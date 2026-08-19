@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+/*
+ * Dot + Dash Consulting brand tokens.
+ * Palette derived from dotanddashconsulting.com:
+ *   coral  #f0523d  (the "Dot")
+ *   blue   #00b2ff  (the "Dash")
+ * on a clean near-black / off-white neutral scale.
+ */
+:root {
+  --brand-coral: #f0523d;
+  --brand-coral-600: #d8412d;
+  --brand-blue: #00b2ff;
+  --brand-ink: #0e0e0e;
+
+  --background: #ffffff;
+  --surface: #fafafa;
+  --surface-2: #f4f4f5;
+  --foreground: #171717;
+  --muted: #6b7280;
+  --border: #e7e7e7;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+
+  --color-brand: var(--brand-coral);
+  --color-brand-hover: var(--brand-coral-600);
+  --color-brand-foreground: #ffffff;
+  --color-accent: var(--brand-blue);
+
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-space-grotesk);
+}
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+}
+
+h1,
+h2,
+h3,
+.font-display {
+  font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
+}

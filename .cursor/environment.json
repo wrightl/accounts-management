@@ -1,0 +1,12 @@
+{
+  "name": "dot-and-dash-accounts",
+  "install": "npm install",
+  "terminals": [
+    {
+      "name": "web",
+      "command": "npm run dev",
+      "description": "Next.js dev server on http://localhost:3000."
+    }
+  ],
+  "ports": [{ "name": "web", "port": 3000 }]
+}

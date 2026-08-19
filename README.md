@@ -1,1 +1,86 @@
-# accounts-management
+# Dot + Dash Consulting — Accounts
+
+Internal accounting platform for **Dot and Dash Consulting Ltd** (stylised
+_Dot + Dash Consulting_). Replaces spreadsheets and shared folders with a single
+secure app for invoicing, expenses, receipts, reimbursements and reporting.
+
+> **Status:** Phase 0 (foundations). The app shell, authentication, database,
+> branding, security and CI/CD are in place; feature sections are scaffolded and
+> access-controlled, and are implemented in later phases (see [Roadmap](#roadmap)).
+
+## Stack
+
+| Concern      | Choice                                                        |
+| ------------ | ------------------------------------------------------------- |
+| Framework    | Next.js 16 (App Router, RSC, Server Actions), React 19, TS    |
+| Styling      | Tailwind CSS v4, brand-themed design tokens                   |
+| Auth & roles | Clerk (Google Workspace SSO), 3 roles                         |
+| Database     | Neon Postgres + Drizzle ORM (PGlite for tests)                |
+| File storage | Vercel Blob (private, streamed via authorised routes)         |
+| Email        | Pluggable provider (Resend), `console` transport in dev       |
+| Testing      | Vitest (unit + integration), Playwright (e2e)                 |
+| Hosting/CI   | Vercel (deploy on merge to `main`, PR previews) + GitHub CI   |
+
+## Roles
+
+- **admin** — full access, incl. user & settings management (`lee@dotanddashconsulting.com`).
+- **user** — co-founder, full day-to-day accounting access (`angel@dotanddashconsulting.com`).
+- **accountant** — external accountant, read-only + export (invite-only, any Google account).
+
+## Getting started
+
+```bash
+npm install
+cp .env.example .env.local   # fill in when integrations are ready
+npm run dev                  # http://localhost:3000
+```
+
+The app runs **without credentials**: public pages work, and auth/DB activate
+automatically once their env vars are present (see [Configuration](#configuration)).
+
+## Scripts
+
+| Command               | Description                                    |
+| --------------------- | ---------------------------------------------- |
+| `npm run dev`         | Next.js dev server                             |
+| `npm run build`       | Production build                               |
+| `npm run lint`        | ESLint                                         |
+| `npm run typecheck`   | TypeScript, no emit                            |
+| `npm test`            | Vitest unit + integration (PGlite)             |
+| `npm run test:e2e`    | Playwright end-to-end                          |
+| `npm run db:generate` | Generate a Drizzle migration from the schema   |
+| `npm run db:migrate`  | Apply migrations (uses `DATABASE_URL_UNPOOLED`)|
+
+## Configuration
+
+Environment variables are documented in [`.env.example`](./.env.example) and
+validated in [`src/env.ts`](./src/env.ts). Feature flags derive from presence:
+
+- `isAuthConfigured()` — both Clerk keys present → Clerk mounts and routes are protected.
+- `isDatabaseConfigured()` — `DATABASE_URL` present → live data.
+
+On Vercel these are injected by the **Neon**, **Clerk** and **Blob**
+integrations. See [`docs/SETUP.md`](./docs/SETUP.md) for the full provisioning
+guide (Vercel project, integrations, Google SSO, custom subdomain, DNS).
+
+## Security
+
+- All non-public routes are gated in [`src/proxy.ts`](./src/proxy.ts) (Next.js 16
+  proxy = former middleware) and re-checked server-side via
+  [`src/lib/auth.ts`](./src/lib/auth.ts) — the client is never trusted.
+- Fine-grained RBAC in [`src/lib/roles.ts`](./src/lib/roles.ts).
+- Uploaded files are stored privately and streamed through authorised routes —
+  never exposed via public URLs.
+- Baseline security headers in [`next.config.ts`](./next.config.ts).
+
+## Roadmap
+
+| Phase | Scope                                                              |
+| ----- | ------------------------------------------------------------------ |
+| 0     | Foundations: Next.js, Clerk + Google SSO + roles, Drizzle + Neon, branding, security, CI/CD (**this PR**) |
+| 1     | Invoicing: clients, invoices, PDF, email, payment tracking, dashboard |
+| 2     | Expenses & receipts (Vercel Blob)                                  |
+| 3     | Reimbursements to founders                                         |
+| 4     | Bank import & reconciliation (Starling — manual CSV first)         |
+| 5     | Reporting & accountant export pack                                 |
+| 6     | Quotes, recurring invoices, reminders (Vercel Cron), audit UI, MTD |
