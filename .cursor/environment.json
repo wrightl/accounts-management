@@ -1,0 +1,20 @@
+{
+  "name": "accounts-management",
+  "install": "npm install",
+  "terminals": [
+    {
+      "name": "api",
+      "command": "npm run dev:server",
+      "description": "Express + SQLite API server on http://localhost:3001 (tsx watch)."
+    },
+    {
+      "name": "web",
+      "command": "npm run dev:web",
+      "description": "Vite React dev server on http://localhost:5173, proxying /api to the API."
+    }
+  ],
+  "ports": [
+    { "name": "api", "port": 3001 },
+    { "name": "web", "port": 5173 }
+  ]
+}
