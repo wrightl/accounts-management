@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const PORT = Number(process.env.PORT ?? 3000);
+/** Dedicated port so local e2e does not collide with `next dev` (3000) or other apps. */
+const PORT = Number(process.env.PORT ?? 3100);
 const baseURL = `http://localhost:${PORT}`;
 
 export default defineConfig({
@@ -19,7 +20,13 @@ export default defineConfig({
   webServer: {
     command: "npm run start",
     url: baseURL,
-    reuseExistingServer: !process.env.CI,
+    // Always start our own server so we never accidentally hit another app
+    // that happens to be listening on the same port.
+    reuseExistingServer: false,
     timeout: 120_000,
+    env: {
+      ...process.env,
+      PORT: String(PORT),
+    },
   },
 });

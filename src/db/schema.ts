@@ -9,6 +9,7 @@ import {
   timestamp,
   jsonb,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 export const roleEnum = pgEnum("role", ["admin", "user", "accountant"]);
@@ -54,6 +55,12 @@ export const companySettings = pgTable("company_settings", {
   accountNumber: text("account_number"),
   financialYearEndMonth: integer("financial_year_end_month").notNull().default(3),
   logoUrl: text("logo_url"),
+  /** Invoice number prefix, e.g. "DD" → DD-2026-0001. */
+  invoiceNumberPrefix: text("invoice_number_prefix").notNull().default("DD"),
+  /** Next sequence number to allocate for the current invoiceSeqYear. */
+  invoiceNextSeq: integer("invoice_next_seq").notNull().default(1),
+  /** Calendar year the sequence applies to; null until the first invoice. */
+  invoiceSeqYear: integer("invoice_seq_year"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -88,6 +95,8 @@ export const invoices = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     sentAt: timestamp("sent_at", { withTimezone: true }),
     paidAt: timestamp("paid_at", { withTimezone: true }),
+    /** Blob pathname for the generated PDF (served via authorised route). */
+    pdfBlobPath: text("pdf_blob_path"),
   },
   (t) => [index("idx_invoices_client").on(t.clientId), index("idx_invoices_status").on(t.status)],
 );
@@ -208,6 +217,139 @@ export const auditLog = pgTable(
   (t) => [index("idx_audit_entity").on(t.entityType, t.entityId)],
 );
 
+// --- Phase 4: bank import & reconciliation ---
+
+export const bankAccounts = pgTable("bank_accounts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull().default("Starling Business"),
+  provider: text("provider").notNull().default("starling"),
+  currency: text("currency").notNull().default("GBP"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const bankTransactions = pgTable(
+  "bank_transactions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bankAccountId: uuid("bank_account_id")
+      .notNull()
+      .references(() => bankAccounts.id, { onDelete: "cascade" }),
+    /** Stable dedupe key from import (e.g. hash of date+amount+reference). */
+    externalId: text("external_id").notNull(),
+    bookedAt: date("booked_at").notNull(),
+    amountPence: integer("amount_pence").notNull(),
+    counterparty: text("counterparty"),
+    reference: text("reference"),
+    description: text("description"),
+    raw: jsonb("raw"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("idx_bank_tx_account").on(t.bankAccountId),
+    index("idx_bank_tx_booked").on(t.bookedAt),
+    uniqueIndex("uniq_bank_tx_external").on(t.bankAccountId, t.externalId),
+  ],
+);
+
+export const reconciliationMatchTypeEnum = pgEnum("reconciliation_match_type", [
+  "invoice_payment",
+  "expense",
+]);
+
+export const reconciliationMatches = pgTable(
+  "reconciliation_matches",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bankTransactionId: uuid("bank_transaction_id")
+      .notNull()
+      .references(() => bankTransactions.id, { onDelete: "cascade" }),
+    matchType: reconciliationMatchTypeEnum("match_type").notNull(),
+    paymentId: uuid("payment_id").references(() => payments.id, {
+      onDelete: "set null",
+    }),
+    expenseId: uuid("expense_id").references(() => expenses.id, {
+      onDelete: "set null",
+    }),
+    confirmed: boolean("confirmed").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("idx_recon_tx").on(t.bankTransactionId)],
+);
+
+// --- Phase 5: dividends ---
+
+export const dividends = pgTable("dividends", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  declaredAt: date("declared_at").notNull(),
+  shareholderName: text("shareholder_name").notNull(),
+  amountPence: integer("amount_pence").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// --- Phase 6: quotes & recurring invoices ---
+
+export const quoteStatusEnum = pgEnum("quote_status", [
+  "draft",
+  "sent",
+  "accepted",
+  "declined",
+  "converted",
+]);
+
+export const quotes = pgTable("quotes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  number: text("number").notNull().unique(),
+  clientId: uuid("client_id")
+    .notNull()
+    .references(() => clients.id, { onDelete: "restrict" }),
+  status: quoteStatusEnum("status").notNull().default("draft"),
+  issueDate: date("issue_date"),
+  validUntil: date("valid_until"),
+  notes: text("notes"),
+  netPence: integer("net_pence").notNull().default(0),
+  vatPence: integer("vat_pence").notNull().default(0),
+  grossPence: integer("gross_pence").notNull().default(0),
+  convertedInvoiceId: uuid("converted_invoice_id").references(() => invoices.id, {
+    onDelete: "set null",
+  }),
+  createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const quoteLineItems = pgTable(
+  "quote_line_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    quoteId: uuid("quote_id")
+      .notNull()
+      .references(() => quotes.id, { onDelete: "cascade" }),
+    description: text("description").notNull(),
+    quantity: integer("quantity").notNull().default(1),
+    unitPricePence: integer("unit_price_pence").notNull().default(0),
+    vatRate: integer("vat_rate").notNull().default(0),
+    position: integer("position").notNull().default(0),
+  },
+  (t) => [index("idx_quote_lines_quote").on(t.quoteId)],
+);
+
+export const recurringInvoices = pgTable("recurring_invoices", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  clientId: uuid("client_id")
+    .notNull()
+    .references(() => clients.id, { onDelete: "restrict" }),
+  /** JSON line template: [{description, quantity, unitPricePence}] */
+  lineTemplate: jsonb("line_template").notNull(),
+  notes: text("notes"),
+  /** Day of month to generate (1–28). */
+  dayOfMonth: integer("day_of_month").notNull().default(1),
+  enabled: boolean("enabled").notNull().default(false),
+  lastGeneratedAt: timestamp("last_generated_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const schema = {
   users,
   companySettings,
@@ -220,4 +362,11 @@ export const schema = {
   reimbursements,
   reimbursementItems,
   auditLog,
+  bankAccounts,
+  bankTransactions,
+  reconciliationMatches,
+  dividends,
+  quotes,
+  quoteLineItems,
+  recurringInvoices,
 };

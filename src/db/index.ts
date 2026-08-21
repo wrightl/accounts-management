@@ -1,21 +1,35 @@
-import { drizzle, type NeonHttpDatabase } from "drizzle-orm/neon-http";
-import { neon } from "@neondatabase/serverless";
+import { Pool, neonConfig } from "@neondatabase/serverless";
+import { drizzle, type NeonDatabase } from "drizzle-orm/neon-serverless";
+import ws from "ws";
 import { requireEnv } from "@/env";
 import { schema } from "./schema";
 
-export type Database = NeonHttpDatabase<typeof schema>;
+// Neon serverless WebSocket driver (needed for transactions / Pool).
+if (typeof WebSocket === "undefined") {
+  neonConfig.webSocketConstructor = ws;
+}
+
+export type Database = NeonDatabase<typeof schema>;
 
 let cached: Database | null = null;
+let cachedPool: Pool | null = null;
 
 /**
- * Lazily-initialised Neon HTTP database client. Throws a clear error if
- * DATABASE_URL is not set, but only when first accessed at request time.
+ * Lazily-initialised Neon serverless database client (Pool). Supports
+ * `db.transaction()` for atomic invoice-number allocation. Throws a clear
+ * error if DATABASE_URL is not set, but only when first accessed at request time.
  */
 export function getDb(): Database {
   if (cached) return cached;
-  const sql = neon(requireEnv("DATABASE_URL"));
-  cached = drizzle({ client: sql, schema });
+  const pool = new Pool({ connectionString: requireEnv("DATABASE_URL") });
+  cachedPool = pool;
+  cached = drizzle({ client: pool, schema });
   return cached;
+}
+
+/** Exposed for tests / graceful shutdown. */
+export function getPool(): Pool | null {
+  return cachedPool;
 }
 
 export { schema };

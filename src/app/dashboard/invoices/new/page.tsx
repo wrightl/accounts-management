@@ -1,0 +1,38 @@
+import Link from "next/link";
+import { guardPage } from "@/lib/auth";
+import { listClients } from "@/lib/invoices/queries";
+import { InvoiceForm } from "@/components/invoices/invoice-form";
+import { buttonClasses } from "@/components/ui/button";
+import { isDatabaseConfigured } from "@/env";
+
+export default async function NewInvoicePage() {
+  await guardPage("accounts:write");
+
+  if (!isDatabaseConfigured()) {
+    return <p className="text-muted">Connect a database to create invoices.</p>;
+  }
+
+  const clients = await listClients();
+
+  return (
+    <div>
+      <div className="mb-6 flex items-center gap-3">
+        <Link href="/dashboard/invoices" className={buttonClasses("ghost")}>
+          ← Invoices
+        </Link>
+      </div>
+      <h1 className="mb-6 font-display text-2xl font-semibold">New invoice</h1>
+      {clients.length === 0 ? (
+        <p className="text-sm text-muted">
+          Add a{" "}
+          <Link href="/dashboard/clients/new" className="text-brand underline">
+            client
+          </Link>{" "}
+          before creating an invoice.
+        </p>
+      ) : (
+        <InvoiceForm mode="create" clients={clients} />
+      )}
+    </div>
+  );
+}

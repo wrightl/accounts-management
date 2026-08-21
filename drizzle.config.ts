@@ -1,5 +1,9 @@
-import "dotenv/config";
+import { config } from "dotenv";
 import { defineConfig } from "drizzle-kit";
+
+// Next.js keeps secrets in `.env.local`; also load `.env` for CI/deploy fallbacks.
+config({ path: ".env.local" });
+config({ path: ".env" });
 
 // Migrations should use a direct (non-pooled) Neon connection when available.
 const url =

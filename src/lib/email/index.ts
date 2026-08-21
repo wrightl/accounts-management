@@ -51,8 +51,13 @@ export async function sendEmail(message: EmailMessage): Promise<EmailResult> {
 class ConsoleProvider implements EmailProvider {
   readonly name = "console";
   async send(message: EmailMessage): Promise<EmailResult> {
+    const attachments =
+      message.attachments
+        ?.map((a) => a.filename)
+        .filter(Boolean)
+        .join(", ") || "(none)";
     console.info(
-      `[email:console] to=${String(message.to)} subject="${message.subject}"`,
+      `[email:console] to=${String(message.to)} subject="${message.subject}" attachments=[${attachments}]`,
     );
     return { id: null };
   }

@@ -2,10 +2,14 @@ import type { Permission } from "@/lib/roles";
 
 export type NavIcon =
   | "overview"
+  | "clients"
   | "invoices"
   | "expenses"
   | "reimbursements"
+  | "bank"
   | "reports"
+  | "quotes"
+  | "audit"
   | "settings"
   | "users";
 
@@ -20,10 +24,14 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Overview", icon: "overview", permission: "accounts:read" },
-  { href: "/dashboard/invoices", label: "Invoices", icon: "invoices", permission: "accounts:read", phase: 1 },
-  { href: "/dashboard/expenses", label: "Expenses", icon: "expenses", permission: "accounts:read", phase: 2 },
-  { href: "/dashboard/reimbursements", label: "Reimbursements", icon: "reimbursements", permission: "accounts:read", phase: 3 },
-  { href: "/dashboard/reports", label: "Reports", icon: "reports", permission: "reports:read", phase: 5 },
+  { href: "/dashboard/clients", label: "Clients", icon: "clients", permission: "accounts:read" },
+  { href: "/dashboard/invoices", label: "Invoices", icon: "invoices", permission: "accounts:read" },
+  { href: "/dashboard/expenses", label: "Expenses", icon: "expenses", permission: "accounts:read" },
+  { href: "/dashboard/reimbursements", label: "Reimbursements", icon: "reimbursements", permission: "accounts:read" },
+  { href: "/dashboard/bank", label: "Bank", icon: "bank", permission: "accounts:read" },
+  { href: "/dashboard/reports", label: "Reports", icon: "reports", permission: "reports:read" },
+  { href: "/dashboard/quotes", label: "Quotes", icon: "quotes", permission: "accounts:read" },
+  { href: "/dashboard/audit", label: "Audit log", icon: "audit", permission: "users:manage" },
   { href: "/dashboard/settings", label: "Settings", icon: "settings", permission: "settings:manage" },
   { href: "/dashboard/users", label: "Users", icon: "users", permission: "users:manage" },
 ];

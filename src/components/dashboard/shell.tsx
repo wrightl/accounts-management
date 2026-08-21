@@ -5,10 +5,14 @@ import { usePathname } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
 import {
   LayoutDashboard,
+  UsersRound,
   FileText,
   Receipt,
   Wallet,
+  Landmark,
   BarChart3,
+  ScrollText,
+  ClipboardList,
   Settings,
   Users,
   type LucideIcon,
@@ -20,10 +24,14 @@ import type { NavIcon, NavItem } from "./nav";
 
 const ICONS: Record<NavIcon, LucideIcon> = {
   overview: LayoutDashboard,
+  clients: UsersRound,
   invoices: FileText,
   expenses: Receipt,
   reimbursements: Wallet,
+  bank: Landmark,
   reports: BarChart3,
+  quotes: ScrollText,
+  audit: ClipboardList,
   settings: Settings,
   users: Users,
 };
