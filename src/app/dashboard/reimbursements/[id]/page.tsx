@@ -74,7 +74,7 @@ export default async function ReimbursementDetailPage({
                 <TD>
                   <Link
                     href={`/dashboard/expenses/${i.expense.id}`}
-                    className="text-brand hover:underline"
+                    className="text-foreground hover:underline"
                   >
                     {i.expense.description}
                   </Link>

@@ -55,7 +55,7 @@ export default async function QuoteDetailPage({
             Converted to{" "}
             <Link
               href={`/dashboard/invoices/${detail.quote.convertedInvoiceId}`}
-              className="text-brand underline"
+              className="text-foreground underline"
             >
               invoice
             </Link>

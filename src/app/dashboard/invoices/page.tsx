@@ -57,7 +57,7 @@ export default async function InvoicesPage() {
                   <TD>
                     <Link
                       href={`/dashboard/invoices/${inv.id}`}
-                      className="font-medium text-brand hover:underline"
+                      className="font-medium text-foreground hover:underline"
                     >
                       {inv.number}
                     </Link>

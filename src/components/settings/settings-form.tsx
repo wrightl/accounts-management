@@ -161,7 +161,7 @@ export function SettingsForm({
         </div>
 
         <FieldError>{error}</FieldError>
-        {message && <p className="text-sm text-emerald-700">{message}</p>}
+        {message && <p className="text-sm text-success">{message}</p>}
         <Button type="submit" disabled={pending}>
           {pending ? "Saving…" : "Save settings"}
         </Button>

@@ -8,6 +8,7 @@ import {
   StyleSheet,
   renderToBuffer,
 } from "@react-pdf/renderer";
+import { brand as palette } from "@/lib/brand";
 import { formatGBP, lineNetPence } from "@/lib/money";
 
 export interface PdfCompany {
@@ -43,31 +44,56 @@ export interface PdfLine {
   unitPricePence: number;
 }
 
-const brand = {
-  coral: "#f0523d",
-  ink: "#0e0e0e",
-  muted: "#6b7280",
-  border: "#e7e7e7",
-};
+const ink = palette.navy;
+const muted = "#5c6490";
+const hairline = "#d5daf0";
 
 const styles = StyleSheet.create({
   page: {
     padding: 48,
     fontSize: 10,
     fontFamily: "Helvetica",
-    color: brand.ink,
+    color: ink,
+  },
+  accentBar: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 8,
+    backgroundColor: palette.periwinkle,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
+    marginTop: 12,
     marginBottom: 32,
   },
   wordmark: {
-    fontSize: 18,
-    fontFamily: "Helvetica-Bold",
+    fontSize: 16,
+    fontFamily: "Helvetica",
+    color: ink,
   },
-  plus: { color: brand.coral },
-  muted: { color: brand.muted, fontSize: 9 },
+  markRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  dot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: palette.pink,
+    marginRight: 4,
+  },
+  dash: {
+    width: 14,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: palette.periwinkle,
+    marginRight: 8,
+  },
+  muted: { color: muted, fontSize: 9 },
   title: {
     fontSize: 22,
     fontFamily: "Helvetica-Bold",
@@ -76,7 +102,7 @@ const styles = StyleSheet.create({
   section: { marginBottom: 20 },
   sectionTitle: {
     fontSize: 9,
-    color: brand.muted,
+    color: muted,
     textTransform: "uppercase",
     letterSpacing: 1,
     marginBottom: 6,
@@ -85,7 +111,7 @@ const styles = StyleSheet.create({
   tableHeader: {
     flexDirection: "row",
     borderBottomWidth: 1,
-    borderBottomColor: brand.border,
+    borderBottomColor: hairline,
     paddingBottom: 6,
     marginBottom: 4,
     fontFamily: "Helvetica-Bold",
@@ -94,7 +120,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     paddingVertical: 6,
     borderBottomWidth: 0.5,
-    borderBottomColor: brand.border,
+    borderBottomColor: hairline,
   },
   colDesc: { flex: 3 },
   colQty: { flex: 1, textAlign: "right" },
@@ -115,13 +141,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
     borderTopWidth: 1,
-    borderTopColor: brand.border,
+    borderTopColor: hairline,
     paddingTop: 6,
   },
   bank: {
     marginTop: 36,
     padding: 12,
-    backgroundColor: "#fafafa",
+    backgroundColor: palette.wash,
     borderRadius: 4,
   },
 });
@@ -140,11 +166,14 @@ function InvoiceDocument({
   return (
     <Document>
       <Page size="A4" style={styles.page}>
+        <View style={styles.accentBar} />
         <View style={styles.header}>
           <View>
-            <Text style={styles.wordmark}>
-              Dot <Text style={styles.plus}>+</Text> Dash
-            </Text>
+            <View style={styles.markRow}>
+              <View style={styles.dot} />
+              <View style={styles.dash} />
+              <Text style={styles.wordmark}>Dot + Dash Consulting</Text>
+            </View>
             <Text style={styles.muted}>{company.legalName}</Text>
             {company.companyNumber ? (
               <Text style={styles.muted}>Company no. {company.companyNumber}</Text>

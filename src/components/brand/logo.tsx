@@ -1,31 +1,42 @@
 import { cn } from "@/lib/utils";
 
+/** Pink dot + periwinkle dash — the brand mark from the company name. */
+export function BrandMark({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn("inline-flex items-center gap-1", className)}
+      aria-hidden="true"
+    >
+      <span className="size-2 shrink-0 rounded-full bg-brand" />
+      <span className="h-0.5 w-3 shrink-0 rounded-full bg-current opacity-80" />
+    </span>
+  );
+}
+
 /**
- * Dot + Dash Consulting wordmark. Uses the stylised "+" in brand coral and a
- * blue dash accent, matching dotanddashconsulting.com.
+ * Dot + Dash wordmark. Matches the marketing site: one geometric line,
+ * no coloured plus. Colour inherits from the parent (`currentColor`).
  */
 export function Logo({
   className,
-  showConsulting = true,
+  showConsulting = false,
+  showMark = true,
 }: {
   className?: string;
   showConsulting?: boolean;
+  showMark?: boolean;
 }) {
   return (
     <span
       className={cn(
-        "font-display inline-flex items-baseline gap-1 text-lg font-semibold tracking-tight",
+        "inline-flex items-center gap-2 text-lg font-normal tracking-tight",
         className,
       )}
     >
-      <span>Dot</span>
-      <span className="text-brand">+</span>
-      <span>Dash</span>
-      {showConsulting && (
-        <span className="ml-1 text-muted font-sans text-xs font-normal uppercase tracking-widest">
-          Consulting
-        </span>
-      )}
+      {showMark && <BrandMark />}
+      <span>
+        Dot + Dash{showConsulting ? " Consulting" : ""}
+      </span>
     </span>
   );
 }

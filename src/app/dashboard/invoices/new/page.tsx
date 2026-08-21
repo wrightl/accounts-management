@@ -25,7 +25,7 @@ export default async function NewInvoicePage() {
       {clients.length === 0 ? (
         <p className="text-sm text-muted">
           Add a{" "}
-          <Link href="/dashboard/clients/new" className="text-brand underline">
+          <Link href="/dashboard/clients/new" className="text-foreground underline">
             client
           </Link>{" "}
           before creating an invoice.

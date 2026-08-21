@@ -41,7 +41,7 @@ export function BankImportForm() {
         <Input id="csv" name="csv" type="file" accept=".csv,text/csv" required disabled={pending} />
       </div>
       <FieldError>{error}</FieldError>
-      {message && <p className="text-sm text-emerald-700">{message}</p>}
+      {message && <p className="text-sm text-success">{message}</p>}
       <Button type="submit" disabled={pending}>
         {pending ? "Importing…" : "Import"}
       </Button>
@@ -83,7 +83,7 @@ export function MatchActions({
   const [pending, startTransition] = useTransition();
   if (!canWrite || !matchId) return null;
   if (confirmed) {
-    return <span className="text-xs text-emerald-700">Confirmed</span>;
+    return <span className="text-xs text-success">Confirmed</span>;
   }
   return (
     <div className="flex gap-1">

@@ -38,7 +38,7 @@ export function ReceiptPanel({
             >
               <a
                 href={`/api/receipts/${r.id}`}
-                className="text-brand hover:underline"
+                className="text-foreground hover:underline"
               >
                 {r.filename}
               </a>

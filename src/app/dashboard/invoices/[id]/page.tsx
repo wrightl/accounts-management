@@ -45,7 +45,7 @@ export default async function InvoiceDetailPage({
           <p className="mt-1 text-muted">
             <Link
               href={`/dashboard/clients/${client.id}`}
-              className="text-brand hover:underline"
+              className="text-foreground hover:underline"
             >
               {client.name}
             </Link>

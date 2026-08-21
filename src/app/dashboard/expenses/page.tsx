@@ -119,7 +119,7 @@ export default async function ExpensesPage({
                   <TD>
                     <Link
                       href={`/dashboard/expenses/${e.id}`}
-                      className="font-medium text-brand hover:underline"
+                      className="font-medium text-foreground hover:underline"
                     >
                       {e.description}
                     </Link>

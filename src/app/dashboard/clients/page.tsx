@@ -52,7 +52,7 @@ export default async function ClientsPage() {
                   <TD>
                     <Link
                       href={`/dashboard/clients/${c.id}`}
-                      className="font-medium text-brand hover:underline"
+                      className="font-medium text-foreground hover:underline"
                     >
                       {c.name}
                     </Link>

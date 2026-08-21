@@ -1,24 +1,33 @@
 @import "tailwindcss";
 
 /*
- * Dot + Dash Consulting brand tokens.
- * Palette derived from dotanddashconsulting.com:
- *   coral  #f0523d  (the "Dot")
- *   blue   #00b2ff  (the "Dash")
- * on a clean near-black / off-white neutral scale.
+ * Dot + Dash Consulting brand tokens, sampled from
+ * https://www.dotanddashconsulting.com (Squarespace 7.1 theme):
+ *
+ *   navy        #171d3a   hsl(230, 43%, 16%)   — ink, dark sections
+ *   pink        #f598ff   hsl(294, 100%, 80%)  — headings on dark, CTAs
+ *   periwinkle  #94abf9   hsl(226, 89%, 78%)   — header, bright sections
+ *   wash        #e5e9fd   hsl(230, 86%, 95%)   — light section fill
+ *
+ * Display/UI type on the site is Adobe Fonts "roc-grotesk"; Outfit is the
+ * licensed-free geometric substitute until Typekit is wired up.
  */
 :root {
-  --brand-coral: #f0523d;
-  --brand-coral-600: #d8412d;
-  --brand-blue: #00b2ff;
-  --brand-ink: #0e0e0e;
+  --navy: #171d3a;
+  --pink: #f598ff;
+  --pink-hover: #f7adff;
+  --periwinkle: #94abf9;
+  --wash: #e5e9fd;
+  --white: #ffffff;
 
-  --background: #ffffff;
-  --surface: #fafafa;
-  --surface-2: #f4f4f5;
-  --foreground: #171717;
-  --muted: #6b7280;
-  --border: #e7e7e7;
+  --background: #f3f5fd;
+  --surface: #ffffff;
+  --surface-2: var(--wash);
+  --foreground: var(--navy);
+  --muted: #5c6490;
+  --border: rgb(23 29 58 / 0.12);
+  --destructive: #c23b5a;
+  --success: #1a7a55;
 }
 
 @theme inline {
@@ -28,14 +37,19 @@
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
   --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
 
-  --color-brand: var(--brand-coral);
-  --color-brand-hover: var(--brand-coral-600);
-  --color-brand-foreground: #ffffff;
-  --color-accent: var(--brand-blue);
+  --color-navy: var(--navy);
+  --color-brand: var(--pink);
+  --color-brand-hover: var(--pink-hover);
+  --color-brand-foreground: var(--navy);
+  --color-accent: var(--periwinkle);
+  --color-wash: var(--wash);
 
-  --font-sans: var(--font-inter);
-  --font-display: var(--font-space-grotesk);
+  --font-sans: "Outfit", "Outfit Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Outfit", "Outfit Fallback", ui-sans-serif, system-ui, sans-serif;
+  --radius-pill: 999px;
 }
 
 * {
@@ -45,7 +59,7 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
 }
 
 h1,
@@ -53,4 +67,15 @@ h2,
 h3,
 .font-display {
   font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
+}
+
+::selection {
+  background: var(--pink);
+  color: var(--navy);
+}
+
+.hero-dots {
+  background-color: var(--navy);
+  background-image: radial-gradient(circle at 1px 1px, rgb(148 171 249 / 0.28) 1px, transparent 0);
+  background-size: 22px 22px;
 }

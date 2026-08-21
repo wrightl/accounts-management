@@ -3,11 +3,11 @@ import type { InvoiceStatus } from "@/lib/invoices/status";
 import { statusLabel } from "@/lib/invoices/status";
 
 const styles: Record<InvoiceStatus, string> = {
-  draft: "bg-surface-2 text-muted",
-  sent: "bg-accent/15 text-accent",
-  paid: "bg-emerald-100 text-emerald-800",
-  overdue: "bg-brand/15 text-brand",
-  void: "bg-surface-2 text-muted line-through",
+  draft: "bg-wash text-muted",
+  sent: "bg-accent/30 text-navy",
+  paid: "bg-success/15 text-success",
+  overdue: "bg-brand text-navy",
+  void: "bg-wash text-muted line-through",
 };
 
 export function StatusBadge({

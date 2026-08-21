@@ -45,7 +45,7 @@ export default async function QuotesPage() {
                   <TD>
                     <Link
                       href={`/dashboard/quotes/${q.id}`}
-                      className="font-medium text-brand hover:underline"
+                      className="font-medium text-foreground hover:underline"
                     >
                       {q.number}
                     </Link>

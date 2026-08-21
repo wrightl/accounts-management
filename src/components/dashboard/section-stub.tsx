@@ -19,7 +19,7 @@ export function SectionStub({
       <div className="flex items-center gap-3">
         <h1 className="font-display text-2xl font-semibold">{title}</h1>
         {phase !== undefined && (
-          <span className="rounded-full bg-accent/15 px-2.5 py-0.5 text-xs font-medium text-accent">
+          <span className="rounded-full bg-accent/30 px-2.5 py-0.5 text-xs font-medium text-navy">
             Phase {phase}
           </span>
         )}

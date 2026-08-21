@@ -55,7 +55,7 @@ export default async function DashboardOverview() {
 
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {cards.map((kpi) => (
-          <Card key={kpi.title}>
+          <Card key={kpi.title} className="border-t-4 border-t-accent">
             <CardTitle>{kpi.title}</CardTitle>
             <CardValue>{kpi.value}</CardValue>
           </Card>

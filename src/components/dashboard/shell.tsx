@@ -51,11 +51,16 @@ export function DashboardShell({
 
   return (
     <div className="flex min-h-full flex-1">
-      <aside className="hidden w-64 shrink-0 flex-col border-r border-border bg-surface md:flex">
-        <div className="px-5 py-5">
-          <Logo />
+      <aside className="hidden w-64 shrink-0 flex-col bg-navy text-white md:flex">
+        <div className="px-5 py-6">
+          <Link href="/dashboard" className="block">
+            <Logo className="text-white" />
+            <span className="mt-1 block pl-7 text-xs tracking-widest text-accent uppercase">
+              Accounts
+            </span>
+          </Link>
         </div>
-        <nav className="flex-1 space-y-1 px-3">
+        <nav className="flex-1 space-y-0.5 px-3">
           {items.map((item) => {
             const Icon = ICONS[item.icon];
             const active =
@@ -67,10 +72,10 @@ export function DashboardShell({
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                  "flex items-center gap-3 rounded-full px-3 py-2 text-sm font-normal transition-colors",
                   active
-                    ? "bg-brand/10 text-brand"
-                    : "text-foreground/70 hover:bg-surface-2 hover:text-foreground",
+                    ? "bg-white/10 text-brand"
+                    : "text-white/70 hover:bg-white/5 hover:text-white",
                 )}
               >
                 <Icon className="h-4 w-4" />
@@ -82,14 +87,21 @@ export function DashboardShell({
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-border px-6 py-3">
-          <div className="text-sm text-muted">{roleLabel(role)}</div>
+        <header className="flex items-center justify-between bg-accent px-6 py-3 text-white">
+          <div className="flex items-center gap-3">
+            <Link href="/dashboard" className="md:hidden">
+              <Logo className="text-base text-white" showMark />
+            </Link>
+            <div className="hidden text-sm text-white/80 md:block">
+              {roleLabel(role)}
+            </div>
+          </div>
           <div className="flex items-center gap-3">
             {userName && <span className="text-sm">{userName}</span>}
             <UserButton />
           </div>
         </header>
-        <main className="flex-1 px-6 py-6">{children}</main>
+        <main className="flex-1 px-6 py-8">{children}</main>
       </div>
     </div>
   );
