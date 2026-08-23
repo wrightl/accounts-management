@@ -12,6 +12,7 @@ export type NavIcon =
     | 'spending'
     | 'reports'
     | 'dividends'
+    | 'shareholders'
     | 'quotes'
     | 'orders'
     | 'audit'
@@ -67,6 +68,12 @@ export const NAV_GROUPS: NavGroup[] = [
                 href: '/dashboard/dividends',
                 label: 'Dividends',
                 icon: 'dividends',
+                permission: 'accounts:read',
+            },
+            {
+                href: '/dashboard/shareholders',
+                label: 'Shareholders',
+                icon: 'shareholders',
                 permission: 'accounts:read',
             },
         ],

@@ -31,7 +31,9 @@ describe("phases 2–4 integration", () => {
       "bank_accounts",
       "bank_transactions",
       "reconciliation_matches",
-      "dividends",
+      "dividend_declarations",
+      "dividend_payouts",
+      "shareholders",
       "quotes",
       "quote_line_items",
       "recurring_invoices",
@@ -39,6 +41,7 @@ describe("phases 2–4 integration", () => {
     ]) {
       expect(names).toContain(t);
     }
+    expect(names).not.toContain("dividends");
   });
 
   it("imports Starling CSV idempotently", async () => {

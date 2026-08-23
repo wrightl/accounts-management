@@ -4,7 +4,8 @@ import { getDb } from "@/db";
 import {
   bankTransactions,
   clients,
-  dividends,
+  dividendDeclarations,
+  dividendPayouts,
   expenseReceipts,
   expenses,
   invoiceLineItems,
@@ -184,9 +185,24 @@ export async function buildAccountantPack({
           .where(inArray(expenseReceipts.expenseId, expenseIds));
 
   const dividendRows = await db
-    .select()
-    .from(dividends)
-    .where(and(gte(dividends.declaredAt, from), lte(dividends.declaredAt, to)));
+    .select({
+      id: dividendPayouts.id,
+      declaredAt: dividendDeclarations.declaredAt,
+      shareholderName: dividendPayouts.shareholderName,
+      amountPence: dividendPayouts.amountPence,
+      notes: dividendDeclarations.notes,
+    })
+    .from(dividendPayouts)
+    .innerJoin(
+      dividendDeclarations,
+      eq(dividendPayouts.declarationId, dividendDeclarations.id),
+    )
+    .where(
+      and(
+        gte(dividendDeclarations.declaredAt, from),
+        lte(dividendDeclarations.declaredAt, to),
+      ),
+    );
 
   const bankTxRows = await db
     .select()

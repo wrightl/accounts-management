@@ -122,10 +122,24 @@
       "breakpoints": true
     },
     {
+      "idx": 17,
+      "version": "7",
+      "when": 1787488000000,
+      "tag": "0017_receipt_ocr_model",
+      "breakpoints": true
+    },
+    {
       "idx": 18,
       "version": "7",
       "when": 1787488500000,
       "tag": "0018_expense_inbound_email",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1787489000000,
+      "tag": "0019_shareholders_dividends",
       "breakpoints": true
     }
   ]

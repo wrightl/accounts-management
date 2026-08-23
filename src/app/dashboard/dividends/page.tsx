@@ -1,12 +1,10 @@
+import Link from "next/link";
 import { guardPage, hasPermission } from "@/lib/auth";
 import {
   defaultReportPeriod,
-  listDividends,
+  listDividendDeclarations,
 } from "@/lib/reports/queries";
-import {
-  DividendForm,
-  DeleteDividendButton,
-} from "@/components/dividends/dividends-form";
+import { DeleteDividendDeclarationButton } from "@/components/dividends/dividends-form";
 import { buttonClasses } from "@/components/ui/button";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/form";
@@ -38,28 +36,36 @@ export default async function DividendsPage({
   const from = sp.from ?? defaults.from;
   const to = sp.to ?? defaults.to;
 
-  const dividends = await listDividends({ from, to });
-  const totalPence = dividends.reduce((sum, d) => sum + d.amountPence, 0);
+  const declarations = await listDividendDeclarations({ from, to });
+  const totalPence = declarations.reduce((sum, d) => sum + d.totalPence, 0);
 
   return (
     <div>
-      <div>
-        <h1 className="font-display text-2xl font-semibold">Dividends</h1>
-        <p className="mt-1 text-muted">
-          Register dividend declarations for the accountant. Period totals match
-          the dividends export in the accountant pack.
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="font-display text-2xl font-semibold">Dividends</h1>
+          <p className="mt-1 text-muted">
+            Declare a total that splits pro rata across the{" "}
+            <Link href="/dashboard/shareholders" className="underline">
+              share register
+            </Link>
+            . Exported in the accountant pack.
+          </p>
+        </div>
+        {canWrite && (
+          <Link
+            href="/dashboard/dividends/new"
+            className={buttonClasses("primary")}
+          >
+            New dividend
+          </Link>
+        )}
       </div>
 
       <form className="mt-6 flex flex-wrap items-end gap-3">
         <div>
           <Label htmlFor="from">From</Label>
-          <Input
-            id="from"
-            name="from"
-            type="date"
-            defaultValue={from}
-          />
+          <Input id="from" name="from" type="date" defaultValue={from} />
         </div>
         <div>
           <Label htmlFor="to">To</Label>
@@ -76,48 +82,53 @@ export default async function DividendsPage({
           <CardValue>{formatGBP(totalPence)}</CardValue>
         </Card>
         <Card>
-          <CardTitle>Records</CardTitle>
-          <CardValue>{dividends.length}</CardValue>
+          <CardTitle>Declarations</CardTitle>
+          <CardValue>{declarations.length}</CardValue>
         </Card>
       </div>
 
       <section className="mt-10">
-        <h2 className="font-display text-lg font-semibold">Add dividend</h2>
-        <DividendForm canWrite={canWrite} />
-      </section>
-
-      <section className="mt-10">
         <h2 className="font-display text-lg font-semibold">Declarations</h2>
-        <div className="mt-4">
-          {dividends.length === 0 ? (
+        <div className="mt-4 space-y-8">
+          {declarations.length === 0 ? (
             <p className="text-sm text-muted">
-              No dividend records in this period.
+              No dividend declarations in this period.
             </p>
           ) : (
-            <Table>
-              <THead>
-                <TR>
-                  <TH>Date</TH>
-                  <TH>Shareholder</TH>
-                  <TH>Notes</TH>
-                  <TH className="text-right">Amount</TH>
-                  <TH />
-                </TR>
-              </THead>
-              <TBody>
-                {dividends.map((d) => (
-                  <TR key={d.id}>
-                    <TD>{d.declaredAt}</TD>
-                    <TD>{d.shareholderName}</TD>
-                    <TD className="text-muted">{d.notes ?? "—"}</TD>
-                    <TD className="text-right">{d.amountFormatted}</TD>
-                    <TD>
-                      <DeleteDividendButton id={d.id} canWrite={canWrite} />
-                    </TD>
-                  </TR>
-                ))}
-              </TBody>
-            </Table>
+            declarations.map((d) => (
+              <div key={d.id}>
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="font-medium">
+                      {d.declaredAt} · {d.totalFormatted}
+                    </p>
+                    {d.notes && (
+                      <p className="text-sm text-muted">{d.notes}</p>
+                    )}
+                  </div>
+                  <DeleteDividendDeclarationButton
+                    id={d.id}
+                    canWrite={canWrite}
+                  />
+                </div>
+                <Table>
+                  <THead>
+                    <TR>
+                      <TH>Shareholder</TH>
+                      <TH className="text-right">Amount</TH>
+                    </TR>
+                  </THead>
+                  <TBody>
+                    {d.payouts.map((p) => (
+                      <TR key={p.id}>
+                        <TD>{p.shareholderName}</TD>
+                        <TD className="text-right">{p.amountFormatted}</TD>
+                      </TR>
+                    ))}
+                  </TBody>
+                </Table>
+              </div>
+            ))
           )}
         </div>
       </section>

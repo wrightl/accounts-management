@@ -5,7 +5,8 @@ import {
   bankAccounts,
   bankTransactions,
   clients,
-  dividends,
+  dividendDeclarations,
+  dividendPayouts,
   expenseReceipts,
   expenses,
   invoiceLineItems,
@@ -125,11 +126,16 @@ describe("accountant pack integration", () => {
       sizeBytes: 4,
     });
 
-    await db.insert(dividends).values({
+    await db.insert(dividendDeclarations).values({
+      id: "00000000-0000-4000-8000-0000000000d1",
       declaredAt: "2026-04-20",
+      totalPence: 50_000,
+      notes: "Interim",
+    });
+    await db.insert(dividendPayouts).values({
+      declarationId: "00000000-0000-4000-8000-0000000000d1",
       shareholderName: "Lee Wright",
       amountPence: 50_000,
-      notes: "Interim",
     });
 
     const [account] = await db

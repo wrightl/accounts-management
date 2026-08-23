@@ -3,7 +3,8 @@ import { and, desc, eq, gte, inArray, lte, ne, sql, sum } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   clients,
-  dividends,
+  dividendDeclarations,
+  dividendPayouts,
   expenses,
   invoices,
   payments,
@@ -211,20 +212,69 @@ export async function getVatSummary(from: string, to: string) {
   };
 }
 
-export async function listDividends(options?: { from?: string; to?: string }) {
+export async function listDividendDeclarations(options?: {
+  from?: string;
+  to?: string;
+}) {
   const db = getDb();
   const conditions = [];
-  if (options?.from) conditions.push(gte(dividends.declaredAt, options.from));
-  if (options?.to) conditions.push(lte(dividends.declaredAt, options.to));
-  const rows = await db
+  if (options?.from) {
+    conditions.push(gte(dividendDeclarations.declaredAt, options.from));
+  }
+  if (options?.to) {
+    conditions.push(lte(dividendDeclarations.declaredAt, options.to));
+  }
+
+  const declarations = await db
     .select()
-    .from(dividends)
+    .from(dividendDeclarations)
     .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .orderBy(desc(dividends.declaredAt));
-  return rows.map((d) => ({
-    ...d,
-    amountFormatted: formatGBP(d.amountPence),
-  }));
+    .orderBy(desc(dividendDeclarations.declaredAt));
+
+  if (declarations.length === 0) return [];
+
+  const ids = declarations.map((d) => d.id);
+  const payouts = await db
+    .select()
+    .from(dividendPayouts)
+    .where(inArray(dividendPayouts.declarationId, ids));
+
+  const byDecl = new Map<string, typeof payouts>();
+  for (const p of payouts) {
+    const list = byDecl.get(p.declarationId) ?? [];
+    list.push(p);
+    byDecl.set(p.declarationId, list);
+  }
+
+  return declarations.map((d) => {
+    const lines = (byDecl.get(d.id) ?? []).sort((a, b) =>
+      a.shareholderName.localeCompare(b.shareholderName),
+    );
+    return {
+      ...d,
+      totalFormatted: formatGBP(d.totalPence),
+      payouts: lines.map((p) => ({
+        ...p,
+        amountFormatted: formatGBP(p.amountPence),
+      })),
+    };
+  });
+}
+
+/** @deprecated Prefer listDividendDeclarations — flat payout list for pack-style exports. */
+export async function listDividends(options?: { from?: string; to?: string }) {
+  const decls = await listDividendDeclarations(options);
+  return decls.flatMap((d) =>
+    d.payouts.map((p) => ({
+      id: p.id,
+      declaredAt: d.declaredAt,
+      shareholderName: p.shareholderName,
+      amountPence: p.amountPence,
+      notes: d.notes,
+      createdAt: p.createdAt,
+      amountFormatted: p.amountFormatted,
+    })),
+  );
 }
 
 export async function defaultReportPeriod(): Promise<{ from: string; to: string }> {

@@ -101,6 +101,8 @@ export const companySettings = pgTable(
     receiptOcrProvider: text("receipt_ocr_provider").notNull().default("local"),
     /** AI Gateway model slug used when receiptOcrProvider is "ai_gateway". */
     receiptOcrModel: text("receipt_ocr_model").notNull().default("google/gemini-2.5-flash"),
+    /** Total issued ordinary shares (must match sum of active shareholder share counts). */
+    totalShares: integer("total_shares"),
     /** Always true — unique so this table can only hold one row. */
     singleton: boolean("singleton").notNull().default(true),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -373,16 +375,42 @@ export const reconciliationMatches = pgTable(
   (t) => [index("idx_recon_tx").on(t.bankTransactionId)],
 );
 
-// --- Phase 5: dividends ---
+// --- Phase 5: dividends & shareholders ---
 
-export const dividends = pgTable("dividends", {
+export const shareholders = pgTable("shareholders", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  shareCount: integer("share_count").notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const dividendDeclarations = pgTable("dividend_declarations", {
   id: uuid("id").primaryKey().defaultRandom(),
   declaredAt: date("declared_at").notNull(),
-  shareholderName: text("shareholder_name").notNull(),
-  amountPence: integer("amount_pence").notNull(),
+  totalPence: integer("total_pence").notNull(),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const dividendPayouts = pgTable(
+  "dividend_payouts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    declarationId: uuid("declaration_id")
+      .notNull()
+      .references(() => dividendDeclarations.id, { onDelete: "cascade" }),
+    shareholderId: uuid("shareholder_id").references(() => shareholders.id, {
+      onDelete: "set null",
+    }),
+    /** Snapshot of shareholder name at declare time (accountant export). */
+    shareholderName: text("shareholder_name").notNull(),
+    amountPence: integer("amount_pence").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("idx_dividend_payouts_declaration").on(t.declarationId)],
+);
 
 // --- Phase 6: quotes, orders & recurring invoices ---
 
@@ -646,7 +674,9 @@ export const schema = {
   bankSpendingCategories,
   bankTransactions,
   reconciliationMatches,
-  dividends,
+  shareholders,
+  dividendDeclarations,
+  dividendPayouts,
   quotes,
   quoteLineItems,
   quotePaymentMilestones,
