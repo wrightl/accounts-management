@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { guardPage, hasPermission } from "@/lib/auth";
-import { listClients } from "@/lib/invoices/queries";
+import { listClients } from "@/lib/clients/queries";
 import { getExpenseDetail, listFounders } from "@/lib/expenses/queries";
 import { expenseStatusLabel, type ExpenseStatus } from "@/lib/expenses/categories";
 import { ExpenseForm } from "@/components/expenses/expense-form";

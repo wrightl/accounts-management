@@ -24,6 +24,10 @@ const serverSchema = z.object({
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().default("Dot + Dash Accounts <accounts@dotanddashconsulting.com>"),
 
+  // Cron / automation. Routes refuse to run until CRON_SECRET is set.
+  CRON_SECRET: z.string().optional(),
+  RECURRING_INVOICES_ENABLED: z.enum(["true", "false"]).optional(),
+
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 });
 

@@ -24,9 +24,14 @@ let cached: StorageProvider | null = null;
 
 export function getStorage(): StorageProvider {
   if (cached) return cached;
-  cached = process.env.BLOB_READ_WRITE_TOKEN
-    ? new VercelBlobStorage()
-    : new MemoryStorage();
+  if (process.env.BLOB_READ_WRITE_TOKEN) {
+    cached = new VercelBlobStorage();
+    return cached;
+  }
+  if (serverEnv().NODE_ENV === "production") {
+    throw new Error("BLOB_READ_WRITE_TOKEN is required in production");
+  }
+  cached = new MemoryStorage();
   return cached;
 }
 
@@ -63,7 +68,7 @@ class VercelBlobStorage implements StorageProvider {
     const { put } = await import("@vercel/blob");
     const token = serverEnv().BLOB_READ_WRITE_TOKEN;
     const blob = await put(path, Buffer.from(data), {
-      access: "public", // URL is unguessable and never surfaced to clients
+      access: "private",
       addRandomSuffix: true,
       contentType,
       token,
@@ -76,15 +81,15 @@ class VercelBlobStorage implements StorageProvider {
   }
 
   async get(path: string) {
-    // Resolve the object via the store and stream its bytes server-side.
-    const { head } = await import("@vercel/blob");
+    const { get } = await import("@vercel/blob");
     const token = serverEnv().BLOB_READ_WRITE_TOKEN;
-    const meta = await head(path, { token });
-    const res = await fetch(meta.url);
-    if (!res.ok) throw new Error(`Failed to read blob: ${path}`);
+    const result = await get(path, { access: "private", token });
+    if (!result || result.statusCode !== 200 || !result.stream) {
+      throw new Error(`Object not found: ${path}`);
+    }
     return {
-      body: await res.arrayBuffer(),
-      contentType: meta.contentType ?? null,
+      body: await new Response(result.stream).arrayBuffer(),
+      contentType: result.blob.contentType ?? null,
     };
   }
 

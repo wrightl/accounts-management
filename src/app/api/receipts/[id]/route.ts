@@ -4,6 +4,7 @@ import { getDb } from "@/db";
 import { expenseReceipts } from "@/db/schema";
 import { requirePermission, ForbiddenError } from "@/lib/auth";
 import { getStorage } from "@/lib/storage";
+import { contentDispositionAttachment } from "@/lib/files";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -42,7 +43,7 @@ export async function GET(
       status: 200,
       headers: {
         "Content-Type": receipt.contentType ?? obj.contentType ?? "application/octet-stream",
-        "Content-Disposition": `attachment; filename="${receipt.filename.replace(/"/g, "")}"`,
+        "Content-Disposition": contentDispositionAttachment(receipt.filename),
         "Cache-Control": "private, no-store",
       },
     });

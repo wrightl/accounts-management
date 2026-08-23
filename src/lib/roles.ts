@@ -1,15 +1,16 @@
 /**
  * Role-based access control for Dot + Dash Accounts.
  *
- * Three roles (see product requirements):
- *  - admin:      full access to everything, incl. user & settings management.
+ *  - admin:      full access, incl. user & settings management.
  *  - user:       co-founder access to all day-to-day accounting.
- *  - accountant: external accountant — read-only plus the ability to export.
+ *  - accountant: external accountant — read-only plus export.
+ *  - pending:    signed in, no permissions until an admin assigns a role.
  */
-export const ROLES = ["admin", "user", "accountant"] as const;
+export const ROLES = ["admin", "user", "accountant", "pending"] as const;
 export type Role = (typeof ROLES)[number];
 
-export const DEFAULT_ROLE: Role = "user";
+/** Assigned on first insert when the email is not in the bootstrap list. */
+export const DEFAULT_ROLE: Role = "pending";
 
 export function isRole(value: unknown): value is Role {
   return typeof value === "string" && (ROLES as readonly string[]).includes(value);
@@ -43,6 +44,7 @@ const PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     "reports:read",
     "reports:export",
   ]),
+  pending: new Set<Permission>(),
 };
 
 /** Whether a role is granted a permission. Unknown roles are denied. */
@@ -60,5 +62,7 @@ export function roleLabel(role: Role): string {
       return "Co-founder";
     case "accountant":
       return "Accountant";
+    case "pending":
+      return "Pending access";
   }
 }

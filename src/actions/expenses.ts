@@ -5,12 +5,14 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
 import { expenseReceipts, expenses, reimbursementItems } from "@/db/schema";
-import { requirePermission } from "@/lib/auth";
+import { requireActionPermission } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { ensureLocalUser } from "@/lib/users";
 import { poundsToPence } from "@/lib/money";
 import { getStorage } from "@/lib/storage";
-import type { ActionResult } from "@/actions/clients";
+import { safeFilename } from "@/lib/files";
+import { EXPENSE_CATEGORIES } from "@/lib/expenses/categories";
+import type { ActionResult } from "@/actions/result";
 
 const MAX_RECEIPT_BYTES = 8 * 1024 * 1024;
 const ALLOWED_RECEIPT_TYPES = new Set([
@@ -21,10 +23,38 @@ const ALLOWED_RECEIPT_TYPES = new Set([
   "application/pdf",
 ]);
 
+function receiptMagicOk(bytes: Buffer, contentType: string): boolean {
+  if (bytes.length < 12) return false;
+  if (contentType === "application/pdf") {
+    return bytes.subarray(0, 5).toString("latin1") === "%PDF-";
+  }
+  if (contentType === "image/jpeg") {
+    return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  }
+  if (contentType === "image/png") {
+    return (
+      bytes[0] === 0x89 &&
+      bytes[1] === 0x50 &&
+      bytes[2] === 0x4e &&
+      bytes[3] === 0x47
+    );
+  }
+  if (contentType === "image/gif") {
+    return bytes.subarray(0, 4).toString("latin1") === "GIF8";
+  }
+  if (contentType === "image/webp") {
+    return (
+      bytes.subarray(0, 4).toString("latin1") === "RIFF" &&
+      bytes.subarray(8, 12).toString("latin1") === "WEBP"
+    );
+  }
+  return false;
+}
+
 const expenseSchema = z.object({
   description: z.string().trim().min(1).max(500),
   category: z
-    .string()
+    .enum(EXPENSE_CATEGORIES)
     .optional()
     .or(z.literal(""))
     .transform((v) => (v === "" || !v ? "" : v)),
@@ -63,7 +93,9 @@ function parseExpense(formData: FormData) {
 }
 
 export async function createExpense(formData: FormData): Promise<ActionResult> {
-  const session = await requirePermission("accounts:write");
+  const authz = await requireActionPermission("accounts:write");
+  if (!authz.ok) return authz;
+  const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
   const parsed = parseExpense(formData);
@@ -113,7 +145,9 @@ export async function updateExpense(
   id: string,
   formData: FormData,
 ): Promise<ActionResult> {
-  const session = await requirePermission("accounts:write");
+  const authz = await requireActionPermission("accounts:write");
+  if (!authz.ok) return authz;
+  const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
   const db = getDb();
@@ -172,7 +206,9 @@ export async function updateExpense(
 }
 
 export async function deleteExpense(id: string): Promise<ActionResult> {
-  const session = await requirePermission("accounts:write");
+  const authz = await requireActionPermission("accounts:write");
+  if (!authz.ok) return authz;
+  const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
   const db = getDb();
@@ -222,7 +258,9 @@ export async function uploadReceipt(
   expenseId: string,
   formData: FormData,
 ): Promise<ActionResult> {
-  const session = await requirePermission("accounts:write");
+  const authz = await requireActionPermission("accounts:write");
+  if (!authz.ok) return authz;
+  const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
   const db = getDb();
@@ -246,9 +284,12 @@ export async function uploadReceipt(
   }
 
   const bytes = Buffer.from(await file.arrayBuffer());
+  if (!receiptMagicOk(bytes, contentType)) {
+    return { ok: false, error: "Receipt file contents do not match the declared type" };
+  }
   const storage = getStorage();
   const stored = await storage.put(
-    `receipts/${expenseId}/${Date.now()}-${file.name}`,
+    `receipts/${expenseId}/${Date.now()}-${safeFilename(file.name)}`,
     bytes,
     contentType,
   );
@@ -258,7 +299,7 @@ export async function uploadReceipt(
     .values({
       expenseId,
       blobPath: stored.path,
-      filename: file.name,
+      filename: safeFilename(file.name),
       contentType,
       sizeBytes: stored.size,
     })
@@ -277,7 +318,9 @@ export async function uploadReceipt(
 }
 
 export async function deleteReceipt(receiptId: string): Promise<ActionResult> {
-  const session = await requirePermission("accounts:write");
+  const authz = await requireActionPermission("accounts:write");
+  if (!authz.ok) return authz;
+  const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
   const db = getDb();

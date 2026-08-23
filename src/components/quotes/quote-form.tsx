@@ -4,34 +4,69 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label, Select, Textarea } from "@/components/ui/form";
-import { formatGBP, invoiceTotals, poundsToPence } from "@/lib/money";
-import { createQuote, convertQuoteToInvoice } from "@/actions/quotes";
+import { formatGBP, invoiceTotals, lineNetPence, poundsToPence } from "@/lib/money";
+import { createQuote, updateQuote } from "@/actions/quotes";
 import { Plus, Trash2 } from "lucide-react";
 
-type Line = { key: string; description: string; quantity: string; unitPricePounds: string };
+export type QuoteLineDraft = {
+  key: string;
+  description: string;
+  quantity: string;
+  unitPricePounds: string;
+};
 
-function newLine(): Line {
+function newLine(): QuoteLineDraft {
   return { key: crypto.randomUUID(), description: "", quantity: "1", unitPricePounds: "" };
 }
 
-export function QuoteCreateForm({
+function isCompleteLine(line: QuoteLineDraft): boolean {
+  return line.description.trim().length > 0 && line.unitPricePounds.trim().length > 0;
+}
+
+function lineTotalPence(line: QuoteLineDraft): number | null {
+  if (!isCompleteLine(line)) return null;
+  try {
+    return lineNetPence({
+      quantity: Number(line.quantity) || 0,
+      unitPricePence: poundsToPence(line.unitPricePounds),
+    });
+  } catch {
+    return null;
+  }
+}
+
+export function QuoteForm({
+  mode,
   clients,
+  quote,
+  initialLines,
 }: {
+  mode: "create" | "edit";
   clients: { id: string; name: string }[];
+  quote?: {
+    id: string;
+    clientId: string;
+    issueDate: string | null;
+    validUntil: string | null;
+    notes: string | null;
+  };
+  initialLines?: QuoteLineDraft[];
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const [lines, setLines] = useState<Line[]>([newLine()]);
+  const [lines, setLines] = useState<QuoteLineDraft[]>(
+    initialLines && initialLines.length > 0 ? initialLines : [newLine()],
+  );
 
   const totals = useMemo(() => {
     try {
       return invoiceTotals(
         lines
-          .filter((l) => l.description && l.unitPricePounds)
+          .filter(isCompleteLine)
           .map((l) => ({
             quantity: Number(l.quantity) || 0,
-            unitPricePence: poundsToPence(l.unitPricePounds || "0"),
+            unitPricePence: poundsToPence(l.unitPricePounds),
           })),
       );
     } catch {
@@ -39,34 +74,48 @@ export function QuoteCreateForm({
     }
   }, [lines]);
 
+  function onSubmit(formData: FormData) {
+    const completeLines = lines.filter(isCompleteLine);
+    if (completeLines.length === 0) {
+      setError("Add at least one line item");
+      return;
+    }
+
+    formData.set(
+      "linesJson",
+      JSON.stringify(
+        completeLines.map((l) => ({
+          description: l.description,
+          quantity: Number(l.quantity),
+          unitPricePounds: l.unitPricePounds,
+        })),
+      ),
+    );
+    setError(null);
+    startTransition(async () => {
+      const result =
+        mode === "create"
+          ? await createQuote(formData)
+          : await updateQuote(quote!.id, formData);
+      if (!result.ok) setError(result.error);
+      else {
+        router.push(`/dashboard/quotes/${result.id}`);
+        router.refresh();
+      }
+    });
+  }
+
   return (
-    <form
-      className="space-y-4"
-      action={(formData) => {
-        formData.set(
-          "linesJson",
-          JSON.stringify(
-            lines.map((l) => ({
-              description: l.description,
-              quantity: Number(l.quantity),
-              unitPricePounds: l.unitPricePounds,
-            })),
-          ),
-        );
-        setError(null);
-        startTransition(async () => {
-          const result = await createQuote(formData);
-          if (!result.ok) setError(result.error);
-          else {
-            router.push(`/dashboard/quotes/${result.id}`);
-            router.refresh();
-          }
-        });
-      }}
-    >
+    <form className="space-y-4" action={onSubmit}>
       <div>
         <Label htmlFor="clientId">Client</Label>
-        <Select id="clientId" name="clientId" required disabled={pending}>
+        <Select
+          id="clientId"
+          name="clientId"
+          required
+          defaultValue={quote?.clientId ?? ""}
+          disabled={pending}
+        >
           <option value="">Select…</option>
           {clients.map((c) => (
             <option key={c.id} value={c.id}>
@@ -82,65 +131,92 @@ export function QuoteCreateForm({
             id="issueDate"
             name="issueDate"
             type="date"
-            defaultValue={new Date().toISOString().slice(0, 10)}
+            required
+            defaultValue={
+              quote?.issueDate ?? new Date().toISOString().slice(0, 10)
+            }
             disabled={pending}
           />
         </div>
         <div>
           <Label htmlFor="validUntil">Valid until</Label>
-          <Input id="validUntil" name="validUntil" type="date" disabled={pending} />
+          <Input
+            id="validUntil"
+            name="validUntil"
+            type="date"
+            defaultValue={quote?.validUntil ?? ""}
+            disabled={pending}
+          />
         </div>
       </div>
       <div className="space-y-2">
-        {lines.map((line, index) => (
-          <div key={line.key} className="grid gap-2 sm:grid-cols-[1fr_70px_100px_36px]">
-            <Input
-              placeholder="Description"
-              value={line.description}
-              disabled={pending}
-              onChange={(e) =>
-                setLines((prev) =>
-                  prev.map((l, i) =>
-                    i === index ? { ...l, description: e.target.value } : l,
-                  ),
-                )
-              }
-            />
-            <Input
-              type="number"
-              min={1}
-              value={line.quantity}
-              disabled={pending}
-              onChange={(e) =>
-                setLines((prev) =>
-                  prev.map((l, i) =>
-                    i === index ? { ...l, quantity: e.target.value } : l,
-                  ),
-                )
-              }
-            />
-            <Input
-              placeholder="£"
-              value={line.unitPricePounds}
-              disabled={pending}
-              onChange={(e) =>
-                setLines((prev) =>
-                  prev.map((l, i) =>
-                    i === index ? { ...l, unitPricePounds: e.target.value } : l,
-                  ),
-                )
-              }
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={pending || lines.length === 1}
-              onClick={() => setLines((prev) => prev.filter((_, i) => i !== index))}
+        <div className="hidden gap-2 text-xs font-medium text-muted sm:grid sm:grid-cols-[1fr_70px_100px_90px_2.5rem]">
+          <span>Description</span>
+          <span>Qty</span>
+          <span>Unit £</span>
+          <span className="text-right">Total</span>
+          <span className="sr-only">Remove</span>
+        </div>
+        {lines.map((line, index) => {
+          const totalPence = lineTotalPence(line);
+          return (
+            <div
+              key={line.key}
+              className="grid gap-2 sm:grid-cols-[1fr_70px_100px_90px_2.5rem]"
             >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
-        ))}
+              <Input
+                placeholder="Description"
+                value={line.description}
+                disabled={pending}
+                onChange={(e) =>
+                  setLines((prev) =>
+                    prev.map((l, i) =>
+                      i === index ? { ...l, description: e.target.value } : l,
+                    ),
+                  )
+                }
+              />
+              <Input
+                type="number"
+                min={1}
+                value={line.quantity}
+                disabled={pending}
+                onChange={(e) =>
+                  setLines((prev) =>
+                    prev.map((l, i) =>
+                      i === index ? { ...l, quantity: e.target.value } : l,
+                    ),
+                  )
+                }
+              />
+              <Input
+                placeholder="£"
+                value={line.unitPricePounds}
+                disabled={pending}
+                onChange={(e) =>
+                  setLines((prev) =>
+                    prev.map((l, i) =>
+                      i === index ? { ...l, unitPricePounds: e.target.value } : l,
+                    ),
+                  )
+                }
+              />
+              <p className="flex items-center justify-end text-sm font-medium tabular-nums">
+                {totalPence === null ? "—" : formatGBP(totalPence)}
+              </p>
+              <Button
+                type="button"
+                variant="ghost"
+                className="size-9 shrink-0 px-0"
+                aria-label="Remove line"
+                disabled={pending || lines.length === 1}
+                onClick={() => setLines((prev) => prev.filter((_, i) => i !== index))}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          );
+        })}
         <Button
           type="button"
           variant="secondary"
@@ -152,51 +228,23 @@ export function QuoteCreateForm({
       </div>
       <div>
         <Label htmlFor="notes">Notes</Label>
-        <Textarea id="notes" name="notes" rows={2} disabled={pending} />
+        <Textarea
+          id="notes"
+          name="notes"
+          rows={2}
+          defaultValue={quote?.notes ?? ""}
+          disabled={pending}
+        />
       </div>
       <FieldError>{error}</FieldError>
       <Button type="submit" disabled={pending}>
-        Create quote
+        {pending ? "Saving…" : mode === "create" ? "Create quote" : "Save changes"}
       </Button>
     </form>
   );
 }
 
-export function ConvertQuoteButton({
-  quoteId,
-  status,
-  canWrite,
-}: {
-  quoteId: string;
-  status: string;
-  canWrite: boolean;
-}) {
-  const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
-
-  if (!canWrite || status === "converted") return null;
-
-  return (
-    <div>
-      <Button
-        type="button"
-        disabled={pending}
-        onClick={() => {
-          setError(null);
-          startTransition(async () => {
-            const result = await convertQuoteToInvoice(quoteId);
-            if (!result.ok) setError(result.error);
-            else {
-              router.push(`/dashboard/invoices/${result.id}`);
-              router.refresh();
-            }
-          });
-        }}
-      >
-        {pending ? "Converting…" : "Convert to invoice"}
-      </Button>
-      <FieldError>{error}</FieldError>
-    </div>
-  );
+/** @deprecated Use QuoteForm */
+export function QuoteCreateForm(props: { clients: { id: string; name: string }[] }) {
+  return <QuoteForm mode="create" clients={props.clients} />;
 }

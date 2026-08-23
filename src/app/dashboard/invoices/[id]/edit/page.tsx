@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { guardPage } from "@/lib/auth";
-import { getInvoiceDetail, listClients } from "@/lib/invoices/queries";
+import { getInvoiceDetail } from "@/lib/invoices/queries";
+import { listClients } from "@/lib/clients/queries";
 import { canEditInvoice, type InvoiceStatus } from "@/lib/invoices/status";
 import { InvoiceForm } from "@/components/invoices/invoice-form";
 import { buttonClasses } from "@/components/ui/button";

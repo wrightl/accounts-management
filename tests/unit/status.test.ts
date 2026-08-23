@@ -5,6 +5,7 @@ import {
   defaultDueDate,
   effectiveStatus,
   isFullySettled,
+  storedStatus,
 } from "@/lib/invoices/status";
 
 describe("invoice status", () => {
@@ -15,18 +16,28 @@ describe("invoice status", () => {
     expect(effectiveStatus("void", "2026-01-01", "2026-02-01")).toBe("void");
   });
 
+  it("treats a legacy stored overdue row as sent for display rules", () => {
+    expect(effectiveStatus("overdue", "2026-01-01", "2026-02-01")).toBe("overdue");
+    expect(effectiveStatus("overdue", "2026-03-01", "2026-02-01")).toBe("sent");
+    expect(storedStatus("overdue")).toBe("sent");
+  });
+
   it("detects full settlement", () => {
     expect(isFullySettled(10000, 10000)).toBe(true);
     expect(isFullySettled(10000, 5000)).toBe(false);
     expect(isFullySettled(0, 0)).toBe(false);
   });
 
-  it("allows void from draft/sent/overdue only", () => {
+  it("allows void from draft/sent (and legacy overdue) only", () => {
     expect(canTransition("draft", "void")).toBe(true);
     expect(canTransition("sent", "void")).toBe(true);
     expect(canTransition("overdue", "void")).toBe(true);
     expect(canTransition("paid", "void")).toBe(false);
     expect(canTransition("void", "sent")).toBe(false);
+  });
+
+  it("does not allow persisting overdue as a transition target", () => {
+    expect(canTransition("sent", "overdue")).toBe(false);
   });
 
   it("only drafts are editable", () => {

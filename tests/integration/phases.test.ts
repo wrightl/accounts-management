@@ -35,6 +35,7 @@ describe("phases 2–4 integration", () => {
       "quotes",
       "quote_line_items",
       "recurring_invoices",
+      "send_jobs",
     ]) {
       expect(names).toContain(t);
     }
@@ -111,5 +112,44 @@ describe("phases 2–4 integration", () => {
 
     const [updated] = await db.select().from(expenses).where(eq(expenses.id, exp.id));
     expect(updated.status).toBe("reimbursed");
+  });
+
+  it("rejects a second reimbursement item for the same expense", async () => {
+    const { db } = ctx;
+    const [founder] = await db
+      .insert(users)
+      .values({ email: "angel@example.com", name: "Angel", role: "user" })
+      .returning();
+
+    const [exp] = await db
+      .insert(expenses)
+      .values({
+        description: "Taxi",
+        amountPence: 2000,
+        status: "reimbursable",
+        paidByUserId: founder.id,
+      })
+      .returning();
+
+    const [runA] = await db
+      .insert(reimbursements)
+      .values({ payeeUserId: founder.id, status: "pending", totalPence: 2000 })
+      .returning();
+    const [runB] = await db
+      .insert(reimbursements)
+      .values({ payeeUserId: founder.id, status: "pending", totalPence: 2000 })
+      .returning();
+
+    await db.insert(reimbursementItems).values({
+      reimbursementId: runA.id,
+      expenseId: exp.id,
+    });
+
+    await expect(
+      db.insert(reimbursementItems).values({
+        reimbursementId: runB.id,
+        expenseId: exp.id,
+      }),
+    ).rejects.toThrow();
   });
 });

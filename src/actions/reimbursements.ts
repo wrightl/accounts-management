@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
 import {
@@ -9,10 +9,10 @@ import {
   reimbursementItems,
   reimbursements,
 } from "@/db/schema";
-import { requirePermission } from "@/lib/auth";
+import { requireActionPermission } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { ensureLocalUser } from "@/lib/users";
-import type { ActionResult } from "@/actions/clients";
+import type { ActionResult } from "@/actions/result";
 
 const createSchema = z.object({
   payeeUserId: z.string().uuid(),
@@ -24,10 +24,19 @@ const createSchema = z.object({
     .transform((v) => (v === "" || !v ? null : v)),
 });
 
+class ReimburseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ReimburseError";
+  }
+}
+
 export async function createReimbursementRun(
   formData: FormData,
 ): Promise<ActionResult> {
-  const session = await requirePermission("accounts:write");
+  const authz = await requireActionPermission("accounts:write");
+  if (!authz.ok) return authz;
+  const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
   let expenseIds: string[] = [];
@@ -47,53 +56,71 @@ export async function createReimbursementRun(
   }
 
   const db = getDb();
-  const selected = await db
-    .select()
-    .from(expenses)
-    .where(
-      and(
-        inArray(expenses.id, parsed.data.expenseIds),
-        eq(expenses.status, "reimbursable"),
-        eq(expenses.paidByUserId, parsed.data.payeeUserId),
-      ),
-    );
+  let runId: string;
+  let totalPence = 0;
+  try {
+    runId = await db.transaction(async (tx) => {
+      const ids = [...parsed.data.expenseIds].sort();
+      for (const id of ids) {
+        await tx.execute(sql`select id from expenses where id = ${id} for update`);
+      }
 
-  if (selected.length !== parsed.data.expenseIds.length) {
-    return {
-      ok: false,
-      error: "Some expenses are not reimbursable for this founder",
-    };
+      const selected = await tx
+        .select()
+        .from(expenses)
+        .where(
+          and(
+            inArray(expenses.id, ids),
+            eq(expenses.status, "reimbursable"),
+            eq(expenses.paidByUserId, parsed.data.payeeUserId),
+          ),
+        );
+
+      if (selected.length !== ids.length) {
+        throw new ReimburseError("Some expenses are not reimbursable for this founder");
+      }
+
+      const alreadyLinked = await tx
+        .select({ id: reimbursementItems.id })
+        .from(reimbursementItems)
+        .where(inArray(reimbursementItems.expenseId, ids))
+        .limit(1);
+      if (alreadyLinked[0]) {
+        throw new ReimburseError("An expense is already on a reimbursement run");
+      }
+
+      totalPence = selected.reduce((a, e) => a + e.amountPence, 0);
+
+      const [run] = await tx
+        .insert(reimbursements)
+        .values({
+          payeeUserId: parsed.data.payeeUserId,
+          status: "pending",
+          totalPence,
+          reference: parsed.data.reference,
+        })
+        .returning({ id: reimbursements.id });
+
+      await tx.insert(reimbursementItems).values(
+        selected.map((e) => ({
+          reimbursementId: run.id,
+          expenseId: e.id,
+        })),
+      );
+
+      return run.id;
+    });
+  } catch (e) {
+    if (e instanceof ReimburseError) return { ok: false, error: e.message };
+    throw e;
   }
-
-  const totalPence = selected.reduce((a, e) => a + e.amountPence, 0);
-
-  const runId = await db.transaction(async (tx) => {
-    const [run] = await tx
-      .insert(reimbursements)
-      .values({
-        payeeUserId: parsed.data.payeeUserId,
-        status: "pending",
-        totalPence,
-        reference: parsed.data.reference,
-      })
-      .returning({ id: reimbursements.id });
-
-    await tx.insert(reimbursementItems).values(
-      selected.map((e) => ({
-        reimbursementId: run.id,
-        expenseId: e.id,
-      })),
-    );
-
-    return run.id;
-  });
 
   await writeAudit({
     actorUserId: localUserId,
     action: "reimbursement.create",
     entityType: "reimbursement",
     entityId: runId,
-    meta: { totalPence, count: selected.length },
+    meta: { totalPence, count: parsed.data.expenseIds.length },
   });
 
   revalidatePath("/dashboard/reimbursements");
@@ -103,7 +130,9 @@ export async function createReimbursementRun(
 }
 
 export async function markReimbursementPaid(id: string): Promise<ActionResult> {
-  const session = await requirePermission("accounts:write");
+  const authz = await requireActionPermission("accounts:write");
+  if (!authz.ok) return authz;
+  const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
   const db = getDb();

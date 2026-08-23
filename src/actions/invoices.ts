@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
 import { invoiceLineItems, invoices } from "@/db/schema";
-import { requirePermission } from "@/lib/auth";
+import { requireActionPermission } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { ensureLocalUser } from "@/lib/users";
 import { invoiceTotals, poundsToPence } from "@/lib/money";
@@ -14,14 +14,13 @@ import {
   canEditInvoice,
   canTransition,
   defaultDueDate,
+  storedStatus,
   todayIsoDate,
   type InvoiceStatus,
 } from "@/lib/invoices/status";
-import { getInvoiceDetail, getOrCreateCompanySettings } from "@/lib/invoices/queries";
-import { renderInvoicePdf } from "@/lib/invoices/pdf";
-import { getStorage } from "@/lib/storage";
-import { sendEmail } from "@/lib/email";
-import type { ActionResult } from "@/actions/clients";
+import { getInvoiceDetail } from "@/lib/invoices/queries";
+import { enqueueSendJob, processSendJob } from "@/lib/outbox";
+import type { ActionResult } from "@/actions/result";
 
 const lineSchema = z.object({
   description: z.string().trim().min(1),
@@ -69,7 +68,9 @@ function buildLineValues(lines: z.infer<typeof lineSchema>[]) {
 }
 
 export async function createInvoice(formData: FormData): Promise<ActionResult> {
-  const session = await requirePermission("accounts:write");
+  const authz = await requireActionPermission("accounts:write");
+  if (!authz.ok) return authz;
+  const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
   const parsed = invoiceSchema.safeParse({
@@ -138,7 +139,9 @@ export async function updateInvoice(
   id: string,
   formData: FormData,
 ): Promise<ActionResult> {
-  const session = await requirePermission("accounts:write");
+  const authz = await requireActionPermission("accounts:write");
+  if (!authz.ok) return authz;
+  const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
   const db = getDb();
@@ -212,7 +215,9 @@ export async function updateInvoice(
 }
 
 export async function voidInvoice(id: string): Promise<ActionResult> {
-  const session = await requirePermission("accounts:write");
+  const authz = await requireActionPermission("accounts:write");
+  if (!authz.ok) return authz;
+  const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
   const db = getDb();
@@ -223,7 +228,7 @@ export async function voidInvoice(id: string): Promise<ActionResult> {
     .limit(1);
   if (!existing) return { ok: false, error: "Invoice not found" };
 
-  const from = existing.status as InvoiceStatus;
+  const from = storedStatus(existing.status);
   if (!canTransition(from, "void")) {
     return { ok: false, error: `Cannot void an invoice in status "${from}"` };
   }
@@ -247,66 +252,37 @@ export async function voidInvoice(id: string): Promise<ActionResult> {
 }
 
 export async function sendInvoice(id: string): Promise<ActionResult> {
-  const session = await requirePermission("accounts:write");
+  const authz = await requireActionPermission("accounts:write");
+  if (!authz.ok) return authz;
+  const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
   const detail = await getInvoiceDetail(id);
   if (!detail) return { ok: false, error: "Invoice not found" };
 
-  const from = detail.invoice.status as InvoiceStatus;
-  if (from !== "draft" && from !== "sent" && from !== "overdue") {
+  const from = storedStatus(detail.invoice.status);
+  if (from !== "draft" && from !== "sent") {
     return { ok: false, error: `Cannot send an invoice in status "${from}"` };
   }
   if (!detail.client.email) {
     return { ok: false, error: "Client has no email address" };
   }
 
-  const company = await getOrCreateCompanySettings();
-  const pdfBytes = await renderInvoicePdf({
-    invoice: detail.invoice,
-    client: detail.client,
-    lines: detail.lines,
-    company,
-  });
-
-  const storage = getStorage();
-  const stored = await storage.put(
-    `invoices/${id}.pdf`,
-    Buffer.from(pdfBytes),
-    "application/pdf",
-  );
-
-  const filename = `${detail.invoice.number}.pdf`;
-  await sendEmail({
-    to: detail.client.email,
-    subject: `Invoice ${detail.invoice.number} from ${company.name}`,
-    html: `<p>Hi,</p><p>Please find attached invoice <strong>${detail.invoice.number}</strong> for ${detail.invoice.grossFormatted}.</p><p>Kind regards,<br/>${company.name}</p>`,
-    text: `Please find attached invoice ${detail.invoice.number} for ${detail.invoice.grossFormatted}.`,
-    attachments: [
-      {
-        filename,
-        content: Buffer.from(pdfBytes),
-        contentType: "application/pdf",
-      },
-    ],
-  });
-
-  const db = getDb();
-  await db
-    .update(invoices)
-    .set({
-      status: "sent",
-      sentAt: new Date(),
-      pdfBlobPath: stored.path,
-    })
-    .where(eq(invoices.id, id));
+  const jobId = await enqueueSendJob("invoice_send", id);
+  const delivered = await processSendJob(jobId);
+  if (!delivered.ok) {
+    return {
+      ok: false,
+      error: delivered.error ?? "Failed to send invoice. It will retry automatically.",
+    };
+  }
 
   await writeAudit({
     actorUserId: localUserId,
     action: "invoice.send",
     entityType: "invoice",
     entityId: id,
-    meta: { to: detail.client.email, pdfPath: stored.path },
+    meta: { to: detail.client.email, jobId },
   });
 
   revalidatePath("/dashboard/invoices");

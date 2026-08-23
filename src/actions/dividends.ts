@@ -5,11 +5,11 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
 import { dividends } from "@/db/schema";
-import { requirePermission } from "@/lib/auth";
+import { requireActionPermission } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { ensureLocalUser } from "@/lib/users";
 import { poundsToPence } from "@/lib/money";
-import type { ActionResult } from "@/actions/clients";
+import type { ActionResult } from "@/actions/result";
 
 const dividendSchema = z.object({
   declaredAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -23,7 +23,9 @@ const dividendSchema = z.object({
 });
 
 export async function createDividend(formData: FormData): Promise<ActionResult> {
-  const session = await requirePermission("accounts:write");
+  const authz = await requireActionPermission("accounts:write");
+  if (!authz.ok) return authz;
+  const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
   const parsed = dividendSchema.safeParse({
@@ -66,7 +68,9 @@ export async function createDividend(formData: FormData): Promise<ActionResult> 
 }
 
 export async function deleteDividend(id: string): Promise<ActionResult> {
-  const session = await requirePermission("accounts:write");
+  const authz = await requireActionPermission("accounts:write");
+  if (!authz.ok) return authz;
+  const session = authz.user;
   const localUserId = await ensureLocalUser(session);
   const db = getDb();
   await db.delete(dividends).where(eq(dividends.id, id));

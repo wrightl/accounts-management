@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { guardPage } from "@/lib/auth";
-import { listClients } from "@/lib/invoices/queries";
+import { listClients } from "@/lib/clients/queries";
 import { InvoiceForm } from "@/components/invoices/invoice-form";
 import { buttonClasses } from "@/components/ui/button";
 import { isDatabaseConfigured } from "@/env";

@@ -22,6 +22,55 @@
       "when": 1787350724234,
       "tag": "0002_phases_4_to_6",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787352801393,
+      "tag": "0003_go_live_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787354010418,
+      "tag": "0004_glorious_roland_deschain",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1787477684255,
+      "tag": "0005_military_bullseye",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787481061566,
+      "tag": "0006_goofy_groot",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787483178611,
+      "tag": "0007_certain_thunderball",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1787483616033,
+      "tag": "0008_black_patriot",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1787483931444,
+      "tag": "0009_sour_marvel_boy",
+      "breakpoints": true
     }
   ]
 }

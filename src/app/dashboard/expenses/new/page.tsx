@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { guardPage, hasPermission } from "@/lib/auth";
-import { listClients } from "@/lib/invoices/queries";
+import { listClients } from "@/lib/clients/queries";
 import { listFounders } from "@/lib/expenses/queries";
 import { ExpenseForm } from "@/components/expenses/expense-form";
 import { buttonClasses } from "@/components/ui/button";

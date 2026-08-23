@@ -1,8 +1,10 @@
 /**
- * Invoice number formatting and allocation.
- * Format: `{prefix}-{YYYY}-{NNNN}` e.g. DD-2026-0001.
+ * Invoice / quote number formatting and allocation.
+ * Format: `{prefix}-{YYYY}-{NNNN}` e.g. DD-2026-0001, Q-2026-0001.
  * Sequence resets when the issue-date calendar year changes.
  */
+
+import { todayIsoDate } from "@/lib/dates";
 
 export function formatInvoiceNumber(
   prefix: string,
@@ -14,15 +16,15 @@ export function formatInvoiceNumber(
 }
 
 export function parseIssueYear(issueDate: string | Date | null | undefined): number {
-  if (!issueDate) return new Date().getFullYear();
+  if (!issueDate) return Number(todayIsoDate().slice(0, 4));
   if (typeof issueDate === "string") {
     const y = Number(issueDate.slice(0, 4));
     if (Number.isFinite(y) && y >= 2000) return y;
   }
   if (issueDate instanceof Date && !Number.isNaN(issueDate.getTime())) {
-    return issueDate.getFullYear();
+    return Number(todayIsoDate(issueDate).slice(0, 4));
   }
-  return new Date().getFullYear();
+  return Number(todayIsoDate().slice(0, 4));
 }
 
 export interface NumberingState {
@@ -42,6 +44,27 @@ export function nextInvoiceNumber(
   const prefix = state.invoiceNumberPrefix || "DD";
   const sameYear = state.invoiceSeqYear === year;
   const seq = sameYear ? state.invoiceNextSeq : 1;
+  return {
+    number: formatInvoiceNumber(prefix, year, seq),
+    nextSeq: seq + 1,
+    seqYear: year,
+  };
+}
+
+export interface QuoteNumberingState {
+  quoteNumberPrefix: string;
+  quoteNextSeq: number;
+  quoteSeqYear: number | null;
+}
+
+/** Quote numbers: {prefix}-{YYYY}-{NNNN}. */
+export function nextQuoteNumber(
+  state: QuoteNumberingState,
+  year: number,
+): { number: string; nextSeq: number; seqYear: number } {
+  const prefix = state.quoteNumberPrefix || "Q";
+  const sameYear = state.quoteSeqYear === year;
+  const seq = sameYear ? state.quoteNextSeq : 1;
   return {
     number: formatInvoiceNumber(prefix, year, seq),
     nextSeq: seq + 1,

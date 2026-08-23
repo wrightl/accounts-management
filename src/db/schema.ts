@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   pgEnum,
@@ -10,9 +11,10 @@ import {
   jsonb,
   index,
   uniqueIndex,
+  check,
 } from "drizzle-orm/pg-core";
 
-export const roleEnum = pgEnum("role", ["admin", "user", "accountant"]);
+export const roleEnum = pgEnum("role", ["admin", "user", "accountant", "pending"]);
 export const invoiceStatusEnum = pgEnum("invoice_status", [
   "draft",
   "sent",
@@ -30,6 +32,15 @@ export const reimbursementStatusEnum = pgEnum("reimbursement_status", [
   "pending",
   "paid",
 ]);
+export const sendJobKindEnum = pgEnum("send_job_kind", [
+  "invoice_send",
+  "invoice_remind",
+]);
+export const sendJobStatusEnum = pgEnum("send_job_status", [
+  "pending",
+  "sent",
+  "failed",
+]);
 
 /** Local mirror of Clerk users, with the app role. */
 export const users = pgTable("users", {
@@ -37,32 +48,46 @@ export const users = pgTable("users", {
   clerkUserId: text("clerk_user_id").unique(),
   email: text("email").notNull(),
   name: text("name"),
-  role: roleEnum("role").notNull().default("user"),
+  role: roleEnum("role").notNull().default("pending"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 /** Single-row company profile / settings. */
-export const companySettings = pgTable("company_settings", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull().default("Dot + Dash Consulting"),
-  legalName: text("legal_name").notNull().default("Dot and Dash Consulting Ltd"),
-  companyNumber: text("company_number"),
-  vatNumber: text("vat_number"), // null: not VAT registered
-  addressLines: text("address_lines"),
-  bankName: text("bank_name").notNull().default("Starling"),
-  bankAccountName: text("bank_account_name"),
-  sortCode: text("sort_code"),
-  accountNumber: text("account_number"),
-  financialYearEndMonth: integer("financial_year_end_month").notNull().default(3),
-  logoUrl: text("logo_url"),
-  /** Invoice number prefix, e.g. "DD" → DD-2026-0001. */
-  invoiceNumberPrefix: text("invoice_number_prefix").notNull().default("DD"),
-  /** Next sequence number to allocate for the current invoiceSeqYear. */
-  invoiceNextSeq: integer("invoice_next_seq").notNull().default(1),
-  /** Calendar year the sequence applies to; null until the first invoice. */
-  invoiceSeqYear: integer("invoice_seq_year"),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+export const companySettings = pgTable(
+  "company_settings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull().default("Dot + Dash Consulting"),
+    legalName: text("legal_name").notNull().default("Dot and Dash Consulting Ltd"),
+    companyNumber: text("company_number"),
+    vatNumber: text("vat_number"), // null: not VAT registered
+    addressLines: text("address_lines"),
+    bankName: text("bank_name").notNull().default("Starling"),
+    bankAccountName: text("bank_account_name"),
+    sortCode: text("sort_code"),
+    accountNumber: text("account_number"),
+    financialYearEndMonth: integer("financial_year_end_month").notNull().default(3),
+    logoUrl: text("logo_url"),
+    /** Invoice number prefix, e.g. "DD" → DD-2026-0001. */
+    invoiceNumberPrefix: text("invoice_number_prefix").notNull().default("DD"),
+    /** Quote number prefix, e.g. "Q" → Q-2026-0001. */
+    quoteNumberPrefix: text("quote_number_prefix").notNull().default("Q"),
+    /** Next sequence number to allocate for the current invoiceSeqYear. */
+    invoiceNextSeq: integer("invoice_next_seq").notNull().default(1),
+    /** Calendar year the sequence applies to; null until the first invoice. */
+    invoiceSeqYear: integer("invoice_seq_year"),
+    /** Next quote sequence for the current quoteSeqYear. */
+    quoteNextSeq: integer("quote_next_seq").notNull().default(1),
+    quoteSeqYear: integer("quote_seq_year"),
+    /** Always true — unique so this table can only hold one row. */
+    singleton: boolean("singleton").notNull().default(true),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("company_settings_singleton").on(t.singleton),
+    check("company_settings_singleton_true", sql`${t.singleton} = true`),
+  ],
+);
 
 export const clients = pgTable("clients", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -154,7 +179,17 @@ export const expenses = pgTable(
     }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index("idx_expenses_status").on(t.status), index("idx_expenses_paid_by").on(t.paidByUserId)],
+  (t) => [
+    index("idx_expenses_status").on(t.status),
+    index("idx_expenses_paid_by").on(t.paidByUserId),
+    check(
+      "expenses_category_known",
+      sql`${t.category} is null or ${t.category} in (
+        'Travel', 'Meals', 'Software', 'Office', 'Marketing',
+        'Professional fees', 'Equipment', 'Training', 'Other'
+      )`,
+    ),
+  ],
 );
 
 export const expenseReceipts = pgTable(
@@ -197,7 +232,10 @@ export const reimbursementItems = pgTable(
       .notNull()
       .references(() => expenses.id, { onDelete: "restrict" }),
   },
-  (t) => [index("idx_reimb_items_reimb").on(t.reimbursementId)],
+  (t) => [
+    index("idx_reimb_items_reimb").on(t.reimbursementId),
+    uniqueIndex("uniq_reimb_items_expense").on(t.expenseId),
+  ],
 );
 
 /** Append-only audit trail of sensitive actions. */
@@ -227,6 +265,17 @@ export const bankAccounts = pgTable("bank_accounts", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+/** User-defined spending categories (reusable outside built-in Starling labels). */
+export const bankSpendingCategories = pgTable(
+  "bank_spending_categories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("uniq_bank_spending_category_name").on(sql`lower(${t.name})`)],
+);
+
 export const bankTransactions = pgTable(
   "bank_transactions",
   {
@@ -241,6 +290,8 @@ export const bankTransactions = pgTable(
     counterparty: text("counterparty"),
     reference: text("reference"),
     description: text("description"),
+    spendingCategory: text("spending_category"),
+    tags: text("tags").array().notNull().default([]),
     raw: jsonb("raw"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -297,6 +348,12 @@ export const quoteStatusEnum = pgEnum("quote_status", [
   "converted",
 ]);
 
+export const quoteVersionSourceEnum = pgEnum("quote_version_source", [
+  "create",
+  "edit",
+  "rollback",
+]);
+
 export const quotes = pgTable("quotes", {
   id: uuid("id").primaryKey().defaultRandom(),
   number: text("number").notNull().unique(),
@@ -304,6 +361,8 @@ export const quotes = pgTable("quotes", {
     .notNull()
     .references(() => clients.id, { onDelete: "restrict" }),
   status: quoteStatusEnum("status").notNull().default("draft"),
+  /** Monotonic revision number; incremented on each edit or rollback. */
+  version: integer("version").notNull().default(1),
   issueDate: date("issue_date"),
   validUntil: date("valid_until"),
   notes: text("notes"),
@@ -317,7 +376,40 @@ export const quotes = pgTable("quotes", {
     onDelete: "set null",
   }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  /** Blob pathname for the generated PDF (served via authorised route). */
+  pdfBlobPath: text("pdf_blob_path"),
 });
+
+export const quoteVersions = pgTable(
+  "quote_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    quoteId: uuid("quote_id")
+      .notNull()
+      .references(() => quotes.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    clientId: uuid("client_id").notNull(),
+    issueDate: date("issue_date"),
+    validUntil: date("valid_until"),
+    notes: text("notes"),
+    netPence: integer("net_pence").notNull().default(0),
+    vatPence: integer("vat_pence").notNull().default(0),
+    grossPence: integer("gross_pence").notNull().default(0),
+    /** [{ description, quantity, unitPricePence, vatRate, position }] */
+    lines: jsonb("lines").notNull(),
+    source: quoteVersionSourceEnum("source").notNull(),
+    rolledBackFromVersion: integer("rolled_back_from_version"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("uniq_quote_versions_quote_version").on(t.quoteId, t.version),
+    index("idx_quote_versions_quote").on(t.quoteId),
+  ],
+);
 
 export const quoteLineItems = pgTable(
   "quote_line_items",
@@ -333,6 +425,29 @@ export const quoteLineItems = pgTable(
     position: integer("position").notNull().default(0),
   },
   (t) => [index("idx_quote_lines_quote").on(t.quoteId)],
+);
+
+export const sendJobs = pgTable(
+  "send_jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kind: sendJobKindEnum("kind").notNull(),
+    invoiceId: uuid("invoice_id")
+      .notNull()
+      .references(() => invoices.id, { onDelete: "cascade" }),
+    status: sendJobStatusEnum("status").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("idx_send_jobs_status").on(t.status),
+    index("idx_send_jobs_invoice").on(t.invoiceId),
+    uniqueIndex("uniq_send_jobs_pending")
+      .on(t.kind, t.invoiceId)
+      .where(sql`${t.status} = 'pending'`),
+  ],
 );
 
 export const recurringInvoices = pgTable("recurring_invoices", {
@@ -363,10 +478,13 @@ export const schema = {
   reimbursementItems,
   auditLog,
   bankAccounts,
+  bankSpendingCategories,
   bankTransactions,
   reconciliationMatches,
   dividends,
   quotes,
   quoteLineItems,
+  quoteVersions,
   recurringInvoices,
+  sendJobs,
 };

@@ -3,12 +3,11 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { invoices } from "@/db/schema";
 import { requirePermission, ForbiddenError } from "@/lib/auth";
-import {
-  getInvoiceDetail,
-  getOrCreateCompanySettings,
-} from "@/lib/invoices/queries";
+import { getInvoiceDetail } from "@/lib/invoices/queries";
+import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { renderInvoicePdf } from "@/lib/invoices/pdf";
 import { getStorage } from "@/lib/storage";
+import { contentDispositionAttachment } from "@/lib/files";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -52,7 +51,7 @@ export async function GET(
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Disposition": contentDispositionAttachment(filename),
       "Cache-Control": "private, no-store",
     },
   });

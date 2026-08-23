@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "@/db/pglite";
 import {
@@ -9,8 +9,10 @@ import {
   payments,
 } from "@/db/schema";
 import { invoiceTotals } from "@/lib/money";
-import { nextInvoiceNumber } from "@/lib/invoices/numbering";
+import { allocateInvoiceNumber } from "@/lib/invoices/allocate";
 import { isFullySettled } from "@/lib/invoices/status";
+
+vi.mock("server-only", () => ({}));
 
 let ctx: Awaited<ReturnType<typeof createTestDb>>;
 let db: TestDatabase;
@@ -32,30 +34,9 @@ async function ensureSettings() {
 }
 
 async function allocateNumber(issueYear: number) {
-  return db.transaction(async (tx) => {
-    let rows = await tx.select().from(companySettings).limit(1);
-    if (!rows[0]) {
-      const [created] = await tx.insert(companySettings).values({}).returning();
-      rows = [created];
-    }
-    const settings = rows[0];
-    const allocated = nextInvoiceNumber(
-      {
-        invoiceNumberPrefix: settings.invoiceNumberPrefix,
-        invoiceNextSeq: settings.invoiceNextSeq,
-        invoiceSeqYear: settings.invoiceSeqYear,
-      },
-      issueYear,
-    );
-    await tx
-      .update(companySettings)
-      .set({
-        invoiceNextSeq: allocated.nextSeq,
-        invoiceSeqYear: allocated.seqYear,
-      })
-      .where(eq(companySettings.id, settings.id));
-    return allocated.number;
-  });
+  return db.transaction(async (tx) =>
+    allocateInvoiceNumber(tx as never, `${issueYear}-06-01`),
+  );
 }
 
 describe("invoicing integration (PGlite)", () => {

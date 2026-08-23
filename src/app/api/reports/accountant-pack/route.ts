@@ -29,7 +29,7 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url);
-  const defaults = defaultReportPeriod();
+  const defaults = await defaultReportPeriod();
   const from = url.searchParams.get("from") ?? defaults.from;
   const to = url.searchParams.get("to") ?? defaults.to;
 

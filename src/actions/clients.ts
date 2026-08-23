@@ -5,9 +5,10 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
 import { clients, invoices } from "@/db/schema";
-import { requirePermission } from "@/lib/auth";
+import { requireActionPermission } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { ensureLocalUser } from "@/lib/users";
+import type { ActionResult } from "@/actions/result";
 
 const clientSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(200),
@@ -32,12 +33,10 @@ const clientSchema = z.object({
     .transform((v) => (v === "" ? null : v)),
 });
 
-export type ActionResult =
-  | { ok: true; id?: string }
-  | { ok: false; error: string };
-
 export async function createClient(formData: FormData): Promise<ActionResult> {
-  const session = await requirePermission("accounts:write");
+  const authz = await requireActionPermission("accounts:write");
+  if (!authz.ok) return authz;
+  const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
   const parsed = clientSchema.safeParse({
@@ -77,7 +76,9 @@ export async function updateClient(
   id: string,
   formData: FormData,
 ): Promise<ActionResult> {
-  const session = await requirePermission("accounts:write");
+  const authz = await requireActionPermission("accounts:write");
+  if (!authz.ok) return authz;
+  const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
   const parsed = clientSchema.safeParse({
@@ -114,7 +115,9 @@ export async function updateClient(
 }
 
 export async function deleteClient(id: string): Promise<ActionResult> {
-  const session = await requirePermission("accounts:write");
+  const authz = await requireActionPermission("accounts:write");
+  if (!authz.ok) return authz;
+  const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
   const db = getDb();

@@ -40,7 +40,11 @@ export function ClientForm({
         setError(result.error);
         return;
       }
-      router.push(result.id ? `/dashboard/clients/${result.id}` : "/dashboard/clients");
+      if (mode === "edit") {
+        router.push("/dashboard/clients");
+      } else {
+        router.push(result.id ? `/dashboard/clients/${result.id}` : "/dashboard/clients");
+      }
       router.refresh();
     });
   }

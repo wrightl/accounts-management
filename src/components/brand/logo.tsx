@@ -1,42 +1,47 @@
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 
-/** Pink dot + periwinkle dash — the brand mark from the company name. */
-export function BrandMark({ className }: { className?: string }) {
-  return (
-    <span
-      className={cn("inline-flex items-center gap-1", className)}
-      aria-hidden="true"
-    >
-      <span className="size-2 shrink-0 rounded-full bg-brand" />
-      <span className="h-0.5 w-3 shrink-0 rounded-full bg-current opacity-80" />
-    </span>
-  );
-}
+export const LOGO_SRC = "/brand/logo.png";
 
 /**
- * Dot + Dash wordmark. Matches the marketing site: one geometric line,
- * no coloured plus. Colour inherits from the parent (`currentColor`).
+ * Official Dot + Dash square mark (blue tile, stacked DOT + / DASH)
+ * plus optional wordmark. Colour of the wordmark inherits from the parent.
  */
 export function Logo({
   className,
   showConsulting = false,
-  showMark = true,
+  showWordmark = true,
+  subtitle,
+  size = 40,
+  priority = false,
 }: {
   className?: string;
   showConsulting?: boolean;
-  showMark?: boolean;
+  showWordmark?: boolean;
+  subtitle?: string;
+  size?: number;
+  priority?: boolean;
 }) {
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-2 text-lg font-normal tracking-tight",
-        className,
+    <span className={cn("inline-flex items-center gap-3", className)}>
+      <Image
+        src={LOGO_SRC}
+        alt="Dot + Dash"
+        width={size}
+        height={size}
+        className="shrink-0 rounded-md"
+        priority={priority}
+      />
+      {showWordmark && (
+        <span className="flex flex-col leading-tight">
+          <span>Dot + Dash{showConsulting ? " Consulting" : ""}</span>
+          {subtitle ? (
+            <span className="mt-0.5 text-xs tracking-widest uppercase opacity-80">
+              {subtitle}
+            </span>
+          ) : null}
+        </span>
       )}
-    >
-      {showMark && <BrandMark />}
-      <span>
-        Dot + Dash{showConsulting ? " Consulting" : ""}
-      </span>
     </span>
   );
 }

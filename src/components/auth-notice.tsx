@@ -8,7 +8,7 @@ export function AuthNotConfigured() {
   return (
     <AuthFrame>
       <div className="w-full max-w-md rounded-2xl bg-surface px-8 py-10 text-center text-foreground">
-        <Logo className="justify-center text-2xl" />
+        <Logo className="justify-center" size={56} />
         <h1 className="mt-6 font-display text-2xl font-normal">
           Authentication not configured
         </h1>

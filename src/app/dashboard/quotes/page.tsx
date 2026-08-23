@@ -1,10 +1,9 @@
 import Link from "next/link";
 import { guardPage, hasPermission } from "@/lib/auth";
 import { listQuotes } from "@/lib/quotes/queries";
-import { listClients } from "@/lib/invoices/queries";
+import { buttonClasses } from "@/components/ui/button";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { isDatabaseConfigured } from "@/env";
-import { QuoteCreateForm } from "@/components/quotes/quote-form";
 
 export default async function QuotesPage() {
   await guardPage("accounts:read");
@@ -19,12 +18,24 @@ export default async function QuotesPage() {
     );
   }
 
-  const [rows, clients] = await Promise.all([listQuotes(), listClients()]);
+  const rows = await listQuotes();
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-semibold">Quotes</h1>
-      <p className="mt-1 text-muted">Estimates that convert to invoices.</p>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h1 className="font-display text-2xl font-semibold">Quotes</h1>
+          <p className="mt-1 text-muted">
+            Estimates that convert to invoices. Download or email a PDF, then convert
+            to an invoice when the client accepts.
+          </p>
+        </div>
+        {canWrite && (
+          <Link href="/dashboard/quotes/new" className={buttonClasses("primary")}>
+            New quote
+          </Link>
+        )}
+      </div>
 
       <div className="mt-6">
         {rows.length === 0 ? (
@@ -59,13 +70,6 @@ export default async function QuotesPage() {
           </Table>
         )}
       </div>
-
-      {canWrite && clients.length > 0 && (
-        <div className="mt-10 max-w-2xl border-t border-border pt-8">
-          <h2 className="mb-4 font-display text-lg font-semibold">New quote</h2>
-          <QuoteCreateForm clients={clients} />
-        </div>
-      )}
     </div>
   );
 }

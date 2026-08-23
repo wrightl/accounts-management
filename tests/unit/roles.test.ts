@@ -6,6 +6,7 @@ describe("roles", () => {
     expect(isRole("admin")).toBe(true);
     expect(isRole("user")).toBe(true);
     expect(isRole("accountant")).toBe(true);
+    expect(isRole("pending")).toBe(true);
     expect(isRole("superuser")).toBe(false);
     expect(isRole(undefined)).toBe(false);
   });
@@ -34,7 +35,9 @@ describe("roles", () => {
     expect(can("accountant", "settings:manage")).toBe(false);
   });
 
-  it("denies everything for an unknown/absent role", () => {
+  it("denies everything for pending, unknown, or absent roles", () => {
+    expect(can("pending", "accounts:read")).toBe(false);
+    expect(can("pending", "accounts:write")).toBe(false);
     expect(can(null, "accounts:read")).toBe(false);
     expect(can(undefined, "reports:read")).toBe(false);
   });

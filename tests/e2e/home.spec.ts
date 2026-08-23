@@ -12,9 +12,6 @@ test("health endpoint reports ok", async ({ request }) => {
   expect(res.ok()).toBeTruthy();
   const body = await res.json();
   expect(body.status).toBe("ok");
-  expect(body.service).toBe("dot-and-dash-accounts");
-  expect(body.config).toHaveProperty("auth");
-  expect(body.config).toHaveProperty("database");
 });
 
 test("sign-in route is reachable", async ({ page }) => {

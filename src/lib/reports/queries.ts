@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, gte, lte, ne, sql, sum } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, ne, sql, sum } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   clients,
@@ -8,8 +8,10 @@ import {
   invoices,
   payments,
 } from "@/db/schema";
+import { defaultReportPeriod as fyDefaultReportPeriod } from "@/lib/dates";
 import { formatGBP } from "@/lib/money";
 import { todayIsoDate } from "@/lib/invoices/status";
+import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 
 export async function getProfitAndLoss(from: string, to: string) {
   const db = getDb();
@@ -39,6 +41,9 @@ export async function getProfitAndLoss(from: string, to: string) {
     incomeFormatted: formatGBP(incomePence),
     expenseFormatted: formatGBP(expensePence),
     profitFormatted: formatGBP(incomePence - expensePence),
+    basis: "accrual" as const,
+    basisNote:
+      "Accrual basis: income is invoiced (issue date, including unpaid) in the period. Expenses are by spend date. VAT is £0 until the company is VAT-registered.",
   };
 }
 
@@ -62,12 +67,28 @@ export async function getAgedReceivables() {
 
   const buckets = { current: 0, d30: 0, d60: 0, d90: 0 };
 
-  for (const inv of rows) {
-    const paid = await db
-      .select({ total: sum(payments.amountPence).mapWith(Number) })
+  const paidMap = new Map<string, number>();
+  if (rows.length > 0) {
+    const paidByInvoice = await db
+      .select({
+        invoiceId: payments.invoiceId,
+        total: sum(payments.amountPence).mapWith(Number),
+      })
       .from(payments)
-      .where(eq(payments.invoiceId, inv.id));
-    const balance = Math.max(0, inv.grossPence - (paid[0]?.total ?? 0));
+      .where(
+        inArray(
+          payments.invoiceId,
+          rows.map((r) => r.id),
+        ),
+      )
+      .groupBy(payments.invoiceId);
+    for (const p of paidByInvoice) {
+      paidMap.set(p.invoiceId, p.total ?? 0);
+    }
+  }
+
+  for (const inv of rows) {
+    const balance = Math.max(0, inv.grossPence - (paidMap.get(inv.id) ?? 0));
     if (balance === 0) continue;
     const due = inv.dueDate ?? today;
     const days = Math.max(
@@ -161,11 +182,7 @@ export async function listDividends() {
   }));
 }
 
-export function defaultReportPeriod(): { from: string; to: string } {
-  const to = todayIsoDate();
-  const year = Number(to.slice(0, 4));
-  // FY ends March: if before April, FY started previous April 1
-  const month = Number(to.slice(5, 7));
-  const fyStartYear = month >= 4 ? year : year - 1;
-  return { from: `${fyStartYear}-04-01`, to };
+export async function defaultReportPeriod(): Promise<{ from: string; to: string }> {
+  const settings = await getOrCreateCompanySettings();
+  return fyDefaultReportPeriod(settings.financialYearEndMonth);
 }

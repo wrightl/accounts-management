@@ -1,41 +1,13 @@
 import "server-only";
 import { and, desc, eq, gte, inArray, lte, ne, sum } from "drizzle-orm";
 import { getDb } from "@/db";
-import {
-  clients,
-  companySettings,
-  invoiceLineItems,
-  invoices,
-  payments,
-} from "@/db/schema";
+import { clients, invoiceLineItems, invoices, payments } from "@/db/schema";
 import { formatGBP } from "@/lib/money";
 import {
   effectiveStatus,
   todayIsoDate,
   type InvoiceStatus,
 } from "@/lib/invoices/status";
-
-export async function getOrCreateCompanySettings() {
-  const db = getDb();
-  const rows = await db.select().from(companySettings).limit(1);
-  if (rows[0]) return rows[0];
-  const [created] = await db
-    .insert(companySettings)
-    .values({})
-    .returning();
-  return created;
-}
-
-export async function listClients() {
-  const db = getDb();
-  return db.select().from(clients).orderBy(clients.name);
-}
-
-export async function getClient(id: string) {
-  const db = getDb();
-  const rows = await db.select().from(clients).where(eq(clients.id, id)).limit(1);
-  return rows[0] ?? null;
-}
 
 export async function listInvoices() {
   const db = getDb();

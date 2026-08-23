@@ -1,8 +1,17 @@
 /**
  * Invoice status helpers: effective (display) status, settlement, transitions.
+ *
+ * Stored values are draft | sent | paid | void. Overdue is computed from
+ * due date while the row stays `sent`. Legacy rows with stored "overdue"
+ * are treated as sent.
  */
 
-export type InvoiceStatus = "draft" | "sent" | "paid" | "overdue" | "void";
+import { todayIsoDate } from "@/lib/dates";
+
+export { todayIsoDate };
+
+export type StoredInvoiceStatus = "draft" | "sent" | "paid" | "void";
+export type InvoiceStatus = StoredInvoiceStatus | "overdue";
 
 export function isInvoiceStatus(value: unknown): value is InvoiceStatus {
   return (
@@ -14,28 +23,33 @@ export function isInvoiceStatus(value: unknown): value is InvoiceStatus {
   );
 }
 
+/** Map a DB value to a stored status (legacy overdue → sent). */
+export function storedStatus(status: string): StoredInvoiceStatus {
+  if (status === "overdue") return "sent";
+  if (status === "draft" || status === "sent" || status === "paid" || status === "void") {
+    return status;
+  }
+  return "draft";
+}
+
 /** Whether payments cover the invoice gross total. */
 export function isFullySettled(grossPence: number, paidPence: number): boolean {
   return paidPence >= grossPence && grossPence > 0;
 }
 
 /**
- * Display status: if stored as `sent` and due date has passed, treat as overdue.
- * Paid and void are never rewritten.
+ * Display status: sent + past due → overdue. Paid and void are never rewritten.
  */
 export function effectiveStatus(
-  status: InvoiceStatus,
+  status: InvoiceStatus | string,
   dueDate: string | null | undefined,
   today: string = todayIsoDate(),
 ): InvoiceStatus {
-  if (status === "sent" && dueDate && dueDate < today) {
+  const stored = storedStatus(status);
+  if (stored === "sent" && dueDate && dueDate < today) {
     return "overdue";
   }
-  return status;
-}
-
-export function todayIsoDate(now: Date = new Date()): string {
-  return now.toISOString().slice(0, 10);
+  return stored;
 }
 
 export function defaultDueDate(issueDate: string, days = 14): string {
@@ -44,23 +58,25 @@ export function defaultDueDate(issueDate: string, days = 14): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Allowed transitions for mutations (void can come from draft/sent/overdue). */
+/** Allowed transitions for mutations. Overdue is display-only (same as sent). */
 export function canTransition(
   from: InvoiceStatus,
   to: InvoiceStatus,
 ): boolean {
-  if (from === to) return true;
-  if (from === "void" || from === "paid") return false;
-  if (to === "void") return from === "draft" || from === "sent" || from === "overdue";
-  if (to === "sent") return from === "draft" || from === "overdue";
-  if (to === "paid") return from === "sent" || from === "overdue";
-  if (to === "overdue") return from === "sent";
-  if (to === "draft") return false;
+  const src = storedStatus(from);
+  const dest = storedStatus(to);
+  if (to === "overdue") return false;
+  if (src === dest) return true;
+  if (src === "void" || src === "paid") return false;
+  if (dest === "void") return src === "draft" || src === "sent";
+  if (dest === "sent") return src === "draft";
+  if (dest === "paid") return src === "sent";
+  if (dest === "draft") return false;
   return false;
 }
 
 export function canEditInvoice(status: InvoiceStatus): boolean {
-  return status === "draft";
+  return storedStatus(status) === "draft";
 }
 
 export function statusLabel(status: InvoiceStatus): string {

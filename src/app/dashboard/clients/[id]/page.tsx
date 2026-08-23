@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { guardPage, hasPermission } from "@/lib/auth";
-import { getClient } from "@/lib/invoices/queries";
+import { getClient } from "@/lib/clients/queries";
 import { ClientForm } from "@/components/clients/client-form";
 import { buttonClasses } from "@/components/ui/button";
 import { isDatabaseConfigured } from "@/env";

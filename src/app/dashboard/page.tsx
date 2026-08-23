@@ -1,11 +1,27 @@
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { requireUser } from "@/lib/auth";
+import { can } from "@/lib/roles";
 import { getDashboardKpis } from "@/lib/invoices/queries";
 import { getOwedSummary } from "@/lib/reimbursements/queries";
 import { isDatabaseConfigured } from "@/env";
 
 export default async function DashboardOverview() {
   const user = await requireUser();
+
+  if (user.role === "pending") {
+    return (
+      <div>
+        <h1 className="font-display text-2xl font-semibold">
+          Welcome{user.name ? `, ${user.name.split(" ")[0]}` : ""}
+        </h1>
+        <p className="mt-2 text-muted">
+          Your account is waiting for an administrator to assign a role in Clerk
+          (admin, co-founder, or accountant). You cannot view or change the books
+          until then.
+        </p>
+      </div>
+    );
+  }
 
   let kpis = {
     outstandingFormatted: "—",
@@ -14,7 +30,7 @@ export default async function DashboardOverview() {
     reimbursementsFormatted: "—",
   };
 
-  if (isDatabaseConfigured()) {
+  if (isDatabaseConfigured() && can(user.role, "accounts:read")) {
     try {
       const [live, owed] = await Promise.all([
         getDashboardKpis(),

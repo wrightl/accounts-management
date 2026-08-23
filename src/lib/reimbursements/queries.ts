@@ -8,7 +8,7 @@ import {
   users,
 } from "@/db/schema";
 import { formatGBP } from "@/lib/money";
-import { ensureLocalUser } from "@/lib/users";
+import { findLocalUserId } from "@/lib/users";
 import type { SessionUser } from "@/lib/auth";
 
 export async function listReimbursements() {
@@ -97,9 +97,11 @@ export async function getReimbursementBalances() {
 }
 
 export async function getOwedSummary(session: SessionUser) {
-  const localId = await ensureLocalUser(session);
+  const localId = await findLocalUserId(session.userId);
   const balances = await getReimbursementBalances();
-  const owedToMe = balances.find((b) => b.payeeUserId === localId);
+  const owedToMe = localId
+    ? balances.find((b) => b.payeeUserId === localId)
+    : undefined;
   const owedToOthers = balances.filter((b) => b.payeeUserId !== localId);
   const othersTotal = owedToOthers.reduce((a, b) => a + b.totalPence, 0);
   return {

@@ -6,7 +6,7 @@ export default function Home() {
   return (
     <main className="flex flex-1 flex-col bg-navy text-white">
       <header className="flex items-center justify-between bg-accent px-6 py-4 text-white">
-        <Logo showConsulting />
+        <Logo showConsulting size={44} priority />
         <Link
           href="/sign-in"
           className={buttonClasses("ghost", "text-white hover:bg-white/15")}
@@ -16,6 +16,7 @@ export default function Home() {
       </header>
 
       <section className="hero-dots flex flex-1 flex-col items-center justify-center px-6 py-24 text-center">
+        <Logo showWordmark={false} size={96} priority className="mb-8" />
         <p className="text-sm tracking-widest text-brand uppercase">Accounts</p>
         <h1 className="mt-4 max-w-3xl font-display text-5xl font-normal leading-tight tracking-tight md:text-6xl">
           Your books, in one place.

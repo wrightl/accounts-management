@@ -5,19 +5,23 @@ import { invoiceLineItems, invoices, recurringInvoices } from "@/db/schema";
 import { invoiceTotals } from "@/lib/money";
 import { allocateInvoiceNumber } from "@/lib/invoices/allocate";
 import { defaultDueDate, todayIsoDate } from "@/lib/invoices/status";
+import { cronAuthError } from "@/lib/cron";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
  * Vercel Cron: generate invoices from enabled recurring templates.
- * Behind RECURRING_INVOICES_ENABLED=true feature flag (foundation).
+ * Fail-closed: refuses to run unless CRON_SECRET is set and matches.
+ * Behind RECURRING_INVOICES_ENABLED=true feature flag.
  */
 export async function GET(request: Request) {
-  const auth = request.headers.get("authorization");
-  const secret = process.env.CRON_SECRET;
-  if (secret && auth !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const denied = cronAuthError(
+    request.headers.get("authorization"),
+    process.env.CRON_SECRET,
+  );
+  if (denied) {
+    return NextResponse.json({ error: denied.error }, { status: denied.status });
   }
 
   if (process.env.RECURRING_INVOICES_ENABLED !== "true") {
@@ -41,9 +45,8 @@ export async function GET(request: Request) {
   let generated = 0;
 
   for (const tmpl of templates) {
-    // Skip if already generated this month
     if (tmpl.lastGeneratedAt) {
-      const last = tmpl.lastGeneratedAt.toISOString().slice(0, 7);
+      const last = todayIsoDate(tmpl.lastGeneratedAt).slice(0, 7);
       if (last === today.slice(0, 7)) continue;
     }
 

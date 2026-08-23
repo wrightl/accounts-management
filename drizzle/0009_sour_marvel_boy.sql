@@ -1,0 +1,1 @@
+ALTER TABLE "company_settings" ADD COLUMN "quote_number_prefix" text DEFAULT 'Q' NOT NULL;

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   formatInvoiceNumber,
   nextInvoiceNumber,
+  nextQuoteNumber,
   parseIssueYear,
 } from "@/lib/invoices/numbering";
 
@@ -42,5 +43,29 @@ describe("invoice numbering", () => {
       2026,
     );
     expect(result.number).toBe("ACME-2026-0001");
+  });
+});
+
+describe("quote numbering", () => {
+  it("formats prefix-year-seq and resets on year change", () => {
+    const a = nextQuoteNumber(
+      { quoteNumberPrefix: "Q", quoteNextSeq: 3, quoteSeqYear: 2026 },
+      2026,
+    );
+    expect(a.number).toBe("Q-2026-0003");
+    expect(a.nextSeq).toBe(4);
+    const b = nextQuoteNumber(
+      { quoteNumberPrefix: "Q", quoteNextSeq: 12, quoteSeqYear: 2025 },
+      2026,
+    );
+    expect(b.number).toBe("Q-2026-0001");
+  });
+
+  it("uses a configurable prefix", () => {
+    const result = nextQuoteNumber(
+      { quoteNumberPrefix: "QT", quoteNextSeq: 1, quoteSeqYear: 2026 },
+      2026,
+    );
+    expect(result.number).toBe("QT-2026-0001");
   });
 });

@@ -6,8 +6,10 @@ import {
   Text,
   View,
   StyleSheet,
+  Image as PdfImage,
   renderToBuffer,
 } from "@react-pdf/renderer";
+import path from "node:path";
 import { brand as palette } from "@/lib/brand";
 import { formatGBP, lineNetPence } from "@/lib/money";
 
@@ -47,6 +49,7 @@ export interface PdfLine {
 const ink = palette.navy;
 const muted = "#5c6490";
 const hairline = "#d5daf0";
+const logoSrc = path.join(process.cwd(), "public/brand/logo.png");
 
 const styles = StyleSheet.create({
   page: {
@@ -79,19 +82,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 4,
   },
-  dot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: palette.pink,
-    marginRight: 4,
-  },
-  dash: {
-    width: 14,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: palette.periwinkle,
-    marginRight: 8,
+  logo: {
+    width: 52,
+    height: 52,
+    marginRight: 12,
   },
   muted: { color: muted, fontSize: 9 },
   title: {
@@ -170,14 +164,15 @@ function InvoiceDocument({
         <View style={styles.header}>
           <View>
             <View style={styles.markRow}>
-              <View style={styles.dot} />
-              <View style={styles.dash} />
-              <Text style={styles.wordmark}>Dot + Dash Consulting</Text>
+              <PdfImage src={logoSrc} style={styles.logo} />
+              <View>
+                <Text style={styles.wordmark}>Dot + Dash Consulting</Text>
+                <Text style={styles.muted}>{company.legalName}</Text>
+                {company.companyNumber ? (
+                  <Text style={styles.muted}>Company no. {company.companyNumber}</Text>
+                ) : null}
+              </View>
             </View>
-            <Text style={styles.muted}>{company.legalName}</Text>
-            {company.companyNumber ? (
-              <Text style={styles.muted}>Company no. {company.companyNumber}</Text>
-            ) : null}
             {company.addressLines
               ? company.addressLines.split("\n").map((line, i) => (
                   <Text key={i} style={styles.muted}>

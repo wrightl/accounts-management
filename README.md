@@ -4,9 +4,11 @@ Internal accounting platform for **Dot and Dash Consulting Ltd** (stylised
 _Dot + Dash Consulting_). Replaces spreadsheets and shared folders with a single
 secure app for invoicing, expenses, receipts, reimbursements and reporting.
 
-> **Status:** Phase 0 (foundations). The app shell, authentication, database,
-> branding, security and CI/CD are in place; feature sections are scaffolded and
-> access-controlled, and are implemented in later phases (see [Roadmap](#roadmap)).
+> **Status:** Phases 1–6 are implemented. Invoicing, expenses, reimbursements,
+> bank CSV import, reports, quotes (create/convert), reminder/recurring cron,
+> in-app user roles, and the audit log are in the app. Remaining gaps: quote
+> send/PDF, and a recurring-invoice UI (cron is behind a flag). See
+> [Roadmap](#roadmap).
 
 ## Stack
 
@@ -14,7 +16,7 @@ secure app for invoicing, expenses, receipts, reimbursements and reporting.
 | ------------ | ------------------------------------------------------------- |
 | Framework    | Next.js 16 (App Router, RSC, Server Actions), React 19, TS    |
 | Styling      | Tailwind CSS v4, brand-themed design tokens                   |
-| Auth & roles | Clerk (Google Workspace SSO), 3 roles                         |
+| Auth & roles | Clerk (identity + Google SSO); roles stored in Postgres        |
 | Database     | Neon Postgres + Drizzle ORM (PGlite for tests)                |
 | File storage | Vercel Blob (private, streamed via authorised routes)         |
 | Email        | Pluggable provider (Resend), `console` transport in dev       |
@@ -26,6 +28,7 @@ secure app for invoicing, expenses, receipts, reimbursements and reporting.
 - **admin** — full access, incl. user & settings management (`lee@dotanddashconsulting.com`).
 - **user** — co-founder, full day-to-day accounting access (`angel@dotanddashconsulting.com`).
 - **accountant** — external accountant, read-only + export (invite-only, any Google account).
+- **pending** — signed in but not yet assigned a role; cannot read or write the books. Assigned from Dashboard → Users.
 
 ## Getting started
 
@@ -38,18 +41,26 @@ npm run dev                  # http://localhost:3000
 The app runs **without credentials**: public pages work, and auth/DB activate
 automatically once their env vars are present (see [Configuration](#configuration)).
 
+When `DATABASE_URL` is set, apply schema then seed the admin:
+
+```bash
+npm run db:migrate
+npm run db:seed    # inserts BOOTSTRAP_ADMIN_EMAILS as admin
+```
+
 ## Scripts
 
 | Command               | Description                                    |
 | --------------------- | ---------------------------------------------- |
 | `npm run dev`         | Next.js dev server                             |
-| `npm run build`       | Production build                               |
+| `npm run build`       | Migrate (if DATABASE_URL is set) then Next.js production build |
 | `npm run lint`        | ESLint                                         |
 | `npm run typecheck`   | TypeScript, no emit                            |
 | `npm test`            | Vitest unit + integration (PGlite)             |
 | `npm run test:e2e`    | Playwright end-to-end                          |
 | `npm run db:generate` | Generate a Drizzle migration from the schema   |
-| `npm run db:migrate`  | Apply migrations (uses `DATABASE_URL_UNPOOLED`)|
+| `npm run db:migrate`  | Apply migrations over a direct Postgres connection (`pg`) |
+| `npm run db:seed`     | Seed the bootstrap admin user (`BOOTSTRAP_ADMIN_EMAILS`) |
 
 ## Configuration
 
@@ -69,18 +80,19 @@ guide (Vercel project, integrations, Google SSO, custom subdomain, DNS).
   proxy = former middleware) and re-checked server-side via
   [`src/lib/auth.ts`](./src/lib/auth.ts) — the client is never trusted.
 - Fine-grained RBAC in [`src/lib/roles.ts`](./src/lib/roles.ts).
-- Uploaded files are stored privately and streamed through authorised routes —
-  never exposed via public URLs.
+- Uploaded files are stored as **private** Vercel Blob objects and streamed
+  through authorised routes — never public URLs.
+- Cron routes fail closed unless `CRON_SECRET` is set and matches.
 - Baseline security headers in [`next.config.ts`](./next.config.ts).
 
 ## Roadmap
 
-| Phase | Scope                                                              |
-| ----- | ------------------------------------------------------------------ |
-| 0     | Foundations: Next.js, Clerk + Google SSO + roles, Drizzle + Neon, branding, security, CI/CD (**this PR**) |
-| 1     | Invoicing: clients, invoices, PDF, email, payment tracking, dashboard |
-| 2     | Expenses & receipts (Vercel Blob)                                  |
-| 3     | Reimbursements to founders                                         |
-| 4     | Bank import & reconciliation (Starling — manual CSV first)         |
-| 5     | Reporting & accountant export pack                                 |
-| 6     | Quotes, recurring invoices, reminders (Vercel Cron), audit UI, MTD |
+| Phase | Scope | State |
+| ----- | ----- | ----- |
+| 0     | Foundations: Next.js, Clerk, Drizzle + Neon, branding, security, CI/CD | Done |
+| 1     | Invoicing: clients, invoices, PDF, email, payments, dashboard | Done |
+| 2     | Expenses & receipts (private Vercel Blob) | Done |
+| 3     | Reimbursements to founders | Done |
+| 4     | Bank import & reconciliation (Starling CSV) | MVP |
+| 5     | Reporting & accountant export pack | Done |
+| 6     | Quotes, recurring cron, reminders, audit UI, in-app roles | Partial — quotes have no send/PDF; recurring has no UI |

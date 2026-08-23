@@ -13,6 +13,8 @@ export interface ParsedBankRow {
   counterparty: string | null;
   reference: string | null;
   description: string | null;
+  spendingCategory: string | null;
+  tags: string[];
   raw: Record<string, string>;
 }
 
@@ -65,6 +67,14 @@ function parseStarlingDate(value: string): string | null {
   return null;
 }
 
+function parseTags(value: string | undefined): string[] {
+  if (!value?.trim()) return [];
+  return value
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
+
 export class StarlingCsvAdapter implements BankFeedAdapter {
   readonly name = "starling-csv";
 
@@ -85,6 +95,8 @@ export class StarlingCsvAdapter implements BankFeedAdapter {
     const referenceIdx = idx(["reference", "payment reference"]);
     const typeIdx = idx(["type", "transaction type"]);
     const descIdx = idx(["description", "narrative"]);
+    const categoryIdx = idx(["spending category", "category"]);
+    const tagsIdx = idx(["tags"]);
 
     if (dateIdx < 0 || amountIdx < 0) {
       throw new Error(
@@ -116,6 +128,8 @@ export class StarlingCsvAdapter implements BankFeedAdapter {
         cols[descIdx]?.trim() ||
         cols[typeIdx]?.trim() ||
         null;
+      const spendingCategory = cols[categoryIdx]?.trim() || null;
+      const tags = parseTags(cols[tagsIdx]);
 
       const externalId = createHash("sha256")
         .update(
@@ -131,6 +145,8 @@ export class StarlingCsvAdapter implements BankFeedAdapter {
         counterparty,
         reference,
         description,
+        spendingCategory,
+        tags,
         raw,
       });
     }

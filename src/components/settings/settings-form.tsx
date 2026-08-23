@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label, Select, Textarea } from "@/components/ui/form";
+import { financialYearStartMonth } from "@/lib/dates";
 import { updateCompany, uploadLogo } from "@/actions/settings";
 
 const MONTHS = [
@@ -35,6 +36,7 @@ export function SettingsForm({
     accountNumber: string | null;
     financialYearEndMonth: number;
     invoiceNumberPrefix: string;
+    quoteNumberPrefix: string;
     logoUrl: string | null;
   };
 }) {
@@ -94,6 +96,26 @@ export function SettingsForm({
             disabled={pending}
           />
         </div>
+        <div>
+          <Label htmlFor="financialYearStartMonth">Financial year starts</Label>
+          <Select
+            id="financialYearStartMonth"
+            name="financialYearStartMonth"
+            defaultValue={String(financialYearStartMonth(settings.financialYearEndMonth))}
+            disabled={pending}
+          >
+            {MONTHS.map((m, i) => (
+              <option key={m} value={i + 1}>
+                {m}
+              </option>
+            ))}
+          </Select>
+          <p className="mt-1 text-xs text-muted">
+            Year runs{" "}
+            {MONTHS[financialYearStartMonth(settings.financialYearEndMonth) - 1]}–
+            {MONTHS[settings.financialYearEndMonth - 1]}.
+          </p>
+        </div>
 
         <h2 className="pt-4 font-display text-lg font-semibold">Bank details (Starling)</h2>
         <div>
@@ -131,33 +153,27 @@ export function SettingsForm({
         </div>
 
         <h2 className="pt-4 font-display text-lg font-semibold">Invoicing</h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <Label htmlFor="invoiceNumberPrefix">Invoice number prefix</Label>
-            <Input
-              id="invoiceNumberPrefix"
-              name="invoiceNumberPrefix"
-              required
-              defaultValue={settings.invoiceNumberPrefix}
-              disabled={pending}
-            />
-            <p className="mt-1 text-xs text-muted">e.g. DD → DD-2026-0001</p>
-          </div>
-          <div>
-            <Label htmlFor="financialYearEndMonth">Financial year end</Label>
-            <Select
-              id="financialYearEndMonth"
-              name="financialYearEndMonth"
-              defaultValue={String(settings.financialYearEndMonth)}
-              disabled={pending}
-            >
-              {MONTHS.map((m, i) => (
-                <option key={m} value={i + 1}>
-                  {m}
-                </option>
-              ))}
-            </Select>
-          </div>
+        <div>
+          <Label htmlFor="invoiceNumberPrefix">Invoice number prefix</Label>
+          <Input
+            id="invoiceNumberPrefix"
+            name="invoiceNumberPrefix"
+            required
+            defaultValue={settings.invoiceNumberPrefix}
+            disabled={pending}
+          />
+          <p className="mt-1 text-xs text-muted">e.g. DD → DD-2026-0001</p>
+        </div>
+        <div>
+          <Label htmlFor="quoteNumberPrefix">Quote number prefix</Label>
+          <Input
+            id="quoteNumberPrefix"
+            name="quoteNumberPrefix"
+            required
+            defaultValue={settings.quoteNumberPrefix}
+            disabled={pending}
+          />
+          <p className="mt-1 text-xs text-muted">e.g. Q → Q-2026-0001</p>
         </div>
 
         <FieldError>{error}</FieldError>

@@ -5,12 +5,13 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
 import { companySettings } from "@/db/schema";
-import { requirePermission } from "@/lib/auth";
+import { requireActionPermission } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { ensureLocalUser } from "@/lib/users";
-import { getOrCreateCompanySettings } from "@/lib/invoices/queries";
+import { financialYearEndMonth } from "@/lib/dates";
+import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { getStorage } from "@/lib/storage";
-import type { ActionResult } from "@/actions/clients";
+import type { ActionResult } from "@/actions/result";
 
 const settingsSchema = z.object({
   name: z.string().trim().min(1).max(200),
@@ -46,8 +47,14 @@ const settingsSchema = z.object({
     .optional()
     .or(z.literal(""))
     .transform((v) => (v === "" ? null : v ?? null)),
-  financialYearEndMonth: z.coerce.number().int().min(1).max(12),
+  financialYearStartMonth: z.coerce.number().int().min(1).max(12),
   invoiceNumberPrefix: z
+    .string()
+    .trim()
+    .min(1)
+    .max(10)
+    .regex(/^[A-Za-z0-9]+$/, "Prefix must be alphanumeric"),
+  quoteNumberPrefix: z
     .string()
     .trim()
     .min(1)
@@ -56,7 +63,9 @@ const settingsSchema = z.object({
 });
 
 export async function updateCompany(formData: FormData): Promise<ActionResult> {
-  const session = await requirePermission("settings:manage");
+  const authz = await requireActionPermission("settings:manage");
+  if (!authz.ok) return authz;
+  const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
   const parsed = settingsSchema.safeParse({
@@ -68,19 +77,22 @@ export async function updateCompany(formData: FormData): Promise<ActionResult> {
     bankAccountName: formData.get("bankAccountName") ?? "",
     sortCode: formData.get("sortCode") ?? "",
     accountNumber: formData.get("accountNumber") ?? "",
-    financialYearEndMonth: formData.get("financialYearEndMonth") ?? "3",
+    financialYearStartMonth: formData.get("financialYearStartMonth") ?? "4",
     invoiceNumberPrefix: formData.get("invoiceNumberPrefix") ?? "DD",
+    quoteNumberPrefix: formData.get("quoteNumberPrefix") ?? "Q",
   });
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
 
+  const { financialYearStartMonth: fyStart, ...rest } = parsed.data;
   const current = await getOrCreateCompanySettings();
   const db = getDb();
   await db
     .update(companySettings)
     .set({
-      ...parsed.data,
+      ...rest,
+      financialYearEndMonth: financialYearEndMonth(fyStart),
       updatedAt: new Date(),
     })
     .where(eq(companySettings.id, current.id));
@@ -94,11 +106,15 @@ export async function updateCompany(formData: FormData): Promise<ActionResult> {
 
   revalidatePath("/dashboard/settings");
   revalidatePath("/dashboard");
+  revalidatePath("/dashboard/spending");
+  revalidatePath("/dashboard/reports");
   return { ok: true, id: current.id };
 }
 
 export async function uploadLogo(formData: FormData): Promise<ActionResult> {
-  const session = await requirePermission("settings:manage");
+  const authz = await requireActionPermission("settings:manage");
+  if (!authz.ok) return authz;
+  const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
   const file = formData.get("logo");
