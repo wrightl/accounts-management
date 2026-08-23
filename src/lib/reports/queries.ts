@@ -211,9 +211,16 @@ export async function getVatSummary(from: string, to: string) {
   };
 }
 
-export async function listDividends() {
+export async function listDividends(options?: { from?: string; to?: string }) {
   const db = getDb();
-  const rows = await db.select().from(dividends).orderBy(desc(dividends.declaredAt));
+  const conditions = [];
+  if (options?.from) conditions.push(gte(dividends.declaredAt, options.from));
+  if (options?.to) conditions.push(lte(dividends.declaredAt, options.to));
+  const rows = await db
+    .select()
+    .from(dividends)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(dividends.declaredAt));
   return rows.map((d) => ({
     ...d,
     amountFormatted: formatGBP(d.amountPence),

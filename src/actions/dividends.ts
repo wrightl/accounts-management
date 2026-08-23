@@ -63,7 +63,7 @@ export async function createDividend(formData: FormData): Promise<ActionResult> 
     entityId: row.id,
   });
 
-  revalidatePath("/dashboard/reports");
+  revalidatePath("/dashboard/dividends");
   return { ok: true, id: row.id };
 }
 
@@ -80,6 +80,6 @@ export async function deleteDividend(id: string): Promise<ActionResult> {
     entityType: "dividend",
     entityId: id,
   });
-  revalidatePath("/dashboard/reports");
+  revalidatePath("/dashboard/dividends");
   return { ok: true, id };
 }

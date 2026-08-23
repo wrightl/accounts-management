@@ -1,14 +1,17 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { clerkClient } from "@clerk/nextjs/server";
 import { getDb } from "@/db";
 import { users, reimbursements } from "@/db/schema";
 import { clientEnv, isAuthConfigured } from "@/env";
+import { requireUser } from "@/lib/auth";
+import { writeAudit } from "@/lib/audit";
 import { mutate } from "@/lib/mutate";
 import { isRole, type Role } from "@/lib/roles";
-import { countAdminUsers, findUserByEmail, normalizeEmail } from "@/lib/users";
+import { countAdminUsers, ensureLocalUser, findUserByEmail, normalizeEmail } from "@/lib/users";
 import type { ActionResult } from "@/actions/result";
 
 const roleSchema = z.enum(["admin", "user", "accountant", "pending"]);
@@ -31,6 +34,10 @@ const updateSchema = z.object({
   role: roleSchema,
 });
 
+const profileUpdateSchema = z.object({
+  name: z.string().optional(),
+});
+
 function splitName(name: string | null | undefined): { firstName?: string; lastName?: string } {
   const trimmed = name?.trim();
   if (!trimmed) return {};
@@ -51,8 +58,20 @@ function clerkErrorMessage(err: unknown): string {
     const msg = errors?.[0]?.message;
     if (msg) return msg;
   }
-  if (err instanceof Error) return err.message;
+  if (err instanceof Error) {
+    if (err.message === "fetch failed") {
+      return "Could not reach Clerk to update your profile picture. Check your connection and try again.";
+    }
+    return err.message;
+  }
   return "Clerk request failed";
+}
+
+async function clerkProfileImageFile(file: File): Promise<File> {
+  const bytes = Buffer.from(await file.arrayBuffer());
+  const contentType = file.type?.startsWith("image/") ? file.type : "image/jpeg";
+  const name = file.name?.trim() || "profile.jpg";
+  return new File([bytes], name, { type: contentType });
 }
 
 function isExistingInviteError(message: string): boolean {
@@ -366,4 +385,131 @@ export async function updateUser(userId: string, formData: FormData): Promise<Ac
       paths: ["/dashboard/users", `/dashboard/users/${parsed.data.userId}/edit`],
     },
   );
+}
+
+export async function updateOwnProfile(formData: FormData): Promise<ActionResult> {
+  const parsed = profileUpdateSchema.safeParse({
+    name: formData.get("name") || undefined,
+  });
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  const session = await requireUser();
+  const localUserId = await ensureLocalUser(session);
+  const name = parsed.data.name?.trim() || null;
+
+  const db = getDb();
+  const [target] = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, localUserId))
+    .limit(1);
+  if (!target) return { ok: false, error: "User not found" };
+
+  if (
+    isAuthConfigured() &&
+    target.clerkUserId &&
+    name !== target.name
+  ) {
+    try {
+      const client = await clerkClient();
+      await client.users.updateUser(target.clerkUserId, splitName(name));
+    } catch (err) {
+      return { ok: false, error: clerkErrorMessage(err) };
+    }
+  }
+
+  await db.update(users).set({ name }).where(eq(users.id, localUserId));
+
+  await writeAudit({
+    actorUserId: localUserId,
+    action: "user.profile.update",
+    entityType: "user",
+    entityId: localUserId,
+  });
+
+  revalidatePath("/dashboard/profile");
+  revalidatePath("/dashboard", "layout");
+
+  return { ok: true, id: localUserId };
+}
+
+const PROFILE_PICTURE_MAX_BYTES = 2 * 1024 * 1024;
+
+function validateProfilePicture(file: File): string | null {
+  if (file.size === 0) return "Choose an image file";
+  if (file.size > PROFILE_PICTURE_MAX_BYTES) {
+    return "Profile picture must be under 2 MB";
+  }
+  const contentType = file.type || "application/octet-stream";
+  if (!contentType.startsWith("image/")) {
+    return "Profile picture must be an image";
+  }
+  return null;
+}
+
+export async function uploadProfilePicture(formData: FormData): Promise<ActionResult> {
+  if (!isAuthConfigured()) {
+    return { ok: false, error: "Clerk is not configured — cannot update profile picture." };
+  }
+
+  const file = formData.get("photo");
+  if (!(file instanceof File)) {
+    return { ok: false, error: "Choose an image file" };
+  }
+
+  const validationError = validateProfilePicture(file);
+  if (validationError) return { ok: false, error: validationError };
+
+  const session = await requireUser();
+  const localUserId = await ensureLocalUser(session);
+
+  try {
+    const client = await clerkClient();
+    const clerkFile = await clerkProfileImageFile(file);
+    await client.users.updateUserProfileImage(session.userId, { file: clerkFile });
+  } catch (err) {
+    return { ok: false, error: clerkErrorMessage(err) };
+  }
+
+  await writeAudit({
+    actorUserId: localUserId,
+    action: "user.profile.picture",
+    entityType: "user",
+    entityId: localUserId,
+  });
+
+  revalidatePath("/dashboard/profile");
+  revalidatePath("/dashboard", "layout");
+
+  return { ok: true, id: localUserId };
+}
+
+export async function removeProfilePicture(): Promise<ActionResult> {
+  if (!isAuthConfigured()) {
+    return { ok: false, error: "Clerk is not configured — cannot update profile picture." };
+  }
+
+  const session = await requireUser();
+  const localUserId = await ensureLocalUser(session);
+
+  try {
+    const client = await clerkClient();
+    await client.users.deleteUserProfileImage(session.userId);
+  } catch (err) {
+    return { ok: false, error: clerkErrorMessage(err) };
+  }
+
+  await writeAudit({
+    actorUserId: localUserId,
+    action: "user.profile.picture.remove",
+    entityType: "user",
+    entityId: localUserId,
+  });
+
+  revalidatePath("/dashboard/profile");
+  revalidatePath("/dashboard", "layout");
+
+  return { ok: true, id: localUserId };
 }

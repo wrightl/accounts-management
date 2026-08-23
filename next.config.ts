@@ -57,7 +57,7 @@ const securityHeaders = [
     key: "Strict-Transport-Security",
     value: "max-age=63072000; includeSubDomains; preload",
   },
-  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+  { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=()" },
   { key: "Content-Security-Policy", value: cspDirectives },
 ];
 
@@ -66,6 +66,11 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   serverExternalPackages: ["pdfjs-dist", "@napi-rs/canvas"],
   ...(devOrigin ? { allowedDevOrigins: [devOrigin] } : {}),
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "10mb",
+    },
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

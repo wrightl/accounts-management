@@ -6,12 +6,7 @@ import {
     getIncomeByMonth,
     getProfitAndLoss,
     getVatSummary,
-    listDividends,
 } from '@/lib/reports/queries';
-import {
-    DividendForm,
-    DeleteDividendButton,
-} from '@/components/reports/dividends';
 import { buttonClasses } from '@/components/ui/button';
 import { Card, CardTitle, CardValue } from '@/components/ui/card';
 import { Input, Label } from '@/components/ui/form';
@@ -24,7 +19,6 @@ export default async function ReportsPage({
     searchParams: Promise<Record<string, string | undefined>>;
 }) {
     await guardPage('reports:read');
-    const canWrite = await hasPermission('accounts:write');
     const canExport = await hasPermission('reports:export');
     const sp = await searchParams;
 
@@ -43,13 +37,12 @@ export default async function ReportsPage({
     const from = sp.from ?? defaults.from;
     const to = sp.to ?? defaults.to;
 
-    const [pnl, aged, byMonth, byCategory, vat, dividends] = await Promise.all([
+    const [pnl, aged, byMonth, byCategory, vat] = await Promise.all([
         getProfitAndLoss(from, to),
         getAgedReceivables(),
         getIncomeByMonth(from, to),
         getExpenseByCategory(from, to),
         getVatSummary(from, to),
-        listDividends(),
     ]);
 
     return (
@@ -62,7 +55,7 @@ export default async function ReportsPage({
                     <p className="mt-1 text-muted">
                         Accrual P&amp;L (invoiced income, not cash collected),
                         receivables, and accountant export (CSVs, invoice PDFs,
-                        receipt files, bank, and dividends).
+                        receipt files, bank, and dividends from the Dividends page).
                     </p>
                 </div>
                 {canExport && (
@@ -202,52 +195,6 @@ export default async function ReportsPage({
                             )}
                         </TBody>
                     </Table>
-                </div>
-            </section>
-
-            <section className="mt-10 border-t border-border pt-8">
-                <h2 className="font-display text-lg font-semibold">
-                    Dividends
-                </h2>
-                <DividendForm canWrite={canWrite} />
-                <div className="mt-4">
-                    {dividends.length === 0 ? (
-                        <p className="text-sm text-muted">
-                            No dividend records.
-                        </p>
-                    ) : (
-                        <Table>
-                            <THead>
-                                <TR>
-                                    <TH>Date</TH>
-                                    <TH>Shareholder</TH>
-                                    <TH>Notes</TH>
-                                    <TH className="text-right">Amount</TH>
-                                    <TH />
-                                </TR>
-                            </THead>
-                            <TBody>
-                                {dividends.map((d) => (
-                                    <TR key={d.id}>
-                                        <TD>{d.declaredAt}</TD>
-                                        <TD>{d.shareholderName}</TD>
-                                        <TD className="text-muted">
-                                            {d.notes ?? '—'}
-                                        </TD>
-                                        <TD className="text-right">
-                                            {d.amountFormatted}
-                                        </TD>
-                                        <TD>
-                                            <DeleteDividendButton
-                                                id={d.id}
-                                                canWrite={canWrite}
-                                            />
-                                        </TD>
-                                    </TR>
-                                ))}
-                            </TBody>
-                        </Table>
-                    )}
                 </div>
             </section>
         </div>

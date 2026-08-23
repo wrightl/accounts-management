@@ -5,8 +5,11 @@ import Link from "next/link";
 import { Menu, X } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { cn } from "@/lib/utils";
+import type { Role } from "@/lib/roles";
 import type { NavGroup } from "./nav";
 import { NavLinks } from "./nav-links";
+import { NavSearchTrigger } from "./nav-command-palette";
+import { NavUserProfile } from "./nav-user-profile";
 
 export function NavMobileDrawer({
   open,
@@ -14,12 +17,20 @@ export function NavMobileDrawer({
   groups,
   pathname,
   overdueInvoiceCount = 0,
+  role,
+  userName,
+  avatarUrl,
+  onSearch,
 }: {
   open: boolean;
   onClose: () => void;
   groups: NavGroup[];
   pathname: string;
   overdueInvoiceCount?: number;
+  role: Role;
+  userName: string | null;
+  avatarUrl: string | null;
+  onSearch: () => void;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -66,14 +77,27 @@ export function NavMobileDrawer({
             <X className="h-5 w-5" />
           </button>
         </div>
-        <nav className="min-h-0 flex-1 overflow-y-auto px-3 pb-6">
-          <NavLinks
-            groups={groups}
-            pathname={pathname}
-            collapsed={false}
-            overdueInvoiceCount={overdueInvoiceCount}
-            onNavigate={onClose}
-          />
+        <nav className="flex min-h-0 flex-1 flex-col overflow-hidden pb-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-3">
+            <NavLinks
+              groups={groups}
+              pathname={pathname}
+              collapsed={false}
+              overdueInvoiceCount={overdueInvoiceCount}
+              onNavigate={onClose}
+            />
+          </div>
+          <div className="shrink-0 pt-2">
+            <NavSearchTrigger collapsed={false} onClick={onSearch} />
+            <NavUserProfile
+              collapsed={false}
+              role={role}
+              userName={userName}
+              avatarUrl={avatarUrl}
+              active={pathname === "/dashboard/profile"}
+              onNavigate={onClose}
+            />
+          </div>
         </nav>
       </aside>
     </div>

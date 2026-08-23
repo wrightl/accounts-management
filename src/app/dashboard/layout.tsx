@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { currentUser } from "@clerk/nextjs/server";
 import { isAuthConfigured, isDatabaseConfigured } from "@/env";
 import { hasDatabaseClient } from "@/db";
 import { requireUser } from "@/lib/auth";
@@ -23,6 +24,8 @@ export default async function DashboardLayout({
   if (!isAuthConfigured()) return <AuthNotConfigured />;
 
   let user = await requireUser();
+  const clerkUser = await currentUser();
+  const avatarUrl = clerkUser?.imageUrl ?? null;
   if (hasDatabaseClient()) {
     await ensureLocalUser(user);
     const local = await findLocalUser(user.userId);
@@ -65,6 +68,7 @@ export default async function DashboardLayout({
       groups={groups}
       role={user.role}
       userName={user.name}
+      avatarUrl={avatarUrl}
       navCollapsed={navCollapsed}
       overdueInvoiceCount={overdueInvoiceCount}
     >
