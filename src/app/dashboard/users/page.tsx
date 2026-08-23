@@ -1,9 +1,13 @@
-import { guardPage } from '@/lib/auth';
-import { listUsers } from '@/lib/users';
-import { isDatabaseConfigured } from '@/env';
-import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
-import { UserRoleForm } from '@/components/users/role-form';
-import { roleLabel } from '@/lib/roles';
+import Link from "next/link";
+import { guardPage } from "@/lib/auth";
+import { listUsers } from "@/lib/users";
+import { userStatus, userStatusLabel } from "@/lib/users/display";
+import { isDatabaseConfigured } from "@/env";
+import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
+import { RevokeInviteButton } from "@/components/users/revoke-invite-button";
+import { DeleteUserButton } from "@/components/users/delete-user-button";
+import { roleLabel } from "@/lib/roles";
+import { buttonClasses } from "@/components/ui/button";
 
 export default async function UsersPage() {
     const session = await guardPage('users:manage');
@@ -23,12 +27,17 @@ export default async function UsersPage() {
 
     return (
         <div>
-            <h1 className="font-display text-2xl font-semibold">Users</h1>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <h1 className="font-display text-2xl font-semibold">Users</h1>
+                <Link href="/dashboard/users/new" className={buttonClasses("primary")}>
+                    Invite user
+                </Link>
+            </div>
 
             <div className="mt-6">
                 {rows.length === 0 ? (
                     <p className="text-sm text-muted">
-                        No users have signed in yet.
+                        No users yet. Invite someone to get started.
                     </p>
                 ) : (
                     <Table>
@@ -36,7 +45,9 @@ export default async function UsersPage() {
                             <TR>
                                 <TH>Name</TH>
                                 <TH>Email</TH>
+                                <TH>Status</TH>
                                 <TH>Role</TH>
+                                <TH>Actions</TH>
                             </TR>
                         </THead>
                         <TBody>
@@ -46,15 +57,37 @@ export default async function UsersPage() {
                                         {u.name ?? '—'}
                                     </TD>
                                     <TD className="text-muted">{u.email}</TD>
+                                    <TD className="text-muted">
+                                        {userStatusLabel(userStatus(u.clerkUserId))}
+                                    </TD>
+                                    <TD className="text-muted">
+                                        {roleLabel(u.role)}
+                                        {u.clerkUserId === session.userId
+                                            ? " (you)"
+                                            : ""}
+                                    </TD>
                                     <TD>
-                                        <UserRoleForm
-                                            userId={u.id}
-                                            role={u.role}
-                                            roleLabel={roleLabel(u.role)}
-                                            isSelf={
-                                                u.clerkUserId === session.userId
-                                            }
-                                        />
+                                        <div className="flex flex-wrap items-center gap-3">
+                                            <Link
+                                                href={`/dashboard/users/${u.id}/edit`}
+                                                className="text-sm text-brand hover:underline"
+                                            >
+                                                Edit
+                                            </Link>
+                                            {!u.clerkUserId ? (
+                                                <RevokeInviteButton
+                                                    userId={u.id}
+                                                    email={u.email}
+                                                    appearance="link"
+                                                />
+                                            ) : u.clerkUserId !== session.userId ? (
+                                                <DeleteUserButton
+                                                    userId={u.id}
+                                                    email={u.email}
+                                                    appearance="link"
+                                                />
+                                            ) : null}
+                                        </div>
                                     </TD>
                                 </TR>
                             ))}

@@ -4,11 +4,16 @@ import { revalidatePath } from "next/cache";
 import { eq, sql, sum } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
-import { invoices, payments } from "@/db/schema";
+import { invoices, payments, reconciliationMatches } from "@/db/schema";
 import { requireActionPermission } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { ensureLocalUser } from "@/lib/users";
 import { poundsToPence } from "@/lib/money";
+import {
+  getBankTransactionById,
+  isBankTransactionAvailable,
+  ReconciliationError,
+} from "@/lib/bank/queries";
 import {
   effectiveStatus,
   isFullySettled,
@@ -36,6 +41,12 @@ const paymentSchema = z.object({
     .optional()
     .or(z.literal(""))
     .transform((v) => (v === "" ? null : v ?? null)),
+  bankTransactionId: z
+    .string()
+    .trim()
+    .optional()
+    .or(z.literal(""))
+    .transform((v) => (v === "" ? null : v ?? null)),
 });
 
 class PaymentError extends Error {
@@ -59,6 +70,7 @@ export async function recordPayment(
     method: formData.get("method") ?? "",
     reference: formData.get("reference") ?? "",
     receivedAt: formData.get("receivedAt") ?? "",
+    bankTransactionId: formData.get("bankTransactionId") ?? "",
   });
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -74,9 +86,26 @@ export async function recordPayment(
     return { ok: false, error: "Payment amount must be positive" };
   }
 
+  const bankTransactionId = parsed.data.bankTransactionId;
+  if (bankTransactionId) {
+    const bankTx = await getBankTransactionById(bankTransactionId);
+    if (!bankTx) return { ok: false, error: "Bank transaction not found" };
+    if (bankTx.amountPence <= 0) {
+      return { ok: false, error: "Only incoming bank transactions can be linked" };
+    }
+    if (!(await isBankTransactionAvailable(bankTransactionId))) {
+      return { ok: false, error: "Bank transaction is already reconciled" };
+    }
+    if (bankTx.amountPence !== amountPence) {
+      return { ok: false, error: "Amount must match the selected bank transaction" };
+    }
+  }
+
   const receivedAt = parsed.data.receivedAt
     ? new Date(parsed.data.receivedAt)
-    : new Date();
+    : bankTransactionId
+      ? new Date(`${(await getBankTransactionById(bankTransactionId))!.bookedAt}T12:00:00Z`)
+      : new Date();
 
   const db = getDb();
   let paymentId: string;
@@ -114,6 +143,17 @@ export async function recordPayment(
         );
       }
 
+      if (bankTransactionId) {
+        const available = await tx
+          .select({ id: reconciliationMatches.id })
+          .from(reconciliationMatches)
+          .where(eq(reconciliationMatches.bankTransactionId, bankTransactionId))
+          .limit(1);
+        if (available[0]) {
+          throw new PaymentError("Bank transaction is already reconciled");
+        }
+      }
+
       const [payment] = await tx
         .insert(payments)
         .values({
@@ -124,6 +164,16 @@ export async function recordPayment(
           receivedAt,
         })
         .returning({ id: payments.id });
+
+      if (bankTransactionId) {
+        await tx.insert(reconciliationMatches).values({
+          bankTransactionId,
+          matchType: "invoice_payment",
+          paymentId: payment.id,
+          invoiceId,
+          confirmed: true,
+        });
+      }
 
       const paidTotal = alreadyPaid + amountPence;
       if (isFullySettled(inv.grossPence, paidTotal)) {
@@ -137,6 +187,7 @@ export async function recordPayment(
     });
   } catch (e) {
     if (e instanceof PaymentError) return { ok: false, error: e.message };
+    if (e instanceof ReconciliationError) return { ok: false, error: e.message };
     throw e;
   }
 
@@ -145,11 +196,12 @@ export async function recordPayment(
     action: "payment.record",
     entityType: "payment",
     entityId: paymentId,
-    meta: { invoiceId, amountPence },
+    meta: { invoiceId, amountPence, bankTransactionId },
   });
 
   revalidatePath("/dashboard/invoices");
   revalidatePath(`/dashboard/invoices/${invoiceId}`);
+  revalidatePath("/dashboard/transactions");
   revalidatePath("/dashboard");
   return { ok: true, id: paymentId };
 }

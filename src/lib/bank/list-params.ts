@@ -11,12 +11,14 @@ export const BANK_PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
 export type BankPageSize = (typeof BANK_PAGE_SIZE_OPTIONS)[number];
 
 export type BankTxType = "incoming" | "outgoing";
+export type BankReconciliationFilter = "reconciled" | "unreconciled";
 export type BankView = "table" | "cards";
 
 export interface BankListParams {
   q: string;
   type: BankTxType | "";
   category: string;
+  reconciliation: BankReconciliationFilter | "";
   period: PeriodPreset | "";
   from: string;
   to: string;
@@ -43,6 +45,11 @@ export function parseBankListParams(
   const typeRaw = first(sp, "type");
   const type: BankTxType | "" =
     typeRaw === "incoming" || typeRaw === "outgoing" ? typeRaw : "";
+  const reconciliationRaw = first(sp, "reconciliation");
+  const reconciliation: BankReconciliationFilter | "" =
+    reconciliationRaw === "reconciled" || reconciliationRaw === "unreconciled"
+      ? reconciliationRaw
+      : "";
   const viewRaw = first(sp, "view");
   const page = Math.max(1, Math.trunc(Number(first(sp, "page")) || 1));
   const periodRaw = first(sp, "period");
@@ -58,6 +65,7 @@ export function parseBankListParams(
     q: first(sp, "q").slice(0, 200),
     type,
     category: first(sp, "category").slice(0, 80),
+    reconciliation,
     period,
     from: parsedFrom,
     to: parsedTo,
@@ -68,7 +76,7 @@ export function parseBankListParams(
 }
 
 export function hasActiveBankFilters(params: BankListParams): boolean {
-  return Boolean(params.q || params.type || params.category || params.period);
+  return Boolean(params.q || params.type || params.category || params.reconciliation || params.period);
 }
 
 export function resolveBankListDateRange(
@@ -93,6 +101,7 @@ export function bankListHref(
   if (next.q) qs.set("q", next.q);
   if (next.type) qs.set("type", next.type);
   if (next.category) qs.set("category", next.category);
+  if (next.reconciliation) qs.set("reconciliation", next.reconciliation);
   if (next.period) {
     qs.set("period", next.period);
     if (next.period === "custom") {

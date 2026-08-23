@@ -4,13 +4,25 @@ import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
 import {
   clients,
+  orderLineItems,
+  orderPaymentMilestones,
+  orders,
   quoteLineItems,
+  quotePaymentMilestones,
   quoteVersions,
   quotes,
   users,
 } from "@/db/schema";
-import { createQuote, rollbackQuote, sendQuote, updateQuote } from "@/actions/quotes";
-import { getQuoteVersionDetail } from "@/lib/quotes/queries";
+import {
+  createQuote,
+  rollbackQuote,
+  sendQuote,
+  updateQuote,
+  updateQuoteStatus,
+} from "@/actions/quotes";
+import { getQuoteDetail, getQuoteVersionDetail } from "@/lib/quotes/queries";
+import { getQuotesSummary } from "@/lib/quotes/summary";
+import { listDeclineReasonCategories } from "@/lib/quotes/decline-reasons";
 import { defaultQuoteEmailMessage } from "@/lib/quotes/email";
 import { quotePdfFilename } from "@/lib/quotes/status";
 import { renderQuotePdf } from "@/lib/quotes/pdf";
@@ -242,4 +254,130 @@ describe("quote PDF and send", () => {
   it("quotePdfFilename includes version", () => {
     expect(quotePdfFilename("Q-2026-0001", 2)).toBe("Q-2026-0001-v2.pdf");
   });
+});
+
+describe("quote status workflow", () => {
+  async function seedQuote(withMilestones = false) {
+    await db.insert(users).values({
+      clerkUserId: "user_clerk_1",
+      email: "lee@dotanddashconsulting.com",
+      name: "Lee",
+      role: "admin",
+    });
+    const [client] = await db
+      .insert(clients)
+      .values({ name: "Acme", email: "ap@acme.test" })
+      .returning();
+
+    const form = new FormData();
+    form.set("clientId", client.id);
+    form.set("issueDate", "2026-08-23");
+    form.set(
+      "linesJson",
+      JSON.stringify([
+        { description: "Workshop", quantity: 2, unitPricePounds: "500" },
+      ]),
+    );
+    if (withMilestones) {
+      form.set(
+        "milestonesJson",
+        JSON.stringify([
+          {
+            label: "Net 30",
+            amountPence: 100000,
+            dueInDays: 30,
+            position: 0,
+          },
+        ]),
+      );
+    }
+
+    const created = await createQuote(form);
+    if (!created.ok || !created.id) throw new Error("createQuote failed");
+    return { quoteId: created.id };
+  }
+
+  it("accepting a quote creates an order with milestones", async () => {
+    const { quoteId } = await seedQuote(true);
+
+    const result = await updateQuoteStatus(quoteId, "accepted");
+    expect(result.ok).toBe(true);
+
+    const [quote] = await db.select().from(quotes).where(eq(quotes.id, quoteId));
+    expect(quote.status).toBe("accepted");
+    expect(quote.orderId).not.toBeNull();
+
+    const [order] = await db.select().from(orders).where(eq(orders.id, quote.orderId!));
+    expect(order.grossPence).toBe(100000);
+
+    const milestones = await db
+      .select()
+      .from(orderPaymentMilestones)
+      .where(eq(orderPaymentMilestones.orderId, order.id));
+    expect(milestones).toHaveLength(1);
+    expect(milestones[0].label).toBe("Net 30");
+  }, 15000);
+
+  it("declining stores reusable custom category", async () => {
+    const { quoteId } = await seedQuote();
+
+    const result = await updateQuoteStatus(quoteId, "declined", {
+      category: "Project paused",
+      narrative: "Client deferred until next quarter.",
+    });
+    expect(result.ok).toBe(true);
+
+    const categories = await listDeclineReasonCategories();
+    expect(categories).toContain("Project paused");
+
+    const summary = await getQuotesSummary({});
+    expect(summary.declinedCount).toBe(1);
+    expect(summary.declineReasons[0]?.category).toBe("Project paused");
+  });
+
+  it("rejects invalid status transitions", async () => {
+    const { quoteId } = await seedQuote();
+    await updateQuoteStatus(quoteId, "declined", {
+      category: "Price",
+      narrative: "Too expensive",
+    });
+
+    const result = await updateQuoteStatus(quoteId, "sent");
+    expect(result.ok).toBe(false);
+  });
+
+  it("reopens a declined quote as draft and clears decline details", async () => {
+    const { quoteId } = await seedQuote();
+    await updateQuoteStatus(quoteId, "declined", {
+      category: "Price",
+      narrative: "Too expensive",
+    });
+
+    const result = await updateQuoteStatus(quoteId, "draft");
+    expect(result.ok).toBe(true);
+
+    const [quote] = await db.select().from(quotes).where(eq(quotes.id, quoteId));
+    expect(quote.status).toBe("draft");
+    expect(quote.declinedReasonCategory).toBeNull();
+    expect(quote.declinedReasonNarrative).toBeNull();
+    expect(quote.declinedAt).toBeNull();
+  });
+
+  it("blocks editing after acceptance", async () => {
+    const { quoteId } = await seedQuote();
+    await updateQuoteStatus(quoteId, "accepted");
+
+    const form = new FormData();
+    form.set("clientId", (await db.select().from(clients).limit(1))[0].id);
+    form.set("issueDate", "2026-08-23");
+    form.set(
+      "linesJson",
+      JSON.stringify([
+        { description: "Changed", quantity: 1, unitPricePounds: "100" },
+      ]),
+    );
+
+    const result = await updateQuote(quoteId, form);
+    expect(result.ok).toBe(false);
+  }, 15000);
 });

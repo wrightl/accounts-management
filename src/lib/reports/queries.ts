@@ -8,6 +8,7 @@ import {
   invoices,
   payments,
 } from "@/db/schema";
+import { clientDisplayNameSql } from "@/lib/clients/sql";
 import { defaultReportPeriod as fyDefaultReportPeriod } from "@/lib/dates";
 import { formatGBP } from "@/lib/money";
 import { todayIsoDate } from "@/lib/invoices/status";
@@ -30,7 +31,13 @@ export async function getProfitAndLoss(from: string, to: string) {
   const [expenseTotal] = await db
     .select({ total: sum(expenses.amountPence).mapWith(Number) })
     .from(expenses)
-    .where(and(gte(expenses.spentAt, from), lte(expenses.spentAt, to)));
+    .where(
+      and(
+        ne(expenses.status, "pending"),
+        gte(expenses.spentAt, from),
+        lte(expenses.spentAt, to),
+      ),
+    );
 
   const incomePence = income?.total ?? 0;
   const expensePence = expenseTotal?.total ?? 0;
@@ -57,7 +64,7 @@ export async function getAgedReceivables() {
       status: invoices.status,
       dueDate: invoices.dueDate,
       grossPence: invoices.grossPence,
-      clientName: clients.name,
+      clientName: clientDisplayNameSql.as("client_name"),
     })
     .from(invoices)
     .innerJoin(clients, eq(invoices.clientId, clients.id))
@@ -140,6 +147,31 @@ export async function getIncomeByMonth(from: string, to: string) {
   }));
 }
 
+export async function getExpenseByMonth(from: string, to: string) {
+  const db = getDb();
+  const rows = await db
+    .select({
+      month: sql<string>`to_char(${expenses.spentAt}, 'YYYY-MM')`,
+      total: sum(expenses.amountPence).mapWith(Number),
+    })
+    .from(expenses)
+    .where(
+      and(
+        ne(expenses.status, "pending"),
+        gte(expenses.spentAt, from),
+        lte(expenses.spentAt, to),
+      ),
+    )
+    .groupBy(sql`to_char(${expenses.spentAt}, 'YYYY-MM')`)
+    .orderBy(sql`to_char(${expenses.spentAt}, 'YYYY-MM')`);
+
+  return rows.map((r) => ({
+    month: r.month,
+    totalPence: r.total ?? 0,
+    totalFormatted: formatGBP(r.total ?? 0),
+  }));
+}
+
 export async function getExpenseByCategory(from: string, to: string) {
   const db = getDb();
   const rows = await db
@@ -148,7 +180,13 @@ export async function getExpenseByCategory(from: string, to: string) {
       total: sum(expenses.amountPence).mapWith(Number),
     })
     .from(expenses)
-    .where(and(gte(expenses.spentAt, from), lte(expenses.spentAt, to)))
+    .where(
+      and(
+        ne(expenses.status, "pending"),
+        gte(expenses.spentAt, from),
+        lte(expenses.spentAt, to),
+      ),
+    )
     .groupBy(expenses.category)
     .orderBy(desc(sum(expenses.amountPence)));
 

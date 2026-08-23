@@ -3,6 +3,7 @@ import { Outfit } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { isAuthConfigured } from "@/env";
 import { brand } from "@/lib/brand";
+import { AppProviders } from "@/components/providers";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -59,7 +60,7 @@ export default function RootLayout({
   const body = (
     <html lang="en" className={`${outfit.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col bg-background font-sans text-foreground">
-        {children}
+        <AppProviders>{children}</AppProviders>
       </body>
     </html>
   );

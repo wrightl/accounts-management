@@ -33,9 +33,14 @@ let cached: EmailProvider | null = null;
 
 export function getEmailProvider(): EmailProvider {
   if (cached) return cached;
-  const { EMAIL_PROVIDER } = serverEnv();
+  const env = serverEnv();
+  if (env.NODE_ENV === "production" && env.EMAIL_PROVIDER === "console") {
+    console.warn(
+      "[email] EMAIL_PROVIDER=console in production — outbound emails are logged only, not delivered.",
+    );
+  }
   cached =
-    EMAIL_PROVIDER === "resend"
+    env.EMAIL_PROVIDER === "resend"
       ? new ResendProvider()
       : new ConsoleProvider();
   return cached;

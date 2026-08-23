@@ -42,6 +42,7 @@ export default async function TransactionsPage({
           q: params.q,
           type: params.type,
           category: params.category,
+          reconciliation: params.reconciliation,
           from: dateRange.from,
           to: dateRange.to,
           page: 1,
@@ -51,6 +52,7 @@ export default async function TransactionsPage({
           q: params.q,
           type: params.type,
           category: params.category,
+          reconciliation: params.reconciliation,
           from: dateRange.from,
           to: dateRange.to,
           page: params.page,
@@ -61,6 +63,7 @@ export default async function TransactionsPage({
     q: params.q,
     type: params.type,
     category: params.category,
+    reconciliation: params.reconciliation,
     from: dateRange.from,
     to: dateRange.to,
   };
@@ -113,6 +116,7 @@ export default async function TransactionsPage({
                   q: params.q,
                   type: params.type,
                   category: params.category,
+                  reconciliation: params.reconciliation,
                   from: dateRange.from,
                   to: dateRange.to,
                 }}

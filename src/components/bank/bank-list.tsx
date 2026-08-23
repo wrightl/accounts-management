@@ -22,8 +22,12 @@ import { friendlyDayLabel } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 
 function matchStatus(row: BankTransactionListItem): string {
-  if (row.reconciled) return `Matched (${row.matchType})`;
-  if (row.suggested) return `Suggested (${row.matchType})`;
+  if (row.reconciled) {
+    return row.matchLabel ? `Matched · ${row.matchLabel}` : `Matched (${row.matchType})`;
+  }
+  if (row.suggested) {
+    return row.matchLabel ? `Suggested · ${row.matchLabel}` : `Suggested (${row.matchType})`;
+  }
   return "Unreconciled";
 }
 
@@ -86,6 +90,14 @@ export function BankFilters({
         </Select>
       </div>
       <div>
+        <Label htmlFor="reconciliation">Reconciliation</Label>
+        <Select id="reconciliation" name="reconciliation" defaultValue={params.reconciliation}>
+          <option value="">All</option>
+          <option value="reconciled">Reconciled</option>
+          <option value="unreconciled">Unreconciled</option>
+        </Select>
+      </div>
+      <div>
         <Label htmlFor="category">Category</Label>
         <Select id="category" name="category" defaultValue={params.category}>
           <option value="">All</option>
@@ -109,6 +121,7 @@ export function BankFilters({
               q: "",
               type: "",
               category: "",
+              reconciliation: "",
               period: "",
               from: "",
               to: "",

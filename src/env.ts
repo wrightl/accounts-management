@@ -19,10 +19,18 @@ const serverSchema = z.object({
   // File storage (Vercel Blob).
   BLOB_READ_WRITE_TOKEN: z.string().optional(),
 
+  // AI Gateway (optional — required when receipt OCR provider is ai_gateway).
+  AI_GATEWAY_API_KEY: z.string().optional(),
+
   // Email (Resend). Provider is pluggable — see src/lib/email.
   EMAIL_PROVIDER: z.enum(["resend", "console"]).default("console"),
   RESEND_API_KEY: z.string().optional(),
+  RESEND_WEBHOOK_SECRET: z.string().optional(),
   EMAIL_FROM: z.string().default("Dot + Dash Accounts <accounts@dotanddashconsulting.com>"),
+  /** Comma-delimited inbound addresses founders email receipts to. */
+  EXPENSE_INBOUND_ADDRESS: z
+    .string()
+    .default("expenses@dotanddashconsulting.com"),
 
   // Cron / automation. Routes refuse to run until CRON_SECRET is set.
   CRON_SECRET: z.string().optional(),

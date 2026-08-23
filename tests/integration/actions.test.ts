@@ -15,7 +15,7 @@ import {
 } from "@/db/schema";
 import { recordPayment } from "@/actions/payments";
 import { createQuote } from "@/actions/quotes";
-import { createReimbursementRun, markReimbursementPaid } from "@/actions/reimbursements";
+import { createReimbursementRun, markReimbursementPaid, updateReimbursementRun } from "@/actions/reimbursements";
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -143,6 +143,7 @@ describe("action-layer PGlite", () => {
     const form = new FormData();
     form.set("payeeUserId", actor.id);
     form.set("expenseIdsJson", JSON.stringify([exp.id]));
+    form.set("reference", "Reimb Lee Apr");
 
     const result = await createReimbursementRun(form);
     expect(result.ok).toBe(true);
@@ -161,6 +162,82 @@ describe("action-layer PGlite", () => {
     expect(runs[0].totalPence).toBe(4500);
     const items = await db.select().from(reimbursementItems);
     expect(items).toHaveLength(1);
+  });
+
+  it("updateReimbursementRun edits pending runs only", async () => {
+    const [actor] = await db
+      .insert(users)
+      .values({
+        clerkUserId: "user_clerk_1",
+        email: "lee@dotanddashconsulting.com",
+        name: "Lee",
+        role: "admin",
+      })
+      .returning();
+    const [exp1, exp2] = await db
+      .insert(expenses)
+      .values([
+        {
+          description: "Train",
+          category: "Travel",
+          spentAt: "2026-04-01",
+          amountPence: 4500,
+          status: "reimbursable",
+          paidByUserId: actor.id,
+          createdByUserId: actor.id,
+        },
+        {
+          description: "Taxi",
+          category: "Travel",
+          spentAt: "2026-04-02",
+          amountPence: 1200,
+          status: "reimbursable",
+          paidByUserId: actor.id,
+          createdByUserId: actor.id,
+        },
+      ])
+      .returning();
+
+    const createForm = new FormData();
+    createForm.set("payeeUserId", actor.id);
+    createForm.set("expenseIdsJson", JSON.stringify([exp1.id]));
+    createForm.set("reference", "Reimb Lee Apr");
+
+    const created = await createReimbursementRun(createForm);
+    expect(created.ok).toBe(true);
+    if (!created.ok || !created.id) throw new Error("expected run id");
+
+    const updateForm = new FormData();
+    updateForm.set("expenseIdsJson", JSON.stringify([exp1.id, exp2.id]));
+    updateForm.set("reference", "Reimb Lee Apr updated");
+
+    const updated = await updateReimbursementRun(created.id, updateForm);
+    expect(updated.ok).toBe(true);
+
+    const [run] = await db
+      .select()
+      .from(reimbursements)
+      .where(eq(reimbursements.id, created.id));
+    expect(run.reference).toBe("Reimb Lee Apr updated");
+    expect(run.totalPence).toBe(5700);
+
+    const items = await db
+      .select()
+      .from(reimbursementItems)
+      .where(eq(reimbursementItems.reimbursementId, created.id));
+    expect(items).toHaveLength(2);
+
+    const paid = await markReimbursementPaid(created.id);
+    expect(paid.ok).toBe(true);
+
+    const paidUpdateForm = new FormData();
+    paidUpdateForm.set("expenseIdsJson", JSON.stringify([exp1.id]));
+    paidUpdateForm.set("reference", "Too late");
+
+    const blocked = await updateReimbursementRun(created.id, paidUpdateForm);
+    expect(blocked.ok).toBe(false);
+    if (blocked.ok) throw new Error("expected failure");
+    expect(blocked.error).toMatch(/pending/i);
   });
 
   it("createQuote ignores trailing blank lines", async () => {
@@ -227,5 +304,32 @@ describe("action-layer PGlite", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected failure");
     expect(result.error).toBe("Add at least one line item");
+  });
+
+  it("createQuote rejects when no client is chosen", async () => {
+    await db
+      .insert(users)
+      .values({
+        clerkUserId: "user_clerk_1",
+        email: "lee@dotanddashconsulting.com",
+        name: "Lee",
+        role: "admin",
+      })
+      .returning();
+
+    const form = new FormData();
+    form.set("clientId", "");
+    form.set("issueDate", "2026-08-23");
+    form.set(
+      "linesJson",
+      JSON.stringify([
+        { description: "Workshop", quantity: 1, unitPricePounds: "100" },
+      ]),
+    );
+
+    const result = await createQuote(form);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected failure");
+    expect(result.error).toBe("Choose a client");
   });
 });

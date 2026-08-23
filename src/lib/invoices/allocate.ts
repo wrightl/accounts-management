@@ -4,6 +4,7 @@ import type { Database } from "@/db";
 import { companySettings } from "@/db/schema";
 import {
   nextInvoiceNumber,
+  nextOrderNumber,
   nextQuoteNumber,
   parseIssueYear,
 } from "@/lib/invoices/numbering";
@@ -89,6 +90,34 @@ export async function allocateQuoteNumber(
     .set({
       quoteNextSeq: allocated.nextSeq,
       quoteSeqYear: allocated.seqYear,
+      updatedAt: new Date(),
+    })
+    .where(eq(companySettings.id, current.id));
+
+  return allocated.number;
+}
+
+/** Atomically allocate the next order number under the same lock. */
+export async function allocateOrderNumber(
+  tx: Tx,
+  issueDate: string | null | undefined,
+): Promise<string> {
+  const year = parseIssueYear(issueDate);
+  const current = await lockCompanySettings(tx);
+  const allocated = nextOrderNumber(
+    {
+      orderNumberPrefix: current.orderNumberPrefix,
+      orderNextSeq: current.orderNextSeq,
+      orderSeqYear: current.orderSeqYear,
+    },
+    year,
+  );
+
+  await tx
+    .update(companySettings)
+    .set({
+      orderNextSeq: allocated.nextSeq,
+      orderSeqYear: allocated.seqYear,
       updatedAt: new Date(),
     })
     .where(eq(companySettings.id, current.id));

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label, Select, Textarea } from "@/components/ui/form";
 import { formatGBP, invoiceTotals, poundsToPence } from "@/lib/money";
 import { createInvoice, updateInvoice } from "@/actions/invoices";
+import { clientDisplayName } from "@/lib/clients/display";
 import { Plus, Trash2 } from "lucide-react";
 
 export interface LineDraft {
@@ -31,7 +32,7 @@ export function InvoiceForm({
   initialLines,
 }: {
   mode: "create" | "edit";
-  clients: { id: string; name: string }[];
+  clients: { id: string; name: string; companyName?: string | null }[];
   invoice?: {
     id: string;
     clientId: string;
@@ -107,7 +108,7 @@ export function InvoiceForm({
             </option>
             {clients.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name}
+                {clientDisplayName(c)}
               </option>
             ))}
           </Select>

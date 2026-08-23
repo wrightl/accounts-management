@@ -6,26 +6,31 @@ import {
   Text,
   View,
   StyleSheet,
-  Image as PdfImage,
   renderToBuffer,
 } from "@react-pdf/renderer";
-import path from "node:path";
 import { brand as palette } from "@/lib/brand";
+import { PdfHeaderLogo } from "@/lib/pdf/header-logo";
+import { resolvePdfCompanyEmail } from "@/lib/pdf/company-email";
+import { resolvePdfLogoSrc } from "@/lib/pdf/logo";
 import { formatGBP, lineNetPence } from "@/lib/money";
+import { clientBillToLines } from "@/lib/clients/display";
 
 export interface PdfCompany {
   name: string;
   legalName: string;
   companyNumber: string | null;
   addressLines: string | null;
+  email?: string | null;
   bankName: string;
   bankAccountName: string | null;
   sortCode: string | null;
   accountNumber: string | null;
+  logoUrl?: string | null;
 }
 
 export interface PdfClient {
   name: string;
+  companyName?: string | null;
   email: string | null;
   addressLines: string | null;
 }
@@ -49,7 +54,6 @@ export interface PdfLine {
 const ink = palette.navy;
 const muted = "#5c6490";
 const hairline = "#d5daf0";
-const logoSrc = path.join(process.cwd(), "public/brand/logo.png");
 
 const styles = StyleSheet.create({
   page: {
@@ -81,11 +85,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 4,
-  },
-  logo: {
-    width: 52,
-    height: 52,
-    marginRight: 12,
   },
   muted: { color: muted, fontSize: 9 },
   title: {
@@ -151,22 +150,24 @@ function InvoiceDocument({
   client,
   lines,
   company,
+  logoSrc,
 }: {
   invoice: PdfInvoice;
   client: PdfClient;
   lines: PdfLine[];
   company: PdfCompany;
+  logoSrc: string;
 }) {
   return (
     <Document>
       <Page size="A4" style={styles.page}>
         <View style={styles.accentBar} />
+        <PdfHeaderLogo src={logoSrc} />
         <View style={styles.header}>
           <View>
             <View style={styles.markRow}>
-              <PdfImage src={logoSrc} style={styles.logo} />
               <View>
-                <Text style={styles.wordmark}>Dot + Dash Consulting</Text>
+                <Text style={styles.wordmark}>{company.name}</Text>
                 <Text style={styles.muted}>{company.legalName}</Text>
                 {company.companyNumber ? (
                   <Text style={styles.muted}>Company no. {company.companyNumber}</Text>
@@ -180,6 +181,7 @@ function InvoiceDocument({
                   </Text>
                 ))
               : null}
+            <Text style={styles.muted}>{resolvePdfCompanyEmail(company.email)}</Text>
           </View>
           <View>
             <Text style={styles.title}>INVOICE</Text>
@@ -195,7 +197,9 @@ function InvoiceDocument({
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Bill to</Text>
-          <Text>{client.name}</Text>
+          {clientBillToLines(client).map((line, i) => (
+            <Text key={i}>{line}</Text>
+          ))}
           {client.email ? <Text style={styles.muted}>{client.email}</Text> : null}
           {client.addressLines
             ? client.addressLines.split("\n").map((line, i) => (
@@ -268,9 +272,10 @@ export async function renderInvoicePdf(params: {
   lines: PdfLine[];
   company: PdfCompany;
 }): Promise<Uint8Array> {
+  const logoSrc = await resolvePdfLogoSrc(params.company.logoUrl);
   // InvoiceDocument renders a <Document>; cast satisfies @react-pdf's DocumentProps expectation.
   const element = (
-    <InvoiceDocument {...params} />
+    <InvoiceDocument {...params} logoSrc={logoSrc} />
   ) as React.ReactElement<React.ComponentProps<typeof Document>>;
   const buffer = await renderToBuffer(element);
   return new Uint8Array(buffer);

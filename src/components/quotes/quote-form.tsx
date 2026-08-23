@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label, Select, Textarea } from "@/components/ui/form";
 import { formatGBP, invoiceTotals, lineNetPence, poundsToPence } from "@/lib/money";
+import { PaymentScheduleEditor } from "@/components/quotes/payment-schedule-editor";
 import { createQuote, updateQuote } from "@/actions/quotes";
+import { clientDisplayName } from "@/lib/clients/display";
 import { Plus, Trash2 } from "lucide-react";
 
 export type QuoteLineDraft = {
@@ -40,9 +42,10 @@ export function QuoteForm({
   clients,
   quote,
   initialLines,
+  initialMilestones,
 }: {
   mode: "create" | "edit";
-  clients: { id: string; name: string }[];
+  clients: { id: string; name: string; companyName?: string | null }[];
   quote?: {
     id: string;
     clientId: string;
@@ -51,6 +54,13 @@ export function QuoteForm({
     notes: string | null;
   };
   initialLines?: QuoteLineDraft[];
+  initialMilestones?: Array<{
+    label: string;
+    amountPence: number | null;
+    percentBasisPoints: number | null;
+    dueDate: string | null;
+    dueInDays: number | null;
+  }>;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +85,12 @@ export function QuoteForm({
   }, [lines]);
 
   function onSubmit(formData: FormData) {
+    const clientId = String(formData.get("clientId") ?? "").trim();
+    if (!clientId) {
+      setError("Choose a client");
+      return;
+    }
+
     const completeLines = lines.filter(isCompleteLine);
     if (completeLines.length === 0) {
       setError("Add at least one line item");
@@ -119,7 +135,7 @@ export function QuoteForm({
           <option value="">Select…</option>
           {clients.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.name}
+              {clientDisplayName(c)}
             </option>
           ))}
         </Select>
@@ -226,6 +242,11 @@ export function QuoteForm({
         </Button>
         <p className="text-right font-medium">Total {formatGBP(totals.grossPence)}</p>
       </div>
+      <PaymentScheduleEditor
+        grossPence={totals.grossPence}
+        initialMilestones={initialMilestones}
+        disabled={pending}
+      />
       <div>
         <Label htmlFor="notes">Notes</Label>
         <Textarea
@@ -245,6 +266,8 @@ export function QuoteForm({
 }
 
 /** @deprecated Use QuoteForm */
-export function QuoteCreateForm(props: { clients: { id: string; name: string }[] }) {
+export function QuoteCreateForm(props: {
+  clients: { id: string; name: string; companyName?: string | null }[];
+}) {
   return <QuoteForm mode="create" clients={props.clients} />;
 }

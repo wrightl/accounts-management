@@ -1,5 +1,5 @@
 import "server-only";
-import { desc, eq, sum } from "drizzle-orm";
+import { and, desc, eq, ne, sum } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   expenses,
@@ -117,4 +117,67 @@ export async function getReimbursementExportRows(id: string) {
   const detail = await getReimbursementDetail(id);
   if (!detail) return null;
   return detail;
+}
+
+/** Linked reimbursement run for an expense, if any. */
+export async function getReimbursementForExpense(expenseId: string) {
+  const db = getDb();
+  const [row] = await db
+    .select({
+      reimbursementId: reimbursements.id,
+      status: reimbursements.status,
+      paidAt: reimbursements.paidAt,
+      reference: reimbursements.reference,
+      totalPence: reimbursements.totalPence,
+      payeeName: users.name,
+      payeeEmail: users.email,
+    })
+    .from(reimbursementItems)
+    .innerJoin(reimbursements, eq(reimbursementItems.reimbursementId, reimbursements.id))
+    .innerJoin(users, eq(reimbursements.payeeUserId, users.id))
+    .where(eq(reimbursementItems.expenseId, expenseId))
+    .limit(1);
+
+  if (!row) return null;
+  return {
+    ...row,
+    totalFormatted: formatGBP(row.totalPence),
+    payeeLabel: row.payeeName || row.payeeEmail,
+  };
+}
+
+export async function getReimbursementEditData(id: string) {
+  const detail = await getReimbursementDetail(id);
+  if (!detail) return null;
+
+  const db = getDb();
+  const payeeUserId = detail.reimbursement.payeeUserId;
+
+  const reimbursable = await db
+    .select({
+      id: expenses.id,
+      description: expenses.description,
+      amountPence: expenses.amountPence,
+      spentAt: expenses.spentAt,
+      paidByUserId: expenses.paidByUserId,
+    })
+    .from(expenses)
+    .where(
+      and(eq(expenses.status, "reimbursable"), eq(expenses.paidByUserId, payeeUserId)),
+    );
+
+  const linkedElsewhere = await db
+    .select({ expenseId: reimbursementItems.expenseId })
+    .from(reimbursementItems)
+    .where(ne(reimbursementItems.reimbursementId, id));
+
+  const blocked = new Set(linkedElsewhere.map((row) => row.expenseId));
+
+  return {
+    detail,
+    payeeLabel: detail.payee.name || detail.payee.email,
+    expenses: reimbursable.filter((expense) => !blocked.has(expense.id)),
+    initialExpenseIds: detail.items.map((item) => item.expense.id),
+    initialReference: detail.reimbursement.reference ?? "",
+  };
 }

@@ -2,10 +2,11 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { guardPage } from "@/lib/auth";
 import { getQuoteVersionDetail } from "@/lib/quotes/queries";
-import { Button, buttonClasses } from "@/components/ui/button";
+import { buttonClasses } from "@/components/ui/button";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { formatGBP, lineNetPence } from "@/lib/money";
+import { clientDisplayName } from "@/lib/clients/display";
 import { isDatabaseConfigured } from "@/env";
 
 export default async function QuoteVersionPage({
@@ -44,7 +45,7 @@ export default async function QuoteVersionPage({
             {detail.quote.reference}
           </h1>
           <p className="mt-1 capitalize text-muted">
-            {detail.quote.status} · {detail.client.name}
+            {detail.quote.status} · {clientDisplayName(detail.client)}
           </p>
           <p className="mt-1 text-sm text-muted">
             Issued {detail.quote.issueDate}
@@ -55,14 +56,6 @@ export default async function QuoteVersionPage({
           <CardTitle>Total</CardTitle>
           <CardValue>{detail.quote.grossFormatted}</CardValue>
         </Card>
-      </div>
-
-      <div className="mt-6">
-        <a href={`/api/quotes/${id}/pdf?version=${version}`}>
-          <Button type="button" variant="secondary">
-            Download PDF
-          </Button>
-        </a>
       </div>
 
       {detail.quote.notes ? (

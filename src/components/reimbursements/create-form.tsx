@@ -10,6 +10,7 @@ import { createReimbursementRun } from "@/actions/reimbursements";
 export function CreateReimbursementForm({
   founders,
   expenses,
+  initialPayeeUserId,
 }: {
   founders: { id: string; name: string | null; email: string }[];
   expenses: {
@@ -19,10 +20,16 @@ export function CreateReimbursementForm({
     spentAt: string | null;
     paidByUserId: string | null;
   }[];
+  initialPayeeUserId?: string;
 }) {
   const router = useRouter();
-  const [payeeUserId, setPayeeUserId] = useState(founders[0]?.id ?? "");
+  const defaultPayee =
+    initialPayeeUserId && founders.some((f) => f.id === initialPayeeUserId)
+      ? initialPayeeUserId
+      : (founders[0]?.id ?? "");
+  const [payeeUserId, setPayeeUserId] = useState(defaultPayee);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [reference, setReference] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -109,13 +116,24 @@ export function CreateReimbursementForm({
       </div>
 
       <div>
-        <Label htmlFor="reference">Reference</Label>
-        <Input id="reference" name="reference" disabled={pending} />
+        <Label htmlFor="reference">Bank payment reference</Label>
+        <Input
+          id="reference"
+          name="reference"
+          value={reference}
+          onChange={(e) => setReference(e.target.value)}
+          placeholder="Use this reference when transferring from the business account"
+          required
+          disabled={pending}
+        />
       </div>
 
       <p className="text-sm text-muted">Total: {formatGBP(total)}</p>
       <FieldError>{error}</FieldError>
-      <Button type="submit" disabled={pending || selected.size === 0}>
+      <Button
+        type="submit"
+        disabled={pending || selected.size === 0 || !reference.trim()}
+      >
         {pending ? "Creating…" : "Create reimbursement run"}
       </Button>
     </form>

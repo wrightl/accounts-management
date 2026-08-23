@@ -12,13 +12,21 @@ import {
 } from "@/lib/bank/list-params";
 import {
   confirmMatch,
+  confirmMatchesBatch,
   dismissMatch,
+  dismissMatchesBatch,
+  findBankTransactionsForInvoice,
+  findReimbursementBankMatches,
   getOrCreateDefaultBankAccount,
   importBankRows,
   listBankTransactions,
+  ReconciliationError,
   suggestMatches,
   updateTransactionCategory,
   type BankTransactionListResult,
+  type InvoiceBankMatch,
+  type ReimbursementBankMatch,
+  type SuggestedMatch,
 } from "@/lib/bank/queries";
 import { deleteUnusedBankSpendingCategory } from "@/lib/bank/spending-categories";
 import type { ActionResult } from "@/actions/result";
@@ -31,6 +39,7 @@ export async function loadBankTransactionsPage(input: {
   q?: string;
   type?: BankListParams["type"];
   category?: string;
+  reconciliation?: BankListParams["reconciliation"];
   from?: string;
   to?: string;
   page: number;
@@ -49,6 +58,7 @@ export async function loadBankTransactionsPage(input: {
     q: input.q,
     type: input.type,
     category: input.category,
+    reconciliation: input.reconciliation,
     from: input.from,
     to: input.to,
     page,
@@ -59,7 +69,7 @@ export async function loadBankTransactionsPage(input: {
 }
 
 export async function importStarlingCsv(formData: FormData): Promise<
-  ActionResult & { inserted?: number; skipped?: number }
+  ActionResult & { inserted?: number; skipped?: number; suggestions?: SuggestedMatch[] }
 > {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
@@ -81,33 +91,35 @@ export async function importStarlingCsv(formData: FormData): Promise<
 
   const account = await getOrCreateDefaultBankAccount();
   const { inserted, skipped } = await importBankRows(account.id, rows);
-  const suggested = await suggestMatches();
+  const suggestions = await suggestMatches();
 
   await writeAudit({
     actorUserId: localUserId,
     action: "bank.import",
     entityType: "bank_account",
     entityId: account.id,
-    meta: { inserted, skipped, suggested },
+    meta: { inserted, skipped, suggested: suggestions.length },
   });
 
   revalidateTransactions();
-  return { ok: true, id: account.id, inserted, skipped };
+  return { ok: true, id: account.id, inserted, skipped, suggestions };
 }
 
-export async function runSuggestMatches(): Promise<ActionResult> {
+export async function runSuggestMatches(): Promise<
+  ActionResult & { suggestions?: SuggestedMatch[] }
+> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
-  const count = await suggestMatches();
+  const suggestions = await suggestMatches();
   await writeAudit({
     actorUserId: localUserId,
     action: "bank.suggest",
-    meta: { count },
+    meta: { count: suggestions.length },
   });
   revalidateTransactions();
-  return { ok: true };
+  return { ok: true, suggestions };
 }
 
 export async function confirmBankMatch(matchId: string): Promise<ActionResult> {
@@ -115,7 +127,12 @@ export async function confirmBankMatch(matchId: string): Promise<ActionResult> {
   if (!authz.ok) return authz;
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
-  await confirmMatch(matchId);
+  try {
+    await confirmMatch(matchId);
+  } catch (e) {
+    if (e instanceof ReconciliationError) return { ok: false, error: e.message };
+    throw e;
+  }
   await writeAudit({
     actorUserId: localUserId,
     action: "bank.confirm_match",
@@ -123,7 +140,45 @@ export async function confirmBankMatch(matchId: string): Promise<ActionResult> {
     entityId: matchId,
   });
   revalidateTransactions();
+  revalidatePath("/dashboard/invoices");
+  revalidatePath("/dashboard/reimbursements");
+  revalidatePath("/dashboard/expenses");
   return { ok: true, id: matchId };
+}
+
+export async function findReimbursementBankMatchesAction(
+  reimbursementId: string,
+): Promise<
+  | { ok: true; matches: ReimbursementBankMatch[] }
+  | { ok: false; error: string }
+> {
+  const authz = await requireActionPermission("accounts:read");
+  if (!authz.ok) return authz;
+  const matches = await findReimbursementBankMatches(reimbursementId);
+  return { ok: true, matches };
+}
+
+export async function confirmBankMatchesBatch(matchIds: string[]): Promise<ActionResult> {
+  const authz = await requireActionPermission("accounts:write");
+  if (!authz.ok) return authz;
+  const session = authz.user;
+  const localUserId = await ensureLocalUser(session);
+  try {
+    await confirmMatchesBatch(matchIds);
+  } catch (e) {
+    if (e instanceof ReconciliationError) return { ok: false, error: e.message };
+    throw e;
+  }
+  await writeAudit({
+    actorUserId: localUserId,
+    action: "bank.confirm_match_batch",
+    meta: { count: matchIds.length },
+  });
+  revalidateTransactions();
+  revalidatePath("/dashboard/invoices");
+  revalidatePath("/dashboard/reimbursements");
+  revalidatePath("/dashboard/expenses");
+  return { ok: true };
 }
 
 export async function dismissBankMatch(matchId: string): Promise<ActionResult> {
@@ -140,6 +195,30 @@ export async function dismissBankMatch(matchId: string): Promise<ActionResult> {
   });
   revalidateTransactions();
   return { ok: true, id: matchId };
+}
+
+export async function dismissBankMatchesBatch(matchIds: string[]): Promise<ActionResult> {
+  const authz = await requireActionPermission("accounts:write");
+  if (!authz.ok) return authz;
+  const session = authz.user;
+  const localUserId = await ensureLocalUser(session);
+  await dismissMatchesBatch(matchIds);
+  await writeAudit({
+    actorUserId: localUserId,
+    action: "bank.dismiss_match_batch",
+    meta: { count: matchIds.length },
+  });
+  revalidateTransactions();
+  return { ok: true };
+}
+
+export async function findInvoiceBankMatches(
+  invoiceId: string,
+): Promise<{ ok: true; matches: InvoiceBankMatch[] } | { ok: false; error: string }> {
+  const authz = await requireActionPermission("accounts:read");
+  if (!authz.ok) return authz;
+  const matches = await findBankTransactionsForInvoice(invoiceId);
+  return { ok: true, matches };
 }
 
 export async function updateBankCategory(
@@ -184,3 +263,5 @@ export async function deleteBankSpendingCategory(categoryId: string): Promise<Ac
   revalidateTransactions();
   return { ok: true, id: categoryId };
 }
+
+export type { SuggestedMatch, InvoiceBankMatch };

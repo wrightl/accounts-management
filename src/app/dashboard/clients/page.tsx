@@ -42,6 +42,7 @@ export default async function ClientsPage() {
             <THead>
               <TR>
                 <TH>Name</TH>
+                <TH>Company</TH>
                 <TH>Email</TH>
                 <TH>Notes</TH>
               </TR>
@@ -57,6 +58,7 @@ export default async function ClientsPage() {
                       {c.name}
                     </Link>
                   </TD>
+                  <TD className="text-muted">{c.companyName ?? "—"}</TD>
                   <TD className="text-muted">{c.email ?? "—"}</TD>
                   <TD className="max-w-xs truncate text-muted">{c.notes ?? "—"}</TD>
                 </TR>

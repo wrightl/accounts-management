@@ -23,10 +23,18 @@ export const invoiceStatusEnum = pgEnum("invoice_status", [
   "void",
 ]);
 export const expenseStatusEnum = pgEnum("expense_status", [
+  "pending", // submitted by email, awaiting review
   "recorded", // logged, not yet classified
   "reimbursable", // owed back to a founder
   "reimbursed", // paid back to the founder
   "company_paid", // paid directly by the company
+]);
+export const expenseSourceEnum = pgEnum("expense_source", ["manual", "email"]);
+export const inboundEmailJobStatusEnum = pgEnum("inbound_email_job_status", [
+  "pending",
+  "processed",
+  "rejected",
+  "failed",
 ]);
 export const reimbursementStatusEnum = pgEnum("reimbursement_status", [
   "pending",
@@ -62,6 +70,7 @@ export const companySettings = pgTable(
     companyNumber: text("company_number"),
     vatNumber: text("vat_number"), // null: not VAT registered
     addressLines: text("address_lines"),
+    email: text("email"),
     bankName: text("bank_name").notNull().default("Starling"),
     bankAccountName: text("bank_account_name"),
     sortCode: text("sort_code"),
@@ -72,6 +81,8 @@ export const companySettings = pgTable(
     invoiceNumberPrefix: text("invoice_number_prefix").notNull().default("DD"),
     /** Quote number prefix, e.g. "Q" → Q-2026-0001. */
     quoteNumberPrefix: text("quote_number_prefix").notNull().default("Q"),
+    /** Order number prefix, e.g. "O" → O-2026-0001. */
+    orderNumberPrefix: text("order_number_prefix").notNull().default("O"),
     /** Next sequence number to allocate for the current invoiceSeqYear. */
     invoiceNextSeq: integer("invoice_next_seq").notNull().default(1),
     /** Calendar year the sequence applies to; null until the first invoice. */
@@ -79,6 +90,17 @@ export const companySettings = pgTable(
     /** Next quote sequence for the current quoteSeqYear. */
     quoteNextSeq: integer("quote_next_seq").notNull().default(1),
     quoteSeqYear: integer("quote_seq_year"),
+    /** Next order sequence for the current orderSeqYear. */
+    orderNextSeq: integer("order_next_seq").notNull().default(1),
+    orderSeqYear: integer("order_seq_year"),
+    /** Default days from issue date until invoice due date. */
+    invoicePaymentTermsDays: integer("invoice_payment_terms_days").notNull().default(14),
+    /** Default HMRC mileage rate in pence per mile (e.g. 45 = 45p/mi). */
+    defaultMileageRatePence: integer("default_mileage_rate_pence").notNull().default(45),
+    /** Receipt OCR provider: "local" (Tesseract) or "ai_gateway". */
+    receiptOcrProvider: text("receipt_ocr_provider").notNull().default("local"),
+    /** AI Gateway model slug used when receiptOcrProvider is "ai_gateway". */
+    receiptOcrModel: text("receipt_ocr_model").notNull().default("google/gemini-2.5-flash"),
     /** Always true — unique so this table can only hold one row. */
     singleton: boolean("singleton").notNull().default(true),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -92,6 +114,7 @@ export const companySettings = pgTable(
 export const clients = pgTable("clients", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
+  companyName: text("company_name"),
   email: text("email"),
   addressLines: text("address_lines"),
   notes: text("notes"),
@@ -120,10 +143,20 @@ export const invoices = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     sentAt: timestamp("sent_at", { withTimezone: true }),
     paidAt: timestamp("paid_at", { withTimezone: true }),
+    orderId: uuid("order_id").references(() => orders.id, { onDelete: "set null" }),
+    paymentMilestoneId: uuid("payment_milestone_id").references(
+      () => orderPaymentMilestones.id,
+      { onDelete: "set null" },
+    ),
     /** Blob pathname for the generated PDF (served via authorised route). */
     pdfBlobPath: text("pdf_blob_path"),
   },
-  (t) => [index("idx_invoices_client").on(t.clientId), index("idx_invoices_status").on(t.status)],
+  (t) => [
+    index("idx_invoices_client").on(t.clientId),
+    index("idx_invoices_status").on(t.status),
+    index("idx_invoices_order").on(t.orderId),
+    index("idx_invoices_payment_milestone").on(t.paymentMilestoneId),
+  ],
 );
 
 export const invoiceLineItems = pgTable(
@@ -167,6 +200,7 @@ export const expenses = pgTable(
     amountPence: integer("amount_pence").notNull().default(0),
     vatPence: integer("vat_pence").notNull().default(0),
     status: expenseStatusEnum("status").notNull().default("recorded"),
+    source: expenseSourceEnum("source").notNull().default("manual"),
     billable: boolean("billable").notNull().default(false),
     billableClientId: uuid("billable_client_id").references(() => clients.id, {
       onDelete: "set null",
@@ -174,6 +208,11 @@ export const expenses = pgTable(
     paidByUserId: uuid("paid_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
+    submittedByUserId: uuid("submitted_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    mileageMiles: integer("mileage_miles"),
+    mileageRatePence: integer("mileage_rate_pence"),
     createdByUserId: uuid("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -305,6 +344,7 @@ export const bankTransactions = pgTable(
 export const reconciliationMatchTypeEnum = pgEnum("reconciliation_match_type", [
   "invoice_payment",
   "expense",
+  "reimbursement",
 ]);
 
 export const reconciliationMatches = pgTable(
@@ -318,7 +358,13 @@ export const reconciliationMatches = pgTable(
     paymentId: uuid("payment_id").references(() => payments.id, {
       onDelete: "set null",
     }),
+    invoiceId: uuid("invoice_id").references(() => invoices.id, {
+      onDelete: "set null",
+    }),
     expenseId: uuid("expense_id").references(() => expenses.id, {
+      onDelete: "set null",
+    }),
+    reimbursementId: uuid("reimbursement_id").references(() => reimbursements.id, {
       onDelete: "set null",
     }),
     confirmed: boolean("confirmed").notNull().default(false),
@@ -338,14 +384,20 @@ export const dividends = pgTable("dividends", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-// --- Phase 6: quotes & recurring invoices ---
+// --- Phase 6: quotes, orders & recurring invoices ---
+
+export const orderStatusEnum = pgEnum("order_status", [
+  "draft",
+  "active",
+  "completed",
+  "cancelled",
+]);
 
 export const quoteStatusEnum = pgEnum("quote_status", [
   "draft",
   "sent",
   "accepted",
   "declined",
-  "converted",
 ]);
 
 export const quoteVersionSourceEnum = pgEnum("quote_version_source", [
@@ -353,6 +405,75 @@ export const quoteVersionSourceEnum = pgEnum("quote_version_source", [
   "edit",
   "rollback",
 ]);
+
+export const quoteDeclineReasonCategories = pgTable(
+  "quote_decline_reason_categories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("uniq_quote_decline_reason_categories_name").on(sql`lower(${t.name})`)],
+);
+
+export const orders = pgTable(
+  "orders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    number: text("number").notNull().unique(),
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "restrict" }),
+    quoteId: uuid("quote_id").unique(),
+    status: orderStatusEnum("status").notNull().default("active"),
+    issueDate: date("issue_date"),
+    notes: text("notes"),
+    netPence: integer("net_pence").notNull().default(0),
+    vatPence: integer("vat_pence").notNull().default(0),
+    grossPence: integer("gross_pence").notNull().default(0),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("idx_orders_client").on(t.clientId),
+    index("idx_orders_status").on(t.status),
+  ],
+);
+
+export const orderLineItems = pgTable(
+  "order_line_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    description: text("description").notNull(),
+    quantity: integer("quantity").notNull().default(1),
+    unitPricePence: integer("unit_price_pence").notNull().default(0),
+    vatRate: integer("vat_rate").notNull().default(0),
+    position: integer("position").notNull().default(0),
+  },
+  (t) => [index("idx_order_lines_order").on(t.orderId)],
+);
+
+export const orderPaymentMilestones = pgTable(
+  "order_payment_milestones",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    amountPence: integer("amount_pence"),
+    percentBasisPoints: integer("percent_basis_points"),
+    dueDate: date("due_date"),
+    dueInDays: integer("due_in_days"),
+    position: integer("position").notNull().default(0),
+  },
+  (t) => [index("idx_order_milestones_order").on(t.orderId)],
+);
 
 export const quotes = pgTable("quotes", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -369,9 +490,13 @@ export const quotes = pgTable("quotes", {
   netPence: integer("net_pence").notNull().default(0),
   vatPence: integer("vat_pence").notNull().default(0),
   grossPence: integer("gross_pence").notNull().default(0),
-  convertedInvoiceId: uuid("converted_invoice_id").references(() => invoices.id, {
-    onDelete: "set null",
-  }),
+  orderId: uuid("order_id")
+    .unique()
+    .references(() => orders.id, { onDelete: "set null" }),
+  declinedReasonCategory: text("declined_reason_category"),
+  declinedReasonNarrative: text("declined_reason_narrative"),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  declinedAt: timestamp("declined_at", { withTimezone: true }),
   createdByUserId: uuid("created_by_user_id").references(() => users.id, {
     onDelete: "set null",
   }),
@@ -427,6 +552,23 @@ export const quoteLineItems = pgTable(
   (t) => [index("idx_quote_lines_quote").on(t.quoteId)],
 );
 
+export const quotePaymentMilestones = pgTable(
+  "quote_payment_milestones",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    quoteId: uuid("quote_id")
+      .notNull()
+      .references(() => quotes.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    amountPence: integer("amount_pence"),
+    percentBasisPoints: integer("percent_basis_points"),
+    dueDate: date("due_date"),
+    dueInDays: integer("due_in_days"),
+    position: integer("position").notNull().default(0),
+  },
+  (t) => [index("idx_quote_milestones_quote").on(t.quoteId)],
+);
+
 export const sendJobs = pgTable(
   "send_jobs",
   {
@@ -447,6 +589,29 @@ export const sendJobs = pgTable(
     uniqueIndex("uniq_send_jobs_pending")
       .on(t.kind, t.invoiceId)
       .where(sql`${t.status} = 'pending'`),
+  ],
+);
+
+export const inboundEmailJobs = pgTable(
+  "inbound_email_jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    resendEmailId: text("resend_email_id").notNull().unique(),
+    fromEmail: text("from_email").notNull(),
+    toEmail: text("to_email").notNull(),
+    subject: text("subject"),
+    status: inboundEmailJobStatusEnum("status").notNull().default("pending"),
+    expenseId: uuid("expense_id").references(() => expenses.id, {
+      onDelete: "set null",
+    }),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("idx_inbound_email_jobs_status").on(t.status),
+    index("idx_inbound_email_jobs_created").on(t.createdAt),
   ],
 );
 
@@ -484,7 +649,13 @@ export const schema = {
   dividends,
   quotes,
   quoteLineItems,
+  quotePaymentMilestones,
+  quoteDeclineReasonCategories,
   quoteVersions,
+  orders,
+  orderLineItems,
+  orderPaymentMilestones,
   recurringInvoices,
   sendJobs,
+  inboundEmailJobs,
 };

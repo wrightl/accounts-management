@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
+import { useAlert } from "@/components/ui/alert-dialog";
 import { FieldError, Input, Label, Textarea } from "@/components/ui/form";
 import { createDividend, deleteDividend } from "@/actions/dividends";
 
@@ -66,6 +67,7 @@ export function DeleteDividendButton({
   canWrite: boolean;
 }) {
   const router = useRouter();
+  const { confirm } = useAlert();
   const [pending, startTransition] = useTransition();
   if (!canWrite) return null;
   return (
@@ -73,8 +75,14 @@ export function DeleteDividendButton({
       type="button"
       variant="ghost"
       disabled={pending}
-      onClick={() => {
-        if (!confirm("Delete this dividend record?")) return;
+      onClick={async () => {
+        const ok = await confirm({
+          title: "Delete dividend",
+          message: "Delete this dividend record?",
+          confirmLabel: "Delete",
+          variant: "destructive",
+        });
+        if (!ok) return;
         startTransition(async () => {
           await deleteDividend(id);
           router.refresh();

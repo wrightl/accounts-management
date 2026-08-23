@@ -46,3 +46,10 @@ next-env.d.ts
 
 # bank export files
 /.bank-exports
+
+# promo video outputs (scripts + captions stay in repo)
+/promo/output/
+/promo/raw/
+/promo/assets/
+/promo/routes.json
+/.playwright-browsers/

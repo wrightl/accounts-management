@@ -1,26 +1,230 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogActions } from "@/components/ui/dialog";
 import { FieldError, Input, Label, Select } from "@/components/ui/form";
 import {
   confirmBankMatch,
+  confirmBankMatchesBatch,
   deleteBankSpendingCategory,
   dismissBankMatch,
+  dismissBankMatchesBatch,
   importStarlingCsv,
   runSuggestMatches,
   updateBankCategory,
+  type SuggestedMatch,
 } from "@/actions/bank";
 import {
   bankCategorySelectOptions,
   formatBankCategory,
   isSelectableBankCategory,
 } from "@/lib/bank/categories";
+import type { MatchScoreBreakdown } from "@/lib/bank/match";
 import type { BankSpendingCategoryRow } from "@/lib/bank/spending-categories";
 
-export function BankImportForm({ onSuccess }: { onSuccess?: () => void }) {
+function ScoreBreakdown({ breakdown }: { breakdown: MatchScoreBreakdown }) {
+  const chips: string[] = [];
+  if (breakdown.invoiceRefScore > 0) {
+    chips.push(`Invoice ref ${breakdown.invoiceRefScore}%`);
+  }
+  if (breakdown.counterpartyScore > 0) {
+    chips.push(`Client ${breakdown.counterpartyScore}%`);
+  }
+  if (breakdown.paymentRefScore > 0) {
+    chips.push(`Payment ref ${breakdown.paymentRefScore}%`);
+  }
+  if (chips.length === 0) return null;
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {chips.map((chip) => (
+        <span
+          key={chip}
+          className="rounded-full bg-wash px-2 py-0.5 text-xs text-muted"
+        >
+          {chip}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function targetLabel(target: SuggestedMatch["target"]): string {
+  if (target.kind === "invoice_payment") {
+    return `${target.invoiceNumber} · ${target.clientName}`;
+  }
+  if (target.kind === "reimbursement") {
+    return `Reimbursement · ${target.payeeName} · ${target.totalFormatted}`;
+  }
+  return target.description;
+}
+
+export function SuggestMatchesDialog({
+  open,
+  suggestions,
+  onClose,
+}: {
+  open: boolean;
+  suggestions: SuggestedMatch[];
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [items, setItems] = useState(suggestions);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (open) setItems(suggestions);
+  }, [open, suggestions]);
+
+  const invoiceCount = items.filter((s) => s.matchType === "invoice_payment").length;
+  const expenseCount = items.filter((s) => s.matchType === "expense").length;
+  const reimbursementCount = items.filter((s) => s.matchType === "reimbursement").length;
+
+  const handleClose = () => {
+    if (!pending) onClose();
+  };
+
+  const removeItems = (ids: string[]) => {
+    setItems((current) => current.filter((item) => !ids.includes(item.matchId)));
+  };
+
+  const runAction = (action: () => Promise<{ ok: boolean; error?: string }>, ids: string[]) => {
+    setError(null);
+    startTransition(async () => {
+      const result = await action();
+      if (!result.ok) {
+        setError(result.error ?? "Action failed");
+        return;
+      }
+      removeItems(ids);
+      router.refresh();
+      if (items.length === ids.length) onClose();
+    });
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      title="Match suggestions"
+      className="max-w-2xl"
+    >
+      {items.length === 0 ? (
+        <p className="text-sm text-muted">No new suggestions were found.</p>
+      ) : (
+        <>
+          <p className="text-sm text-muted">
+            Found {items.length} suggestion{items.length === 1 ? "" : "s"}
+            {invoiceCount > 0 || expenseCount > 0 || reimbursementCount > 0 ? (
+              <>
+                {" "}
+                ({invoiceCount} invoice payment{invoiceCount === 1 ? "" : "s"}
+                {expenseCount > 0 ? `, ${expenseCount} expense${expenseCount === 1 ? "" : "s"}` : ""}
+                {reimbursementCount > 0
+                  ? `, ${reimbursementCount} reimbursement${reimbursementCount === 1 ? "" : "s"}`
+                  : ""}
+                )
+              </>
+            ) : null}
+            . Review and accept or decline each match.
+          </p>
+          <ul className="mt-4 max-h-[24rem] space-y-3 overflow-y-auto">
+            {items.map((item) => (
+              <li
+                key={item.matchId}
+                className="rounded-xl border border-border bg-wash/40 p-3"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium">
+                      {item.tx.counterparty ?? "Unknown"} · {item.tx.amountFormatted}
+                    </p>
+                    <p className="text-sm text-muted">
+                      {item.tx.bookedAt}
+                      {item.tx.reference ? ` · ${item.tx.reference}` : ""}
+                    </p>
+                    <p className="mt-2 text-sm">
+                      → {targetLabel(item.target)}
+                      <span className="ml-2 text-xs text-muted">Score {item.score}</span>
+                    </p>
+                    <ScoreBreakdown breakdown={item.breakdown} />
+                  </div>
+                  <div className="flex shrink-0 gap-1">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={pending}
+                      onClick={() =>
+                        runAction(() => confirmBankMatch(item.matchId), [item.matchId])
+                      }
+                    >
+                      Accept
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      disabled={pending}
+                      onClick={() =>
+                        runAction(() => dismissBankMatch(item.matchId), [item.matchId])
+                      }
+                    >
+                      Decline
+                    </Button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      <FieldError>{error}</FieldError>
+      <DialogActions>
+        {items.length > 0 ? (
+          <>
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={pending}
+              onClick={() =>
+                runAction(
+                  () => dismissBankMatchesBatch(items.map((i) => i.matchId)),
+                  items.map((i) => i.matchId),
+                )
+              }
+            >
+              Decline all
+            </Button>
+            <Button
+              type="button"
+              disabled={pending}
+              onClick={() =>
+                runAction(
+                  () => confirmBankMatchesBatch(items.map((i) => i.matchId)),
+                  items.map((i) => i.matchId),
+                )
+              }
+            >
+              Accept all
+            </Button>
+          </>
+        ) : null}
+        <Button type="button" variant="secondary" disabled={pending} onClick={handleClose}>
+          Close
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+export function BankImportForm({
+  onSuccess,
+  onSuggestions,
+}: {
+  onSuccess?: () => void;
+  onSuggestions?: (suggestions: SuggestedMatch[]) => void;
+}) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -41,6 +245,9 @@ export function BankImportForm({ onSuccess }: { onSuccess?: () => void }) {
             );
             router.refresh();
             onSuccess?.();
+            if (result.suggestions?.length) {
+              onSuggestions?.(result.suggestions);
+            }
           }
         });
       }}
@@ -63,8 +270,16 @@ export function BankImportForm({ onSuccess }: { onSuccess?: () => void }) {
 export function BankToolbar({ canWrite }: { canWrite: boolean }) {
   const router = useRouter();
   const [importOpen, setImportOpen] = useState(false);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const [suggestions, setSuggestions] = useState<SuggestedMatch[]>([]);
   const [pending, startTransition] = useTransition();
   if (!canWrite) return null;
+
+  const openSuggestions = (items: SuggestedMatch[]) => {
+    setSuggestions(items);
+    setSuggestionsOpen(true);
+  };
+
   return (
     <>
       <div className="flex flex-wrap gap-2">
@@ -77,7 +292,10 @@ export function BankToolbar({ canWrite }: { canWrite: boolean }) {
           disabled={pending}
           onClick={() => {
             startTransition(async () => {
-              await runSuggestMatches();
+              const result = await runSuggestMatches();
+              if (result.ok && result.suggestions?.length) {
+                openSuggestions(result.suggestions);
+              }
               router.refresh();
             });
           }}
@@ -90,8 +308,19 @@ export function BankToolbar({ canWrite }: { canWrite: boolean }) {
         onClose={() => setImportOpen(false)}
         title="Import Starling CSV"
       >
-        <BankImportForm onSuccess={() => setImportOpen(false)} />
+        <BankImportForm
+          onSuccess={() => setImportOpen(false)}
+          onSuggestions={(items) => {
+            setImportOpen(false);
+            openSuggestions(items);
+          }}
+        />
       </Dialog>
+      <SuggestMatchesDialog
+        open={suggestionsOpen}
+        suggestions={suggestions}
+        onClose={() => setSuggestionsOpen(false)}
+      />
     </>
   );
 }
@@ -303,4 +532,25 @@ export function MatchActions({
       </Button>
     </div>
   );
+}
+
+export function MatchStatusLabel({
+  row,
+}: {
+  row: {
+    reconciled: boolean;
+    suggested: boolean;
+    matchType: string | null;
+    matchLabel: string | null;
+  };
+}) {
+  let label: ReactNode;
+  if (row.reconciled) {
+    label = row.matchLabel ? `Matched · ${row.matchLabel}` : `Matched (${row.matchType})`;
+  } else if (row.suggested) {
+    label = row.matchLabel ? `Suggested · ${row.matchLabel}` : `Suggested (${row.matchType})`;
+  } else {
+    label = "Unreconciled";
+  }
+  return <span className="text-sm">{label}</span>;
 }

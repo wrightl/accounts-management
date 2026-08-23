@@ -1,9 +1,21 @@
-import { Card, CardTitle, CardValue } from "@/components/ui/card";
+import { AgedReceivablesChart } from "@/components/dashboard/aged-receivables-chart";
+import { AttentionPanel } from "@/components/dashboard/attention-panel";
+import { IncomeExpenseChart } from "@/components/dashboard/income-expense-chart";
+import { KpiGrid } from "@/components/dashboard/kpi-grid";
+import { SpendingSnapshot } from "@/components/dashboard/spending-snapshot";
+import { StatusDonutChart } from "@/components/dashboard/status-donut-chart";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/roles";
-import { getDashboardKpis } from "@/lib/invoices/queries";
-import { getOwedSummary } from "@/lib/reimbursements/queries";
+import { getDashboardOverview } from "@/lib/dashboard/queries";
+import type { QuoteStatus } from "@/lib/quotes/status";
 import { isDatabaseConfigured } from "@/env";
+
+const QUOTE_STATUS_COLORS: Record<QuoteStatus, string> = {
+  draft: "var(--muted)",
+  sent: "var(--periwinkle)",
+  accepted: "var(--navy)",
+  declined: "var(--destructive)",
+};
 
 export default async function DashboardOverview() {
   const user = await requireUser();
@@ -23,60 +35,74 @@ export default async function DashboardOverview() {
     );
   }
 
-  let kpis = {
-    outstandingFormatted: "—",
-    overdueFormatted: "—",
-    invoicedThisMonthFormatted: "—",
-    reimbursementsFormatted: "—",
-  };
+  let overview: Awaited<ReturnType<typeof getDashboardOverview>> | null = null;
 
   if (isDatabaseConfigured() && can(user.role, "accounts:read")) {
     try {
-      const [live, owed] = await Promise.all([
-        getDashboardKpis(),
-        getOwedSummary(user),
-      ]);
-      kpis = {
-        outstandingFormatted: live.outstandingFormatted,
-        overdueFormatted: live.overdueFormatted,
-        invoicedThisMonthFormatted: live.invoicedThisMonthFormatted,
-        reimbursementsFormatted: owed.owedToMeFormatted,
-      };
+      overview = await getDashboardOverview(user);
     } catch (err) {
       console.warn(
         JSON.stringify({
           level: "warn",
-          msg: "dashboard_kpi_failed",
+          msg: "dashboard_overview_failed",
           error: err instanceof Error ? err.message : String(err),
         }),
       );
     }
   }
 
-  const cards = [
-    { title: "Outstanding invoices", value: kpis.outstandingFormatted },
-    { title: "Overdue", value: kpis.overdueFormatted },
-    { title: "Invoiced this month", value: kpis.invoicedThisMonthFormatted },
-    { title: "Owed to me", value: kpis.reimbursementsFormatted },
-  ];
-
   return (
     <div>
       <h1 className="font-display text-2xl font-semibold">
         Welcome{user.name ? `, ${user.name.split(" ")[0]}` : ""}
       </h1>
-      <p className="mt-2 text-muted">
-        Your account role is <span className="text-foreground">{user.role}</span>.
+      <p className="mt-1 text-muted">
+        Business overview — receivables, pipeline, cash, and items needing action.
       </p>
 
-      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {cards.map((kpi) => (
-          <Card key={kpi.title} className="border-t-4 border-t-accent">
-            <CardTitle>{kpi.title}</CardTitle>
-            <CardValue>{kpi.value}</CardValue>
-          </Card>
-        ))}
-      </div>
+      {!overview ? (
+        <p className="mt-6 text-sm text-muted">
+          Connect a database to view dashboard metrics.
+        </p>
+      ) : (
+        <>
+          <KpiGrid groups={overview.kpis} />
+
+          <section className="mt-10 grid gap-6 lg:grid-cols-2">
+            <IncomeExpenseChart data={overview.incomeExpenseSeries} />
+            <AgedReceivablesChart
+              raw={overview.agedReceivables.raw}
+              formatted={{
+                current: overview.agedReceivables.current,
+                d30: overview.agedReceivables.d30,
+                d60: overview.agedReceivables.d60,
+                d90: overview.agedReceivables.d90,
+              }}
+            />
+            <StatusDonutChart
+              title="Quote pipeline"
+              subtitle="By status"
+              slices={overview.quoteStatusBreakdown.map((row) => ({
+                key: row.status,
+                label: row.label,
+                count: row.count,
+                grossFormatted: row.grossFormatted,
+                percent: row.percent,
+                color: QUOTE_STATUS_COLORS[row.status],
+              }))}
+            />
+            <SpendingSnapshot
+              summary={overview.spending.summary}
+              series={overview.spending.series}
+              periodLabel={overview.spending.periodLabel}
+              compareLabel={overview.spending.compareLabel}
+              buckets={overview.spending.buckets}
+            />
+          </section>
+
+          <AttentionPanel items={overview.attention} className="mt-10" />
+        </>
+      )}
     </div>
   );
 }

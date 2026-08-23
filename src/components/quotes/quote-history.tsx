@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { rollbackQuote } from "@/actions/quotes";
 import { Button, buttonClasses } from "@/components/ui/button";
+import { useAlert } from "@/components/ui/alert-dialog";
 import { FieldError } from "@/components/ui/form";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 
@@ -31,6 +32,7 @@ export function QuoteHistory({
   history: HistoryRow[];
 }) {
   const router = useRouter();
+  const { confirm } = useAlert();
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -85,14 +87,13 @@ export function QuoteHistory({
                       type="button"
                       variant="secondary"
                       disabled={pending}
-                      onClick={() => {
-                        if (
-                          !confirm(
-                            `Restore version ${row.version}? This creates a new version ${currentVersion + 1} with that content.`,
-                          )
-                        ) {
-                          return;
-                        }
+                      onClick={async () => {
+                        const ok = await confirm({
+                          title: "Restore version",
+                          message: `Restore version ${row.version}? This creates a new version ${currentVersion + 1} with that content.`,
+                          confirmLabel: "Restore",
+                        });
+                        if (!ok) return;
                         setError(null);
                         startTransition(async () => {
                           const result = await rollbackQuote(quoteId, row.version);

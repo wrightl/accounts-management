@@ -79,6 +79,16 @@ export function canEditInvoice(status: InvoiceStatus): boolean {
   return storedStatus(status) === "draft";
 }
 
+/** Stored statuses reachable from the current effective status. */
+export function allowedInvoiceTransitions(
+  status: InvoiceStatus,
+): StoredInvoiceStatus[] {
+  const targets: StoredInvoiceStatus[] = ["draft", "sent", "paid", "void"];
+  return targets.filter(
+    (dest) => dest !== storedStatus(status) && canTransition(status, dest),
+  );
+}
+
 export function statusLabel(status: InvoiceStatus): string {
   switch (status) {
     case "draft":

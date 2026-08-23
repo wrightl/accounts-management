@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { createTestDb } from "@/db/pglite";
 import {
   clients,
+  companySettings,
   invoices,
   invoiceLineItems,
   payments,
@@ -115,5 +116,23 @@ describe("database schema (PGlite)", () => {
     await expect(
       db.insert(invoices).values({ number: "INV-DUP", clientId: client.id }),
     ).rejects.toThrow();
+  });
+
+  it("persists a client company name", async () => {
+    const { db } = ctx;
+    const [client] = await db
+      .insert(clients)
+      .values({ name: "Jane Smith", companyName: "Acme Ltd" })
+      .returning();
+    expect(client.companyName).toBe("Acme Ltd");
+  });
+
+  it("defaults receipt OCR to local Tesseract and Gemini Flash", async () => {
+    const { db } = ctx;
+    const existing = await db.select().from(companySettings).limit(1);
+    const settings =
+      existing[0] ?? (await db.insert(companySettings).values({}).returning())[0];
+    expect(settings.receiptOcrProvider).toBe("local");
+    expect(settings.receiptOcrModel).toBe("google/gemini-2.5-flash");
   });
 });

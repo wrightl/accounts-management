@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
+import { useAlert } from "@/components/ui/alert-dialog";
 import { FieldError, Input, Label, Textarea } from "@/components/ui/form";
 import { createClient, updateClient, deleteClient } from "@/actions/clients";
 
@@ -15,6 +16,7 @@ export function ClientForm({
   client?: {
     id: string;
     name: string;
+    companyName: string | null;
     email: string | null;
     addressLines: string | null;
     notes: string | null;
@@ -22,6 +24,7 @@ export function ClientForm({
   canWrite: boolean;
 }) {
   const router = useRouter();
+  const { confirm } = useAlert();
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -41,7 +44,7 @@ export function ClientForm({
         return;
       }
       if (mode === "edit") {
-        router.push("/dashboard/clients");
+        router.push(`/dashboard/clients/${client!.id}`);
       } else {
         router.push(result.id ? `/dashboard/clients/${result.id}` : "/dashboard/clients");
       }
@@ -49,8 +52,15 @@ export function ClientForm({
     });
   }
 
-  function onDelete() {
-    if (!client || !confirm("Delete this client?")) return;
+  async function onDelete() {
+    if (!client) return;
+    const ok = await confirm({
+      title: "Delete client",
+      message: "Delete this client?",
+      confirmLabel: "Delete",
+      variant: "destructive",
+    });
+    if (!ok) return;
     setError(null);
     startTransition(async () => {
       const result = await deleteClient(client.id);
@@ -66,7 +76,16 @@ export function ClientForm({
   return (
     <form action={onSubmit} className="mx-auto max-w-xl space-y-4">
       <div>
-        <Label htmlFor="name">Name</Label>
+        <Label htmlFor="companyName">Company name</Label>
+        <Input
+          id="companyName"
+          name="companyName"
+          defaultValue={client?.companyName ?? ""}
+          disabled={!canWrite || pending}
+        />
+      </div>
+      <div>
+        <Label htmlFor="name">Contact name</Label>
         <Input
           id="name"
           name="name"

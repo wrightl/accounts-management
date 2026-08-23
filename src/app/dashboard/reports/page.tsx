@@ -61,7 +61,8 @@ export default async function ReportsPage({
                     </h1>
                     <p className="mt-1 text-muted">
                         Accrual P&amp;L (invoiced income, not cash collected),
-                        receivables, and accountant export.
+                        receivables, and accountant export (CSVs, invoice PDFs,
+                        receipt files, bank, and dividends).
                     </p>
                 </div>
                 {canExport && (
@@ -171,6 +172,10 @@ export default async function ReportsPage({
                     <h2 className="mb-3 font-display text-lg font-semibold">
                         Expenses by category
                     </h2>
+                    <p className="mb-3 text-sm text-muted">
+                        Expenses include founder-reimbursed items by spend date. Reimbursement
+                        bank transfers are not counted again.
+                    </p>
                     <Table>
                         <THead>
                             <TR>

@@ -10,8 +10,16 @@ import { writeAudit } from "@/lib/audit";
 import { ensureLocalUser } from "@/lib/users";
 import type { ActionResult } from "@/actions/result";
 
+const optionalText = z
+  .string()
+  .trim()
+  .optional()
+  .or(z.literal(""))
+  .transform((v) => (v === "" ? null : v));
+
 const clientSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(200),
+  companyName: optionalText.pipe(z.string().max(200).nullable()),
   email: z
     .string()
     .trim()
@@ -19,18 +27,8 @@ const clientSchema = z.object({
     .optional()
     .or(z.literal(""))
     .transform((v) => (v === "" ? null : v)),
-  addressLines: z
-    .string()
-    .trim()
-    .optional()
-    .or(z.literal(""))
-    .transform((v) => (v === "" ? null : v)),
-  notes: z
-    .string()
-    .trim()
-    .optional()
-    .or(z.literal(""))
-    .transform((v) => (v === "" ? null : v)),
+  addressLines: optionalText,
+  notes: optionalText,
 });
 
 export async function createClient(formData: FormData): Promise<ActionResult> {
@@ -41,6 +39,7 @@ export async function createClient(formData: FormData): Promise<ActionResult> {
 
   const parsed = clientSchema.safeParse({
     name: formData.get("name"),
+    companyName: formData.get("companyName") ?? "",
     email: formData.get("email") ?? "",
     addressLines: formData.get("addressLines") ?? "",
     notes: formData.get("notes") ?? "",
@@ -54,6 +53,7 @@ export async function createClient(formData: FormData): Promise<ActionResult> {
     .insert(clients)
     .values({
       name: parsed.data.name,
+      companyName: parsed.data.companyName,
       email: parsed.data.email,
       addressLines: parsed.data.addressLines,
       notes: parsed.data.notes,
@@ -83,6 +83,7 @@ export async function updateClient(
 
   const parsed = clientSchema.safeParse({
     name: formData.get("name"),
+    companyName: formData.get("companyName") ?? "",
     email: formData.get("email") ?? "",
     addressLines: formData.get("addressLines") ?? "",
     notes: formData.get("notes") ?? "",
@@ -96,6 +97,7 @@ export async function updateClient(
     .update(clients)
     .set({
       name: parsed.data.name,
+      companyName: parsed.data.companyName,
       email: parsed.data.email,
       addressLines: parsed.data.addressLines,
       notes: parsed.data.notes,

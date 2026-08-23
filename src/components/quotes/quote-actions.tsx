@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { convertQuoteToInvoice, sendQuote } from "@/actions/quotes";
+import { sendQuote } from "@/actions/quotes";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { Dialog, DialogActions } from "@/components/ui/dialog";
 import { FieldError, Input, Label, Textarea } from "@/components/ui/form";
@@ -29,8 +29,7 @@ export function QuoteActions({
 
   if (!canWrite) return null;
 
-  const canSend = status !== "converted" && status !== "declined";
-  const canConvert = status !== "converted" && status !== "declined";
+  const canSend = status === "draft" || status === "sent";
 
   function refresh() {
     router.refresh();
@@ -44,7 +43,7 @@ export function QuoteActions({
   }
 
   return (
-    <div className="space-y-4">
+    <>
       <div className="flex flex-wrap gap-2">
         <a href={`/api/quotes/${quoteId}/pdf`}>
           <Button type="button" variant="secondary" disabled={pending}>
@@ -54,25 +53,6 @@ export function QuoteActions({
         {canSend && (
           <Button type="button" disabled={pending} onClick={openSendDialog}>
             Send PDF
-          </Button>
-        )}
-        {canConvert && (
-          <Button
-            type="button"
-            disabled={pending}
-            onClick={() => {
-              setError(null);
-              startTransition(async () => {
-                const result = await convertQuoteToInvoice(quoteId);
-                if (!result.ok) setError(result.error);
-                else {
-                  router.push(`/dashboard/invoices/${result.id}`);
-                  router.refresh();
-                }
-              });
-            }}
-          >
-            {pending ? "Converting…" : "Convert to invoice"}
           </Button>
         )}
       </div>
@@ -135,6 +115,6 @@ export function QuoteActions({
       </Dialog>
 
       <FieldError>{error && !sendOpen ? error : null}</FieldError>
-    </div>
+    </>
   );
 }

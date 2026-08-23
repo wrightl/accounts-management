@@ -13,6 +13,7 @@ describe("parseBankListParams", () => {
       q: "",
       type: "",
       category: "",
+      reconciliation: "",
       period: "",
       from: "",
       to: "",
@@ -42,11 +43,19 @@ describe("parseBankListParams", () => {
     expect(params.view).toBe("cards");
   });
 
-  it("treats unknown type/view as defaults", () => {
-    const params = parseBankListParams({ type: "both", view: "grid", page: "0" });
+  it("treats unknown type/view/reconciliation as defaults", () => {
+    const params = parseBankListParams({ type: "both", view: "grid", reconciliation: "maybe", page: "0" });
     expect(params.type).toBe("");
+    expect(params.reconciliation).toBe("");
     expect(params.view).toBe("table");
     expect(params.page).toBe(1);
+  });
+
+  it("accepts reconciliation filter values", () => {
+    expect(parseBankListParams({ reconciliation: "reconciled" }).reconciliation).toBe("reconciled");
+    expect(parseBankListParams({ reconciliation: "unreconciled" }).reconciliation).toBe(
+      "unreconciled",
+    );
   });
 
   it("parses pageSize and rejects invalid values", () => {
@@ -88,7 +97,16 @@ describe("bankListHref", () => {
   it("resets filters while keeping view", () => {
     const base = parseBankListParams({ q: "x", view: "cards", page: "4" });
     expect(
-      bankListHref(base, { q: "", type: "", category: "", period: "", from: "", to: "", page: 1 }),
+      bankListHref(base, {
+        q: "",
+        type: "",
+        category: "",
+        reconciliation: "",
+        period: "",
+        from: "",
+        to: "",
+        page: 1,
+      }),
     ).toBe("/dashboard/transactions?view=cards");
   });
 
@@ -106,6 +124,11 @@ describe("bankListHref", () => {
       "/dashboard/transactions?period=last-month",
     );
   });
+
+  it("includes reconciliation filter in href", () => {
+    const base = parseBankListParams({ reconciliation: "unreconciled", q: "acme" });
+    expect(bankListHref(base)).toBe("/dashboard/transactions?q=acme&reconciliation=unreconciled");
+  });
 });
 
 describe("hasActiveBankFilters", () => {
@@ -116,6 +139,7 @@ describe("hasActiveBankFilters", () => {
   it("is true when a filter is set", () => {
     expect(hasActiveBankFilters(parseBankListParams({ type: "incoming" }))).toBe(true);
     expect(hasActiveBankFilters(parseBankListParams({ period: "last-month" }))).toBe(true);
+    expect(hasActiveBankFilters(parseBankListParams({ reconciliation: "reconciled" }))).toBe(true);
   });
 });
 

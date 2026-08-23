@@ -1,15 +1,18 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Pencil } from "lucide-react";
 import { guardPage, hasPermission } from "@/lib/auth";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
-import { StatusBadge } from "@/components/ui/badge";
+import { canEditInvoice, type InvoiceStatus } from "@/lib/invoices/status";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { buttonClasses } from "@/components/ui/button";
 import { InvoiceActions } from "@/components/invoices/invoice-actions";
+import { InvoiceDueDate } from "@/components/invoices/invoice-due-date";
+import { InvoiceStatusSelect } from "@/components/invoices/invoice-status-select";
 import { formatGBP, lineNetPence } from "@/lib/money";
+import { clientDisplayName } from "@/lib/clients/display";
 import { isDatabaseConfigured } from "@/env";
-import type { InvoiceStatus } from "@/lib/invoices/status";
 
 export default async function InvoiceDetailPage({
   params,
@@ -28,44 +31,81 @@ export default async function InvoiceDetailPage({
   const { invoice, client, lines, payments, paidFormatted, balanceFormatted } =
     detail;
 
+  const status = invoice.status as InvoiceStatus;
+
   return (
     <div>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Link href="/dashboard/invoices" className={buttonClasses("ghost")}>
-            ← Invoices
-          </Link>
-          <StatusBadge status={invoice.status as InvoiceStatus} />
-        </div>
+      <div className="mb-6">
+        <Link href="/dashboard/invoices" className={buttonClasses("ghost")}>
+          ← Invoices
+        </Link>
       </div>
 
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-semibold">{invoice.number}</h1>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h1 className="font-display text-2xl font-semibold">{invoice.number}</h1>
+            {canWrite && canEditInvoice(status) ? (
+              <Link
+                href={`/dashboard/invoices/${invoice.id}/edit`}
+                className={buttonClasses("ghost", "size-9 shrink-0 px-0")}
+                aria-label="Edit invoice"
+              >
+                <Pencil className="h-4 w-4" />
+              </Link>
+            ) : null}
+          </div>
           <p className="mt-1 text-muted">
             <Link
               href={`/dashboard/clients/${client.id}`}
               className="text-foreground hover:underline"
             >
-              {client.name}
+              {clientDisplayName(client)}
             </Link>
             {invoice.issueDate ? ` · Issued ${invoice.issueDate}` : null}
-            {invoice.dueDate ? ` · Due ${invoice.dueDate}` : null}
+            {invoice.dueDate ? (
+              <>
+                {" · "}
+                <InvoiceDueDate
+                  dueDate={invoice.dueDate}
+                  status={status}
+                  prefix="Due "
+                  className="inline-flex"
+                />
+              </>
+            ) : null}
           </p>
+          {canWrite ? (
+            <div className="mt-3 flex flex-wrap items-start gap-2">
+              <InvoiceStatusSelect
+                invoiceId={invoice.id}
+                status={status}
+                canWrite={canWrite}
+              />
+              <InvoiceActions
+                invoiceId={invoice.id}
+                invoiceNumber={invoice.number}
+                status={invoice.status}
+                canWrite={canWrite}
+                balanceFormatted={balanceFormatted}
+                clientName={client.name}
+                companyName={client.companyName}
+              />
+            </div>
+          ) : (
+            <div className="mt-3">
+              <InvoiceStatusSelect
+                invoiceId={invoice.id}
+                status={status}
+                canWrite={false}
+              />
+            </div>
+          )}
         </div>
         <Card className="min-w-[160px]">
           <CardTitle>Total</CardTitle>
           <CardValue>{invoice.grossFormatted}</CardValue>
         </Card>
-      </div>
-
-      <div className="mt-6">
-        <InvoiceActions
-          invoiceId={invoice.id}
-          status={invoice.status}
-          canWrite={canWrite}
-          balanceFormatted={balanceFormatted}
-        />
       </div>
 
       <div className="mt-8">

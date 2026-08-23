@@ -19,6 +19,46 @@ export interface Identity {
   name: string | null;
 }
 
+function mapUserRow(row: typeof users.$inferSelect): LocalUser {
+  return {
+    id: row.id,
+    clerkUserId: row.clerkUserId,
+    email: row.email,
+    name: row.name,
+    role: isRole(row.role) ? row.role : DEFAULT_ROLE,
+  };
+}
+
+export function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+/** Prefer a non-empty Clerk name; otherwise keep the local value. */
+function resolveDisplayName(
+  identityName: string | null | undefined,
+  localName: string | null,
+): string | null {
+  const trimmed = identityName?.trim();
+  return trimmed || localName;
+}
+
+export async function getUser(id: string): Promise<LocalUser | null> {
+  const db = getDb();
+  const [row] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  return row ? mapUserRow(row) : null;
+}
+
+export async function findUserByEmail(email: string): Promise<LocalUser | null> {
+  const normalised = normalizeEmail(email);
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(users)
+    .where(sql`lower(${users.email}) = ${normalised}`)
+    .limit(1);
+  return row ? mapUserRow(row) : null;
+}
+
 export async function findLocalUser(clerkUserId: string): Promise<LocalUser | null> {
   const db = getDb();
   const existing = await db
@@ -28,13 +68,7 @@ export async function findLocalUser(clerkUserId: string): Promise<LocalUser | nu
     .limit(1);
   const row = existing[0];
   if (!row) return null;
-  return {
-    id: row.id,
-    clerkUserId: row.clerkUserId,
-    email: row.email,
-    name: row.name,
-    role: isRole(row.role) ? row.role : DEFAULT_ROLE,
-  };
+  return mapUserRow(row);
 }
 
 /** Look up the local users row without inserting. Safe on read paths. */
@@ -46,13 +80,16 @@ export async function findLocalUserId(clerkUserId: string): Promise<string | nul
 export async function listUsers(): Promise<LocalUser[]> {
   const db = getDb();
   const rows = await db.select().from(users).orderBy(asc(users.email));
-  return rows.map((row) => ({
-    id: row.id,
-    clerkUserId: row.clerkUserId,
-    email: row.email,
-    name: row.name,
-    role: isRole(row.role) ? row.role : DEFAULT_ROLE,
-  }));
+  return rows.map(mapUserRow);
+}
+
+export async function countAdminUsers(): Promise<number> {
+  const db = getDb();
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(users)
+    .where(eq(users.role, "admin"));
+  return row?.count ?? 0;
 }
 
 /**
@@ -73,8 +110,9 @@ export async function ensureLocalUser(identity: Identity): Promise<string> {
     if (identity.email && identity.email !== existing[0].email) {
       patch.email = identity.email;
     }
-    if (identity.name !== undefined && identity.name !== existing[0].name) {
-      patch.name = identity.name;
+    const name = resolveDisplayName(identity.name, existing[0].name);
+    if (name !== existing[0].name) {
+      patch.name = name;
     }
     if (Object.keys(patch).length > 0) {
       await db.update(users).set(patch).where(eq(users.id, existing[0].id));
@@ -96,7 +134,7 @@ export async function ensureLocalUser(identity: Identity): Promise<string> {
         .set({
           clerkUserId: identity.userId,
           email: identity.email ?? normalisedEmail,
-          name: identity.name ?? seeded.name,
+          name: resolveDisplayName(identity.name, seeded.name),
         })
         .where(eq(users.id, seeded.id));
       return seeded.id;
@@ -108,7 +146,7 @@ export async function ensureLocalUser(identity: Identity): Promise<string> {
     .values({
       clerkUserId: identity.userId,
       email: identity.email ?? `${identity.userId}@clerk.local`,
-      name: identity.name,
+      name: identity.name?.trim() || null,
       role: bootstrapRole(identity.email),
     })
     .returning({ id: users.id });

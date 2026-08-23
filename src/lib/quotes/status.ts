@@ -22,9 +22,32 @@ export function quotePdfFilename(number: string, version: number): string {
 }
 
 export function canEditQuote(status: string): boolean {
-  return status !== "converted" && status !== "declined";
+  return status === "draft" || status === "sent";
 }
 
 export function canRollbackQuote(status: string): boolean {
-  return status !== "converted" && status !== "declined";
+  return status === "draft" || status === "sent";
+}
+
+export type QuoteStatus = "draft" | "sent" | "accepted" | "declined";
+
+export const QUOTE_STATUSES: QuoteStatus[] = [
+  "draft",
+  "sent",
+  "accepted",
+  "declined",
+];
+
+export function quoteStatusLabel(status: QuoteStatus): string {
+  const labels: Record<QuoteStatus, string> = {
+    draft: "Draft",
+    sent: "Sent",
+    accepted: "Accepted",
+    declined: "Declined",
+  };
+  return labels[status];
+}
+
+export function isQuoteStatus(value: string): value is QuoteStatus {
+  return (QUOTE_STATUSES as string[]).includes(value);
 }

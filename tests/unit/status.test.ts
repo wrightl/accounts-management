@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  allowedInvoiceTransitions,
   canEditInvoice,
   canTransition,
   defaultDueDate,
@@ -38,6 +39,14 @@ describe("invoice status", () => {
 
   it("does not allow persisting overdue as a transition target", () => {
     expect(canTransition("sent", "overdue")).toBe(false);
+  });
+
+  it("lists allowed transitions from each status", () => {
+    expect(allowedInvoiceTransitions("draft")).toEqual(["sent", "void"]);
+    expect(allowedInvoiceTransitions("sent")).toEqual(["paid", "void"]);
+    expect(allowedInvoiceTransitions("overdue")).toEqual(["paid", "void"]);
+    expect(allowedInvoiceTransitions("paid")).toEqual([]);
+    expect(allowedInvoiceTransitions("void")).toEqual([]);
   });
 
   it("only drafts are editable", () => {

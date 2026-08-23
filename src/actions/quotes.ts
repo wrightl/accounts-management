@@ -5,8 +5,6 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
 import {
-  invoiceLineItems,
-  invoices,
   quoteLineItems,
   quotes,
 } from "@/db/schema";
@@ -14,26 +12,50 @@ import { requireActionPermission } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { ensureLocalUser } from "@/lib/users";
 import { invoiceTotals, poundsToPence } from "@/lib/money";
-import { allocateInvoiceNumber, allocateQuoteNumber } from "@/lib/invoices/allocate";
-import { defaultDueDate, todayIsoDate } from "@/lib/invoices/status";
+import { allocateQuoteNumber } from "@/lib/invoices/allocate";
+import { todayIsoDate } from "@/lib/invoices/status";
 import { getQuoteDetail, getQuoteVersionSnapshot } from "@/lib/quotes/queries";
 import { loadOrRenderQuotePdf } from "@/lib/quotes/pdf-cache";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { sendEmail } from "@/lib/email";
 import { escapeHtml } from "@/lib/html";
-import { canEditQuote, canRollbackQuote, formatQuoteReference } from "@/lib/quotes/status";
+import {
+  canEditQuote,
+  canRollbackQuote,
+  formatQuoteReference,
+  isQuoteStatus,
+  type QuoteStatus,
+} from "@/lib/quotes/status";
 import { insertQuoteVersion, linesToSnapshot } from "@/lib/quotes/versions";
+import { upsertDeclineReasonCategory } from "@/lib/quotes/decline-reasons";
+import { createOrderFromQuote, replaceQuotePaymentMilestones } from "@/lib/orders/copy-from-quote";
+import {
+  parseMilestonesJson,
+  validateMilestones,
+} from "@/lib/quotes/payment-schedule";
+import { canTransitionQuote } from "@/lib/quotes/transitions";
 import type { ActionResult } from "@/actions/result";
 
 const lineSchema = z.object({
   description: z.string().trim().min(1, "Description is required"),
-  quantity: z.coerce.number().int().positive(),
+  quantity: z.coerce
+    .number({ invalid_type_error: "Enter a valid quantity" })
+    .int("Quantity must be a whole number")
+    .min(1, "Quantity must be at least 1"),
   unitPricePounds: z.string().trim().min(1, "Unit price is required"),
 });
 
 const quoteSchema = z.object({
-  clientId: z.string().uuid(),
-  issueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  clientId: z
+    .string()
+    .trim()
+    .min(1, "Choose a client")
+    .uuid("Choose a client from the list"),
+  issueDate: z
+    .string()
+    .trim()
+    .min(1, "Issue date is required")
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid issue date"),
   validUntil: z
     .string()
     .optional()
@@ -65,6 +87,13 @@ function parseLines(formData: FormData) {
   }
 }
 
+function parseAndValidateMilestones(formData: FormData, grossPence: number) {
+  const milestones = parseMilestonesJson(String(formData.get("milestonesJson") ?? "[]"));
+  const error = validateMilestones(milestones, grossPence);
+  if (error) return { ok: false as const, error };
+  return { ok: true as const, milestones };
+}
+
 export async function createQuote(formData: FormData): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
@@ -91,10 +120,13 @@ export async function createQuote(formData: FormData): Promise<ActionResult> {
       vatRate: 0,
       position: i,
     }));
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Invalid amount" };
+  } catch {
+    return { ok: false, error: "Enter a valid unit price on each line item" };
   }
   const totals = invoiceTotals(lineValues);
+  const milestoneResult = parseAndValidateMilestones(formData, totals.grossPence);
+  if (!milestoneResult.ok) return { ok: false, error: milestoneResult.error };
+
   const db = getDb();
   const quoteId = await db.transaction(async (tx) => {
     const number = await allocateQuoteNumber(tx, parsed.data.issueDate);
@@ -116,6 +148,8 @@ export async function createQuote(formData: FormData): Promise<ActionResult> {
     await tx.insert(quoteLineItems).values(
       lineValues.map((l) => ({ ...l, quoteId: row.id })),
     );
+
+    await replaceQuotePaymentMilestones(tx, row.id, milestoneResult.milestones);
 
     await insertQuoteVersion(tx, {
       quoteId: row.id,
@@ -179,10 +213,13 @@ export async function updateQuote(id: string, formData: FormData): Promise<Actio
       vatRate: 0,
       position: i,
     }));
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Invalid amount" };
+  } catch {
+    return { ok: false, error: "Enter a valid unit price on each line item" };
   }
   const totals = invoiceTotals(lineValues);
+  const milestoneResult = parseAndValidateMilestones(formData, totals.grossPence);
+  if (!milestoneResult.ok) return { ok: false, error: milestoneResult.error };
+
   const nextVersion = existing.version + 1;
 
   await db.transaction(async (tx) => {
@@ -201,6 +238,8 @@ export async function updateQuote(id: string, formData: FormData): Promise<Actio
 
     await tx.delete(quoteLineItems).where(eq(quoteLineItems.quoteId, id));
     await tx.insert(quoteLineItems).values(lineValues.map((l) => ({ ...l, quoteId: id })));
+
+    await replaceQuotePaymentMilestones(tx, id, milestoneResult.milestones);
 
     await insertQuoteVersion(tx, {
       quoteId: id,
@@ -308,72 +347,143 @@ export async function rollbackQuote(
   return { ok: true, id: quoteId };
 }
 
-export async function convertQuoteToInvoice(quoteId: string): Promise<ActionResult> {
+const declinePayloadSchema = z.object({
+  category: z.string().trim().min(1, "Choose a reason category"),
+  narrative: z.string().trim().min(1, "Enter a brief explanation"),
+});
+
+export async function updateQuoteStatus(
+  quoteId: string,
+  targetStatus: string,
+  payload?: { category?: string; narrative?: string },
+): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
-  const session = authz.user;
-  const localUserId = await ensureLocalUser(session);
+  const localUserId = await ensureLocalUser(authz.user);
 
-  const detail = await getQuoteDetail(quoteId);
-  if (!detail) return { ok: false, error: "Quote not found" };
-  if (detail.quote.status === "converted") {
-    return { ok: false, error: "Quote already converted" };
-  }
-  if (detail.quote.status === "declined") {
-    return { ok: false, error: "Cannot convert a declined quote" };
+  if (!isQuoteStatus(targetStatus)) {
+    return { ok: false, error: "Invalid status" };
   }
 
-  const issueDate = todayIsoDate();
   const db = getDb();
+  const [existing] = await db.select().from(quotes).where(eq(quotes.id, quoteId)).limit(1);
+  if (!existing) return { ok: false, error: "Quote not found" };
 
-  const invoiceId = await db.transaction(async (tx) => {
-    const number = await allocateInvoiceNumber(tx, issueDate);
-    const [inv] = await tx
-      .insert(invoices)
-      .values({
-        number,
-        clientId: detail.quote.clientId,
-        status: "draft",
-        issueDate,
-        dueDate: defaultDueDate(issueDate),
-        notes: detail.quote.notes,
-        netPence: detail.quote.netPence,
-        vatPence: detail.quote.vatPence,
-        grossPence: detail.quote.grossPence,
-        createdByUserId: localUserId,
-      })
-      .returning({ id: invoices.id });
+  const fromStatus = existing.status as QuoteStatus;
+  if (!canTransitionQuote(fromStatus, targetStatus)) {
+    return { ok: false, error: "This status change is not allowed" };
+  }
 
-    await tx.insert(invoiceLineItems).values(
-      detail.lines.map((l) => ({
-        invoiceId: inv.id,
-        description: l.description,
-        quantity: l.quantity,
-        unitPricePence: l.unitPricePence,
-        vatRate: l.vatRate,
-        position: l.position,
-      })),
-    );
+  if (targetStatus === "declined") {
+    const parsed = declinePayloadSchema.safeParse(payload ?? {});
+    if (!parsed.success) {
+      return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+    }
+    const category = await upsertDeclineReasonCategory(parsed.data.category);
+    if (!category) return { ok: false, error: "Choose a reason category" };
 
-    await tx
+    await db
       .update(quotes)
-      .set({ status: "converted", convertedInvoiceId: inv.id })
+      .set({
+        status: "declined",
+        declinedReasonCategory: category,
+        declinedReasonNarrative: parsed.data.narrative,
+        declinedAt: new Date(),
+      })
       .where(eq(quotes.id, quoteId));
 
-    return inv.id;
-  });
+    await writeAudit({
+      actorUserId: localUserId,
+      action: "quote.decline",
+      entityType: "quote",
+      entityId: quoteId,
+      meta: { category },
+    });
+  } else if (targetStatus === "accepted") {
+    const detail = await getQuoteDetail(quoteId);
+    if (!detail) return { ok: false, error: "Quote not found" };
 
-  await writeAudit({
-    actorUserId: localUserId,
-    action: "quote.convert",
-    entityType: "quote",
-    entityId: quoteId,
-    meta: { invoiceId },
-  });
+    const milestones: PaymentMilestoneInput[] = detail.milestones.map((m) => ({
+      label: m.label,
+      amountPence: m.amountPence,
+      percentBasisPoints: m.percentBasisPoints,
+      dueDate: m.dueDate,
+      dueInDays: m.dueInDays,
+      position: m.position,
+    }));
+
+    let orderId: string;
+    try {
+      orderId = await db.transaction(async (tx) => {
+        const id = await createOrderFromQuote(
+          tx,
+          { quote: detail.quote, lines: detail.lines },
+          milestones,
+          localUserId,
+        );
+        await tx
+          .update(quotes)
+          .set({ status: "accepted", acceptedAt: new Date() })
+          .where(eq(quotes.id, quoteId));
+        return id;
+      });
+    } catch (e) {
+      return {
+        ok: false,
+        error: e instanceof Error ? e.message : "Could not create order",
+      };
+    }
+
+    await writeAudit({
+      actorUserId: localUserId,
+      action: "quote.accept",
+      entityType: "quote",
+      entityId: quoteId,
+      meta: { orderId },
+    });
+
+    revalidatePath("/dashboard/quotes");
+    revalidatePath(`/dashboard/quotes/${quoteId}`);
+    revalidatePath("/dashboard/orders");
+    return { ok: true, id: orderId };
+  } else if (targetStatus === "sent") {
+    const now = new Date();
+    await db
+      .update(quotes)
+      .set({
+        status: "sent",
+        sentAt: existing.sentAt ?? now,
+      })
+      .where(eq(quotes.id, quoteId));
+
+    await writeAudit({
+      actorUserId: localUserId,
+      action: "quote.mark_sent",
+      entityType: "quote",
+      entityId: quoteId,
+    });
+  } else if (targetStatus === "draft" && fromStatus === "declined") {
+    await db
+      .update(quotes)
+      .set({
+        status: "draft",
+        declinedReasonCategory: null,
+        declinedReasonNarrative: null,
+        declinedAt: null,
+      })
+      .where(eq(quotes.id, quoteId));
+
+    await writeAudit({
+      actorUserId: localUserId,
+      action: "quote.reopen",
+      entityType: "quote",
+      entityId: quoteId,
+    });
+  }
 
   revalidatePath("/dashboard/quotes");
-  revalidatePath("/dashboard/invoices");
-  return { ok: true, id: invoiceId };
+  revalidatePath(`/dashboard/quotes/${quoteId}`);
+  return { ok: true, id: quoteId };
 }
 
 const sendQuoteSchema = z.object({
@@ -401,8 +511,8 @@ export async function sendQuote(quoteId: string, formData: FormData): Promise<Ac
 
   const detail = await getQuoteDetail(quoteId);
   if (!detail) return { ok: false, error: "Quote not found" };
-  if (detail.quote.status === "converted") {
-    return { ok: false, error: "Cannot send a converted quote" };
+  if (detail.quote.status === "accepted") {
+    return { ok: false, error: "Cannot send an accepted quote" };
   }
   if (detail.quote.status === "declined") {
     return { ok: false, error: "Cannot send a declined quote" };

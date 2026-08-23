@@ -32,7 +32,7 @@ export function Dialog({
     <dialog
       ref={ref}
       className={cn(
-        "fixed inset-0 z-50 m-auto w-full max-w-lg rounded-2xl border border-border bg-surface p-0 shadow-xl backdrop:bg-navy/40 backdrop:backdrop-blur-sm",
+        "fixed inset-0 z-50 m-auto w-full max-w-lg overflow-visible rounded-2xl border border-border bg-surface p-0 shadow-xl backdrop:bg-navy/40 backdrop:backdrop-blur-sm",
         className,
       )}
       onCancel={(e) => {
@@ -52,7 +52,7 @@ export function Dialog({
           ×
         </button>
       </div>
-      <div className="p-5">{children}</div>
+      <div className="overflow-visible p-5">{children}</div>
     </dialog>
   );
 }

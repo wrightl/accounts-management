@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
-import { bankAccounts, bankTransactions } from "@/db/schema";
+import { bankAccounts, bankTransactions, reconciliationMatches } from "@/db/schema";
 import {
   countUnreconciledBankTransactions,
   listBankTransactions,
@@ -110,6 +110,43 @@ describe("listBankTransactions paging and filters", () => {
       pageSize: 10,
     });
     expect(ranged.total).toBe(3);
+  });
+
+  it("filters by reconciliation status", async () => {
+    const account = await seedTransactions();
+
+    const [reconciledTx] = await db
+      .insert(bankTransactions)
+      .values({
+        bankAccountId: account.id,
+        externalId: "tx-reconciled",
+        bookedAt: "2026-08-20",
+        amountPence: 5_000,
+        counterparty: "Settled Co",
+        reference: "Paid",
+      })
+      .returning();
+
+    await db.insert(reconciliationMatches).values({
+      bankTransactionId: reconciledTx.id,
+      matchType: "expense",
+      confirmed: true,
+    });
+
+    const all = await listBankTransactions({ pageSize: 10 });
+    expect(all.total).toBe(5);
+
+    const reconciled = await listBankTransactions({ reconciliation: "reconciled", pageSize: 10 });
+    expect(reconciled.total).toBe(1);
+    expect(reconciled.rows[0].counterparty).toBe("Settled Co");
+    expect(reconciled.rows[0].reconciled).toBe(true);
+
+    const unreconciled = await listBankTransactions({
+      reconciliation: "unreconciled",
+      pageSize: 10,
+    });
+    expect(unreconciled.total).toBe(4);
+    expect(unreconciled.rows.every((row) => !row.reconciled)).toBe(true);
   });
 
   it("counts unreconciled rows independently of the current page", async () => {

@@ -1,7 +1,8 @@
 import "server-only";
 import { and, desc, eq, gte, inArray, lte, ne, sum } from "drizzle-orm";
 import { getDb } from "@/db";
-import { clients, invoiceLineItems, invoices, payments } from "@/db/schema";
+import { clients, invoiceLineItems, invoices, orders, payments } from "@/db/schema";
+import { clientDisplayNameSql } from "@/lib/clients/sql";
 import { formatGBP } from "@/lib/money";
 import {
   effectiveStatus,
@@ -20,12 +21,15 @@ export async function listInvoices() {
       dueDate: invoices.dueDate,
       grossPence: invoices.grossPence,
       clientId: invoices.clientId,
-      clientName: clients.name,
+      clientName: clientDisplayNameSql.as("client_name"),
+      orderId: invoices.orderId,
+      orderNumber: orders.number,
       sentAt: invoices.sentAt,
       paidAt: invoices.paidAt,
     })
     .from(invoices)
     .innerJoin(clients, eq(invoices.clientId, clients.id))
+    .leftJoin(orders, eq(invoices.orderId, orders.id))
     .orderBy(desc(invoices.createdAt));
 
   const today = todayIsoDate();
@@ -162,6 +166,124 @@ export async function getDashboardKpis(): Promise<DashboardKpis> {
     overdueFormatted: formatGBP(overduePence),
     invoicedThisMonthFormatted: formatGBP(invoicedThisMonthPence),
   };
+}
+
+/** Count open invoices with an outstanding balance past due date. */
+export async function countOverdueInvoices(): Promise<number> {
+  const db = getDb();
+  const today = todayIsoDate();
+
+  const open = await db
+    .select({
+      id: invoices.id,
+      status: invoices.status,
+      dueDate: invoices.dueDate,
+      grossPence: invoices.grossPence,
+    })
+    .from(invoices)
+    .where(
+      and(
+        ne(invoices.status, "draft"),
+        ne(invoices.status, "void"),
+        ne(invoices.status, "paid"),
+      ),
+    );
+
+  if (open.length === 0) return 0;
+
+  const ids = open.map((i) => i.id);
+  const paidByInvoice = await db
+    .select({
+      invoiceId: payments.invoiceId,
+      total: sum(payments.amountPence).mapWith(Number),
+    })
+    .from(payments)
+    .where(inArray(payments.invoiceId, ids))
+    .groupBy(payments.invoiceId);
+
+  const paidMap = new Map(paidByInvoice.map((r) => [r.invoiceId, r.total ?? 0]));
+
+  let count = 0;
+  for (const inv of open) {
+    const paid = paidMap.get(inv.id) ?? 0;
+    const balance = Math.max(0, inv.grossPence - paid);
+    if (balance === 0) continue;
+    const eff = effectiveStatus(inv.status as InvoiceStatus, inv.dueDate, today);
+    if (eff === "overdue") count += 1;
+  }
+
+  return count;
+}
+
+export type OverdueInvoiceRow = {
+  id: string;
+  number: string;
+  clientName: string;
+  dueDate: string | null;
+  balanceFormatted: string;
+  balancePence: number;
+};
+
+/** Open overdue invoices by balance descending. */
+export async function listOverdueInvoices(limit = 5): Promise<OverdueInvoiceRow[]> {
+  const db = getDb();
+  const today = todayIsoDate();
+
+  const open = await db
+    .select({
+      id: invoices.id,
+      number: invoices.number,
+      status: invoices.status,
+      dueDate: invoices.dueDate,
+      grossPence: invoices.grossPence,
+      clientName: clientDisplayNameSql.as("client_name"),
+    })
+    .from(invoices)
+    .innerJoin(clients, eq(invoices.clientId, clients.id))
+    .where(
+      and(
+        ne(invoices.status, "draft"),
+        ne(invoices.status, "void"),
+        ne(invoices.status, "paid"),
+      ),
+    );
+
+  if (open.length === 0) return [];
+
+  const ids = open.map((i) => i.id);
+  const paidByInvoice = await db
+    .select({
+      invoiceId: payments.invoiceId,
+      total: sum(payments.amountPence).mapWith(Number),
+    })
+    .from(payments)
+    .where(inArray(payments.invoiceId, ids))
+    .groupBy(payments.invoiceId);
+
+  const paidMap = new Map(paidByInvoice.map((r) => [r.invoiceId, r.total ?? 0]));
+
+  return open
+    .map((inv) => {
+      const paid = paidMap.get(inv.id) ?? 0;
+      const balancePence = Math.max(0, inv.grossPence - paid);
+      const eff = effectiveStatus(inv.status as InvoiceStatus, inv.dueDate, today);
+      return {
+        id: inv.id,
+        number: inv.number,
+        clientName: inv.clientName,
+        dueDate: inv.dueDate,
+        balancePence,
+        balanceFormatted: formatGBP(balancePence),
+        effectiveStatus: eff,
+      };
+    })
+    .filter((row) => row.balancePence > 0 && row.effectiveStatus === "overdue")
+    .sort((a, b) => b.balancePence - a.balancePence)
+    .slice(0, limit)
+    .map(({ effectiveStatus: _s, balancePence, ...rest }) => ({
+      ...rest,
+      balancePence,
+    }));
 }
 
 /** Sum of payments for an invoice (raw SQL helper for mutations). */

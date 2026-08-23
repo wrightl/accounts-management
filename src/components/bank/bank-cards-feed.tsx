@@ -21,7 +21,7 @@ export function BankCardsFeed({
   initialPage: number;
   pageCount: number;
   total: number;
-  filters: Pick<BankListParams, "q" | "type" | "category" | "from" | "to">;
+  filters: Pick<BankListParams, "q" | "type" | "category" | "reconciliation" | "from" | "to">;
   customCategories: readonly string[];
   canWrite: boolean;
 }) {
@@ -36,7 +36,7 @@ export function BankCardsFeed({
     setRows(initialRows);
     setPage(initialPage);
     setError(null);
-  }, [initialRows, initialPage, filters.q, filters.type, filters.category, filters.from, filters.to]);
+  }, [initialRows, initialPage, filters.q, filters.type, filters.category, filters.reconciliation, filters.from, filters.to]);
 
   const hasMore = page < pageCount;
 

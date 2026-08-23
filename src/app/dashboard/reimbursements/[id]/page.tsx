@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Pencil } from "lucide-react";
 import { guardPage, hasPermission } from "@/lib/auth";
 import { getReimbursementDetail } from "@/lib/reimbursements/queries";
+import { canEditReimbursement } from "@/lib/reimbursements/status";
 import { ReimbursementActions } from "@/components/reimbursements/actions";
 import { buttonClasses } from "@/components/ui/button";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
@@ -32,15 +34,38 @@ export default async function ReimbursementDetailPage({
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="font-display text-2xl font-semibold">
-            {detail.payee.name || detail.payee.email}
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="font-display text-2xl font-semibold">
+              {detail.payee.name || detail.payee.email}
+            </h1>
+            {canWrite && canEditReimbursement(detail.reimbursement.status) ? (
+              <Link
+                href={`/dashboard/reimbursements/${detail.reimbursement.id}/edit`}
+                className={buttonClasses("ghost", "size-9 shrink-0 px-0")}
+                aria-label="Edit reimbursement run"
+              >
+                <Pencil className="h-4 w-4" />
+              </Link>
+            ) : null}
+          </div>
           <p className="mt-1 capitalize text-muted">
             {detail.reimbursement.status}
             {detail.reimbursement.paidAt
               ? ` · Paid ${detail.reimbursement.paidAt.toISOString().slice(0, 10)}`
               : null}
           </p>
+          {detail.reimbursement.reference ? (
+            <p className="mt-2 text-sm">
+              Bank reference:{" "}
+              <span className="font-medium text-foreground">
+                {detail.reimbursement.reference}
+              </span>
+            </p>
+          ) : detail.reimbursement.status === "pending" ? (
+            <p className="mt-2 text-sm text-muted">
+              Add a bank payment reference when creating the run, then use it on the transfer.
+            </p>
+          ) : null}
         </div>
         <Card className="min-w-[140px]">
           <CardTitle>Total</CardTitle>

@@ -12,7 +12,9 @@ export type NavIcon =
     | 'spending'
     | 'reports'
     | 'quotes'
+    | 'orders'
     | 'audit'
+    | 'inboundEmail'
     | 'settings'
     | 'users';
 
@@ -25,77 +27,149 @@ export interface NavItem {
     phase?: number;
 }
 
-export const NAV_ITEMS: NavItem[] = [
+export interface NavGroup {
+    id: string;
+    /** When omitted, items render without a group header (e.g. Overview). */
+    label?: string;
+    items: NavItem[];
+}
+
+export const NAV_GROUPS: NavGroup[] = [
     {
-        href: '/dashboard',
-        label: 'Overview',
-        icon: 'overview',
-        permission: 'accounts:read',
+        id: 'overview',
+        items: [
+            {
+                href: '/dashboard',
+                label: 'Overview',
+                icon: 'overview',
+                permission: 'accounts:read',
+            },
+        ],
     },
     {
-        href: '/dashboard/transactions',
-        label: 'Transactions',
-        icon: 'bank',
-        permission: 'accounts:read',
+        id: 'banking',
+        label: 'Banking',
+        items: [
+            {
+                href: '/dashboard/transactions',
+                label: 'Transactions',
+                icon: 'bank',
+                permission: 'accounts:read',
+            },
+            {
+                href: '/dashboard/spending',
+                label: 'Spending',
+                icon: 'spending',
+                permission: 'accounts:read',
+            },
+        ],
     },
     {
-        href: '/dashboard/spending',
-        label: 'Spending',
-        icon: 'spending',
-        permission: 'accounts:read',
-    },
-    {
-        href: '/dashboard/expenses',
+        id: 'expenses',
         label: 'Expenses',
-        icon: 'expenses',
-        permission: 'accounts:read',
+        items: [
+            {
+                href: '/dashboard/expenses',
+                label: 'Expenses',
+                icon: 'expenses',
+                permission: 'accounts:read',
+            },
+            {
+                href: '/dashboard/reimbursements',
+                label: 'Reimbursements',
+                icon: 'reimbursements',
+                permission: 'accounts:read',
+            },
+        ],
     },
     {
-        href: '/dashboard/reimbursements',
-        label: 'Reimbursements',
-        icon: 'reimbursements',
-        permission: 'accounts:read',
+        id: 'sales',
+        label: 'Sales',
+        items: [
+            {
+                href: '/dashboard/clients',
+                label: 'Clients',
+                icon: 'clients',
+                permission: 'accounts:read',
+            },
+            {
+                href: '/dashboard/quotes',
+                label: 'Quotes',
+                icon: 'quotes',
+                permission: 'accounts:read',
+            },
+            {
+                href: '/dashboard/orders',
+                label: 'Orders',
+                icon: 'orders',
+                permission: 'accounts:read',
+            },
+            {
+                href: '/dashboard/invoices',
+                label: 'Invoices',
+                icon: 'invoices',
+                permission: 'accounts:read',
+            },
+        ],
     },
     {
-        href: '/dashboard/clients',
-        label: 'Clients',
-        icon: 'clients',
-        permission: 'accounts:read',
+        id: 'reporting',
+        label: 'Reporting',
+        items: [
+            {
+                href: '/dashboard/reports',
+                label: 'Reports',
+                icon: 'reports',
+                permission: 'reports:read',
+            },
+        ],
     },
     {
-        href: '/dashboard/quotes',
-        label: 'Quotes',
-        icon: 'quotes',
-        permission: 'accounts:read',
-    },
-    {
-        href: '/dashboard/invoices',
-        label: 'Invoices',
-        icon: 'invoices',
-        permission: 'accounts:read',
-    },
-    {
-        href: '/dashboard/reports',
-        label: 'Reports',
-        icon: 'reports',
-        permission: 'reports:read',
-    },
-    {
-        href: '/dashboard/audit',
-        label: 'Audit log',
-        icon: 'audit',
-        permission: 'users:manage',
-    },
-    {
-        href: '/dashboard/settings',
-        label: 'Settings',
-        icon: 'settings',
-        permission: 'settings:manage',
-    },
-    {
-        href: '/dashboard/users',
-        label: 'Users',
-        icon: 'users',
-        permission: 'users:manage',
+        id: 'administration',
+        label: 'Administration',
+        items: [
+            {
+                href: '/dashboard/audit',
+                label: 'Audit log',
+                icon: 'audit',
+                permission: 'users:manage',
+            },
+            {
+                href: '/dashboard/inbound-email',
+                label: 'Inbound email',
+                icon: 'inboundEmail',
+                permission: 'users:manage',
+            },
+            {
+                href: '/dashboard/settings',
+                label: 'Settings',
+                icon: 'settings',
+                permission: 'settings:manage',
+            },
+            {
+                href: '/dashboard/users',
+                label: 'Users',
+                icon: 'users',
+                permission: 'users:manage',
+            },
+        ],
     },
 ];
+
+/** Flat list of all nav items across groups. */
+export function flattenNavItems(groups: NavGroup[]): NavItem[] {
+    return groups.flatMap((group) => group.items);
+}
+
+/** Filter groups by permission, dropping groups with no visible items. */
+export function filterNavGroups(
+    groups: NavGroup[],
+    permissionCheck: (permission: Permission) => boolean,
+): NavGroup[] {
+    return groups
+        .map((group) => ({
+            ...group,
+            items: group.items.filter((item) => permissionCheck(item.permission)),
+        }))
+        .filter((group) => group.items.length > 0);
+}

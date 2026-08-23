@@ -3,6 +3,7 @@ import { guardPage, hasPermission } from "@/lib/auth";
 import { listInvoices } from "@/lib/invoices/queries";
 import { buttonClasses } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
+import { InvoiceDueDate } from "@/components/invoices/invoice-due-date";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { isDatabaseConfigured } from "@/env";
 import type { InvoiceStatus } from "@/lib/invoices/status";
@@ -45,6 +46,7 @@ export default async function InvoicesPage() {
               <TR>
                 <TH>Number</TH>
                 <TH>Client</TH>
+                <TH>Order</TH>
                 <TH>Status</TH>
                 <TH>Issue date</TH>
                 <TH>Due</TH>
@@ -64,10 +66,27 @@ export default async function InvoicesPage() {
                   </TD>
                   <TD>{inv.clientName}</TD>
                   <TD>
+                    {inv.orderId && inv.orderNumber ? (
+                      <Link
+                        href={`/dashboard/orders/${inv.orderId}`}
+                        className="text-foreground hover:underline"
+                      >
+                        {inv.orderNumber}
+                      </Link>
+                    ) : (
+                      <span className="text-muted">—</span>
+                    )}
+                  </TD>
+                  <TD>
                     <StatusBadge status={inv.status as InvoiceStatus} />
                   </TD>
                   <TD className="text-muted">{inv.issueDate ?? "—"}</TD>
-                  <TD className="text-muted">{inv.dueDate ?? "—"}</TD>
+                  <TD>
+                    <InvoiceDueDate
+                      dueDate={inv.dueDate}
+                      status={inv.status as InvoiceStatus}
+                    />
+                  </TD>
                   <TD className="text-right font-medium">{inv.grossFormatted}</TD>
                 </TR>
               ))}

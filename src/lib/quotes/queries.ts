@@ -1,17 +1,38 @@
 import "server-only";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, type SQL } from "drizzle-orm";
 import { getDb } from "@/db";
-import { clients, quoteLineItems, quoteVersions, quotes, users } from "@/db/schema";
+import { clients, quoteLineItems, quotePaymentMilestones, quoteVersions, quotes, users } from "@/db/schema";
+import { clientDisplayNameSql } from "@/lib/clients/sql";
 import { formatGBP } from "@/lib/money";
 import {
   formatQuoteReference,
   formatQuoteVersion,
+  isQuoteStatus,
   type QuoteVersionLine,
 } from "@/lib/quotes/status";
 import { insertQuoteVersion, linesToSnapshot, type QuoteSnapshot } from "@/lib/quotes/versions";
 
-export async function listQuotes() {
+export type QuoteListFilters = {
+  status?: string;
+  clientId?: string;
+};
+
+export function quoteFilterConditions(filters: QuoteListFilters): SQL[] {
+  const conditions: SQL[] = [];
+  if (filters.status && isQuoteStatus(filters.status)) {
+    conditions.push(eq(quotes.status, filters.status));
+  }
+  if (filters.clientId) {
+    conditions.push(eq(quotes.clientId, filters.clientId));
+  }
+  return conditions;
+}
+
+export async function listQuotes(filters: QuoteListFilters = {}) {
   const db = getDb();
+  const conditions = quoteFilterConditions(filters);
+  const where = conditions.length ? and(...conditions) : undefined;
+
   const rows = await db
     .select({
       id: quotes.id,
@@ -20,10 +41,11 @@ export async function listQuotes() {
       status: quotes.status,
       issueDate: quotes.issueDate,
       grossPence: quotes.grossPence,
-      clientName: clients.name,
+      clientName: clientDisplayNameSql.as("client_name"),
     })
     .from(quotes)
     .innerJoin(clients, eq(quotes.clientId, clients.id))
+    .where(where)
     .orderBy(desc(quotes.createdAt));
 
   return rows.map((r) => ({
@@ -49,6 +71,12 @@ export async function getQuoteDetail(id: string) {
     .where(eq(quoteLineItems.quoteId, id))
     .orderBy(quoteLineItems.position);
 
+  const milestones = await db
+    .select()
+    .from(quotePaymentMilestones)
+    .where(eq(quotePaymentMilestones.quoteId, id))
+    .orderBy(quotePaymentMilestones.position);
+
   const quote = rows[0].quote;
   return {
     quote: {
@@ -59,6 +87,7 @@ export async function getQuoteDetail(id: string) {
     },
     client: rows[0].client,
     lines,
+    milestones,
   };
 }
 
@@ -186,7 +215,7 @@ export async function getQuoteVersionDetail(quoteId: string, version: number) {
       grossFormatted: formatGBP(snapshot.grossPence),
       versionLabel: formatQuoteVersion(version),
       reference: formatQuoteReference(detail.quote.number, version),
-      convertedInvoiceId: detail.quote.convertedInvoiceId,
+      orderId: detail.quote.orderId,
     },
     client,
     lines: snapshot.lines.map((l, index) => ({

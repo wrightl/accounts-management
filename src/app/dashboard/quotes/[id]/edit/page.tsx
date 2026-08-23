@@ -53,6 +53,7 @@ export default async function EditQuotePage({
             notes: detail.quote.notes,
           }}
           initialLines={initialLines}
+          initialMilestones={detail.milestones}
         />
       </div>
     </div>

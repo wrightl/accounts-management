@@ -17,10 +17,17 @@ export function isExpenseCategory(value: string): value is ExpenseCategory {
   return (EXPENSE_CATEGORIES as readonly string[]).includes(value);
 }
 
-export type ExpenseStatus = "recorded" | "reimbursable" | "reimbursed" | "company_paid";
+export type ExpenseStatus =
+  | "pending"
+  | "recorded"
+  | "reimbursable"
+  | "reimbursed"
+  | "company_paid";
 
 export function expenseStatusLabel(status: ExpenseStatus): string {
   switch (status) {
+    case "pending":
+      return "Pending review";
     case "recorded":
       return "Recorded";
     case "reimbursable":

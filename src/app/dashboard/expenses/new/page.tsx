@@ -1,20 +1,28 @@
 import Link from "next/link";
-import { guardPage, hasPermission } from "@/lib/auth";
+import { guardPage, hasPermission, requireUser } from "@/lib/auth";
 import { listClients } from "@/lib/clients/queries";
 import { listFounders } from "@/lib/expenses/queries";
 import { ExpenseForm } from "@/components/expenses/expense-form";
 import { buttonClasses } from "@/components/ui/button";
 import { isDatabaseConfigured } from "@/env";
+import { getOrCreateCompanySettings } from "@/lib/settings/queries";
+import { findLocalUserId } from "@/lib/users";
 
 export default async function NewExpensePage() {
   await guardPage("accounts:write");
   const canWrite = await hasPermission("accounts:write");
+  const user = await requireUser();
 
   if (!isDatabaseConfigured()) {
     return <p className="text-muted">Connect a database to create expenses.</p>;
   }
 
-  const [founders, clients] = await Promise.all([listFounders(), listClients()]);
+  const [founders, clients, localUserId, settings] = await Promise.all([
+    listFounders(),
+    listClients(),
+    findLocalUserId(user.userId),
+    getOrCreateCompanySettings(),
+  ]);
 
   return (
     <div>
@@ -29,6 +37,10 @@ export default async function NewExpensePage() {
         founders={founders}
         clients={clients}
         canWrite={canWrite}
+        defaultPaidByUserId={localUserId}
+        defaultMileageRatePence={settings.defaultMileageRatePence}
+        receiptOcrProvider={settings.receiptOcrProvider ?? "local"}
+        receiptOcrModel={settings.receiptOcrModel}
       />
     </div>
   );

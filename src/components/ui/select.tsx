@@ -12,8 +12,10 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { overlayPortalTarget } from "@/components/ui/portal-target";
 
 const field =
   "w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-navy disabled:opacity-50";
@@ -22,6 +24,12 @@ export type SelectOption = {
   value: string;
   label: ReactNode;
   disabled?: boolean;
+};
+
+type MenuPosition = {
+  top: number;
+  left: number;
+  width: number;
 };
 
 function optionsFromChildren(children: ReactNode): SelectOption[] {
@@ -86,7 +94,9 @@ export function Select({
 
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(-1);
+  const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
 
   const enabledOptions = options.filter((o) => !o.disabled);
@@ -105,10 +115,39 @@ export function Select({
     [isControlled, onChange],
   );
 
+  const updateMenuPosition = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    setMenuPosition({
+      top: rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!open) {
+      setMenuPosition(null);
+      return;
+    }
+
+    updateMenuPosition();
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
+    };
+  }, [open, updateMenuPosition]);
+
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (rootRef.current?.contains(target)) return;
+      if (listRef.current?.contains(target)) return;
+      setOpen(false);
     };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
@@ -175,6 +214,57 @@ export function Select({
     }
   };
 
+  const listbox =
+    open && menuPosition ? (
+      <ul
+        ref={listRef}
+        id={listboxId}
+        role="listbox"
+        aria-labelledby={id}
+        style={{
+          position: "fixed",
+          top: menuPosition.top,
+          left: menuPosition.left,
+          width: menuPosition.width,
+          zIndex: 100,
+        }}
+        className="max-h-60 overflow-auto rounded-xl border border-border bg-surface py-1 shadow-lg"
+      >
+        {options.map((opt, i) => {
+          const enabledIdx = enabledOptions.indexOf(opt);
+          const isHighlighted = enabledIdx === highlight;
+          const isSelected = opt.value === value;
+          return (
+            <li
+              key={`${opt.value}-${i}`}
+              role="option"
+              aria-selected={isSelected}
+              aria-disabled={opt.disabled || undefined}
+              data-index={enabledIdx}
+              className={cn(
+                "flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-sm",
+                opt.disabled && "cursor-not-allowed opacity-50",
+                !opt.disabled && isHighlighted && "bg-wash",
+                !opt.disabled && isSelected && "bg-accent/20 font-medium",
+                !opt.disabled && !isHighlighted && !isSelected && "hover:bg-wash",
+              )}
+              onMouseEnter={() => {
+                if (!opt.disabled && enabledIdx >= 0) setHighlight(enabledIdx);
+              }}
+              onClick={() => {
+                if (!opt.disabled) commit(opt.value);
+              }}
+            >
+              <span className="truncate">{opt.label}</span>
+              {isSelected ? (
+                <Check className="h-4 w-4 shrink-0 text-navy" aria-hidden />
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+    ) : null;
+
   return (
     <div ref={rootRef} className={cn("relative", className)}>
       {name ? (
@@ -182,6 +272,7 @@ export function Select({
       ) : null}
 
       <button
+        ref={triggerRef}
         id={id}
         type="button"
         role="combobox"
@@ -209,48 +300,9 @@ export function Select({
         />
       </button>
 
-      {open && (
-        <ul
-          ref={listRef}
-          id={listboxId}
-          role="listbox"
-          aria-labelledby={id}
-          className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-xl border border-border bg-surface py-1 shadow-lg"
-        >
-          {options.map((opt, i) => {
-            const enabledIdx = enabledOptions.indexOf(opt);
-            const isHighlighted = enabledIdx === highlight;
-            const isSelected = opt.value === value;
-            return (
-              <li
-                key={`${opt.value}-${i}`}
-                role="option"
-                aria-selected={isSelected}
-                aria-disabled={opt.disabled || undefined}
-                data-index={enabledIdx}
-                className={cn(
-                  "flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-sm",
-                  opt.disabled && "cursor-not-allowed opacity-50",
-                  !opt.disabled && isHighlighted && "bg-wash",
-                  !opt.disabled && isSelected && "bg-accent/20 font-medium",
-                  !opt.disabled && !isHighlighted && !isSelected && "hover:bg-wash",
-                )}
-                onMouseEnter={() => {
-                  if (!opt.disabled && enabledIdx >= 0) setHighlight(enabledIdx);
-                }}
-                onClick={() => {
-                  if (!opt.disabled) commit(opt.value);
-                }}
-              >
-                <span className="truncate">{opt.label}</span>
-                {isSelected ? (
-                  <Check className="h-4 w-4 shrink-0 text-navy" aria-hidden />
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      {listbox
+        ? createPortal(listbox, overlayPortalTarget(triggerRef.current) ?? document.body)
+        : null}
     </div>
   );
 }

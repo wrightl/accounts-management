@@ -290,3 +290,65 @@ export async function sendInvoice(id: string): Promise<ActionResult> {
   revalidatePath("/dashboard");
   return { ok: true, id };
 }
+
+const updateStatusSchema = z.object({
+  status: z.enum(["draft", "sent", "paid", "void"]),
+});
+
+export async function updateInvoiceStatus(
+  id: string,
+  status: string,
+): Promise<ActionResult> {
+  const authz = await requireActionPermission("accounts:write");
+  if (!authz.ok) return authz;
+  const localUserId = await ensureLocalUser(authz.user);
+
+  const parsed = updateStatusSchema.safeParse({ status });
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid status" };
+  }
+
+  const detail = await getInvoiceDetail(id);
+  if (!detail) return { ok: false, error: "Invoice not found" };
+
+  const current = detail.invoice.status as InvoiceStatus;
+  const target = parsed.data.status;
+
+  if (!canTransition(current, target)) {
+    return {
+      ok: false,
+      error: `Cannot change status from ${current} to ${target}`,
+    };
+  }
+
+  const db = getDb();
+  const [existing] = await db
+    .select()
+    .from(invoices)
+    .where(eq(invoices.id, id))
+    .limit(1);
+  if (!existing) return { ok: false, error: "Invoice not found" };
+
+  const now = new Date();
+  await db
+    .update(invoices)
+    .set({
+      status: target,
+      sentAt: target === "sent" ? (existing.sentAt ?? now) : existing.sentAt,
+      paidAt: target === "paid" ? now : existing.paidAt,
+    })
+    .where(eq(invoices.id, id));
+
+  await writeAudit({
+    actorUserId: localUserId,
+    action: "invoice.status",
+    entityType: "invoice",
+    entityId: id,
+    meta: { from: storedStatus(current), to: target },
+  });
+
+  revalidatePath("/dashboard/invoices");
+  revalidatePath(`/dashboard/invoices/${id}`);
+  revalidatePath("/dashboard");
+  return { ok: true, id };
+}

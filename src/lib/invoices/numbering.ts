@@ -71,3 +71,24 @@ export function nextQuoteNumber(
     seqYear: year,
   };
 }
+
+export interface OrderNumberingState {
+  orderNumberPrefix: string;
+  orderNextSeq: number;
+  orderSeqYear: number | null;
+}
+
+/** Order numbers: {prefix}-{YYYY}-{NNNN}. */
+export function nextOrderNumber(
+  state: OrderNumberingState,
+  year: number,
+): { number: string; nextSeq: number; seqYear: number } {
+  const prefix = state.orderNumberPrefix || "O";
+  const sameYear = state.orderSeqYear === year;
+  const seq = sameYear ? state.orderNextSeq : 1;
+  return {
+    number: formatInvoiceNumber(prefix, year, seq),
+    nextSeq: seq + 1,
+    seqYear: year,
+  };
+}

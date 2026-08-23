@@ -49,6 +49,7 @@ async function renderFromSnapshot(
     },
     client: {
       name: client.name,
+      companyName: client.companyName,
       email: client.email,
       addressLines: client.addressLines,
     },
@@ -111,6 +112,7 @@ export async function loadOrRenderQuotePdf(
     },
     client: {
       name: detail.client.name,
+      companyName: detail.client.companyName,
       email: detail.client.email,
       addressLines: detail.client.addressLines,
     },
