@@ -10,11 +10,15 @@ import {
   users,
 } from "@/db/schema";
 import { StarlingCsvAdapter } from "@/lib/bank/starling-csv";
+import { seedCompany } from "@/lib/test/seed-company";
 
 let ctx: Awaited<ReturnType<typeof createTestDb>>;
+let companyId: string;
 
 beforeEach(async () => {
   ctx = await createTestDb();
+  const company = await seedCompany(ctx.db);
+  companyId = company.id;
 });
 
 afterEach(async () => {
@@ -48,7 +52,7 @@ describe("phases 2–4 integration", () => {
     const { db } = ctx;
     const [account] = await db
       .insert(bankAccounts)
-      .values({ name: "Starling" })
+      .values({ companyId, name: "Starling" })
       .returning();
 
     const csv = [
@@ -77,12 +81,18 @@ describe("phases 2–4 integration", () => {
     const { db } = ctx;
     const [founder] = await db
       .insert(users)
-      .values({ email: "lee@example.com", name: "Lee", role: "admin" })
+      .values({
+        companyId,
+        email: "lee@example.com",
+        name: "Lee",
+        role: "admin",
+      })
       .returning();
 
     const [exp] = await db
       .insert(expenses)
       .values({
+        companyId,
         description: "Train",
         amountPence: 5000,
         status: "reimbursable",
@@ -93,6 +103,7 @@ describe("phases 2–4 integration", () => {
     const [run] = await db
       .insert(reimbursements)
       .values({
+        companyId,
         payeeUserId: founder.id,
         status: "pending",
         totalPence: 5000,
@@ -121,12 +132,18 @@ describe("phases 2–4 integration", () => {
     const { db } = ctx;
     const [founder] = await db
       .insert(users)
-      .values({ email: "angel@example.com", name: "Angel", role: "user" })
+      .values({
+        companyId,
+        email: "angel@example.com",
+        name: "Angel",
+        role: "user",
+      })
       .returning();
 
     const [exp] = await db
       .insert(expenses)
       .values({
+        companyId,
         description: "Taxi",
         amountPence: 2000,
         status: "reimbursable",
@@ -136,11 +153,21 @@ describe("phases 2–4 integration", () => {
 
     const [runA] = await db
       .insert(reimbursements)
-      .values({ payeeUserId: founder.id, status: "pending", totalPence: 2000 })
+      .values({
+        companyId,
+        payeeUserId: founder.id,
+        status: "pending",
+        totalPence: 2000,
+      })
       .returning();
     const [runB] = await db
       .insert(reimbursements)
-      .values({ payeeUserId: founder.id, status: "pending", totalPence: 2000 })
+      .values({
+        companyId,
+        payeeUserId: founder.id,
+        status: "pending",
+        totalPence: 2000,
+      })
       .returning();
 
     await db.insert(reimbursementItems).values({

@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { guardPage } from "@/lib/auth";
+import { guardTenantPage } from "@/lib/auth";
 import { listClients } from "@/lib/clients/queries";
 import { OrderForm } from "@/components/orders/order-form";
 import { buttonClasses } from "@/components/ui/button";
 import { isDatabaseConfigured } from "@/env";
 
 export default async function NewOrderPage() {
-  await guardPage("accounts:write");
+  const { companyId } = await guardTenantPage("accounts:write");
 
   if (!isDatabaseConfigured()) {
     return (
@@ -17,7 +17,7 @@ export default async function NewOrderPage() {
     );
   }
 
-  const clients = await listClients();
+  const clients = await listClients(companyId);
 
   return (
     <div>

@@ -15,6 +15,7 @@ import {
   reconciliationMatches,
   users,
 } from "@/db/schema";
+import { seedCompany } from "@/lib/test/seed-company";
 import {
   buildAccountantPack,
   buildStoreZip,
@@ -27,11 +28,14 @@ vi.mock("server-only", () => ({}));
 
 let ctx: Awaited<ReturnType<typeof createTestDb>>;
 let db: TestDatabase;
+let companyId: string;
 
 beforeEach(async () => {
   ctx = await createTestDb();
   db = ctx.db;
   setTestDb(db as unknown as Database);
+  const company = await seedCompany(db);
+  companyId = company.id;
 });
 
 afterEach(async () => {
@@ -55,12 +59,12 @@ describe("accountant pack integration", () => {
   it("includes CSVs, summary reports, invoice PDFs, and receipt files", async () => {
     const [client] = await db
       .insert(clients)
-      .values({ name: "Acme", companyName: "Acme Ltd", email: "ap@acme.test" })
+      .values({ companyId, name: "Acme", companyName: "Acme Ltd", email: "ap@acme.test" })
       .returning();
 
     const [user] = await db
       .insert(users)
-      .values({ email: "founder@example.com", role: "user" })
+      .values({ companyId, email: "founder@example.com", role: "user" })
       .returning();
 
     const pdfPath = await storePdf("invoices/inv-sent.pdf", "sent-invoice");
@@ -68,6 +72,7 @@ describe("accountant pack integration", () => {
     const [sentInvoice] = await db
       .insert(invoices)
       .values({
+        companyId,
         number: "DD-2026-0100",
         clientId: client.id,
         status: "sent",
@@ -100,6 +105,7 @@ describe("accountant pack integration", () => {
     const [expense] = await db
       .insert(expenses)
       .values({
+        companyId,
         description: "Train ticket",
         category: "Travel",
         spentAt: "2026-04-12",
@@ -127,6 +133,7 @@ describe("accountant pack integration", () => {
     });
 
     await db.insert(dividendDeclarations).values({
+      companyId,
       id: "00000000-0000-4000-8000-0000000000d1",
       declaredAt: "2026-04-20",
       totalPence: 50_000,
@@ -140,7 +147,7 @@ describe("accountant pack integration", () => {
 
     const [account] = await db
       .insert(bankAccounts)
-      .values({ name: "Starling Business" })
+      .values({ companyId, name: "Starling Business" })
       .returning();
 
     const [bankTx] = await db
@@ -162,7 +169,7 @@ describe("accountant pack integration", () => {
       confirmed: true,
     });
 
-    const { zip } = await buildAccountantPack(PERIOD);
+    const { zip } = await buildAccountantPack({ companyId, ...PERIOD });
     const entries = listStoreZipEntries(zip);
 
     expect(entries).toContain("invoices.csv");
@@ -197,13 +204,14 @@ describe("accountant pack integration", () => {
   it("excludes void and draft invoices, pending expenses, and out-of-period payments", async () => {
     const [client] = await db
       .insert(clients)
-      .values({ name: "Beta", email: "beta@test.com" })
+      .values({ companyId, name: "Beta", email: "beta@test.com" })
       .returning();
 
     const pdfPath = await storePdf("invoices/void.pdf", "void");
 
     await db.insert(invoices).values([
       {
+        companyId,
         number: "DD-2026-VOID",
         clientId: client.id,
         status: "void",
@@ -213,6 +221,7 @@ describe("accountant pack integration", () => {
         pdfBlobPath: pdfPath,
       },
       {
+        companyId,
         number: "DD-2026-DRAFT",
         clientId: client.id,
         status: "draft",
@@ -225,6 +234,7 @@ describe("accountant pack integration", () => {
     const [inPeriodInvoice] = await db
       .insert(invoices)
       .values({
+        companyId,
         number: "DD-2026-0200",
         clientId: client.id,
         status: "sent",
@@ -250,6 +260,7 @@ describe("accountant pack integration", () => {
 
     await db.insert(expenses).values([
       {
+        companyId,
         description: "Pending email expense",
         spentAt: "2026-04-11",
         amountPence: 999,
@@ -257,6 +268,7 @@ describe("accountant pack integration", () => {
         source: "email",
       },
       {
+        companyId,
         description: "Recorded expense",
         spentAt: "2026-04-11",
         amountPence: 1500,
@@ -265,7 +277,7 @@ describe("accountant pack integration", () => {
       },
     ]);
 
-    const { zip } = await buildAccountantPack(PERIOD);
+    const { zip } = await buildAccountantPack({ companyId, ...PERIOD });
     const entries = listStoreZipEntries(zip);
 
     const invoicesCsv = extractZipText(zip, "invoices.csv");

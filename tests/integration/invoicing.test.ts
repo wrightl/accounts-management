@@ -11,44 +11,42 @@ import {
 import { invoiceTotals } from "@/lib/money";
 import { allocateInvoiceNumber } from "@/lib/invoices/allocate";
 import { isFullySettled } from "@/lib/invoices/status";
+import { seedCompany } from "@/lib/test/seed-company";
 
 vi.mock("server-only", () => ({}));
 
 let ctx: Awaited<ReturnType<typeof createTestDb>>;
 let db: TestDatabase;
+let companyId: string;
 
 beforeEach(async () => {
   ctx = await createTestDb();
   db = ctx.db;
+  const company = await seedCompany(db);
+  companyId = company.id;
 });
 
 afterEach(async () => {
   await ctx.client.close();
 });
 
-async function ensureSettings() {
-  const rows = await db.select().from(companySettings).limit(1);
-  if (rows[0]) return rows[0];
-  const [created] = await db.insert(companySettings).values({}).returning();
-  return created;
-}
-
 async function allocateNumber(issueYear: number) {
   return db.transaction(async (tx) =>
-    allocateInvoiceNumber(tx as never, `${issueYear}-06-01`),
+    allocateInvoiceNumber(tx as never, companyId, `${issueYear}-06-01`),
   );
 }
 
 describe("invoicing integration (PGlite)", () => {
   it("seeds company settings with invoice numbering defaults via migration", async () => {
-    // Migration INSERT may seed a row; otherwise defaults apply on insert.
-    const settings = await ensureSettings();
+    const [settings] = await db
+      .select()
+      .from(companySettings)
+      .where(eq(companySettings.id, companyId));
     expect(settings.invoiceNumberPrefix).toBe("DD");
     expect(settings.invoiceNextSeq).toBe(1);
   });
 
   it("allocates unique year-aware invoice numbers", async () => {
-    await ensureSettings();
     const a = await allocateNumber(2026);
     const b = await allocateNumber(2026);
     const c = await allocateNumber(2027);
@@ -60,7 +58,7 @@ describe("invoicing integration (PGlite)", () => {
   it("creates an invoice with line totals", async () => {
     const [client] = await db
       .insert(clients)
-      .values({ name: "Acme", email: "ap@acme.test" })
+      .values({ companyId, name: "Acme", email: "ap@acme.test" })
       .returning();
 
     const lines = [
@@ -72,6 +70,7 @@ describe("invoicing integration (PGlite)", () => {
     const [inv] = await db
       .insert(invoices)
       .values({
+        companyId,
         number,
         clientId: client.id,
         status: "draft",
@@ -90,10 +89,14 @@ describe("invoicing integration (PGlite)", () => {
   });
 
   it("flips to paid when payments cover the gross", async () => {
-    const [client] = await db.insert(clients).values({ name: "Beta" }).returning();
+    const [client] = await db
+      .insert(clients)
+      .values({ companyId, name: "Beta" })
+      .returning();
     const [inv] = await db
       .insert(invoices)
       .values({
+        companyId,
         number: "DD-2026-0099",
         clientId: client.id,
         status: "sent",
@@ -128,8 +131,12 @@ describe("invoicing integration (PGlite)", () => {
   });
 
   it("blocks deleting a client that has invoices", async () => {
-    const [client] = await db.insert(clients).values({ name: "Gamma" }).returning();
+    const [client] = await db
+      .insert(clients)
+      .values({ companyId, name: "Gamma" })
+      .returning();
     await db.insert(invoices).values({
+      companyId,
       number: "DD-2026-0100",
       clientId: client.id,
     });
@@ -140,7 +147,6 @@ describe("invoicing integration (PGlite)", () => {
   });
 
   it("persists company settings updates", async () => {
-    const settings = await ensureSettings();
     await db
       .update(companySettings)
       .set({
@@ -148,9 +154,12 @@ describe("invoicing integration (PGlite)", () => {
         sortCode: "12-34-56",
         accountNumber: "12345678",
       })
-      .where(eq(companySettings.id, settings.id));
+      .where(eq(companySettings.id, companyId));
 
-    const [updated] = await db.select().from(companySettings);
+    const [updated] = await db
+      .select()
+      .from(companySettings)
+      .where(eq(companySettings.id, companyId));
     expect(updated.invoiceNumberPrefix).toBe("XX");
     expect(updated.sortCode).toBe("12-34-56");
   });

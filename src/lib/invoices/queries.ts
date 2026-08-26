@@ -10,7 +10,7 @@ import {
   type InvoiceStatus,
 } from "@/lib/invoices/status";
 
-export async function listInvoices() {
+export async function listInvoices(companyId: string) {
   const db = getDb();
   const rows = await db
     .select({
@@ -30,6 +30,7 @@ export async function listInvoices() {
     .from(invoices)
     .innerJoin(clients, eq(invoices.clientId, clients.id))
     .leftJoin(orders, eq(invoices.orderId, orders.id))
+    .where(eq(invoices.companyId, companyId))
     .orderBy(desc(invoices.createdAt));
 
   const today = todayIsoDate();
@@ -40,7 +41,7 @@ export async function listInvoices() {
   }));
 }
 
-export async function getInvoiceDetail(id: string) {
+export async function getInvoiceDetail(companyId: string, id: string) {
   const db = getDb();
   const rows = await db
     .select({
@@ -49,7 +50,7 @@ export async function getInvoiceDetail(id: string) {
     })
     .from(invoices)
     .innerJoin(clients, eq(invoices.clientId, clients.id))
-    .where(eq(invoices.id, id))
+    .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)))
     .limit(1);
 
   if (!rows[0]) return null;
@@ -100,12 +101,11 @@ export interface DashboardKpis {
   invoicedThisMonthFormatted: string;
 }
 
-export async function getDashboardKpis(): Promise<DashboardKpis> {
+export async function getDashboardKpis(companyId: string): Promise<DashboardKpis> {
   const db = getDb();
   const today = todayIsoDate();
   const monthStart = `${today.slice(0, 7)}-01`;
 
-  // Outstanding / overdue: non-draft, non-void, non-paid invoices.
   const open = await db
     .select({
       id: invoices.id,
@@ -114,7 +114,14 @@ export async function getDashboardKpis(): Promise<DashboardKpis> {
       grossPence: invoices.grossPence,
     })
     .from(invoices)
-    .where(and(ne(invoices.status, "draft"), ne(invoices.status, "void"), ne(invoices.status, "paid")));
+    .where(
+      and(
+        eq(invoices.companyId, companyId),
+        ne(invoices.status, "draft"),
+        ne(invoices.status, "void"),
+        ne(invoices.status, "paid"),
+      ),
+    );
 
   let outstandingPence = 0;
   let overduePence = 0;
@@ -149,6 +156,7 @@ export async function getDashboardKpis(): Promise<DashboardKpis> {
     .from(invoices)
     .where(
       and(
+        eq(invoices.companyId, companyId),
         ne(invoices.status, "void"),
         ne(invoices.status, "draft"),
         gte(invoices.issueDate, monthStart),
@@ -169,7 +177,7 @@ export async function getDashboardKpis(): Promise<DashboardKpis> {
 }
 
 /** Count open invoices with an outstanding balance past due date. */
-export async function countOverdueInvoices(): Promise<number> {
+export async function countOverdueInvoices(companyId: string): Promise<number> {
   const db = getDb();
   const today = todayIsoDate();
 
@@ -183,6 +191,7 @@ export async function countOverdueInvoices(): Promise<number> {
     .from(invoices)
     .where(
       and(
+        eq(invoices.companyId, companyId),
         ne(invoices.status, "draft"),
         ne(invoices.status, "void"),
         ne(invoices.status, "paid"),
@@ -225,7 +234,10 @@ export type OverdueInvoiceRow = {
 };
 
 /** Open overdue invoices by balance descending. */
-export async function listOverdueInvoices(limit = 5): Promise<OverdueInvoiceRow[]> {
+export async function listOverdueInvoices(
+  companyId: string,
+  limit = 5,
+): Promise<OverdueInvoiceRow[]> {
   const db = getDb();
   const today = todayIsoDate();
 
@@ -242,6 +254,7 @@ export async function listOverdueInvoices(limit = 5): Promise<OverdueInvoiceRow[
     .innerJoin(clients, eq(invoices.clientId, clients.id))
     .where(
       and(
+        eq(invoices.companyId, companyId),
         ne(invoices.status, "draft"),
         ne(invoices.status, "void"),
         ne(invoices.status, "paid"),

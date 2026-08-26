@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { guardPage } from "@/lib/auth";
+import { guardTenantPage } from "@/lib/auth";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
 import { listClients } from "@/lib/clients/queries";
 import { canEditInvoice, type InvoiceStatus } from "@/lib/invoices/status";
@@ -14,18 +14,18 @@ export default async function EditInvoicePage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await guardPage("accounts:write");
+  const { companyId } = await guardTenantPage("accounts:write");
   const { id } = await params;
 
   if (!isDatabaseConfigured()) notFound();
 
-  const detail = await getInvoiceDetail(id);
+  const detail = await getInvoiceDetail(companyId, id);
   if (!detail) notFound();
   if (!canEditInvoice(detail.invoice.status as InvoiceStatus)) {
     notFound();
   }
 
-  const clients = await listClients();
+  const clients = await listClients(companyId);
   const initialLines = detail.lines.map((l) => ({
     key: l.id,
     description: l.description,

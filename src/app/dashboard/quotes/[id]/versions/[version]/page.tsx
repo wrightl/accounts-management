@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { guardPage } from "@/lib/auth";
+import { guardTenantPage } from "@/lib/auth";
 import { getQuoteVersionDetail } from "@/lib/quotes/queries";
 import { buttonClasses } from "@/components/ui/button";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
@@ -14,13 +14,13 @@ export default async function QuoteVersionPage({
 }: {
   params: Promise<{ id: string; version: string }>;
 }) {
-  await guardPage("accounts:read");
+  const { companyId } = await guardTenantPage("accounts:read");
   const { id, version: versionParam } = await params;
   const version = Number.parseInt(versionParam, 10);
   if (!Number.isFinite(version) || version < 1) notFound();
 
   if (!isDatabaseConfigured()) notFound();
-  const detail = await getQuoteVersionDetail(id, version);
+  const detail = await getQuoteVersionDetail(companyId, id, version);
   if (!detail) notFound();
   if (detail.isCurrent) {
     redirect(`/dashboard/quotes/${id}`);

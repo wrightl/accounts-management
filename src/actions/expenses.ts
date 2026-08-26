@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq} from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
 import { expenseReceipts, expenses, reimbursementItems } from "@/db/schema";
@@ -161,6 +161,11 @@ function normalizeExpensePaymentFields(data: {
 export async function createExpense(formData: FormData): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
@@ -202,7 +207,8 @@ export async function createExpense(formData: FormData): Promise<ActionResult> {
   const [row] = await db
     .insert(expenses)
     .values({
-      description,
+      companyId,
+        description,
       category: parsed.data.category || null,
       spentAt: parsed.data.spentAt || null,
       amountPence,
@@ -218,6 +224,7 @@ export async function createExpense(formData: FormData): Promise<ActionResult> {
     .returning({ id: expenses.id });
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "expense.create",
     entityType: "expense",
@@ -236,11 +243,16 @@ export async function updateExpense(
 ): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
   const db = getDb();
-  const [existing] = await db.select().from(expenses).where(eq(expenses.id, id)).limit(1);
+  const [existing] = await db.select().from(expenses).where(and(eq(expenses.id, id), eq(expenses.companyId, companyId))).limit(1);
   if (!existing) return { ok: false, error: "Expense not found" };
   if (existing.status === "reimbursed") {
     return { ok: false, error: "Cannot edit a reimbursed expense" };
@@ -305,9 +317,10 @@ export async function updateExpense(
       mileageMiles,
       mileageRatePence,
     })
-    .where(eq(expenses.id, id));
+    .where(and(eq(expenses.id, id), eq(expenses.companyId, companyId)));
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "expense.update",
     entityType: "expense",
@@ -327,11 +340,16 @@ export async function approveExpense(
 ): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
   const db = getDb();
-  const [existing] = await db.select().from(expenses).where(eq(expenses.id, id)).limit(1);
+  const [existing] = await db.select().from(expenses).where(and(eq(expenses.id, id), eq(expenses.companyId, companyId))).limit(1);
   if (!existing) return { ok: false, error: "Expense not found" };
   if (existing.status !== "pending") {
     return { ok: false, error: "Only pending expenses can be approved" };
@@ -391,9 +409,10 @@ export async function approveExpense(
       mileageMiles: null,
       mileageRatePence: null,
     })
-    .where(eq(expenses.id, id));
+    .where(and(eq(expenses.id, id), eq(expenses.companyId, companyId)));
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "expense.approve",
     entityType: "expense",
@@ -411,11 +430,16 @@ export async function approveExpense(
 export async function rejectExpense(id: string): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
   const db = getDb();
-  const [existing] = await db.select().from(expenses).where(eq(expenses.id, id)).limit(1);
+  const [existing] = await db.select().from(expenses).where(and(eq(expenses.id, id), eq(expenses.companyId, companyId))).limit(1);
   if (!existing) return { ok: false, error: "Expense not found" };
   if (existing.status !== "pending") {
     return { ok: false, error: "Only pending expenses can be rejected" };
@@ -434,9 +458,10 @@ export async function rejectExpense(id: string): Promise<ActionResult> {
     }
   }
 
-  await db.delete(expenses).where(eq(expenses.id, id));
+  await db.delete(expenses).where(and(eq(expenses.id, id), eq(expenses.companyId, companyId)));
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "expense.reject",
     entityType: "expense",
@@ -451,11 +476,16 @@ export async function rejectExpense(id: string): Promise<ActionResult> {
 export async function deleteExpense(id: string): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
   const db = getDb();
-  const [existing] = await db.select().from(expenses).where(eq(expenses.id, id)).limit(1);
+  const [existing] = await db.select().from(expenses).where(and(eq(expenses.id, id), eq(expenses.companyId, companyId))).limit(1);
   if (!existing) return { ok: false, error: "Expense not found" };
   if (existing.status === "reimbursed") {
     return { ok: false, error: "Cannot delete a reimbursed expense" };
@@ -483,9 +513,10 @@ export async function deleteExpense(id: string): Promise<ActionResult> {
     }
   }
 
-  await db.delete(expenses).where(eq(expenses.id, id));
+  await db.delete(expenses).where(and(eq(expenses.id, id), eq(expenses.companyId, companyId)));
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "expense.delete",
     entityType: "expense",
@@ -503,6 +534,11 @@ export async function uploadReceipt(
 ): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
@@ -510,7 +546,7 @@ export async function uploadReceipt(
   const [expense] = await db
     .select()
     .from(expenses)
-    .where(eq(expenses.id, expenseId))
+    .where(and(eq(expenses.id, expenseId), eq(expenses.companyId, companyId)))
     .limit(1);
   if (!expense) return { ok: false, error: "Expense not found" };
 
@@ -537,6 +573,7 @@ export async function uploadReceipt(
     .returning({ id: expenseReceipts.id });
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "expense.receipt_upload",
     entityType: "expense_receipt",
@@ -553,11 +590,16 @@ export async function extractReceiptFields(
 ): Promise<ReceiptExtractionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
 
   const parsed = await parseReceiptFileAsync(formData);
   if (!parsed.ok) return parsed;
 
-  const settings = await getOrCreateCompanySettings();
+  const settings = await getOrCreateCompanySettings(companyId);
   const providerRaw = settings.receiptOcrProvider ?? "local";
   const provider: ReceiptOcrProvider = isReceiptOcrProvider(providerRaw)
     ? providerRaw
@@ -582,6 +624,11 @@ export async function extractReceiptFields(
 export async function deleteReceipt(receiptId: string): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
@@ -601,6 +648,7 @@ export async function deleteReceipt(receiptId: string): Promise<ActionResult> {
   await db.delete(expenseReceipts).where(eq(expenseReceipts.id, receiptId));
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "expense.receipt_delete",
     entityType: "expense_receipt",
@@ -616,6 +664,11 @@ export async function previewExpenseImport(
 ): Promise<ExpenseImportPreviewResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
 
   const file = formData.get("csv");
   if (!(file instanceof File) || file.size === 0) {
@@ -626,8 +679,8 @@ export async function previewExpenseImport(
   }
 
   const [founders, settings] = await Promise.all([
-    listFounders(),
-    getOrCreateCompanySettings(),
+    listFounders(companyId),
+    getOrCreateCompanySettings(companyId),
   ]);
   const text = await file.text();
   const rows = parseExpenseImportCsv(
@@ -646,6 +699,11 @@ export async function commitExpenseImport(
 ): Promise<ActionResult & { count?: number }> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
@@ -666,6 +724,7 @@ export async function commitExpenseImport(
   await db.transaction(async (tx) => {
     for (const row of rows) {
       await tx.insert(expenses).values({
+        companyId,
         description: row.description,
         category: row.category,
         spentAt: row.spentAt,
@@ -682,6 +741,7 @@ export async function commitExpenseImport(
   });
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "expense.import",
     entityType: "expense",

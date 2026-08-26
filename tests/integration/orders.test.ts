@@ -12,6 +12,7 @@ import {
   quotes,
   users,
 } from "@/db/schema";
+import { seedCompany } from "@/lib/test/seed-company";
 import {
   createOrder,
   createInvoiceFromOrder,
@@ -36,11 +37,14 @@ vi.mock("@clerk/nextjs/server", () => ({
 
 let ctx: Awaited<ReturnType<typeof createTestDb>>;
 let db: TestDatabase;
+let companyId: string;
 
 beforeEach(async () => {
   ctx = await createTestDb();
   db = ctx.db;
   setTestDb(db as unknown as Database);
+  const company = await seedCompany(db);
+  companyId = company.id;
 });
 
 afterEach(async () => {
@@ -50,6 +54,7 @@ afterEach(async () => {
 
 async function seedAdmin() {
   await db.insert(users).values({
+    companyId,
     clerkUserId: "user_clerk_1",
     email: "lee@dotanddashconsulting.com",
     name: "Lee",
@@ -69,7 +74,7 @@ async function createTestOrder(opts?: {
 }) {
   const [client] = await db
     .insert(clients)
-    .values({ name: "Beta Ltd", email: "beta@test.com" })
+    .values({ companyId, name: "Beta Ltd", email: "beta@test.com" })
     .returning();
 
   const form = new FormData();
@@ -111,7 +116,7 @@ describe("orders", () => {
 
   it("creates a manual order", async () => {
     const { orderId } = await createTestOrder({ grossPounds: "1200" });
-    const detail = await getOrderDetail(orderId);
+    const detail = await getOrderDetail(companyId, orderId);
     expect(detail?.order.grossPence).toBe(120000);
     expect(detail?.lines).toHaveLength(1);
   });
@@ -258,16 +263,16 @@ describe("orders", () => {
     const created = await createInvoiceFromOrder(orderId, form);
     if (!created.ok || !created.id) throw new Error("invoice failed");
 
-    let detail = await getOrderDetail(orderId);
+    let detail = await getOrderDetail(companyId, orderId);
     expect(detail?.remainingPence).toBe(0);
 
     await voidInvoice(created.id);
-    detail = await getOrderDetail(orderId);
+    detail = await getOrderDetail(companyId, orderId);
     expect(detail?.remainingPence).toBe(100000);
   });
 
   it("uses company payment terms for full invoice due date", async () => {
-    await db.update(companySettings).set({ invoicePaymentTermsDays: 30 });
+    await db.update(companySettings).set({ invoicePaymentTermsDays: 30 }).where(eq(companySettings.id, companyId));
     const { orderId } = await createTestOrder({ grossPounds: "500" });
     const form = new FormData();
     form.set("mode", "remaining");
@@ -285,11 +290,12 @@ describe("client overview", () => {
   it("computes pipeline quotes and outstanding excluding drafts", async () => {
     const [client] = await db
       .insert(clients)
-      .values({ name: "Acme", email: "acme@test.com" })
+      .values({ companyId, name: "Acme", email: "acme@test.com" })
       .returning();
 
     await db.insert(quotes).values([
       {
+        companyId,
         number: "Q-2026-0001",
         clientId: client.id,
         status: "sent",
@@ -298,6 +304,7 @@ describe("client overview", () => {
         vatPence: 0,
       },
       {
+        companyId,
         number: "Q-2026-0002",
         clientId: client.id,
         status: "declined",
@@ -308,6 +315,7 @@ describe("client overview", () => {
     ]);
 
     await db.insert(orders).values({
+      companyId,
       number: "O-2026-0001",
       clientId: client.id,
       status: "active",
@@ -319,6 +327,7 @@ describe("client overview", () => {
     const [draftInv] = await db
       .insert(invoices)
       .values({
+        companyId,
         number: "DD-2026-0001",
         clientId: client.id,
         status: "draft",
@@ -330,6 +339,7 @@ describe("client overview", () => {
       .returning();
 
     await db.insert(invoices).values({
+      companyId,
       number: "DD-2026-0002",
       clientId: client.id,
       status: "sent",
@@ -340,7 +350,7 @@ describe("client overview", () => {
       dueDate: "2026-08-15",
     });
 
-    const overview = await getClientOverview(client.id);
+    const overview = await getClientOverview(companyId, client.id);
     expect(overview?.metrics.pipelineQuoteCount).toBe(1);
     expect(overview?.metrics.pipelineQuoteFormatted).toBe("£500.00");
     expect(overview?.metrics.activeOrderCount).toBe(1);

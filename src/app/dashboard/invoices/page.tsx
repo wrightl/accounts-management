@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { guardPage, hasPermission } from "@/lib/auth";
+import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { listInvoices } from "@/lib/invoices/queries";
 import { buttonClasses } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
@@ -9,7 +9,7 @@ import { isDatabaseConfigured } from "@/env";
 import type { InvoiceStatus } from "@/lib/invoices/status";
 
 export default async function InvoicesPage() {
-  await guardPage("accounts:read");
+  const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
 
   if (!isDatabaseConfigured()) {
@@ -21,7 +21,7 @@ export default async function InvoicesPage() {
     );
   }
 
-  const rows = await listInvoices();
+  const rows = await listInvoices(companyId);
 
   return (
     <div>

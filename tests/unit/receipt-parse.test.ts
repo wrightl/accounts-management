@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  detectReceiptCurrency,
   inferReceiptCategory,
+  isForeignCurrency,
   normalizeAiExtraction,
   parseReceiptAmount,
   parseReceiptDate,
@@ -105,6 +107,34 @@ describe("parseReceiptMerchant", () => {
 
   it("prefers company names on invoices", () => {
     expect(parseReceiptMerchant(MICROSOFT_INVOICE_TEXT)).toBe("Microsoft Limited");
+  });
+});
+
+describe("detectReceiptCurrency", () => {
+  it("detects sterling", () => {
+    expect(detectReceiptCurrency("Total GBP 70.07")).toBe("GBP");
+    expect(detectReceiptCurrency("Paid £12.00")).toBe("GBP");
+  });
+
+  it("prefers foreign currency when mixed markers appear", () => {
+    expect(detectReceiptCurrency("Total $49.00 USD\nAlso shows £0.00")).toBe("USD");
+  });
+
+  it("detects euro and dollar symbols", () => {
+    expect(detectReceiptCurrency("Amount due €19.99")).toBe("EUR");
+    expect(detectReceiptCurrency("Total: $9.99")).toBe("USD");
+  });
+
+  it("returns undefined when no markers", () => {
+    expect(detectReceiptCurrency("Coffee shop receipt")).toBeUndefined();
+  });
+});
+
+describe("isForeignCurrency", () => {
+  it("treats only non-GBP as foreign", () => {
+    expect(isForeignCurrency("USD")).toBe(true);
+    expect(isForeignCurrency("gbp")).toBe(false);
+    expect(isForeignCurrency(null)).toBe(false);
   });
 });
 

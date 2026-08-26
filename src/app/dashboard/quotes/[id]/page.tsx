@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Pencil } from "lucide-react";
-import { guardPage, hasPermission } from "@/lib/auth";
+import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { getQuoteDetail, listQuoteVersionHistory } from "@/lib/quotes/queries";
 import { listDeclineReasonCategories } from "@/lib/quotes/decline-reasons";
 import { canEditQuote, quoteStatusLabel, type QuoteStatus } from "@/lib/quotes/status";
@@ -22,16 +22,16 @@ export default async function QuoteDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await guardPage("accounts:read");
+  const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
   const { id } = await params;
 
   if (!isDatabaseConfigured()) notFound();
   const [detail, company, history, declineCategories] = await Promise.all([
-    getQuoteDetail(id),
-    getOrCreateCompanySettings(),
-    listQuoteVersionHistory(id),
-    listDeclineReasonCategories(),
+    getQuoteDetail(companyId, id),
+    getOrCreateCompanySettings(companyId),
+    listQuoteVersionHistory(companyId, id),
+    listDeclineReasonCategories(companyId),
   ]);
   if (!detail) notFound();
 

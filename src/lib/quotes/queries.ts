@@ -17,8 +17,11 @@ export type QuoteListFilters = {
   clientId?: string;
 };
 
-export function quoteFilterConditions(filters: QuoteListFilters): SQL[] {
-  const conditions: SQL[] = [];
+export function quoteFilterConditions(
+  companyId: string,
+  filters: QuoteListFilters,
+): SQL[] {
+  const conditions: SQL[] = [eq(quotes.companyId, companyId)];
   if (filters.status && isQuoteStatus(filters.status)) {
     conditions.push(eq(quotes.status, filters.status));
   }
@@ -28,10 +31,10 @@ export function quoteFilterConditions(filters: QuoteListFilters): SQL[] {
   return conditions;
 }
 
-export async function listQuotes(filters: QuoteListFilters = {}) {
+export async function listQuotes(companyId: string, filters: QuoteListFilters = {}) {
   const db = getDb();
-  const conditions = quoteFilterConditions(filters);
-  const where = conditions.length ? and(...conditions) : undefined;
+  const conditions = quoteFilterConditions(companyId, filters);
+  const where = and(...conditions);
 
   const rows = await db
     .select({
@@ -55,13 +58,13 @@ export async function listQuotes(filters: QuoteListFilters = {}) {
   }));
 }
 
-export async function getQuoteDetail(id: string) {
+export async function getQuoteDetail(companyId: string, id: string) {
   const db = getDb();
   const rows = await db
     .select({ quote: quotes, client: clients })
     .from(quotes)
     .innerJoin(clients, eq(quotes.clientId, clients.id))
-    .where(eq(quotes.id, id))
+    .where(and(eq(quotes.id, id), eq(quotes.companyId, companyId)))
     .limit(1);
   if (!rows[0]) return null;
 
@@ -91,9 +94,9 @@ export async function getQuoteDetail(id: string) {
   };
 }
 
-export async function listQuoteVersionHistory(quoteId: string) {
+export async function listQuoteVersionHistory(companyId: string, quoteId: string) {
   const db = getDb();
-  const detail = await getQuoteDetail(quoteId);
+  const detail = await getQuoteDetail(companyId, quoteId);
   if (!detail) return null;
 
   let rows = await db
@@ -176,8 +179,12 @@ export async function getQuoteVersionSnapshot(
   };
 }
 
-export async function getQuoteVersionDetail(quoteId: string, version: number) {
-  const detail = await getQuoteDetail(quoteId);
+export async function getQuoteVersionDetail(
+  companyId: string,
+  quoteId: string,
+  version: number,
+) {
+  const detail = await getQuoteDetail(companyId, quoteId);
   if (!detail) return null;
 
   if (version === detail.quote.version) {
@@ -196,7 +203,7 @@ export async function getQuoteVersionDetail(quoteId: string, version: number) {
   const [client] = await db
     .select()
     .from(clients)
-    .where(eq(clients.id, snapshot.clientId))
+    .where(and(eq(clients.id, snapshot.clientId), eq(clients.companyId, companyId)))
     .limit(1);
   if (!client) return null;
 

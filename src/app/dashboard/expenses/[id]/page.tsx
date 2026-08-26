@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { guardPage, hasPermission } from "@/lib/auth";
+import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { listClients } from "@/lib/clients/queries";
 import { getExpenseDetail, listFounders } from "@/lib/expenses/queries";
 import { expenseStatusLabel, type ExpenseStatus } from "@/lib/expenses/categories";
@@ -11,6 +11,7 @@ import { buttonClasses } from "@/components/ui/button";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { isDatabaseConfigured } from "@/env";
+import { isForeignCurrency } from "@/lib/expenses/receipt-parse";
 
 export default async function ExpenseDetailPage({
   params,
@@ -19,24 +20,27 @@ export default async function ExpenseDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ receiptUploadFailed?: string }>;
 }) {
-  await guardPage("accounts:read");
+  const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
   const { id } = await params;
   const { receiptUploadFailed } = await searchParams;
 
   if (!isDatabaseConfigured()) notFound();
 
-  const detail = await getExpenseDetail(id);
+  const detail = await getExpenseDetail(companyId, id);
   if (!detail) notFound();
 
   const [founders, clients, linkedRun, settings] = await Promise.all([
-    listFounders(),
-    listClients(),
-    getReimbursementForExpense(id),
-    getOrCreateCompanySettings(),
+    listFounders(companyId),
+    listClients(companyId),
+    getReimbursementForExpense(companyId, id),
+    getOrCreateCompanySettings(companyId),
   ]);
 
   const payeeId = detail.expense.paidByUserId;
+  const foreignCurrency = isForeignCurrency(detail.expense.detectedCurrency)
+    ? detail.expense.detectedCurrency!.toUpperCase()
+    : null;
 
   return (
     <div>
@@ -56,6 +60,14 @@ export default async function ExpenseDetailPage({
           ) : null}
         </div>
       )}
+
+      {foreignCurrency && detail.expense.status === "pending" ? (
+        <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+          Foreign currency detected on the receipt ({foreignCurrency}). Amounts in
+          this app are recorded in GBP — confirm the sterling amount before
+          approving.
+        </div>
+      ) : null}
 
       {receiptUploadFailed && (
         <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">

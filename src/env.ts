@@ -27,10 +27,10 @@ const serverSchema = z.object({
   RESEND_API_KEY: z.string().optional(),
   RESEND_WEBHOOK_SECRET: z.string().optional(),
   EMAIL_FROM: z.string().default("Dot + Dash Accounts <accounts@dotanddashconsulting.com>"),
-  /** Comma-delimited inbound addresses founders email receipts to. */
-  EXPENSE_INBOUND_ADDRESS: z
-    .string()
-    .default("expenses@dotanddashconsulting.com"),
+  /** Domain that receives inbound expense emails (Resend Receiving). */
+  EXPENSE_INBOUND_DOMAIN: z.string().default("dotanddashconsulting.com"),
+  /** Local-part prefix for per-user plus-addresses, e.g. expenses+company.user@domain. */
+  EXPENSE_INBOUND_PREFIX: z.string().default("expenses"),
 
   // Cron / automation. Routes refuse to run until CRON_SECRET is set.
   CRON_SECRET: z.string().optional(),

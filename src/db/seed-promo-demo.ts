@@ -2,12 +2,13 @@
  * Idempotent fictional demo dataset for the promo video.
  * All entities use fixed document numbers (900x suffix) and fictional UK clients.
  */
-import { eq, inArray, sql } from "drizzle-orm";
+import { asc, eq, inArray, sql } from "drizzle-orm";
 import type { Database } from "@/db";
 import {
   bankAccounts,
   bankTransactions,
   clients,
+  companies,
   expenses,
   inboundEmailJobs,
   invoiceLineItems,
@@ -173,10 +174,21 @@ export async function seedPromoDemo(
 
   const admin = await findAdminUser(db);
 
+  const [primary] = await db
+    .select({ id: companies.id })
+    .from(companies)
+    .orderBy(asc(companies.createdAt))
+    .limit(1);
+  const companyId = admin.companyId ?? primary?.id;
+  if (!companyId) {
+    throw new Error("No company in database. Run migrations / seed a company first.");
+  }
+
   const [harbor, northbridge, meridian] = await db
     .insert(clients)
     .values([
       {
+        companyId,
         name: "Harbor Digital Ltd",
         companyName: "Harbor Digital Ltd",
         email: "finance@harbor-digital.example",
@@ -184,6 +196,7 @@ export async function seedPromoDemo(
         notes: "[PROMO] Fictional client for demo video.",
       },
       {
+        companyId,
         name: "Northbridge Studio Ltd",
         companyName: "Northbridge Studio Ltd",
         email: "hello@northbridge-studio.example",
@@ -191,6 +204,7 @@ export async function seedPromoDemo(
         notes: "[PROMO] Fictional client.",
       },
       {
+        companyId,
         name: "Meridian Agency Ltd",
         companyName: "Meridian Agency Ltd",
         email: "accounts@meridian-agency.example",
@@ -222,6 +236,7 @@ export async function seedPromoDemo(
   const [order] = await db
     .insert(orders)
     .values({
+      companyId,
       number: PROMO_NUMBERS.order,
       clientId: harbor.id,
       status: "active",
@@ -248,6 +263,7 @@ export async function seedPromoDemo(
   const [quote] = await db
     .insert(quotes)
     .values({
+      companyId,
       number: PROMO_NUMBERS.quote,
       clientId: harbor.id,
       status: "accepted",
@@ -299,6 +315,7 @@ export async function seedPromoDemo(
   const [invoiceSent] = await db
     .insert(invoices)
     .values({
+      companyId,
       number: PROMO_NUMBERS.invoiceSent,
       clientId: harbor.id,
       orderId: order.id,
@@ -326,6 +343,7 @@ export async function seedPromoDemo(
   const [invoicePaid] = await db
     .insert(invoices)
     .values({
+      companyId,
       number: PROMO_NUMBERS.invoicePaid,
       clientId: northbridge.id,
       status: "paid",
@@ -360,6 +378,7 @@ export async function seedPromoDemo(
   const [invoiceOverdue] = await db
     .insert(invoices)
     .values({
+      companyId,
       number: PROMO_NUMBERS.invoiceOverdue,
       clientId: meridian.id,
       status: "sent",
@@ -385,6 +404,7 @@ export async function seedPromoDemo(
   const [expensePending] = await db
     .insert(expenses)
     .values({
+      companyId,
       description: "[PROMO] Client lunch — Harbor Digital kick-off",
       category: "Meals",
       spentAt: "2026-07-03",
@@ -400,6 +420,7 @@ export async function seedPromoDemo(
     .returning();
 
   await db.insert(inboundEmailJobs).values({
+    companyId,
     resendEmailId: "promo-email-receipt-001",
     fromEmail: "founder@studio.example",
     toEmail: "expenses@dotanddashconsulting.com",
@@ -412,6 +433,7 @@ export async function seedPromoDemo(
   const [expenseReimbursable] = await db
     .insert(expenses)
     .values({
+      companyId,
       description: "[PROMO] Train to client workshop — Leeds",
       category: "Travel",
       spentAt: "2026-07-08",
@@ -427,6 +449,7 @@ export async function seedPromoDemo(
   const [reimbursement] = await db
     .insert(reimbursements)
     .values({
+      companyId,
       payeeUserId: admin.id,
       status: "pending",
       totalPence: 8_420,
@@ -439,11 +462,15 @@ export async function seedPromoDemo(
     expenseId: expenseReimbursable.id,
   });
 
-  let [bankAccount] = await db.select().from(bankAccounts).limit(1);
+  let [bankAccount] = await db
+    .select()
+    .from(bankAccounts)
+    .where(eq(bankAccounts.companyId, companyId))
+    .limit(1);
   if (!bankAccount) {
     [bankAccount] = await db
       .insert(bankAccounts)
-      .values({ name: "Starling Business" })
+      .values({ companyId, name: "Starling Business" })
       .returning();
   }
 

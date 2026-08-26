@@ -27,7 +27,7 @@ import {
   getIncomeByMonth,
   getProfitAndLoss,
 } from "@/lib/reports/queries";
-import { getOrCreateCompanySettings } from "@/lib/settings/queries";
+import { getCompanySettings } from "@/lib/settings/queries";
 import {
   getSpendingSeries,
   getSpendingSummary,
@@ -266,12 +266,13 @@ function buildKpiGroups(input: {
 }
 
 export async function getDashboardOverview(
+  companyId: string,
   user: SessionUser,
 ): Promise<DashboardOverviewData> {
-  const settings = await getOrCreateCompanySettings();
+  const settings = await getCompanySettings(companyId);
   const trailing = trailingMonthsRange(6);
   const spendingPeriod = resolvePeriod("current-month", settings.financialYearEndMonth);
-  const fyPeriod = await defaultReportPeriod();
+  const fyPeriod = await defaultReportPeriod(companyId);
 
   const [
     invoiceKpis,
@@ -292,34 +293,36 @@ export async function getDashboardOverview(
     pendingExpenses,
     inboundEmailIssues,
   ] = await Promise.all([
-    getDashboardKpis(),
-    countOverdueInvoices(),
-    getOwedSummary(user),
-    getQuotesSummary({}),
-    getOrdersSummary(),
-    getAgedReceivables(),
-    getReimbursableSummary(),
-    countUnreconciledBankTransactions(),
-    getProfitAndLoss(fyPeriod.from, fyPeriod.to),
-    getIncomeByMonth(trailing.from, trailing.to),
-    getExpenseByMonth(trailing.from, trailing.to),
-    getSpendingSummary({
+    getDashboardKpis(companyId),
+    countOverdueInvoices(companyId),
+    getOwedSummary(companyId, user),
+    getQuotesSummary(companyId, {}),
+    getOrdersSummary(companyId),
+    getAgedReceivables(companyId),
+    getReimbursableSummary(companyId),
+    countUnreconciledBankTransactions(companyId),
+    getProfitAndLoss(companyId, fyPeriod.from, fyPeriod.to),
+    getIncomeByMonth(companyId, trailing.from, trailing.to),
+    getExpenseByMonth(companyId, trailing.from, trailing.to),
+    getSpendingSummary(companyId, {
       from: spendingPeriod.from,
       to: spendingPeriod.to,
       compareFrom: spendingPeriod.compareFrom,
       compareTo: spendingPeriod.compareTo,
     }),
-    getSpendingSeries({
+    getSpendingSeries(companyId, {
       from: spendingPeriod.from,
       to: spendingPeriod.to,
       compareFrom: spendingPeriod.compareFrom,
       compareTo: spendingPeriod.compareTo,
       buckets: spendingPeriod.buckets,
     }),
-    listOverdueInvoices(5),
-    listExpiringQuotes(5),
-    listPendingExpenses(5),
-    can(user.role, "users:manage") ? listInboundEmailIssues(5) : Promise.resolve([]),
+    listOverdueInvoices(companyId, 5),
+    listExpiringQuotes(companyId, 5),
+    listPendingExpenses(companyId, 5),
+    can(user.role, "users:manage")
+      ? listInboundEmailIssues(companyId, 5)
+      : Promise.resolve([]),
   ]);
 
   const fyLabel = "FY";

@@ -10,8 +10,57 @@ export type ReceiptExtraction = {
   spentAt?: string;
   category?: ExpenseCategory;
   merchant?: string;
+  /** ISO-ish currency code detected on the receipt, e.g. GBP, USD, EUR. */
+  currency?: string;
   confidence: "high" | "partial" | "none";
 };
+
+/** True when a detected currency is present and not sterling. */
+export function isForeignCurrency(code: string | null | undefined): boolean {
+  if (!code) return false;
+  return code.trim().toUpperCase() !== "GBP";
+}
+
+const CURRENCY_MARKERS: { code: string; patterns: RegExp[] }[] = [
+  { code: "GBP", patterns: [/£/, /\bGBP\b/i, /\bpounds?\b/i, /\bsterling\b/i] },
+  { code: "USD", patterns: [/\$/, /\bUSD\b/i, /\bUS\$/i, /\bdollars?\b/i] },
+  { code: "EUR", patterns: [/€/, /\bEUR\b/i, /\beuros?\b/i] },
+  { code: "AUD", patterns: [/\bAUD\b/i, /\bA\$/] },
+  { code: "CAD", patterns: [/\bCAD\b/i, /\bC\$/] },
+  { code: "CHF", patterns: [/\bCHF\b/i] },
+  { code: "JPY", patterns: [/¥/, /\bJPY\b/i, /\byen\b/i] },
+  { code: "INR", patterns: [/₹/, /\bINR\b/i, /\brupees?\b/i] },
+  { code: "SEK", patterns: [/\bSEK\b/i] },
+  { code: "NOK", patterns: [/\bNOK\b/i] },
+  { code: "DKK", patterns: [/\bDKK\b/i] },
+  { code: "PLN", patterns: [/\bPLN\b/i, /\bzł/i] },
+];
+
+/**
+ * Detect currency markers in OCR / email text.
+ * If any non-GBP currency is present, returns that code (first match) so
+ * reviewers can be warned; otherwise returns GBP when sterling is found.
+ */
+export function detectReceiptCurrency(text: string): string | undefined {
+  if (!text.trim()) return undefined;
+  const found: string[] = [];
+  for (const { code, patterns } of CURRENCY_MARKERS) {
+    if (patterns.some((re) => re.test(text))) {
+      found.push(code);
+    }
+  }
+  if (found.length === 0) return undefined;
+  return found.find((c) => c !== "GBP") ?? "GBP";
+}
+
+export function normalizeCurrencyCode(
+  raw: string | null | undefined,
+): string | undefined {
+  if (!raw) return undefined;
+  const trimmed = raw.trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(trimmed)) return undefined;
+  return trimmed;
+}
 
 const MONTHS: Record<string, number> = {
   jan: 1,
@@ -215,6 +264,7 @@ export function parseReceiptText(text: string): ReceiptExtraction {
   const amountPounds = parseReceiptAmount(text);
   const spentAt = parseReceiptDate(text);
   const category = inferReceiptCategory(text);
+  const currency = detectReceiptCurrency(text);
   const description = merchant;
 
   const fields = [description, amountPounds, spentAt, category].filter(Boolean);
@@ -228,6 +278,7 @@ export function parseReceiptText(text: string): ReceiptExtraction {
     spentAt,
     category,
     merchant,
+    currency,
     confidence,
   };
 }
@@ -238,12 +289,14 @@ export function normalizeAiExtraction(raw: {
   spentAt?: string | null;
   category?: string | null;
   merchant?: string | null;
+  currency?: string | null;
 }): ReceiptExtraction {
   const description = raw.description?.trim() || raw.merchant?.trim() || undefined;
   const amountPounds = raw.amountPounds?.trim() || undefined;
   const spentAt = raw.spentAt?.match(/^\d{4}-\d{2}-\d{2}$/) ? raw.spentAt : undefined;
   const category =
     raw.category && isExpenseCategory(raw.category) ? raw.category : undefined;
+  const currency = normalizeCurrencyCode(raw.currency);
 
   const fields = [description, amountPounds, spentAt, category].filter(Boolean);
   let confidence: ReceiptExtraction["confidence"] = "none";
@@ -256,6 +309,7 @@ export function normalizeAiExtraction(raw: {
     spentAt,
     category,
     merchant: raw.merchant?.trim() || undefined,
+    currency,
     confidence,
   };
 }

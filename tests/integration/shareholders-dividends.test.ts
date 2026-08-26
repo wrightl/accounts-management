@@ -9,14 +9,18 @@ import {
   shareholders,
 } from "@/db/schema";
 import { splitDividendPence } from "@/lib/dividends/split";
+import { seedCompany } from "@/lib/test/seed-company";
 
 let ctx: Awaited<ReturnType<typeof createTestDb>>;
 let db: TestDatabase;
+let companyId: string;
 
 beforeEach(async () => {
   ctx = await createTestDb();
   db = ctx.db;
   setTestDb(db as unknown as Database);
+  const company = await seedCompany(db);
+  companyId = company.id;
 });
 
 afterEach(async () => {
@@ -26,22 +30,25 @@ afterEach(async () => {
 
 describe("shareholders + dividend declare integration", () => {
   it("creates balanced register and pro-rata payouts", async () => {
-    const [settings] = await db.select().from(companySettings).limit(1);
+    const [settings] = await db
+      .select()
+      .from(companySettings)
+      .where(eq(companySettings.id, companyId));
     expect(settings).toBeTruthy();
 
     const [a] = await db
       .insert(shareholders)
-      .values({ name: "Lee", shareCount: 60 })
+      .values({ companyId, name: "Lee", shareCount: 60 })
       .returning();
     const [b] = await db
       .insert(shareholders)
-      .values({ name: "Partner", shareCount: 40 })
+      .values({ companyId, name: "Partner", shareCount: 40 })
       .returning();
 
     await db
       .update(companySettings)
       .set({ totalShares: 100 })
-      .where(eq(companySettings.id, settings!.id));
+      .where(eq(companySettings.id, companyId));
 
     const totalPence = 10_000;
     const splits = splitDividendPence(
@@ -56,6 +63,7 @@ describe("shareholders + dividend declare integration", () => {
     const [decl] = await db
       .insert(dividendDeclarations)
       .values({
+        companyId,
         declaredAt: "2026-04-01",
         totalPence,
         notes: "Q1",
@@ -88,8 +96,9 @@ describe("shareholders + dividend declare integration", () => {
 
   it("excludes archived shareholders from active sum", async () => {
     await db.insert(shareholders).values([
-      { name: "Active", shareCount: 50 },
+      { companyId, name: "Active", shareCount: 50 },
       {
+        companyId,
         name: "Gone",
         shareCount: 50,
         archivedAt: new Date(),

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { guardPage, hasPermission } from "@/lib/auth";
+import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { getClient } from "@/lib/clients/queries";
 import { clientDisplayName } from "@/lib/clients/display";
 import { ClientForm } from "@/components/clients/client-form";
@@ -12,13 +12,13 @@ export default async function EditClientPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await guardPage("accounts:read");
+  const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
   const { id } = await params;
 
   if (!isDatabaseConfigured()) notFound();
 
-  const client = await getClient(id);
+  const client = await getClient(companyId, id);
   if (!client) notFound();
 
   return (

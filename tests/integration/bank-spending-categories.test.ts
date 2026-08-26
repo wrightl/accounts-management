@@ -9,21 +9,25 @@ import {
   listBankSpendingCategoriesWithUsage,
   upsertBankSpendingCategory,
 } from "@/lib/bank/spending-categories";
+import { seedCompany } from "@/lib/test/seed-company";
 
 vi.mock("server-only", () => ({}));
 
 let ctx: Awaited<ReturnType<typeof createTestDb>>;
 let db: TestDatabase;
 let accountId: string;
+let companyId: string;
 
 beforeEach(async () => {
   ctx = await createTestDb();
   db = ctx.db;
   setTestDb(db as unknown as Database);
+  const company = await seedCompany(db);
+  companyId = company.id;
 
   const [account] = await db
     .insert(bankAccounts)
-    .values({ name: "Starling Business" })
+    .values({ companyId, name: "Starling Business" })
     .returning();
   accountId = account.id;
 });
@@ -35,8 +39,8 @@ afterEach(async () => {
 
 describe("bank spending categories", () => {
   it("upserts custom labels and reuses canonical spelling", async () => {
-    const first = await upsertBankSpendingCategory("Client hospitality");
-    const second = await upsertBankSpendingCategory("client hospitality");
+    const first = await upsertBankSpendingCategory(companyId, "Client hospitality");
+    const second = await upsertBankSpendingCategory(companyId, "client hospitality");
 
     expect(first).toBe("Client hospitality");
     expect(second).toBe("Client hospitality");
@@ -47,7 +51,7 @@ describe("bank spending categories", () => {
   });
 
   it("does not catalog built-in Starling categories", async () => {
-    const value = await upsertBankSpendingCategory("TRAVEL");
+    const value = await upsertBankSpendingCategory(companyId, "TRAVEL");
     expect(value).toBe("TRAVEL");
 
     const rows = await db.select().from(bankSpendingCategories);
@@ -65,7 +69,7 @@ describe("bank spending categories", () => {
       })
       .returning();
 
-    await updateTransactionCategory(tx.id, "Conference travel");
+    await updateTransactionCategory(companyId, tx.id, "Conference travel");
 
     const [updated] = await db
       .select()
@@ -73,14 +77,14 @@ describe("bank spending categories", () => {
       .where(eq(bankTransactions.id, tx.id));
     expect(updated?.spendingCategory).toBe("Conference travel");
 
-    const catalog = await listBankSpendingCategoriesWithUsage();
+    const catalog = await listBankSpendingCategoriesWithUsage(companyId);
     expect(catalog).toHaveLength(1);
     expect(catalog[0]?.name).toBe("Conference travel");
     expect(catalog[0]?.usageCount).toBe(1);
   });
 
   it("catalogues unknown labels during CSV import", async () => {
-    await importBankRows(accountId, [
+    await importBankRows(companyId, accountId, [
       {
         externalId: "import-1",
         bookedAt: "2026-08-23",
@@ -94,7 +98,7 @@ describe("bank spending categories", () => {
       },
     ]);
 
-    const catalog = await listBankSpendingCategoriesWithUsage();
+    const catalog = await listBankSpendingCategoriesWithUsage(companyId);
     expect(catalog.map((c) => c.name)).toContain("Office supplies");
   });
 
@@ -102,14 +106,14 @@ describe("bank spending categories", () => {
     const unusedId = (
       await db
         .insert(bankSpendingCategories)
-        .values({ name: "Legacy label" })
+        .values({ companyId, name: "Legacy label" })
         .returning({ id: bankSpendingCategories.id })
     )[0]?.id;
 
     const usedId = (
       await db
         .insert(bankSpendingCategories)
-        .values({ name: "Active label" })
+        .values({ companyId, name: "Active label" })
         .returning({ id: bankSpendingCategories.id })
     )[0]?.id;
 
@@ -124,10 +128,10 @@ describe("bank spending categories", () => {
     expect(unusedId).toBeDefined();
     expect(usedId).toBeDefined();
 
-    const blocked = await deleteUnusedBankSpendingCategory(usedId!);
+    const blocked = await deleteUnusedBankSpendingCategory(companyId, usedId!);
     expect(blocked.ok).toBe(false);
 
-    const removed = await deleteUnusedBankSpendingCategory(unusedId!);
+    const removed = await deleteUnusedBankSpendingCategory(companyId, unusedId!);
     expect(removed.ok).toBe(true);
 
     const remaining = await db.select().from(bankSpendingCategories);

@@ -5,7 +5,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label, Select, Textarea } from "@/components/ui/form";
 import { financialYearStartMonth } from "@/lib/dates";
-import { updateCompany, uploadLogo } from "@/actions/settings";
+import { updateCompany } from "@/actions/settings";
 import {
   CUSTOM_RECEIPT_OCR_MODEL,
   DEFAULT_RECEIPT_OCR_MODEL,
@@ -33,9 +33,11 @@ export function SettingsForm({
   ocrModels = [],
 }: {
   settings: {
+    entityType: "limited_company" | "sole_trader";
     name: string;
     legalName: string;
     companyNumber: string | null;
+    utr: string | null;
     addressLines: string | null;
     email: string | null;
     bankName: string;
@@ -89,7 +91,7 @@ export function SettingsForm({
         }}
         className="space-y-4"
       >
-        <h2 className="font-display text-lg font-semibold">Company profile</h2>
+        <h2 className="font-display text-lg font-semibold">{settings.entityType === "sole_trader" ? "Business profile" : "Company profile"}</h2>
         <div>
           <Label htmlFor="name">Trading name</Label>
           <Input id="name" name="name" required defaultValue={settings.name} disabled={pending} />
@@ -104,15 +106,27 @@ export function SettingsForm({
             disabled={pending}
           />
         </div>
-        <div>
-          <Label htmlFor="companyNumber">Company number</Label>
-          <Input
-            id="companyNumber"
-            name="companyNumber"
-            defaultValue={settings.companyNumber ?? ""}
-            disabled={pending}
-          />
-        </div>
+        {settings.entityType === "limited_company" ? (
+          <div>
+            <Label htmlFor="companyNumber">Company number</Label>
+            <Input
+              id="companyNumber"
+              name="companyNumber"
+              defaultValue={settings.companyNumber ?? ""}
+              disabled={pending}
+            />
+          </div>
+        ) : (
+          <div>
+            <Label htmlFor="utr">UTR (optional)</Label>
+            <Input
+              id="utr"
+              name="utr"
+              defaultValue={settings.utr ?? ""}
+              disabled={pending}
+            />
+          </div>
+        )}
         <div>
           <Label htmlFor="addressLines">Address</Label>
           <Textarea
@@ -153,6 +167,23 @@ export function SettingsForm({
             Year runs{" "}
             {MONTHS[financialYearStartMonth(settings.financialYearEndMonth) - 1]}–
             {MONTHS[settings.financialYearEndMonth - 1]}.
+          </p>
+        </div>
+        <div className="space-y-3 rounded-xl border border-border bg-surface/50 p-4">
+          <Label htmlFor="logo">Logo (optional)</Label>
+          {settings.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- private storage preview
+            <img
+              src={`/api/company/logo?v=${encodeURIComponent(settings.logoUrl)}`}
+              alt="Company logo"
+              className="max-h-24 rounded-md border border-border bg-surface object-contain p-2"
+            />
+          ) : (
+            <p className="text-sm text-muted">No logo uploaded yet.</p>
+          )}
+          <Input id="logo" name="logo" type="file" accept="image/*" disabled={pending} />
+          <p className="text-xs text-muted">
+            Shown in the navigation and on invoices. PNG or JPG, under 2 MB. Leave empty to keep the current logo.
           </p>
         </div>
 
@@ -318,37 +349,6 @@ export function SettingsForm({
         </Button>
       </form>
 
-      <form
-        action={(formData) => {
-          setError(null);
-          setMessage(null);
-          startTransition(async () => {
-            const result = await uploadLogo(formData);
-            if (!result.ok) setError(result.error);
-            else {
-              setMessage("Logo uploaded.");
-              router.refresh();
-            }
-          });
-        }}
-        className="space-y-3 border-t border-border pt-8"
-      >
-        <h2 className="font-display text-lg font-semibold">Logo</h2>
-        {settings.logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- private storage preview
-          <img
-            src={`/api/company/logo?v=${encodeURIComponent(settings.logoUrl)}`}
-            alt="Company logo"
-            className="max-h-24 rounded-md border border-border bg-surface object-contain p-2"
-          />
-        ) : (
-          <p className="text-sm text-muted">No logo uploaded yet.</p>
-        )}
-        <Input id="logo" name="logo" type="file" accept="image/*" disabled={pending} />
-        <Button type="submit" variant="secondary" disabled={pending}>
-          Upload logo
-        </Button>
-      </form>
     </div>
   );
 }

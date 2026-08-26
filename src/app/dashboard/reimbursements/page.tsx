@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { guardPage, hasPermission } from "@/lib/auth";
+import { guardTenantPage, hasPermission } from "@/lib/auth";
 import {
   getReimbursementBalances,
   listReimbursements,
@@ -26,7 +26,7 @@ export default async function ReimbursementsPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  await guardPage("accounts:read");
+  const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
   const sp = await searchParams;
   const runFilter = sp.filter === "paid" ? "paid" : sp.filter === "pending" ? "pending" : "all";
@@ -41,9 +41,9 @@ export default async function ReimbursementsPage({
   }
 
   const [allRuns, balances, founders] = await Promise.all([
-    listReimbursements(),
-    getReimbursementBalances(),
-    listFounders(),
+    listReimbursements(companyId),
+    getReimbursementBalances(companyId),
+    listFounders(companyId),
   ]);
 
   const runs =

@@ -7,16 +7,20 @@ import {
   listBankTransactions,
 } from "@/lib/bank/queries";
 import { getBankTransactionSummary } from "@/lib/bank/summary";
+import { seedCompany } from "@/lib/test/seed-company";
 
 vi.mock("server-only", () => ({}));
 
 let ctx: Awaited<ReturnType<typeof createTestDb>>;
 let db: TestDatabase;
+let companyId: string;
 
 beforeEach(async () => {
   ctx = await createTestDb();
   db = ctx.db;
   setTestDb(db as unknown as Database);
+  const company = await seedCompany(db);
+  companyId = company.id;
 });
 
 afterEach(async () => {
@@ -27,7 +31,7 @@ afterEach(async () => {
 async function seedTransactions() {
   const [account] = await db
     .insert(bankAccounts)
-    .values({ name: "Starling Business" })
+    .values({ companyId, name: "Starling Business" })
     .returning();
 
   const rows = [
@@ -76,14 +80,14 @@ async function seedTransactions() {
 describe("listBankTransactions paging and filters", () => {
   it("returns only the requested page from the server", async () => {
     await seedTransactions();
-    const page1 = await listBankTransactions({ page: 1, pageSize: 2 });
+    const page1 = await listBankTransactions(companyId, { page: 1, pageSize: 2 });
     expect(page1.total).toBe(4);
     expect(page1.pageCount).toBe(2);
     expect(page1.rows).toHaveLength(2);
     expect(page1.rows[0].bookedAt).toBe("2026-08-23");
     expect(page1.rows[1].bookedAt).toBe("2026-08-22");
 
-    const page2 = await listBankTransactions({ page: 2, pageSize: 2 });
+    const page2 = await listBankTransactions(companyId, { page: 2, pageSize: 2 });
     expect(page2.rows).toHaveLength(2);
     expect(page2.rows[0].bookedAt).toBe("2026-08-01");
     expect(page2.page).toBe(2);
@@ -92,19 +96,25 @@ describe("listBankTransactions paging and filters", () => {
   it("filters by type, category, search, and date range on the server", async () => {
     await seedTransactions();
 
-    const incoming = await listBankTransactions({ type: "incoming", pageSize: 10 });
+    const incoming = await listBankTransactions(companyId, {
+      type: "incoming",
+      pageSize: 10,
+    });
     expect(incoming.total).toBe(1);
     expect(incoming.rows[0].counterparty).toBe("Acme Ltd");
 
-    const travel = await listBankTransactions({ category: "TRAVEL", pageSize: 10 });
+    const travel = await listBankTransactions(companyId, {
+      category: "TRAVEL",
+      pageSize: 10,
+    });
     expect(travel.total).toBe(1);
     expect(travel.rows[0].counterparty).toBe("Trainline");
 
-    const search = await listBankTransactions({ q: "aws", pageSize: 10 });
+    const search = await listBankTransactions(companyId, { q: "aws", pageSize: 10 });
     expect(search.total).toBe(1);
     expect(search.rows[0].counterparty).toBe("AWS");
 
-    const ranged = await listBankTransactions({
+    const ranged = await listBankTransactions(companyId, {
       from: "2026-08-01",
       to: "2026-08-31",
       pageSize: 10,
@@ -133,15 +143,18 @@ describe("listBankTransactions paging and filters", () => {
       confirmed: true,
     });
 
-    const all = await listBankTransactions({ pageSize: 10 });
+    const all = await listBankTransactions(companyId, { pageSize: 10 });
     expect(all.total).toBe(5);
 
-    const reconciled = await listBankTransactions({ reconciliation: "reconciled", pageSize: 10 });
+    const reconciled = await listBankTransactions(companyId, {
+      reconciliation: "reconciled",
+      pageSize: 10,
+    });
     expect(reconciled.total).toBe(1);
     expect(reconciled.rows[0].counterparty).toBe("Settled Co");
     expect(reconciled.rows[0].reconciled).toBe(true);
 
-    const unreconciled = await listBankTransactions({
+    const unreconciled = await listBankTransactions(companyId, {
       reconciliation: "unreconciled",
       pageSize: 10,
     });
@@ -151,7 +164,7 @@ describe("listBankTransactions paging and filters", () => {
 
   it("counts unreconciled rows independently of the current page", async () => {
     await seedTransactions();
-    const unreconciled = await countUnreconciledBankTransactions();
+    const unreconciled = await countUnreconciledBankTransactions(companyId);
     expect(unreconciled).toBe(4);
   });
 });
@@ -160,7 +173,7 @@ describe("getBankTransactionSummary", () => {
   it("aggregates incoming, outgoing, and net across all matching rows", async () => {
     await seedTransactions();
 
-    const summary = await getBankTransactionSummary({});
+    const summary = await getBankTransactionSummary(companyId, {});
     expect(summary.totalCount).toBe(4);
     expect(summary.incomingPence).toBe(12_000);
     expect(summary.outgoingPence).toBe(15_600);
@@ -178,7 +191,7 @@ describe("getBankTransactionSummary", () => {
   it("respects the same filters as the transaction list", async () => {
     await seedTransactions();
 
-    const summary = await getBankTransactionSummary({ type: "incoming" });
+    const summary = await getBankTransactionSummary(companyId, { type: "incoming" });
     expect(summary.totalCount).toBe(1);
     expect(summary.incomingPence).toBe(12_000);
     expect(summary.outgoingPence).toBe(0);

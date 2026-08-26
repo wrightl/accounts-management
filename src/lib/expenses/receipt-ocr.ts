@@ -100,6 +100,7 @@ async function runAiGatewayOcr(
     amountPounds: z.string().nullable(),
     spentAt: z.string().nullable(),
     category: z.enum(EXPENSE_CATEGORIES).nullable(),
+    currency: z.string().nullable(),
   });
 
   const mediaType = isPdfContent(bytes, contentType) ? "application/pdf" : contentType;
@@ -117,12 +118,13 @@ async function runAiGatewayOcr(
         content: [
           {
             type: "text",
-            text: `Extract expense details from this UK receipt. Return JSON fields:
+            text: `Extract expense details from this receipt. Return JSON fields:
 - merchant: store or vendor name
 - description: short expense description (merchant + brief context)
-- amountPounds: total paid in GBP as decimal string e.g. "12.50"
+- amountPounds: total paid as a decimal string e.g. "12.50" (numeric amount only)
 - spentAt: transaction date as YYYY-MM-DD if visible
 - category: best match from ${EXPENSE_CATEGORIES.join(", ")}
+- currency: ISO 4217 currency code of the total (e.g. GBP, USD, EUR). Use null if unclear.
 Use null for any field you cannot determine confidently.`,
           },
           filePart,

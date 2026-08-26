@@ -50,28 +50,46 @@ import {
 } from "@/lib/invoices/status";
 import { clientDisplayName } from "@/lib/clients/display";
 
-export async function getOrCreateDefaultBankAccount() {
+export async function getOrCreateDefaultBankAccount(companyId: string) {
   const db = getDb();
-  const existing = await db.select().from(bankAccounts).limit(1);
+  const existing = await db
+    .select()
+    .from(bankAccounts)
+    .where(eq(bankAccounts.companyId, companyId))
+    .limit(1);
   if (existing[0]) return existing[0];
   const [created] = await db
     .insert(bankAccounts)
-    .values({ name: "Starling Business", provider: "starling" })
+    .values({
+      companyId,
+      name: "Starling Business",
+      provider: "starling",
+    })
     .returning();
   return created;
 }
 
 export async function importBankRows(
+  companyId: string,
   accountId: string,
   rows: ParsedBankRow[],
 ): Promise<{ inserted: number; skipped: number }> {
   const db = getDb();
+  const [account] = await db
+    .select({ id: bankAccounts.id })
+    .from(bankAccounts)
+    .where(and(eq(bankAccounts.id, accountId), eq(bankAccounts.companyId, companyId)))
+    .limit(1);
+  if (!account) {
+    throw new Error("Bank account not found for company");
+  }
+
   let inserted = 0;
   let skipped = 0;
 
   for (const row of rows) {
     const spendingCategory = row.spendingCategory
-      ? await upsertBankSpendingCategory(row.spendingCategory)
+      ? await upsertBankSpendingCategory(companyId, row.spendingCategory)
       : null;
 
     try {
@@ -209,11 +227,14 @@ const confirmedReconciliationExists = sql`EXISTS (
 )`;
 
 export function bankListWhere(
+  companyId: string,
   filters: Partial<
     Pick<BankListParams, "q" | "type" | "category" | "reconciliation" | "from" | "to">
   >,
 ): SQL | undefined {
-  const conditions: SQL[] = [];
+  const conditions: SQL[] = [
+    sql`${bankTransactions.bankAccountId} in (select id from ${bankAccounts} where ${bankAccounts.companyId} = ${companyId})`,
+  ];
   const pattern = filters.q ? bankSearchPattern(filters.q) : null;
   if (pattern) {
     const search = or(
@@ -344,6 +365,7 @@ async function buildMatchLabels(
 }
 
 export async function listBankTransactions(
+  companyId: string,
   filters: Partial<
     Pick<BankListParams, "q" | "type" | "category" | "reconciliation" | "from" | "to" | "page">
   > & {
@@ -352,7 +374,7 @@ export async function listBankTransactions(
 ): Promise<BankTransactionListResult> {
   const db = getDb();
   const pageSize = filters.pageSize ?? BANK_PAGE_SIZE;
-  const where = bankListWhere(filters);
+  const where = bankListWhere(companyId, filters);
 
   const [countRow] = await db
     .select({ total: count() })
@@ -414,11 +436,14 @@ export async function listBankTransactions(
 }
 
 /** Unreconciled count across the whole ledger (ignores list filters). */
-export async function countUnreconciledBankTransactions(): Promise<number> {
+export async function countUnreconciledBankTransactions(
+  companyId: string,
+): Promise<number> {
   const db = getDb();
   const [row] = await db
     .select({ total: count() })
     .from(bankTransactions)
+    .innerJoin(bankAccounts, eq(bankTransactions.bankAccountId, bankAccounts.id))
     .leftJoin(
       reconciliationMatches,
       and(
@@ -426,7 +451,9 @@ export async function countUnreconciledBankTransactions(): Promise<number> {
         eq(reconciliationMatches.confirmed, true),
       ),
     )
-    .where(isNull(reconciliationMatches.id));
+    .where(
+      and(eq(bankAccounts.companyId, companyId), isNull(reconciliationMatches.id)),
+    );
   return row?.total ?? 0;
 }
 
@@ -452,6 +479,7 @@ function toSuggestedTx(tx: typeof bankTransactions.$inferSelect) {
 
 async function findIncomingMatch(
   db: ReturnType<typeof getDb>,
+  companyId: string,
   tx: typeof bankTransactions.$inferSelect,
 ) {
   const txLike = txLikeFromRow(tx);
@@ -469,7 +497,9 @@ async function findIncomingMatch(
     .from(payments)
     .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
     .innerJoin(clients, eq(invoices.clientId, clients.id))
-    .where(eq(payments.amountPence, tx.amountPence));
+    .where(
+      and(eq(invoices.companyId, companyId), eq(payments.amountPence, tx.amountPence)),
+    );
 
   const paymentMatch = pickBestMatch(
     txLike,
@@ -497,7 +527,12 @@ async function findIncomingMatch(
     })
     .from(invoices)
     .innerJoin(clients, eq(invoices.clientId, clients.id))
-    .where(or(eq(invoices.status, "sent"), eq(invoices.status, "overdue")));
+    .where(
+      and(
+        eq(invoices.companyId, companyId),
+        or(eq(invoices.status, "sent"), eq(invoices.status, "overdue")),
+      ),
+    );
 
   const today = todayIsoDate();
   const invoiceCandidates = [];
@@ -596,22 +631,25 @@ async function findIncomingMatch(
 /**
  * Suggest matches: incoming tx → payment or unpaid invoice; outgoing tx → reimbursement or company-paid expense.
  */
-export async function suggestMatches(): Promise<SuggestedMatch[]> {
+export async function suggestMatches(companyId: string): Promise<SuggestedMatch[]> {
   const db = getDb();
   const unmatched = await db
     .select({ tx: bankTransactions })
     .from(bankTransactions)
+    .innerJoin(bankAccounts, eq(bankTransactions.bankAccountId, bankAccounts.id))
     .leftJoin(
       reconciliationMatches,
       eq(reconciliationMatches.bankTransactionId, bankTransactions.id),
     )
-    .where(isNull(reconciliationMatches.id));
+    .where(
+      and(eq(bankAccounts.companyId, companyId), isNull(reconciliationMatches.id)),
+    );
 
   const created: SuggestedMatch[] = [];
 
   for (const { tx } of unmatched) {
     if (tx.amountPence > 0) {
-      const incoming = await findIncomingMatch(db, tx);
+      const incoming = await findIncomingMatch(db, companyId, tx);
       if (!incoming) continue;
 
       if (incoming.kind === "payment") {
@@ -685,7 +723,11 @@ export async function suggestMatches(): Promise<SuggestedMatch[]> {
         .from(reimbursements)
         .innerJoin(users, eq(reimbursements.payeeUserId, users.id))
         .where(
-          and(eq(reimbursements.status, "pending"), eq(reimbursements.totalPence, amount)),
+          and(
+            eq(reimbursements.companyId, companyId),
+            eq(reimbursements.status, "pending"),
+            eq(reimbursements.totalPence, amount),
+          ),
         );
 
       const reimbMatch =
@@ -756,7 +798,13 @@ export async function suggestMatches(): Promise<SuggestedMatch[]> {
       const candidates = await db
         .select()
         .from(expenses)
-        .where(and(eq(expenses.amountPence, amount), eq(expenses.status, "company_paid")));
+        .where(
+          and(
+            eq(expenses.companyId, companyId),
+            eq(expenses.amountPence, amount),
+            eq(expenses.status, "company_paid"),
+          ),
+        );
 
       const match = pickBestMatch(
         txLike,
@@ -961,19 +1009,27 @@ export async function dismissMatchesBatch(matchIds: string[]) {
 }
 
 /** Incoming bank transactions not linked to any reconciliation match. */
-export async function listUnmatchedIncomingTransactions() {
+export async function listUnmatchedIncomingTransactions(companyId: string) {
   const db = getDb();
   return db
     .select({ tx: bankTransactions })
     .from(bankTransactions)
+    .innerJoin(bankAccounts, eq(bankTransactions.bankAccountId, bankAccounts.id))
     .leftJoin(
       reconciliationMatches,
       eq(reconciliationMatches.bankTransactionId, bankTransactions.id),
     )
-    .where(and(isNull(reconciliationMatches.id), gt(bankTransactions.amountPence, 0)));
+    .where(
+      and(
+        eq(bankAccounts.companyId, companyId),
+        isNull(reconciliationMatches.id),
+        gt(bankTransactions.amountPence, 0),
+      ),
+    );
 }
 
 export async function findBankTransactionsForInvoice(
+  companyId: string,
   invoiceId: string,
 ): Promise<InvoiceBankMatch[]> {
   const db = getDb();
@@ -981,7 +1037,7 @@ export async function findBankTransactionsForInvoice(
     .select({ invoice: invoices, client: clients })
     .from(invoices)
     .innerJoin(clients, eq(invoices.clientId, clients.id))
-    .where(eq(invoices.id, invoiceId))
+    .where(and(eq(invoices.id, invoiceId), eq(invoices.companyId, companyId)))
     .limit(1);
   if (!rows[0]) return [];
 
@@ -1001,7 +1057,7 @@ export async function findBankTransactionsForInvoice(
     issueDate: invoice.issueDate,
   };
 
-  const unmatched = await listUnmatchedIncomingTransactions();
+  const unmatched = await listUnmatchedIncomingTransactions(companyId);
   const scored: InvoiceBankMatch[] = [];
 
   for (const { tx } of unmatched) {
@@ -1025,19 +1081,27 @@ export async function findBankTransactionsForInvoice(
 }
 
 /** Outgoing bank transactions not linked to any reconciliation match. */
-export async function listUnmatchedOutgoingTransactions() {
+export async function listUnmatchedOutgoingTransactions(companyId: string) {
   const db = getDb();
   return db
     .select({ tx: bankTransactions })
     .from(bankTransactions)
+    .innerJoin(bankAccounts, eq(bankTransactions.bankAccountId, bankAccounts.id))
     .leftJoin(
       reconciliationMatches,
       eq(reconciliationMatches.bankTransactionId, bankTransactions.id),
     )
-    .where(and(isNull(reconciliationMatches.id), lt(bankTransactions.amountPence, 0)));
+    .where(
+      and(
+        eq(bankAccounts.companyId, companyId),
+        isNull(reconciliationMatches.id),
+        lt(bankTransactions.amountPence, 0),
+      ),
+    );
 }
 
 export async function findReimbursementBankMatches(
+  companyId: string,
   reimbursementId: string,
 ): Promise<ReimbursementBankMatch[]> {
   const db = getDb();
@@ -1049,13 +1113,18 @@ export async function findReimbursementBankMatches(
     })
     .from(reimbursements)
     .innerJoin(users, eq(reimbursements.payeeUserId, users.id))
-    .where(eq(reimbursements.id, reimbursementId))
+    .where(
+      and(
+        eq(reimbursements.id, reimbursementId),
+        eq(reimbursements.companyId, companyId),
+      ),
+    )
     .limit(1);
   if (!run || run.run.status !== "pending") return [];
 
   const referenceDate = run.run.createdAt.toISOString().slice(0, 10);
   const payeeLabel = run.payeeName || run.payeeEmail;
-  const unmatched = await listUnmatchedOutgoingTransactions();
+  const unmatched = await listUnmatchedOutgoingTransactions(companyId);
   const scored: ReimbursementBankMatch[] = [];
 
   for (const { tx } of unmatched) {
@@ -1085,14 +1154,23 @@ export async function findReimbursementBankMatches(
   return scored;
 }
 
-export async function getBankTransactionById(transactionId: string) {
+export async function getBankTransactionById(
+  companyId: string,
+  transactionId: string,
+) {
   const db = getDb();
   const [row] = await db
-    .select()
+    .select({ tx: bankTransactions })
     .from(bankTransactions)
-    .where(eq(bankTransactions.id, transactionId))
+    .innerJoin(bankAccounts, eq(bankTransactions.bankAccountId, bankAccounts.id))
+    .where(
+      and(
+        eq(bankTransactions.id, transactionId),
+        eq(bankAccounts.companyId, companyId),
+      ),
+    )
     .limit(1);
-  return row ?? null;
+  return row?.tx ?? null;
 }
 
 export async function isBankTransactionAvailable(transactionId: string): Promise<boolean> {
@@ -1106,12 +1184,17 @@ export async function isBankTransactionAvailable(transactionId: string): Promise
 }
 
 export async function updateTransactionCategory(
+  companyId: string,
   transactionId: string,
   spendingCategory: string | null,
 ) {
   const db = getDb();
+  const tx = await getBankTransactionById(companyId, transactionId);
+  if (!tx) throw new Error("Bank transaction not found");
   const resolved =
-    spendingCategory === null ? null : await upsertBankSpendingCategory(spendingCategory);
+    spendingCategory === null
+      ? null
+      : await upsertBankSpendingCategory(companyId, spendingCategory);
   await db
     .update(bankTransactions)
     .set({ spendingCategory: resolved })

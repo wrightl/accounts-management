@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { guardPage, hasPermission } from "@/lib/auth";
+import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { getActiveShareholdersForSplit } from "@/lib/shareholders/queries";
 import { DividendDeclareForm } from "@/components/dividends/dividends-form";
 import { buttonClasses } from "@/components/ui/button";
 import { isDatabaseConfigured } from "@/env";
 
 export default async function NewDividendPage() {
-  await guardPage("accounts:write");
+  const { companyId } = await guardTenantPage("accounts:write");
   const canWrite = await hasPermission("accounts:write");
 
   if (!isDatabaseConfigured()) {
@@ -20,7 +20,7 @@ export default async function NewDividendPage() {
     );
   }
 
-  const split = await getActiveShareholdersForSplit();
+  const split = await getActiveShareholdersForSplit(companyId);
 
   return (
     <div>

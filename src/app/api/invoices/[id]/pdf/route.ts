@@ -16,17 +16,22 @@ export async function GET(
   _request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
+  let user;
   try {
-    await requirePermission("accounts:read");
+    user = await requirePermission("accounts:read");
   } catch (e) {
     if (e instanceof ForbiddenError) {
       return NextResponse.json({ error: e.message }, { status: 403 });
     }
     throw e;
   }
+  if (!user.companyId) {
+    return NextResponse.json({ error: "Complete onboarding first" }, { status: 403 });
+  }
+  const companyId = user.companyId;
 
   const { id } = await context.params;
-  const detail = await getInvoiceDetail(id);
+  const detail = await getInvoiceDetail(companyId, id);
   if (!detail) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -39,11 +44,10 @@ export async function GET(
       const obj = await storage.get(detail.invoice.pdfBlobPath);
       bytes = new Uint8Array(obj.body);
     } catch {
-      // Fall through to regenerate if blob is missing.
-      bytes = await generatePdf(detail);
+      bytes = await generatePdf(companyId, detail);
     }
   } else {
-    bytes = await generatePdf(detail);
+    bytes = await generatePdf(companyId, detail);
   }
 
   const filename = `${detail.invoice.number}.pdf`;
@@ -58,9 +62,10 @@ export async function GET(
 }
 
 async function generatePdf(
+  companyId: string,
   detail: NonNullable<Awaited<ReturnType<typeof getInvoiceDetail>>>,
 ) {
-  const company = await getOrCreateCompanySettings();
+  const company = await getOrCreateCompanySettings(companyId);
   const bytes = await renderInvoicePdf({
     invoice: detail.invoice,
     client: detail.client,
@@ -68,7 +73,6 @@ async function generatePdf(
     company,
   });
 
-  // Cache draft PDFs on first download so subsequent downloads are cheap.
   try {
     const storage = getStorage();
     const stored = await storage.put(

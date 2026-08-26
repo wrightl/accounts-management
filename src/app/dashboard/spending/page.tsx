@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { guardPage } from "@/lib/auth";
+import { guardTenantPage } from "@/lib/auth";
 import { isPeriodPreset, resolvePeriod } from "@/lib/dates";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import {
@@ -23,7 +23,7 @@ export default async function SpendingPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  await guardPage("accounts:read");
+  const { companyId } = await guardTenantPage("accounts:read");
   const sp = await searchParams;
 
   if (!isDatabaseConfigured()) {
@@ -35,7 +35,7 @@ export default async function SpendingPage({
     );
   }
 
-  const settings = await getOrCreateCompanySettings();
+  const settings = await getOrCreateCompanySettings(companyId);
   const periodParam = sp.period ?? "current-month";
   const period = isPeriodPreset(periodParam) ? periodParam : "current-month";
   const breakdown = sp.breakdown === "merchant" ? "merchant" : "category";
@@ -46,26 +46,26 @@ export default async function SpendingPage({
   });
 
   const [summary, series, topRows, hasData] = await Promise.all([
-    getSpendingSummary({
+    getSpendingSummary(companyId, {
       from: resolved.from,
       to: resolved.to,
       compareFrom: resolved.compareFrom,
       compareTo: resolved.compareTo,
     }),
-    getSpendingSeries({
+    getSpendingSeries(companyId, {
       from: resolved.from,
       to: resolved.to,
       compareFrom: resolved.compareFrom,
       compareTo: resolved.compareTo,
       buckets: resolved.buckets,
     }),
-    getTopSpending({
+    getTopSpending(companyId, {
       from: resolved.from,
       to: resolved.to,
       groupBy: breakdown,
       limit: 10,
     }),
-    hasSpendingOutflows(resolved.from, resolved.to),
+    hasSpendingOutflows(companyId, resolved.from, resolved.to),
   ]);
 
   return (

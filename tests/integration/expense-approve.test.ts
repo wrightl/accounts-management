@@ -9,6 +9,7 @@ import {
   updateExpense,
 } from "@/actions/expenses";
 import { isAuthorisedExpenseSender } from "@/lib/expenses/inbound-email";
+import { seedCompany } from "@/lib/test/seed-company";
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -25,11 +26,14 @@ vi.mock("@clerk/nextjs/server", () => ({
 
 let ctx: Awaited<ReturnType<typeof createTestDb>>;
 let db: TestDatabase;
+let companyId: string;
 
 beforeEach(async () => {
   ctx = await createTestDb();
   db = ctx.db;
   setTestDb(db as unknown as Database);
+  const company = await seedCompany(db);
+  companyId = company.id;
 });
 
 afterEach(async () => {
@@ -40,8 +44,18 @@ afterEach(async () => {
 describe("isAuthorisedExpenseSender", () => {
   it("allows admin and user roles only", async () => {
     await db.insert(users).values([
-      { email: "founder@example.com", role: "user", clerkUserId: "u1" },
-      { email: "accountant@example.com", role: "accountant", clerkUserId: "u2" },
+      {
+        companyId,
+        email: "founder@example.com",
+        role: "user",
+        clerkUserId: "u1",
+      },
+      {
+        companyId,
+        email: "accountant@example.com",
+        role: "accountant",
+        clerkUserId: "u2",
+      },
     ]);
 
     expect(await isAuthorisedExpenseSender("founder@example.com")).toBe(true);
@@ -55,6 +69,7 @@ describe("pending expense approval", () => {
     const [founder] = await db
       .insert(users)
       .values({
+        companyId,
         clerkUserId: "user_clerk_1",
         email: "lee@dotanddashconsulting.com",
         name: "Lee",
@@ -64,6 +79,7 @@ describe("pending expense approval", () => {
     const [reviewer] = await db
       .insert(users)
       .values({
+        companyId,
         clerkUserId: "user_clerk_2",
         email: "angel@dotanddashconsulting.com",
         name: "Angel",
@@ -74,6 +90,7 @@ describe("pending expense approval", () => {
     const [expense] = await db
       .insert(expenses)
       .values({
+        companyId,
         description: "Coffee receipt",
         amountPence: 0,
         status: "pending",

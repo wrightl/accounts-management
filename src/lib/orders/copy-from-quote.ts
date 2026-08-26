@@ -38,6 +38,7 @@ type QuoteOrderSource = {
 
 export async function createOrderFromQuote(
   tx: Tx,
+  companyId: string,
   source: QuoteOrderSource,
   milestones: PaymentMilestoneInput[],
   createdByUserId: string,
@@ -45,11 +46,12 @@ export async function createOrderFromQuote(
   if (source.quote.orderId) throw new Error("Quote already has an order");
 
   const issueDate = todayIsoDate();
-  const number = await allocateOrderNumber(tx, issueDate);
+  const number = await allocateOrderNumber(tx, companyId, issueDate);
 
   const [order] = await tx
     .insert(orders)
     .values({
+      companyId,
       number,
       clientId: source.quote.clientId,
       quoteId: source.quote.id,

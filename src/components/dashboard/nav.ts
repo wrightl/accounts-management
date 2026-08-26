@@ -175,15 +175,26 @@ export function flattenNavItems(groups: NavGroup[]): NavItem[] {
     return groups.flatMap((group) => group.items);
 }
 
-/** Filter groups by permission, dropping groups with no visible items. */
+const LTD_ONLY_HREFS = new Set([
+    '/dashboard/dividends',
+    '/dashboard/shareholders',
+]);
+
+/** Filter groups by permission (and entity type), dropping empty groups. */
 export function filterNavGroups(
     groups: NavGroup[],
     permissionCheck: (permission: Permission) => boolean,
+    entityType?: string | null,
 ): NavGroup[] {
+    const isSoleTrader = entityType === 'sole_trader';
     return groups
         .map((group) => ({
             ...group,
-            items: group.items.filter((item) => permissionCheck(item.permission)),
+            items: group.items.filter((item) => {
+                if (!permissionCheck(item.permission)) return false;
+                if (isSoleTrader && LTD_ONLY_HREFS.has(item.href)) return false;
+                return true;
+            }),
         }))
         .filter((group) => group.items.length > 0);
 }

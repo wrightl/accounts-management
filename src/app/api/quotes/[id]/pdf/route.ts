@@ -10,13 +10,17 @@ export async function GET(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
+  let user;
   try {
-    await requirePermission("accounts:read");
+    user = await requirePermission("accounts:read");
   } catch (e) {
     if (e instanceof ForbiddenError) {
       return NextResponse.json({ error: e.message }, { status: 403 });
     }
     throw e;
+  }
+  if (!user.companyId) {
+    return NextResponse.json({ error: "Complete onboarding first" }, { status: 403 });
   }
 
   const { id } = await context.params;
@@ -30,7 +34,9 @@ export async function GET(
   }
 
   try {
-    const { bytes, filename } = await loadOrRenderQuotePdf(id, { version });
+    const { bytes, filename } = await loadOrRenderQuotePdf(user.companyId, id, {
+      version,
+    });
     return new NextResponse(Buffer.from(bytes), {
       status: 200,
       headers: {
@@ -39,11 +45,8 @@ export async function GET(
         "Cache-Control": "private, no-store",
       },
     });
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Not found";
-    if (message === "Quote not found" || message === "Quote version not found") {
-      return NextResponse.json({ error: message }, { status: 404 });
-    }
-    throw e;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to render PDF";
+    return NextResponse.json({ error: message }, { status: 404 });
   }
 }

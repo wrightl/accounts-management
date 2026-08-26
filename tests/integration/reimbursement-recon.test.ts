@@ -12,16 +12,20 @@ import {
   users,
 } from "@/db/schema";
 import { confirmMatch, suggestMatches } from "@/lib/bank/queries";
+import { seedCompany } from "@/lib/test/seed-company";
 
 vi.mock("server-only", () => ({}));
 
 let ctx: Awaited<ReturnType<typeof createTestDb>>;
 let db: TestDatabase;
+let companyId: string;
 
 beforeEach(async () => {
   ctx = await createTestDb();
   db = ctx.db;
   setTestDb(db as unknown as Database);
+  const company = await seedCompany(db);
+  companyId = company.id;
 });
 
 afterEach(async () => {
@@ -32,12 +36,13 @@ afterEach(async () => {
 async function seedReimbursementScenario() {
   const [account] = await db
     .insert(bankAccounts)
-    .values({ name: "Starling Business" })
+    .values({ companyId, name: "Starling Business" })
     .returning();
 
   const [founder] = await db
     .insert(users)
     .values({
+      companyId,
       clerkUserId: "user_clerk_1",
       email: "lee@example.com",
       name: "Lee",
@@ -48,6 +53,7 @@ async function seedReimbursementScenario() {
   const [exp] = await db
     .insert(expenses)
     .values({
+      companyId,
       description: "Train",
       category: "Travel",
       spentAt: "2026-04-01",
@@ -61,6 +67,7 @@ async function seedReimbursementScenario() {
   const [run] = await db
     .insert(reimbursements)
     .values({
+      companyId,
       payeeUserId: founder.id,
       status: "pending",
       totalPence: 4500,
@@ -92,7 +99,7 @@ describe("reimbursement bank reconciliation", () => {
   it("suggests a reimbursement run for an outgoing transfer matching the total", async () => {
     await seedReimbursementScenario();
 
-    const suggestions = await suggestMatches();
+    const suggestions = await suggestMatches(companyId);
     expect(suggestions).toHaveLength(1);
     expect(suggestions[0].matchType).toBe("reimbursement");
     expect(suggestions[0].target.kind).toBe("reimbursement");
@@ -100,7 +107,7 @@ describe("reimbursement bank reconciliation", () => {
 
   it("confirming a reimbursement match marks the run paid and expenses reimbursed", async () => {
     const { exp, run } = await seedReimbursementScenario();
-    const suggestions = await suggestMatches();
+    const suggestions = await suggestMatches(companyId);
     expect(suggestions).toHaveLength(1);
 
     await confirmMatch(suggestions[0].matchId);
@@ -126,11 +133,12 @@ describe("reimbursement bank reconciliation", () => {
   it("does not suggest reimbursable expenses for outgoing bank transactions", async () => {
     const [account] = await db
       .insert(bankAccounts)
-      .values({ name: "Starling Business" })
+      .values({ companyId, name: "Starling Business" })
       .returning();
     const [founder] = await db
       .insert(users)
       .values({
+        companyId,
         clerkUserId: "user_clerk_2",
         email: "alex@example.com",
         name: "Alex",
@@ -139,6 +147,7 @@ describe("reimbursement bank reconciliation", () => {
       .returning();
 
     await db.insert(expenses).values({
+      companyId,
       description: "Software",
       spentAt: "2026-04-01",
       amountPence: 2000,
@@ -156,17 +165,18 @@ describe("reimbursement bank reconciliation", () => {
       reference: "SaaS",
     });
 
-    const suggestions = await suggestMatches();
+    const suggestions = await suggestMatches(companyId);
     expect(suggestions).toHaveLength(0);
   });
 
   it("suggests company_paid expenses for outgoing transactions", async () => {
     const [account] = await db
       .insert(bankAccounts)
-      .values({ name: "Starling Business" })
+      .values({ companyId, name: "Starling Business" })
       .returning();
 
     await db.insert(expenses).values({
+      companyId,
       description: "Hosting",
       spentAt: "2026-04-03",
       amountPence: 1500,
@@ -182,7 +192,7 @@ describe("reimbursement bank reconciliation", () => {
       reference: "Hosting",
     });
 
-    const suggestions = await suggestMatches();
+    const suggestions = await suggestMatches(companyId);
     expect(suggestions).toHaveLength(1);
     expect(suggestions[0].matchType).toBe("expense");
   });

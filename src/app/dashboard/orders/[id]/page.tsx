@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { guardPage, hasPermission } from "@/lib/auth";
+import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { getOrderDetail } from "@/lib/orders/queries";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { OrderActions } from "@/components/orders/order-actions";
@@ -20,14 +20,14 @@ export default async function OrderDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await guardPage("accounts:read");
+  const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
   const { id } = await params;
 
   if (!isDatabaseConfigured()) notFound();
   const [detail, company] = await Promise.all([
-    getOrderDetail(id),
-    getOrCreateCompanySettings(),
+    getOrderDetail(companyId, id),
+    getOrCreateCompanySettings(companyId),
   ]);
   if (!detail) notFound();
 

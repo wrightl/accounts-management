@@ -1,12 +1,12 @@
 import { desc, eq } from "drizzle-orm";
-import { guardPage } from "@/lib/auth";
+import { guardTenantPage } from "@/lib/auth";
 import { getDb } from "@/db";
 import { auditLog, users } from "@/db/schema";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { isDatabaseConfigured } from "@/env";
 
 export default async function AuditLogPage() {
-  await guardPage("users:manage");
+  const { companyId } = await guardTenantPage("users:manage");
 
   if (!isDatabaseConfigured()) {
     return (
@@ -30,13 +30,16 @@ export default async function AuditLogPage() {
     })
     .from(auditLog)
     .leftJoin(users, eq(auditLog.actorUserId, users.id))
+    .where(eq(auditLog.companyId, companyId))
     .orderBy(desc(auditLog.createdAt))
     .limit(200);
 
   return (
     <div>
       <h1 className="font-display text-2xl font-semibold">Audit log</h1>
-      <p className="mt-1 text-muted">Recent sensitive actions (admin only).</p>
+      <p className="mt-1 text-muted">
+        Recent sensitive actions for this company (admin only).
+      </p>
 
       <div className="mt-6">
         {rows.length === 0 ? (

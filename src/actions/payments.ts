@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq, sql, sum } from "drizzle-orm";
+import { and, eq, sql, sum} from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
 import { invoices, payments, reconciliationMatches } from "@/db/schema";
@@ -62,6 +62,11 @@ export async function recordPayment(
 ): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
@@ -88,7 +93,7 @@ export async function recordPayment(
 
   const bankTransactionId = parsed.data.bankTransactionId;
   if (bankTransactionId) {
-    const bankTx = await getBankTransactionById(bankTransactionId);
+    const bankTx = await getBankTransactionById(companyId, bankTransactionId);
     if (!bankTx) return { ok: false, error: "Bank transaction not found" };
     if (bankTx.amountPence <= 0) {
       return { ok: false, error: "Only incoming bank transactions can be linked" };
@@ -104,7 +109,7 @@ export async function recordPayment(
   const receivedAt = parsed.data.receivedAt
     ? new Date(parsed.data.receivedAt)
     : bankTransactionId
-      ? new Date(`${(await getBankTransactionById(bankTransactionId))!.bookedAt}T12:00:00Z`)
+      ? new Date(`${(await getBankTransactionById(companyId, bankTransactionId))!.bookedAt}T12:00:00Z`)
       : new Date();
 
   const db = getDb();
@@ -118,7 +123,7 @@ export async function recordPayment(
       const [inv] = await tx
         .select()
         .from(invoices)
-        .where(eq(invoices.id, invoiceId))
+        .where(and(eq(invoices.id, invoiceId), eq(invoices.companyId, companyId)))
         .limit(1);
       if (!inv) throw new PaymentError("Invoice not found");
 
@@ -180,7 +185,7 @@ export async function recordPayment(
         await tx
           .update(invoices)
           .set({ status: "paid", paidAt: receivedAt })
-          .where(eq(invoices.id, invoiceId));
+          .where(and(eq(invoices.id, invoiceId), eq(invoices.companyId, companyId)));
       }
 
       return payment.id;
@@ -192,6 +197,7 @@ export async function recordPayment(
   }
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "payment.record",
     entityType: "payment",

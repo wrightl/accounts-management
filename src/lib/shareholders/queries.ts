@@ -1,12 +1,15 @@
 import "server-only";
-import { asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { companySettings, shareholders, users } from "@/db/schema";
-import { getOrCreateCompanySettings } from "@/lib/settings/queries";
+import { getCompanySettings } from "@/lib/settings/queries";
 
-export async function listShareholders(options?: { includeArchived?: boolean }) {
+export async function listShareholders(
+  companyId: string,
+  options?: { includeArchived?: boolean },
+) {
   const db = getDb();
-  const settings = await getOrCreateCompanySettings();
+  const settings = await getCompanySettings(companyId);
   const totalShares = settings.totalShares;
 
   const rows = await db
@@ -22,7 +25,12 @@ export async function listShareholders(options?: { includeArchived?: boolean }) 
     })
     .from(shareholders)
     .leftJoin(users, eq(shareholders.userId, users.id))
-    .where(options?.includeArchived ? undefined : isNull(shareholders.archivedAt))
+    .where(
+      and(
+        eq(shareholders.companyId, companyId),
+        options?.includeArchived ? undefined : isNull(shareholders.archivedAt),
+      ),
+    )
     .orderBy(asc(shareholders.name));
 
   const activeSum = rows
@@ -45,7 +53,7 @@ export async function listShareholders(options?: { includeArchived?: boolean }) 
   };
 }
 
-export async function getShareholder(id: string) {
+export async function getShareholder(companyId: string, id: string) {
   const db = getDb();
   const [row] = await db
     .select({
@@ -60,14 +68,14 @@ export async function getShareholder(id: string) {
     })
     .from(shareholders)
     .leftJoin(users, eq(shareholders.userId, users.id))
-    .where(eq(shareholders.id, id))
+    .where(and(eq(shareholders.id, id), eq(shareholders.companyId, companyId)))
     .limit(1);
   return row ?? null;
 }
 
-export async function getActiveShareholdersForSplit() {
+export async function getActiveShareholdersForSplit(companyId: string) {
   const db = getDb();
-  const settings = await getOrCreateCompanySettings();
+  const settings = await getCompanySettings(companyId);
   const active = await db
     .select({
       id: shareholders.id,
@@ -75,7 +83,9 @@ export async function getActiveShareholdersForSplit() {
       shareCount: shareholders.shareCount,
     })
     .from(shareholders)
-    .where(isNull(shareholders.archivedAt))
+    .where(
+      and(eq(shareholders.companyId, companyId), isNull(shareholders.archivedAt)),
+    )
     .orderBy(asc(shareholders.name));
 
   const activeSum = active.reduce((s, r) => s + r.shareCount, 0);
@@ -92,8 +102,15 @@ export async function getActiveShareholdersForSplit() {
 }
 
 /** Ensure active share counts match company totalShares when total is set. */
-export async function assertRegisterBalanced(db = getDb()) {
-  const [settings] = await db.select().from(companySettings).limit(1);
+export async function assertRegisterBalanced(
+  companyId: string,
+  db = getDb(),
+) {
+  const [settings] = await db
+    .select()
+    .from(companySettings)
+    .where(eq(companySettings.id, companyId))
+    .limit(1);
   if (!settings?.totalShares) {
     return { ok: false as const, error: "Set total shares on the Shareholders page first." };
   }
@@ -102,7 +119,9 @@ export async function assertRegisterBalanced(db = getDb()) {
       sum: sql<number>`coalesce(sum(${shareholders.shareCount}), 0)`.mapWith(Number),
     })
     .from(shareholders)
-    .where(isNull(shareholders.archivedAt));
+    .where(
+      and(eq(shareholders.companyId, companyId), isNull(shareholders.archivedAt)),
+    );
   const sum = sumRow?.sum ?? 0;
   if (sum !== settings.totalShares) {
     return {

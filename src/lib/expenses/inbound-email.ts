@@ -2,21 +2,21 @@ import "server-only";
 import { and, count, desc, eq, isNotNull, lt, or } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
+  companies,
   expenseReceipts,
   expenses,
   inboundEmailJobs,
   users,
 } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
-import { serverEnv } from "@/env";
 import { safeFilename } from "@/lib/files";
 import {
   buildInboundExpenseDescription,
-  matchesInboundAddress,
+  matchesInboundMailboxPattern,
   mergeReceiptExtractions,
   parseEmailAddressHeader,
   parseEmailBodyText,
-  parseExpenseInboundAddresses,
+  parseInboundMailbox,
 } from "@/lib/expenses/inbound-merge";
 import {
   describeFetchError,
@@ -32,11 +32,17 @@ import {
   MAX_RECEIPT_BYTES,
   resolveReceiptContentType,
 } from "@/lib/expenses/receipt-file";
+import {
+  inboundMailboxConfig,
+  pickInboundToAddress,
+  resolveInboundRecipient,
+} from "@/lib/expenses/inbound-mailbox";
 import { formatGBP, poundsToPence } from "@/lib/money";
 import { getResendClient } from "@/lib/resend/client";
-import { getOrCreateCompanySettings } from "@/lib/settings/queries";
+import { getCompanySettings } from "@/lib/settings/queries";
 import { getStorage } from "@/lib/storage";
-import { findUserByEmail, normalizeEmail } from "@/lib/users";
+import { findUserByEmail, getUser, normalizeEmail } from "@/lib/users";
+import { isForeignCurrency } from "@/lib/expenses/receipt-parse";
 
 const MAX_ATTEMPTS = 8;
 
@@ -89,22 +95,16 @@ function isFounderRole(role: string): boolean {
   return role === "admin" || role === "user";
 }
 
-function resolveInboundAddresses(): string[] {
-  return parseExpenseInboundAddresses(serverEnv().EXPENSE_INBOUND_ADDRESS);
-}
-
-function pickMatchedToAddress(recipients: string[]): string {
-  const expected = resolveInboundAddresses();
-  const match = recipients.find((addr) =>
-    expected.includes(parseEmailAddressHeader(addr)),
-  );
-  return match ? parseEmailAddressHeader(match) : (expected[0] ?? "");
-}
-
 export async function enqueueInboundEmailJob(
   payload: InboundEmailReceivedPayload,
 ): Promise<{ jobId: string | null; skipped: boolean }> {
-  if (!matchesInboundAddress(payload.to, resolveInboundAddresses())) {
+  const config = inboundMailboxConfig();
+  if (!matchesInboundMailboxPattern(payload.to, config)) {
+    return { jobId: null, skipped: true };
+  }
+
+  const toEmail = pickInboundToAddress(payload.to, config);
+  if (!toEmail) {
     return { jobId: null, skipped: true };
   }
 
@@ -119,19 +119,50 @@ export async function enqueueInboundEmailJob(
   }
 
   const fromEmail = parseEmailAddressHeader(payload.from);
-  const toEmail = pickMatchedToAddress(payload.to);
+  const recipient = await resolveInboundRecipient(toEmail, config);
+
+  if (recipient) {
+    const [created] = await db
+      .insert(inboundEmailJobs)
+      .values({
+        companyId: recipient.companyId,
+        resendEmailId: payload.email_id,
+        fromEmail,
+        toEmail,
+        subject: payload.subject ?? null,
+        status: "pending",
+      })
+      .returning({ id: inboundEmailJobs.id });
+    return { jobId: created.id, skipped: false };
+  }
+
+  // Pattern matched but company/user unknown → rejected job when company exists.
+  const parsed = parseInboundMailbox(toEmail, config);
+  if (!parsed) {
+    return { jobId: null, skipped: true };
+  }
+  const [company] = await db
+    .select({ id: companies.id })
+    .from(companies)
+    .where(eq(companies.slug, parsed.companySlug))
+    .limit(1);
+  if (!company) {
+    return { jobId: null, skipped: true };
+  }
 
   const [created] = await db
     .insert(inboundEmailJobs)
     .values({
+      companyId: company.id,
       resendEmailId: payload.email_id,
       fromEmail,
       toEmail,
       subject: payload.subject ?? null,
-      status: "pending",
+      status: "rejected",
+      lastError: `Unknown inbound user for mailbox: ${toEmail}`,
+      processedAt: new Date(),
     })
     .returning({ id: inboundEmailJobs.id });
-
   return { jobId: created.id, skipped: false };
 }
 
@@ -233,9 +264,17 @@ export async function drainInboundEmailJobs(limit = 20): Promise<{
 async function deliverInboundEmail(
   job: typeof inboundEmailJobs.$inferSelect,
 ): Promise<string> {
-  const sender = await findUserByEmail(normalizeEmail(job.fromEmail));
+  const recipient = await resolveInboundRecipient(job.toEmail);
+  if (!recipient || !isFounderRole(recipient.role)) {
+    throw new Error("REJECTED: Inbound mailbox is not an authorised founder");
+  }
+  if (recipient.companyId !== job.companyId) {
+    throw new Error("REJECTED: Inbound mailbox company mismatch");
+  }
+
+  const sender = await getUser(recipient.userId);
   if (!sender || !isFounderRole(sender.role)) {
-    throw new Error("REJECTED: Sender is not an authorised founder");
+    throw new Error("REJECTED: Inbound mailbox is not an authorised founder");
   }
 
   const resend = getResendClient();
@@ -255,7 +294,8 @@ async function deliverInboundEmail(
     });
   }
 
-  const settings = await getOrCreateCompanySettings();
+  const companyId = job.companyId;
+  const settings = await getCompanySettings(companyId);
   const providerRaw = settings.receiptOcrProvider ?? "local";
   const provider: ReceiptOcrProvider = isReceiptOcrProvider(providerRaw)
     ? providerRaw
@@ -360,6 +400,7 @@ async function deliverInboundEmail(
     const [expense] = await tx
       .insert(expenses)
       .values({
+        companyId,
         description,
         category: merged.category ?? null,
         spentAt: merged.spentAt ?? null,
@@ -370,7 +411,10 @@ async function deliverInboundEmail(
         billable: false,
         paidByUserId: null,
         submittedByUserId: sender.id,
-        createdByUserId: null,
+        createdByUserId: sender.id,
+        detectedCurrency: isForeignCurrency(merged.currency)
+          ? merged.currency!.toUpperCase()
+          : null,
       })
       .returning({ id: expenses.id });
 
@@ -394,6 +438,7 @@ async function deliverInboundEmail(
   });
 
   await writeAudit({
+    companyId,
     actorUserId: sender.id,
     action: "expense.inbound_create",
     entityType: "expense",
@@ -414,16 +459,16 @@ export async function isAuthorisedExpenseSender(email: string): Promise<boolean>
   return Boolean(user && isFounderRole(user.role));
 }
 
-export async function countPendingExpenses(): Promise<number> {
+export async function countPendingExpenses(companyId: string): Promise<number> {
   const db = getDb();
   const [row] = await db
     .select({ total: count() })
     .from(expenses)
-    .where(eq(expenses.status, "pending"));
+    .where(and(eq(expenses.companyId, companyId), eq(expenses.status, "pending")));
   return row?.total ?? 0;
 }
 
-export async function listPendingExpenses(limit = 5) {
+export async function listPendingExpenses(companyId: string, limit = 5) {
   const db = getDb();
   const rows = await db
     .select({
@@ -436,7 +481,7 @@ export async function listPendingExpenses(limit = 5) {
     })
     .from(expenses)
     .leftJoin(users, eq(expenses.submittedByUserId, users.id))
-    .where(eq(expenses.status, "pending"))
+    .where(and(eq(expenses.companyId, companyId), eq(expenses.status, "pending")))
     .orderBy(desc(expenses.createdAt))
     .limit(limit);
 
@@ -452,16 +497,16 @@ const inboundIssueFilter = or(
   and(eq(inboundEmailJobs.status, "pending"), isNotNull(inboundEmailJobs.lastError)),
 );
 
-export async function countInboundEmailIssues(): Promise<number> {
+export async function countInboundEmailIssues(companyId: string): Promise<number> {
   const db = getDb();
   const [row] = await db
     .select({ total: count() })
     .from(inboundEmailJobs)
-    .where(inboundIssueFilter);
+    .where(and(eq(inboundEmailJobs.companyId, companyId), inboundIssueFilter));
   return row?.total ?? 0;
 }
 
-export async function listInboundEmailIssues(limit = 5) {
+export async function listInboundEmailIssues(companyId: string, limit = 5) {
   const db = getDb();
   const rows = await db
     .select({
@@ -476,7 +521,7 @@ export async function listInboundEmailIssues(limit = 5) {
       expenseId: inboundEmailJobs.expenseId,
     })
     .from(inboundEmailJobs)
-    .where(inboundIssueFilter)
+    .where(and(eq(inboundEmailJobs.companyId, companyId), inboundIssueFilter))
     .orderBy(desc(inboundEmailJobs.createdAt))
     .limit(limit);
 
@@ -492,6 +537,7 @@ export type InboundEmailJobListFilter =
   | "processed";
 
 export async function listInboundEmailJobs(input: {
+  companyId: string;
   filter?: InboundEmailJobListFilter;
   limit?: number;
 }) {
@@ -499,29 +545,28 @@ export async function listInboundEmailJobs(input: {
   const limit = input.limit ?? 100;
   const filter = input.filter ?? "all";
 
-  let where;
+  const conditions = [eq(inboundEmailJobs.companyId, input.companyId)];
   switch (filter) {
     case "attention":
-      where = inboundIssueFilter;
+      conditions.push(inboundIssueFilter!);
       break;
     case "pending":
-      where = eq(inboundEmailJobs.status, "pending");
+      conditions.push(eq(inboundEmailJobs.status, "pending"));
       break;
     case "failed":
-      where = eq(inboundEmailJobs.status, "failed");
+      conditions.push(eq(inboundEmailJobs.status, "failed"));
       break;
     case "rejected":
-      where = eq(inboundEmailJobs.status, "rejected");
+      conditions.push(eq(inboundEmailJobs.status, "rejected"));
       break;
     case "processed":
-      where = eq(inboundEmailJobs.status, "processed");
+      conditions.push(eq(inboundEmailJobs.status, "processed"));
       break;
     default:
-      where = undefined;
       break;
   }
 
-  const query = db
+  return db
     .select({
       id: inboundEmailJobs.id,
       resendEmailId: inboundEmailJobs.resendEmailId,
@@ -536,18 +581,19 @@ export async function listInboundEmailJobs(input: {
       expenseId: inboundEmailJobs.expenseId,
     })
     .from(inboundEmailJobs)
+    .where(and(...conditions))
     .orderBy(desc(inboundEmailJobs.createdAt))
     .limit(limit);
-
-  return where ? query.where(where) : query;
 }
 
-export async function getInboundEmailJob(jobId: string) {
+export async function getInboundEmailJob(companyId: string, jobId: string) {
   const db = getDb();
   const [job] = await db
     .select()
     .from(inboundEmailJobs)
-    .where(eq(inboundEmailJobs.id, jobId))
+    .where(
+      and(eq(inboundEmailJobs.id, jobId), eq(inboundEmailJobs.companyId, companyId)),
+    )
     .limit(1);
   return job ?? null;
 }

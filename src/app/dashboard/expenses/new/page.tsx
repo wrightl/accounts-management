@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { guardPage, hasPermission, requireUser } from "@/lib/auth";
+import { guardTenantPage, hasPermission, requireUser } from "@/lib/auth";
 import { listClients } from "@/lib/clients/queries";
 import { listFounders } from "@/lib/expenses/queries";
 import { ExpenseForm } from "@/components/expenses/expense-form";
@@ -9,7 +9,7 @@ import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { findLocalUserId } from "@/lib/users";
 
 export default async function NewExpensePage() {
-  await guardPage("accounts:write");
+  const { companyId } = await guardTenantPage("accounts:write");
   const canWrite = await hasPermission("accounts:write");
   const user = await requireUser();
 
@@ -18,10 +18,10 @@ export default async function NewExpensePage() {
   }
 
   const [founders, clients, localUserId, settings] = await Promise.all([
-    listFounders(),
-    listClients(),
+    listFounders(companyId),
+    listClients(companyId),
     findLocalUserId(user.userId),
-    getOrCreateCompanySettings(),
+    getOrCreateCompanySettings(companyId),
   ]);
 
   return (

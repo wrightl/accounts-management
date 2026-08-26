@@ -50,11 +50,16 @@ export async function loadBankTransactionsPage(input: {
 > {
   const authz = await requireActionPermission("accounts:read");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
 
   const page = Math.max(1, Math.trunc(input.page));
   const pageSize = input.pageSize ?? BANK_PAGE_SIZE;
 
-  const result = await listBankTransactions({
+  const result = await listBankTransactions(companyId, {
     q: input.q,
     type: input.type,
     category: input.category,
@@ -73,6 +78,11 @@ export async function importStarlingCsv(formData: FormData): Promise<
 > {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
@@ -89,11 +99,12 @@ export async function importStarlingCsv(formData: FormData): Promise<
     return { ok: false, error: e instanceof Error ? e.message : "Parse failed" };
   }
 
-  const account = await getOrCreateDefaultBankAccount();
-  const { inserted, skipped } = await importBankRows(account.id, rows);
-  const suggestions = await suggestMatches();
+  const account = await getOrCreateDefaultBankAccount(companyId);
+  const { inserted, skipped } = await importBankRows(companyId, account.id, rows);
+  const suggestions = await suggestMatches(companyId);
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "bank.import",
     entityType: "bank_account",
@@ -110,10 +121,16 @@ export async function runSuggestMatches(): Promise<
 > {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
-  const suggestions = await suggestMatches();
+  const suggestions = await suggestMatches(companyId);
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "bank.suggest",
     meta: { count: suggestions.length },
@@ -125,6 +142,11 @@ export async function runSuggestMatches(): Promise<
 export async function confirmBankMatch(matchId: string): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
   try {
@@ -134,6 +156,7 @@ export async function confirmBankMatch(matchId: string): Promise<ActionResult> {
     throw e;
   }
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "bank.confirm_match",
     entityType: "reconciliation_match",
@@ -154,13 +177,23 @@ export async function findReimbursementBankMatchesAction(
 > {
   const authz = await requireActionPermission("accounts:read");
   if (!authz.ok) return authz;
-  const matches = await findReimbursementBankMatches(reimbursementId);
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
+  const matches = await findReimbursementBankMatches(companyId, reimbursementId);
   return { ok: true, matches };
 }
 
 export async function confirmBankMatchesBatch(matchIds: string[]): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
   try {
@@ -170,6 +203,7 @@ export async function confirmBankMatchesBatch(matchIds: string[]): Promise<Actio
     throw e;
   }
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "bank.confirm_match_batch",
     meta: { count: matchIds.length },
@@ -184,10 +218,16 @@ export async function confirmBankMatchesBatch(matchIds: string[]): Promise<Actio
 export async function dismissBankMatch(matchId: string): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
   await dismissMatch(matchId);
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "bank.dismiss_match",
     entityType: "reconciliation_match",
@@ -200,10 +240,16 @@ export async function dismissBankMatch(matchId: string): Promise<ActionResult> {
 export async function dismissBankMatchesBatch(matchIds: string[]): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
   await dismissMatchesBatch(matchIds);
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "bank.dismiss_match_batch",
     meta: { count: matchIds.length },
@@ -217,7 +263,12 @@ export async function findInvoiceBankMatches(
 ): Promise<{ ok: true; matches: InvoiceBankMatch[] } | { ok: false; error: string }> {
   const authz = await requireActionPermission("accounts:read");
   if (!authz.ok) return authz;
-  const matches = await findBankTransactionsForInvoice(invoiceId);
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
+  const matches = await findBankTransactionsForInvoice(companyId, invoiceId);
   return { ok: true, matches };
 }
 
@@ -227,14 +278,20 @@ export async function updateBankCategory(
 ): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
   const trimmed = spendingCategory?.trim() ?? "";
   const value = trimmed.length > 0 ? trimmed.slice(0, 120) : null;
 
-  await updateTransactionCategory(transactionId, value);
+  await updateTransactionCategory(companyId, transactionId, value);
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "bank.update_category",
     entityType: "bank_transaction",
@@ -248,13 +305,19 @@ export async function updateBankCategory(
 export async function deleteBankSpendingCategory(categoryId: string): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
-  const result = await deleteUnusedBankSpendingCategory(categoryId);
+  const result = await deleteUnusedBankSpendingCategory(companyId, categoryId);
   if (!result.ok) return { ok: false, error: result.error };
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "bank.delete_category",
     entityType: "bank_spending_category",

@@ -1,7 +1,7 @@
 import "server-only";
 import { eq, sql } from "drizzle-orm";
 import type { Database } from "@/db";
-import { companySettings } from "@/db/schema";
+import { companies } from "@/db/schema";
 import {
   nextInvoiceNumber,
   nextOrderNumber,
@@ -11,43 +11,34 @@ import {
 
 export type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
-async function lockCompanySettings(tx: Tx) {
-  let rows = await tx.select().from(companySettings).limit(1);
-  if (!rows[0]) {
-    try {
-      const [created] = await tx.insert(companySettings).values({}).returning();
-      rows = [created];
-    } catch {
-      rows = await tx.select().from(companySettings).limit(1);
-    }
-  }
-  const settings = rows[0];
-  if (!settings) {
-    throw new Error("company_settings row is missing");
-  }
-
+async function lockCompany(tx: Tx, companyId: string) {
   await tx.execute(
-    sql`select id from company_settings where id = ${settings.id} for update`,
+    sql`select id from companies where id = ${companyId} for update`,
   );
 
-  const refreshed = await tx
+  const [settings] = await tx
     .select()
-    .from(companySettings)
-    .where(eq(companySettings.id, settings.id))
+    .from(companies)
+    .where(eq(companies.id, companyId))
     .limit(1);
-  return refreshed[0] ?? settings;
+
+  if (!settings) {
+    throw new Error(`Company not found: ${companyId}`);
+  }
+  return settings;
 }
 
 /**
  * Atomically allocate the next invoice number for the given issue date.
- * Locks (or creates) the single company_settings row inside the transaction.
+ * Locks the company row inside the transaction.
  */
 export async function allocateInvoiceNumber(
   tx: Tx,
+  companyId: string,
   issueDate: string | null | undefined,
 ): Promise<string> {
   const year = parseIssueYear(issueDate);
-  const current = await lockCompanySettings(tx);
+  const current = await lockCompany(tx, companyId);
   const allocated = nextInvoiceNumber(
     {
       invoiceNumberPrefix: current.invoiceNumberPrefix,
@@ -58,13 +49,13 @@ export async function allocateInvoiceNumber(
   );
 
   await tx
-    .update(companySettings)
+    .update(companies)
     .set({
       invoiceNextSeq: allocated.nextSeq,
       invoiceSeqYear: allocated.seqYear,
       updatedAt: new Date(),
     })
-    .where(eq(companySettings.id, current.id));
+    .where(eq(companies.id, current.id));
 
   return allocated.number;
 }
@@ -72,10 +63,11 @@ export async function allocateInvoiceNumber(
 /** Atomically allocate the next quote number (Q-YYYY-NNNN) under the same lock. */
 export async function allocateQuoteNumber(
   tx: Tx,
+  companyId: string,
   issueDate: string | null | undefined,
 ): Promise<string> {
   const year = parseIssueYear(issueDate);
-  const current = await lockCompanySettings(tx);
+  const current = await lockCompany(tx, companyId);
   const allocated = nextQuoteNumber(
     {
       quoteNumberPrefix: current.quoteNumberPrefix,
@@ -86,13 +78,13 @@ export async function allocateQuoteNumber(
   );
 
   await tx
-    .update(companySettings)
+    .update(companies)
     .set({
       quoteNextSeq: allocated.nextSeq,
       quoteSeqYear: allocated.seqYear,
       updatedAt: new Date(),
     })
-    .where(eq(companySettings.id, current.id));
+    .where(eq(companies.id, current.id));
 
   return allocated.number;
 }
@@ -100,10 +92,11 @@ export async function allocateQuoteNumber(
 /** Atomically allocate the next order number under the same lock. */
 export async function allocateOrderNumber(
   tx: Tx,
+  companyId: string,
   issueDate: string | null | undefined,
 ): Promise<string> {
   const year = parseIssueYear(issueDate);
-  const current = await lockCompanySettings(tx);
+  const current = await lockCompany(tx, companyId);
   const allocated = nextOrderNumber(
     {
       orderNumberPrefix: current.orderNumberPrefix,
@@ -114,13 +107,13 @@ export async function allocateOrderNumber(
   );
 
   await tx
-    .update(companySettings)
+    .update(companies)
     .set({
       orderNextSeq: allocated.nextSeq,
       orderSeqYear: allocated.seqYear,
       updatedAt: new Date(),
     })
-    .where(eq(companySettings.id, current.id));
+    .where(eq(companies.id, current.id));
 
   return allocated.number;
 }

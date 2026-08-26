@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { guardPage, hasPermission } from "@/lib/auth";
+import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { getShareholder } from "@/lib/shareholders/queries";
 import { listFounders } from "@/lib/expenses/queries";
 import { ShareholderForm } from "@/components/shareholders/shareholder-form";
@@ -12,7 +12,7 @@ export default async function ShareholderDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await guardPage("accounts:read");
+  const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
   const { id } = await params;
 
@@ -21,8 +21,8 @@ export default async function ShareholderDetailPage({
   }
 
   const [shareholder, founders] = await Promise.all([
-    getShareholder(id),
-    listFounders(),
+    getShareholder(companyId, id),
+    listFounders(companyId),
   ]);
   if (!shareholder) notFound();
 

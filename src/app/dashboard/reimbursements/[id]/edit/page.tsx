@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { guardPage } from "@/lib/auth";
+import { guardTenantPage } from "@/lib/auth";
 import { getReimbursementEditData } from "@/lib/reimbursements/queries";
 import { canEditReimbursement } from "@/lib/reimbursements/status";
 import { EditReimbursementForm } from "@/components/reimbursements/edit-form";
@@ -12,12 +12,12 @@ export default async function EditReimbursementPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await guardPage("accounts:write");
+  const { companyId } = await guardTenantPage("accounts:write");
   const { id } = await params;
 
   if (!isDatabaseConfigured()) notFound();
 
-  const data = await getReimbursementEditData(id);
+  const data = await getReimbursementEditData(companyId, id);
   if (!data) notFound();
   if (!canEditReimbursement(data.detail.reimbursement.status)) notFound();
 

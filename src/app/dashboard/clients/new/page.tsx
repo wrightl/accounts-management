@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { guardPage, hasPermission } from "@/lib/auth";
+import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { ClientForm } from "@/components/clients/client-form";
 import { buttonClasses } from "@/components/ui/button";
 
 export default async function NewClientPage() {
-  await guardPage("accounts:write");
+  const { companyId } = await guardTenantPage("accounts:write");
   const canWrite = await hasPermission("accounts:write");
 
   return (

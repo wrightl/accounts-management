@@ -74,6 +74,11 @@ function parseLines(formData: FormData) {
 export async function createOrder(formData: FormData): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const localUserId = await ensureLocalUser(authz.user);
 
   const parsed = orderSchema.safeParse({
@@ -106,10 +111,11 @@ export async function createOrder(formData: FormData): Promise<ActionResult> {
 
   const db = getDb();
   const orderId = await db.transaction(async (tx) => {
-    const number = await allocateOrderNumber(tx, parsed.data.issueDate);
+    const number = await allocateOrderNumber(tx, companyId, parsed.data.issueDate);
     const [row] = await tx
       .insert(orders)
       .values({
+        companyId,
         number,
         clientId: parsed.data.clientId,
         status: "active",
@@ -129,6 +135,7 @@ export async function createOrder(formData: FormData): Promise<ActionResult> {
   });
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "order.create",
     entityType: "order",
@@ -158,6 +165,11 @@ export async function createInvoiceFromOrder(
 ): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const localUserId = await ensureLocalUser(authz.user);
 
   const parsed = createInvoiceSchema.safeParse({
@@ -172,11 +184,11 @@ export async function createInvoiceFromOrder(
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
 
-  const detail = await getOrderDetail(orderId);
+  const detail = await getOrderDetail(companyId, orderId);
   if (!detail) return { ok: false, error: "Order not found" };
 
   const db = getDb();
-  const company = await getOrCreateCompanySettings();
+  const company = await getOrCreateCompanySettings(companyId);
   const paymentTermsDays = company.invoicePaymentTermsDays;
   const priorInvoicedPence = await sumInvoicedPenceForOrder(db, orderId);
   const remainingPence = detail.order.grossPence - priorInvoicedPence;
@@ -262,10 +274,11 @@ export async function createInvoiceFromOrder(
   const totals = invoiceTotals(lineValues);
 
   const invoiceId = await db.transaction(async (tx) => {
-    const number = await allocateInvoiceNumber(tx, issueDate);
+    const number = await allocateInvoiceNumber(tx, companyId, issueDate);
     const [inv] = await tx
       .insert(invoices)
       .values({
+        companyId,
         number,
         clientId: detail.order.clientId,
         status: "draft",
@@ -296,6 +309,7 @@ export async function createInvoiceFromOrder(
   });
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "order.create_invoice",
     entityType: "order",

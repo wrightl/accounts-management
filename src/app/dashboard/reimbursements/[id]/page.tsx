@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Pencil } from "lucide-react";
-import { guardPage, hasPermission } from "@/lib/auth";
+import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { getReimbursementDetail } from "@/lib/reimbursements/queries";
 import { canEditReimbursement } from "@/lib/reimbursements/status";
 import { ReimbursementActions } from "@/components/reimbursements/actions";
@@ -15,13 +15,13 @@ export default async function ReimbursementDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await guardPage("accounts:read");
+  const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
   const { id } = await params;
 
   if (!isDatabaseConfigured()) notFound();
 
-  const detail = await getReimbursementDetail(id);
+  const detail = await getReimbursementDetail(companyId, id);
   if (!detail) notFound();
 
   return (

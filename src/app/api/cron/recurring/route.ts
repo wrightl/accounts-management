@@ -66,10 +66,11 @@ export async function GET(request: Request) {
     );
 
     await db.transaction(async (tx) => {
-      const number = await allocateInvoiceNumber(tx, today);
+      const number = await allocateInvoiceNumber(tx, tmpl.companyId, today);
       const [inv] = await tx
         .insert(invoices)
         .values({
+          companyId: tmpl.companyId,
           number,
           clientId: tmpl.clientId,
           status: "draft",

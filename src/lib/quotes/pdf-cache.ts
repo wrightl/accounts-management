@@ -1,5 +1,5 @@
 import "server-only";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { clients, quotes } from "@/db/schema";
 import {
@@ -8,10 +8,11 @@ import {
 } from "@/lib/quotes/queries";
 import { renderQuotePdf } from "@/lib/quotes/pdf";
 import { quotePdfFilename } from "@/lib/quotes/status";
-import { getOrCreateCompanySettings } from "@/lib/settings/queries";
+import { getCompanySettings } from "@/lib/settings/queries";
 import { getStorage } from "@/lib/storage";
 
 async function renderFromSnapshot(
+  companyId: string,
   quoteId: string,
   number: string,
   version: number,
@@ -23,11 +24,11 @@ async function renderFromSnapshot(
   const [client] = await db
     .select()
     .from(clients)
-    .where(eq(clients.id, snapshot.clientId))
+    .where(and(eq(clients.id, snapshot.clientId), eq(clients.companyId, companyId)))
     .limit(1);
   if (!client) throw new Error("Client not found");
 
-  const company = await getOrCreateCompanySettings();
+  const company = await getCompanySettings(companyId);
   const filename = quotePdfFilename(number, version);
   const cachePath = `quotes/${quoteId}/${filename}`;
 
@@ -77,15 +78,16 @@ async function renderFromSnapshot(
 }
 
 export async function loadOrRenderQuotePdf(
+  companyId: string,
   quoteId: string,
   options?: { version?: number },
 ): Promise<{ bytes: Uint8Array; filename: string }> {
-  const detail = await getQuoteDetail(quoteId);
+  const detail = await getQuoteDetail(companyId, quoteId);
   if (!detail) throw new Error("Quote not found");
 
   const version = options?.version ?? detail.quote.version;
   if (version !== detail.quote.version) {
-    return renderFromSnapshot(quoteId, detail.quote.number, version);
+    return renderFromSnapshot(companyId, quoteId, detail.quote.number, version);
   }
 
   const filename = quotePdfFilename(detail.quote.number, detail.quote.version);
@@ -100,7 +102,7 @@ export async function loadOrRenderQuotePdf(
     }
   }
 
-  const company = await getOrCreateCompanySettings();
+  const company = await getCompanySettings(companyId);
   const bytes = await renderQuotePdf({
     quote: {
       number: detail.quote.number,

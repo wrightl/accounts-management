@@ -1,24 +1,27 @@
 import Link from "next/link";
-import { guardPage, hasPermission, requireUser } from "@/lib/auth";
+import { guardTenantPage, hasPermission, requireUser } from "@/lib/auth";
 import { listExpenses, listFounders, getReimbursableSummary } from "@/lib/expenses/queries";
 import {
   EXPENSE_CATEGORIES,
   expenseStatusLabel,
   type ExpenseStatus,
 } from "@/lib/expenses/categories";
+import { expenseInboundAddress } from "@/lib/expenses/inbound-mailbox";
 import { buttonClasses } from "@/components/ui/button";
 import { Input, Label, Select } from "@/components/ui/form";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { isDatabaseConfigured } from "@/env";
-import { findLocalUserId } from "@/lib/users";
+import { findLocalUser } from "@/lib/users";
+import { getCompany } from "@/lib/tenant";
 import { ExpenseImportButton } from "@/components/expenses/expense-import-panel";
+import { CopyEmailAddress } from "@/components/expenses/copy-email-address";
 
 export default async function ExpensesPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  await guardPage("accounts:read");
+  const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
   const user = await requireUser();
   const sp = await searchParams;
@@ -32,21 +35,30 @@ export default async function ExpensesPage({
     );
   }
 
-  const localUserId = await findLocalUserId(user.userId);
+  const localUser = await findLocalUser(user.userId);
+  const localUserId = localUser?.id ?? null;
   const myReimbursable = sp.mine === "1" && localUserId;
 
-  const [rows, founders, reimbSummary] = await Promise.all([
-    listExpenses({
+  const [rows, founders, reimbSummary, company] = await Promise.all([
+    listExpenses(companyId, {
       from: sp.from,
       to: sp.to,
       category: sp.category,
-      paidByUserId: myReimbursable ? localUserId : sp.paidBy,
+      paidByUserId: myReimbursable ? localUserId! : sp.paidBy,
       billable: (sp.billable as "true" | "false" | "") || "",
       status: myReimbursable ? "reimbursable" : sp.status,
     }),
-    listFounders(),
-    getReimbursableSummary(),
+    listFounders(companyId),
+    getReimbursableSummary(companyId),
+    getCompany(companyId),
   ]);
+
+  const inboundAddress =
+    localUser &&
+    (localUser.role === "admin" || localUser.role === "user") &&
+    localUser.expenseInboundSlug
+      ? expenseInboundAddress(company.slug, localUser.expenseInboundSlug)
+      : null;
 
   const filterParams = new URLSearchParams();
   if (sp.from) filterParams.set("from", sp.from);
@@ -72,6 +84,16 @@ export default async function ExpensesPage({
           </div>
         )}
       </div>
+
+      {inboundAddress ? (
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-wash/50 px-4 py-3 text-sm">
+          <span className="text-muted">
+            Email receipts to{" "}
+            <span className="font-medium text-foreground break-all">{inboundAddress}</span>
+          </span>
+          <CopyEmailAddress address={inboundAddress} />
+        </div>
+      ) : null}
 
       {reimbSummary.count > 0 && (
         <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-wash/50 px-4 py-3 text-sm">
@@ -174,6 +196,7 @@ export default async function ExpensesPage({
                 <TH>Description</TH>
                 <TH>Category</TH>
                 <TH>Paid by</TH>
+                <TH>Created by</TH>
                 <TH>Status</TH>
                 <TH className="text-right">Amount</TH>
               </TR>
@@ -200,6 +223,7 @@ export default async function ExpensesPage({
                   </TD>
                   <TD>{e.category ?? "—"}</TD>
                   <TD>{e.paidByName ?? "—"}</TD>
+                  <TD>{e.createdByName ?? "—"}</TD>
                   <TD>{expenseStatusLabel(e.status as ExpenseStatus)}</TD>
                   <TD className="text-right font-medium">{e.amountFormatted}</TD>
                 </TR>

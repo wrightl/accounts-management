@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq} from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
 import { clients, invoices } from "@/db/schema";
@@ -34,6 +34,11 @@ const clientSchema = z.object({
 export async function createClient(formData: FormData): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
@@ -52,7 +57,8 @@ export async function createClient(formData: FormData): Promise<ActionResult> {
   const [row] = await db
     .insert(clients)
     .values({
-      name: parsed.data.name,
+      companyId,
+        name: parsed.data.name,
       companyName: parsed.data.companyName,
       email: parsed.data.email,
       addressLines: parsed.data.addressLines,
@@ -61,6 +67,7 @@ export async function createClient(formData: FormData): Promise<ActionResult> {
     .returning({ id: clients.id });
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "client.create",
     entityType: "client",
@@ -78,6 +85,11 @@ export async function updateClient(
 ): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
@@ -102,9 +114,10 @@ export async function updateClient(
       addressLines: parsed.data.addressLines,
       notes: parsed.data.notes,
     })
-    .where(eq(clients.id, id));
+    .where(and(eq(clients.id, id), eq(clients.companyId, companyId)));
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "client.update",
     entityType: "client",
@@ -119,6 +132,11 @@ export async function updateClient(
 export async function deleteClient(id: string): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
@@ -136,9 +154,10 @@ export async function deleteClient(id: string): Promise<ActionResult> {
     };
   }
 
-  await db.delete(clients).where(eq(clients.id, id));
+  await db.delete(clients).where(and(eq(clients.id, id), eq(clients.companyId, companyId)));
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "client.delete",
     entityType: "client",

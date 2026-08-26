@@ -9,17 +9,21 @@ export async function GET(
   _request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
+  let user;
   try {
-    await requirePermission("accounts:read");
+    user = await requirePermission("accounts:read");
   } catch (e) {
     if (e instanceof ForbiddenError) {
       return NextResponse.json({ error: e.message }, { status: 403 });
     }
     throw e;
   }
+  if (!user.companyId) {
+    return NextResponse.json({ error: "Complete onboarding first" }, { status: 403 });
+  }
 
   const { id } = await context.params;
-  const detail = await getReimbursementDetail(id);
+  const detail = await getReimbursementDetail(user.companyId, id);
   if (!detail) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -46,18 +50,20 @@ export async function GET(
     ),
   ];
 
-  const body = lines.join("\n");
+  const body = lines.join("\n") + "\n";
+  const filename = `reimbursement-${detail.reimbursement.id.slice(0, 8)}.csv`;
+
   return new NextResponse(body, {
     status: 200,
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="reimbursement-${detail.reimbursement.id.slice(0, 8)}.csv"`,
+      "Content-Disposition": `attachment; filename="${filename}"`,
       "Cache-Control": "private, no-store",
     },
   });
 }
 
-function csv(value: string) {
+function csv(value: string): string {
   if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
   return value;
 }

@@ -13,15 +13,20 @@ import { clientDisplayNameSql } from "@/lib/clients/sql";
 import { defaultReportPeriod as fyDefaultReportPeriod } from "@/lib/dates";
 import { formatGBP } from "@/lib/money";
 import { todayIsoDate } from "@/lib/invoices/status";
-import { getOrCreateCompanySettings } from "@/lib/settings/queries";
+import { getCompanySettings } from "@/lib/settings/queries";
 
-export async function getProfitAndLoss(from: string, to: string) {
+export async function getProfitAndLoss(
+  companyId: string,
+  from: string,
+  to: string,
+) {
   const db = getDb();
   const [income] = await db
     .select({ total: sum(invoices.grossPence).mapWith(Number) })
     .from(invoices)
     .where(
       and(
+        eq(invoices.companyId, companyId),
         ne(invoices.status, "void"),
         ne(invoices.status, "draft"),
         gte(invoices.issueDate, from),
@@ -34,6 +39,7 @@ export async function getProfitAndLoss(from: string, to: string) {
     .from(expenses)
     .where(
       and(
+        eq(expenses.companyId, companyId),
         ne(expenses.status, "pending"),
         gte(expenses.spentAt, from),
         lte(expenses.spentAt, to),
@@ -55,7 +61,7 @@ export async function getProfitAndLoss(from: string, to: string) {
   };
 }
 
-export async function getAgedReceivables() {
+export async function getAgedReceivables(companyId: string) {
   const db = getDb();
   const today = todayIsoDate();
   const rows = await db
@@ -70,7 +76,12 @@ export async function getAgedReceivables() {
     .from(invoices)
     .innerJoin(clients, eq(invoices.clientId, clients.id))
     .where(
-      and(ne(invoices.status, "draft"), ne(invoices.status, "void"), ne(invoices.status, "paid")),
+      and(
+        eq(invoices.companyId, companyId),
+        ne(invoices.status, "draft"),
+        ne(invoices.status, "void"),
+        ne(invoices.status, "paid"),
+      ),
     );
 
   const buckets = { current: 0, d30: 0, d60: 0, d90: 0 };
@@ -122,7 +133,11 @@ export async function getAgedReceivables() {
   };
 }
 
-export async function getIncomeByMonth(from: string, to: string) {
+export async function getIncomeByMonth(
+  companyId: string,
+  from: string,
+  to: string,
+) {
   const db = getDb();
   const rows = await db
     .select({
@@ -132,6 +147,7 @@ export async function getIncomeByMonth(from: string, to: string) {
     .from(invoices)
     .where(
       and(
+        eq(invoices.companyId, companyId),
         ne(invoices.status, "void"),
         ne(invoices.status, "draft"),
         gte(invoices.issueDate, from),
@@ -148,7 +164,11 @@ export async function getIncomeByMonth(from: string, to: string) {
   }));
 }
 
-export async function getExpenseByMonth(from: string, to: string) {
+export async function getExpenseByMonth(
+  companyId: string,
+  from: string,
+  to: string,
+) {
   const db = getDb();
   const rows = await db
     .select({
@@ -158,6 +178,7 @@ export async function getExpenseByMonth(from: string, to: string) {
     .from(expenses)
     .where(
       and(
+        eq(expenses.companyId, companyId),
         ne(expenses.status, "pending"),
         gte(expenses.spentAt, from),
         lte(expenses.spentAt, to),
@@ -173,7 +194,11 @@ export async function getExpenseByMonth(from: string, to: string) {
   }));
 }
 
-export async function getExpenseByCategory(from: string, to: string) {
+export async function getExpenseByCategory(
+  companyId: string,
+  from: string,
+  to: string,
+) {
   const db = getDb();
   const rows = await db
     .select({
@@ -183,6 +208,7 @@ export async function getExpenseByCategory(from: string, to: string) {
     .from(expenses)
     .where(
       and(
+        eq(expenses.companyId, companyId),
         ne(expenses.status, "pending"),
         gte(expenses.spentAt, from),
         lte(expenses.spentAt, to),
@@ -212,12 +238,15 @@ export async function getVatSummary(from: string, to: string) {
   };
 }
 
-export async function listDividendDeclarations(options?: {
-  from?: string;
-  to?: string;
-}) {
+export async function listDividendDeclarations(
+  companyId: string,
+  options?: {
+    from?: string;
+    to?: string;
+  },
+) {
   const db = getDb();
-  const conditions = [];
+  const conditions = [eq(dividendDeclarations.companyId, companyId)];
   if (options?.from) {
     conditions.push(gte(dividendDeclarations.declaredAt, options.from));
   }
@@ -228,7 +257,7 @@ export async function listDividendDeclarations(options?: {
   const declarations = await db
     .select()
     .from(dividendDeclarations)
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .where(and(...conditions))
     .orderBy(desc(dividendDeclarations.declaredAt));
 
   if (declarations.length === 0) return [];
@@ -262,8 +291,11 @@ export async function listDividendDeclarations(options?: {
 }
 
 /** @deprecated Prefer listDividendDeclarations — flat payout list for pack-style exports. */
-export async function listDividends(options?: { from?: string; to?: string }) {
-  const decls = await listDividendDeclarations(options);
+export async function listDividends(
+  companyId: string,
+  options?: { from?: string; to?: string },
+) {
+  const decls = await listDividendDeclarations(companyId, options);
   return decls.flatMap((d) =>
     d.payouts.map((p) => ({
       id: p.id,
@@ -277,7 +309,9 @@ export async function listDividends(options?: { from?: string; to?: string }) {
   );
 }
 
-export async function defaultReportPeriod(): Promise<{ from: string; to: string }> {
-  const settings = await getOrCreateCompanySettings();
+export async function defaultReportPeriod(
+  companyId: string,
+): Promise<{ from: string; to: string }> {
+  const settings = await getCompanySettings(companyId);
   return fyDefaultReportPeriod(settings.financialYearEndMonth);
 }

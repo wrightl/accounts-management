@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { guardPage } from "@/lib/auth";
+import { guardTenantPage } from "@/lib/auth";
 import { getQuoteDetail } from "@/lib/quotes/queries";
 import { listClients } from "@/lib/clients/queries";
 import { canEditQuote } from "@/lib/quotes/status";
@@ -14,16 +14,16 @@ export default async function EditQuotePage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await guardPage("accounts:write");
+  const { companyId } = await guardTenantPage("accounts:write");
   const { id } = await params;
 
   if (!isDatabaseConfigured()) notFound();
 
-  const detail = await getQuoteDetail(id);
+  const detail = await getQuoteDetail(companyId, id);
   if (!detail) notFound();
   if (!canEditQuote(detail.quote.status)) notFound();
 
-  const clients = await listClients();
+  const clients = await listClients(companyId);
   const initialLines = detail.lines.map((l) => ({
     key: l.id,
     description: l.description,

@@ -1,5 +1,6 @@
 import "server-only";
 import { auth, currentUser } from "@clerk/nextjs/server";
+import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import {
   type Role,
@@ -7,7 +8,8 @@ import {
   DEFAULT_ROLE,
   can,
 } from "./roles";
-import { hasDatabaseClient } from "@/db";
+import { hasDatabaseClient, getDb } from "@/db";
+import { companies, type EntityType } from "@/db/schema";
 import { findLocalUser } from "@/lib/users";
 
 export interface SessionUser {
@@ -15,6 +17,11 @@ export interface SessionUser {
   email: string | null;
   name: string | null;
   role: Role;
+  /** Local users.id when known. */
+  localUserId: string | null;
+  /** Null until onboarding completes. */
+  companyId: string | null;
+  entityType: EntityType | null;
 }
 
 export type ActionAuth =
@@ -22,9 +29,9 @@ export type ActionAuth =
   | { ok: false; error: string };
 
 /**
- * Resolve the currently signed-in user. Identity comes from Clerk; role comes
- * from the local `users` row (pending until an admin assigns one). Clerk
- * metadata is never used for authorisation.
+ * Resolve the currently signed-in user. Identity comes from Clerk; role and
+ * company come from the local `users` row. Clerk metadata is never used for
+ * authorisation.
  */
 export async function getCurrentUser(): Promise<SessionUser | null> {
   const { userId } = await auth();
@@ -36,16 +43,33 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     [user?.firstName, user?.lastName].filter(Boolean).join(" ") || null;
 
   let role: Role = DEFAULT_ROLE;
+  let localUserId: string | null = null;
+  let companyId: string | null = null;
+  let entityType: EntityType | null = null;
+
   if (hasDatabaseClient()) {
     try {
       const local = await findLocalUser(userId);
-      if (local) role = local.role;
+      if (local) {
+        role = local.role;
+        localUserId = local.id;
+        companyId = local.companyId;
+        if (companyId) {
+          const db = getDb();
+          const [company] = await db
+            .select({ entityType: companies.entityType })
+            .from(companies)
+            .where(eq(companies.id, companyId))
+            .limit(1);
+          entityType = company?.entityType ?? null;
+        }
+      }
     } catch {
       role = DEFAULT_ROLE;
     }
   }
 
-  return { userId, email, name, role };
+  return { userId, email, name, role, localUserId, companyId, entityType };
 }
 
 /** Require an authenticated session, redirecting to sign-in otherwise. */
@@ -99,9 +123,28 @@ export async function guardPage(permission: Permission): Promise<SessionUser> {
   return user;
 }
 
+/** Page guard that also requires a completed company (fail closed). */
+export async function guardTenantPage(
+  permission: Permission,
+): Promise<SessionUser & { companyId: string; entityType: NonNullable<SessionUser["entityType"]> }> {
+  const user = await guardPage(permission);
+  if (!user.companyId || !user.entityType) {
+    redirect("/onboarding");
+  }
+  return {
+    ...user,
+    companyId: user.companyId,
+    entityType: user.entityType,
+  };
+}
+
 export class ForbiddenError extends Error {
-  constructor(permission: Permission) {
-    super(`Forbidden: missing permission "${permission}"`);
+  constructor(permission: Permission | string) {
+    super(
+      typeof permission === "string" && !permission.includes(":")
+        ? permission
+        : `Forbidden: missing permission "${permission}"`,
+    );
     this.name = "ForbiddenError";
   }
 }

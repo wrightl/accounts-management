@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { guardPage, hasPermission } from "@/lib/auth";
+import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { listFounders } from "@/lib/expenses/queries";
 import { ShareholderForm } from "@/components/shareholders/shareholder-form";
 import { buttonClasses } from "@/components/ui/button";
 import { isDatabaseConfigured } from "@/env";
 
 export default async function NewShareholderPage() {
-  await guardPage("accounts:write");
+  const { companyId } = await guardTenantPage("accounts:write");
   const canWrite = await hasPermission("accounts:write");
 
   if (!isDatabaseConfigured()) {
@@ -18,7 +18,7 @@ export default async function NewShareholderPage() {
     );
   }
 
-  const founders = await listFounders();
+  const founders = await listFounders(companyId);
 
   return (
     <div>

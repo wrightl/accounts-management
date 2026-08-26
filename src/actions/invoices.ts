@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq} from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
 import { invoiceLineItems, invoices } from "@/db/schema";
@@ -70,6 +70,11 @@ function buildLineValues(lines: z.infer<typeof lineSchema>[]) {
 export async function createInvoice(formData: FormData): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
@@ -100,10 +105,11 @@ export async function createInvoice(formData: FormData): Promise<ActionResult> {
 
   const db = getDb();
   const invoiceId = await db.transaction(async (tx) => {
-    const number = await allocateInvoiceNumber(tx, issueDate);
+    const number = await allocateInvoiceNumber(tx, companyId, issueDate);
     const [inv] = await tx
       .insert(invoices)
       .values({
+        companyId,
         number,
         clientId: parsed.data.clientId,
         status: "draft",
@@ -124,6 +130,7 @@ export async function createInvoice(formData: FormData): Promise<ActionResult> {
   });
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "invoice.create",
     entityType: "invoice",
@@ -141,6 +148,11 @@ export async function updateInvoice(
 ): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
@@ -148,7 +160,7 @@ export async function updateInvoice(
   const [existing] = await db
     .select()
     .from(invoices)
-    .where(eq(invoices.id, id))
+    .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)))
     .limit(1);
   if (!existing) return { ok: false, error: "Invoice not found" };
   if (!canEditInvoice(existing.status as InvoiceStatus)) {
@@ -193,7 +205,7 @@ export async function updateInvoice(
         grossPence: totals.grossPence,
         pdfBlobPath: null,
       })
-      .where(eq(invoices.id, id));
+      .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)));
 
     await tx.delete(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, id));
     await tx.insert(invoiceLineItems).values(
@@ -202,6 +214,7 @@ export async function updateInvoice(
   });
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "invoice.update",
     entityType: "invoice",
@@ -217,6 +230,11 @@ export async function updateInvoice(
 export async function voidInvoice(id: string): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
@@ -224,7 +242,7 @@ export async function voidInvoice(id: string): Promise<ActionResult> {
   const [existing] = await db
     .select()
     .from(invoices)
-    .where(eq(invoices.id, id))
+    .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)))
     .limit(1);
   if (!existing) return { ok: false, error: "Invoice not found" };
 
@@ -236,9 +254,10 @@ export async function voidInvoice(id: string): Promise<ActionResult> {
   await db
     .update(invoices)
     .set({ status: "void" })
-    .where(eq(invoices.id, id));
+    .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)));
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "invoice.void",
     entityType: "invoice",
@@ -254,10 +273,15 @@ export async function voidInvoice(id: string): Promise<ActionResult> {
 export async function sendInvoice(id: string): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
-  const detail = await getInvoiceDetail(id);
+  const detail = await getInvoiceDetail(companyId, id);
   if (!detail) return { ok: false, error: "Invoice not found" };
 
   const from = storedStatus(detail.invoice.status);
@@ -268,7 +292,7 @@ export async function sendInvoice(id: string): Promise<ActionResult> {
     return { ok: false, error: "Client has no email address" };
   }
 
-  const jobId = await enqueueSendJob("invoice_send", id);
+  const jobId = await enqueueSendJob("invoice_send", companyId, id);
   const delivered = await processSendJob(jobId);
   if (!delivered.ok) {
     return {
@@ -278,6 +302,7 @@ export async function sendInvoice(id: string): Promise<ActionResult> {
   }
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "invoice.send",
     entityType: "invoice",
@@ -301,6 +326,11 @@ export async function updateInvoiceStatus(
 ): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const localUserId = await ensureLocalUser(authz.user);
 
   const parsed = updateStatusSchema.safeParse({ status });
@@ -308,7 +338,7 @@ export async function updateInvoiceStatus(
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid status" };
   }
 
-  const detail = await getInvoiceDetail(id);
+  const detail = await getInvoiceDetail(companyId, id);
   if (!detail) return { ok: false, error: "Invoice not found" };
 
   const current = detail.invoice.status as InvoiceStatus;
@@ -325,7 +355,7 @@ export async function updateInvoiceStatus(
   const [existing] = await db
     .select()
     .from(invoices)
-    .where(eq(invoices.id, id))
+    .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)))
     .limit(1);
   if (!existing) return { ok: false, error: "Invoice not found" };
 
@@ -337,9 +367,10 @@ export async function updateInvoiceStatus(
       sentAt: target === "sent" ? (existing.sentAt ?? now) : existing.sentAt,
       paidAt: target === "paid" ? now : existing.paidAt,
     })
-    .where(eq(invoices.id, id));
+    .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)));
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "invoice.status",
     entityType: "invoice",

@@ -1,4 +1,5 @@
 import "server-only";
+import { arrayBuffer as consumeArrayBuffer } from "node:stream/consumers";
 import { serverEnv } from "@/env";
 
 export interface StoredObject {
@@ -81,14 +82,14 @@ class VercelBlobStorage implements StorageProvider {
   }
 
   async get(path: string) {
-    const { get } = await import("@vercel/blob");
+    const { get: getBlob } = await import("@vercel/blob");
     const token = serverEnv().BLOB_READ_WRITE_TOKEN;
-    const result = await get(path, { access: "private", token });
+    const result = await getBlob(path, { access: "private", token });
     if (!result || result.statusCode !== 200 || !result.stream) {
       throw new Error(`Object not found: ${path}`);
     }
     return {
-      body: await new Response(result.stream).arrayBuffer(),
+      body: await consumeArrayBuffer(result.stream),
       contentType: result.blob.contentType ?? null,
     };
   }

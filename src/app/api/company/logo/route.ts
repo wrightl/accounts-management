@@ -1,25 +1,22 @@
 import { NextResponse } from "next/server";
-import { requirePermission, ForbiddenError } from "@/lib/auth";
-import { getOrCreateCompanySettings } from "@/lib/settings/queries";
+import { requireUser } from "@/lib/auth";
+import { getCompanySettings } from "@/lib/settings/queries";
 import { getStorage } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Stream the company logo from private storage. Never expose the Blob URL.
+ * Stream the signed-in user's company logo from private storage.
+ * Available to any authenticated member of the company (navbar + settings).
  */
 export async function GET() {
-  try {
-    await requirePermission("settings:manage");
-  } catch (e) {
-    if (e instanceof ForbiddenError) {
-      return NextResponse.json({ error: e.message }, { status: 403 });
-    }
-    throw e;
+  const user = await requireUser();
+  if (!user.companyId) {
+    return NextResponse.json({ error: "Complete onboarding first" }, { status: 403 });
   }
 
-  const settings = await getOrCreateCompanySettings();
+  const settings = await getCompanySettings(user.companyId);
   if (!settings.logoUrl) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -30,10 +27,18 @@ export async function GET() {
       status: 200,
       headers: {
         "Content-Type": obj.contentType ?? "image/png",
-        "Cache-Control": "private, no-store",
+        "Cache-Control": "private, max-age=300",
       },
     });
-  } catch {
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        level: "error",
+        msg: "company.logo.get",
+        path: settings.logoUrl,
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    );
     return NextResponse.json({ error: "File unavailable" }, { status: 404 });
   }
 }

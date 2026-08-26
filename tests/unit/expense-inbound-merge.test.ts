@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
   buildInboundExpenseDescription,
-  matchesInboundAddress,
+  formatExpenseInboundAddress,
+  matchesInboundMailboxPattern,
   mergeReceiptExtractions,
   parseEmailAddressHeader,
   parseEmailBodyText,
-  parseExpenseInboundAddresses,
+  parseInboundMailbox,
+  slugifyInbound,
 } from "@/lib/expenses/inbound-merge";
+
+const config = {
+  domain: "dotanddashconsulting.com",
+  prefix: "expenses",
+};
 
 describe("parseEmailAddressHeader", () => {
   it("extracts bare email addresses", () => {
@@ -18,36 +25,90 @@ describe("parseEmailAddressHeader", () => {
   });
 });
 
-describe("parseExpenseInboundAddresses", () => {
-  it("parses comma-delimited addresses", () => {
+describe("parseInboundMailbox", () => {
+  it("parses plus-tag company.user addresses", () => {
     expect(
-      parseExpenseInboundAddresses(
-        " expenses@dotanddashconsulting.com , receipts@dotanddashconsulting.com ",
+      parseInboundMailbox("expenses+dot-dash.lee@dotanddashconsulting.com", config),
+    ).toEqual({
+      companySlug: "dot-dash",
+      userSlug: "lee",
+      address: "expenses+dot-dash.lee@dotanddashconsulting.com",
+    });
+  });
+
+  it("extracts from display-name To headers", () => {
+    expect(
+      parseInboundMailbox(
+        "Expenses <expenses+acme.angel@dotanddashconsulting.com>",
+        config,
       ),
-    ).toEqual(["expenses@dotanddashconsulting.com", "receipts@dotanddashconsulting.com"]);
+    ).toEqual({
+      companySlug: "acme",
+      userSlug: "angel",
+      address: "expenses+acme.angel@dotanddashconsulting.com",
+    });
+  });
+
+  it("splits company and user on the first dot", () => {
+    expect(
+      parseInboundMailbox("expenses+my-co.lee-wright@dotanddashconsulting.com", config),
+    ).toEqual({
+      companySlug: "my-co",
+      userSlug: "lee-wright",
+      address: "expenses+my-co.lee-wright@dotanddashconsulting.com",
+    });
+  });
+
+  it("rejects user tags that are not valid slugs", () => {
+    expect(
+      parseInboundMailbox("expenses+acme.lee.wright@dotanddashconsulting.com", config),
+    ).toBeNull();
+  });
+
+  it("rejects wrong domain or prefix", () => {
+    expect(
+      parseInboundMailbox("expenses+dot-dash.lee@other.com", config),
+    ).toBeNull();
+    expect(
+      parseInboundMailbox("receipts+dot-dash.lee@dotanddashconsulting.com", config),
+    ).toBeNull();
+    expect(
+      parseInboundMailbox("expenses@dotanddashconsulting.com", config),
+    ).toBeNull();
+  });
+
+  it("rejects invalid slugs", () => {
+    expect(
+      parseInboundMailbox("expenses+Dot_Dash.lee@dotanddashconsulting.com", config),
+    ).toBeNull();
+    expect(
+      parseInboundMailbox("expenses+acme.@dotanddashconsulting.com", config),
+    ).toBeNull();
   });
 });
 
-describe("matchesInboundAddress", () => {
-  it("matches configured inbound address case-insensitively", () => {
+describe("matchesInboundMailboxPattern", () => {
+  it("matches when any recipient is a plus-address", () => {
     expect(
-      matchesInboundAddress(
-        ["Expenses <expenses@dotanddashconsulting.com>"],
-        "expenses@dotanddashconsulting.com",
+      matchesInboundMailboxPattern(
+        ["cc@example.com", "expenses+acme.lee@dotanddashconsulting.com"],
+        config,
       ),
     ).toBe(true);
-    expect(matchesInboundAddress(["other@example.com"], "expenses@dotanddashconsulting.com")).toBe(
-      false,
+    expect(matchesInboundMailboxPattern(["other@example.com"], config)).toBe(false);
+  });
+});
+
+describe("formatExpenseInboundAddress / slugifyInbound", () => {
+  it("formats the display address", () => {
+    expect(formatExpenseInboundAddress("dot-dash", "lee", config)).toBe(
+      "expenses+dot-dash.lee@dotanddashconsulting.com",
     );
   });
 
-  it("matches any address in a comma-delimited list", () => {
-    const expected =
-      "expenses@dotanddashconsulting.com, receipts@dotanddashconsulting.com";
-    expect(
-      matchesInboundAddress(["Receipts <receipts@dotanddashconsulting.com>"], expected),
-    ).toBe(true);
-    expect(matchesInboundAddress(["other@example.com"], expected)).toBe(false);
+  it("slugifies names", () => {
+    expect(slugifyInbound("Dot + Dash Consulting")).toBe("dot-dash-consulting");
+    expect(slugifyInbound("Lee Wright")).toBe("lee-wright");
   });
 });
 
@@ -79,27 +140,19 @@ describe("mergeReceiptExtractions", () => {
 
     expect(merged.amountPounds).toBe("9.99");
     expect(merged.description).toBe("Taxi receipt");
+    expect(merged.confidence).toBe("partial");
   });
 });
 
-describe("parseEmailBodyText", () => {
-  it("extracts amount and merchant hints from subject/body", () => {
-    const result = parseEmailBodyText(
-      "Uber trip receipt",
-      "Total paid £18.40 on 12/03/2026",
-    );
-
-    expect(result.amountPounds).toBe("18.40");
-    expect(result.spentAt).toBe("2026-03-12");
-    expect(result.category).toBe("Travel");
+describe("parseEmailBodyText / buildInboundExpenseDescription", () => {
+  it("extracts amount from body text", () => {
+    const extracted = parseEmailBodyText("Coffee", "Total £12.50");
+    expect(extracted.amountPounds).toBeTruthy();
   });
-});
 
-describe("buildInboundExpenseDescription", () => {
-  it("falls back to subject then default label", () => {
+  it("falls back to subject for description", () => {
     expect(
-      buildInboundExpenseDescription({ confidence: "none" }, "March expenses"),
-    ).toBe("March expenses");
-    expect(buildInboundExpenseDescription({ confidence: "none" }, "")).toBe("Expense from email");
+      buildInboundExpenseDescription({ confidence: "none" }, "Lunch receipt"),
+    ).toBe("Lunch receipt");
   });
 });

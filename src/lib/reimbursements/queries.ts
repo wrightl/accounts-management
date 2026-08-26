@@ -11,7 +11,7 @@ import { formatGBP } from "@/lib/money";
 import { findLocalUserId } from "@/lib/users";
 import type { SessionUser } from "@/lib/auth";
 
-export async function listReimbursements() {
+export async function listReimbursements(companyId: string) {
   const db = getDb();
   const rows = await db
     .select({
@@ -27,6 +27,7 @@ export async function listReimbursements() {
     })
     .from(reimbursements)
     .innerJoin(users, eq(reimbursements.payeeUserId, users.id))
+    .where(eq(reimbursements.companyId, companyId))
     .orderBy(desc(reimbursements.createdAt));
 
   return rows.map((r) => ({
@@ -35,7 +36,7 @@ export async function listReimbursements() {
   }));
 }
 
-export async function getReimbursementDetail(id: string) {
+export async function getReimbursementDetail(companyId: string, id: string) {
   const db = getDb();
   const [run] = await db
     .select({
@@ -44,7 +45,7 @@ export async function getReimbursementDetail(id: string) {
     })
     .from(reimbursements)
     .innerJoin(users, eq(reimbursements.payeeUserId, users.id))
-    .where(eq(reimbursements.id, id))
+    .where(and(eq(reimbursements.id, id), eq(reimbursements.companyId, companyId)))
     .limit(1);
 
   if (!run) return null;
@@ -72,7 +73,7 @@ export async function getReimbursementDetail(id: string) {
 }
 
 /** Outstanding reimbursable totals per founder. */
-export async function getReimbursementBalances() {
+export async function getReimbursementBalances(companyId: string) {
   const db = getDb();
   const rows = await db
     .select({
@@ -83,7 +84,9 @@ export async function getReimbursementBalances() {
     })
     .from(expenses)
     .leftJoin(users, eq(expenses.paidByUserId, users.id))
-    .where(eq(expenses.status, "reimbursable"))
+    .where(
+      and(eq(expenses.companyId, companyId), eq(expenses.status, "reimbursable")),
+    )
     .groupBy(expenses.paidByUserId, users.name, users.email);
 
   return rows
@@ -96,9 +99,9 @@ export async function getReimbursementBalances() {
     }));
 }
 
-export async function getOwedSummary(session: SessionUser) {
+export async function getOwedSummary(companyId: string, session: SessionUser) {
   const localId = await findLocalUserId(session.userId);
-  const balances = await getReimbursementBalances();
+  const balances = await getReimbursementBalances(companyId);
   const owedToMe = localId
     ? balances.find((b) => b.payeeUserId === localId)
     : undefined;
@@ -113,14 +116,17 @@ export async function getOwedSummary(session: SessionUser) {
   };
 }
 
-export async function getReimbursementExportRows(id: string) {
-  const detail = await getReimbursementDetail(id);
+export async function getReimbursementExportRows(companyId: string, id: string) {
+  const detail = await getReimbursementDetail(companyId, id);
   if (!detail) return null;
   return detail;
 }
 
 /** Linked reimbursement run for an expense, if any. */
-export async function getReimbursementForExpense(expenseId: string) {
+export async function getReimbursementForExpense(
+  companyId: string,
+  expenseId: string,
+) {
   const db = getDb();
   const [row] = await db
     .select({
@@ -135,7 +141,12 @@ export async function getReimbursementForExpense(expenseId: string) {
     .from(reimbursementItems)
     .innerJoin(reimbursements, eq(reimbursementItems.reimbursementId, reimbursements.id))
     .innerJoin(users, eq(reimbursements.payeeUserId, users.id))
-    .where(eq(reimbursementItems.expenseId, expenseId))
+    .where(
+      and(
+        eq(reimbursementItems.expenseId, expenseId),
+        eq(reimbursements.companyId, companyId),
+      ),
+    )
     .limit(1);
 
   if (!row) return null;
@@ -146,8 +157,8 @@ export async function getReimbursementForExpense(expenseId: string) {
   };
 }
 
-export async function getReimbursementEditData(id: string) {
-  const detail = await getReimbursementDetail(id);
+export async function getReimbursementEditData(companyId: string, id: string) {
+  const detail = await getReimbursementDetail(companyId, id);
   if (!detail) return null;
 
   const db = getDb();
@@ -163,13 +174,23 @@ export async function getReimbursementEditData(id: string) {
     })
     .from(expenses)
     .where(
-      and(eq(expenses.status, "reimbursable"), eq(expenses.paidByUserId, payeeUserId)),
+      and(
+        eq(expenses.companyId, companyId),
+        eq(expenses.status, "reimbursable"),
+        eq(expenses.paidByUserId, payeeUserId),
+      ),
     );
 
   const linkedElsewhere = await db
     .select({ expenseId: reimbursementItems.expenseId })
     .from(reimbursementItems)
-    .where(ne(reimbursementItems.reimbursementId, id));
+    .innerJoin(reimbursements, eq(reimbursementItems.reimbursementId, reimbursements.id))
+    .where(
+      and(
+        eq(reimbursements.companyId, companyId),
+        ne(reimbursementItems.reimbursementId, id),
+      ),
+    );
 
   const blocked = new Set(linkedElsewhere.map((row) => row.expenseId));
 

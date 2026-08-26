@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect } from "react";
-import Link from "next/link";
 import { Menu, X } from "lucide-react";
-import { Logo } from "@/components/brand/logo";
 import { cn } from "@/lib/utils";
 import type { Role } from "@/lib/roles";
 import type { NavGroup } from "./nav";
+import {
+  CompanyNavBrand,
+  type CompanySwitcherOption,
+} from "./company-nav-brand";
 import { NavLinks } from "./nav-links";
 import { NavSearchTrigger } from "./nav-command-palette";
 import { NavUserProfile } from "./nav-user-profile";
@@ -20,6 +22,10 @@ export function NavMobileDrawer({
   role,
   userName,
   avatarUrl,
+  companyId,
+  companyName,
+  companyLogoUrl,
+  memberships = [],
   onSearch,
 }: {
   open: boolean;
@@ -30,6 +36,10 @@ export function NavMobileDrawer({
   role: Role;
   userName: string | null;
   avatarUrl: string | null;
+  companyId: string;
+  companyName: string;
+  companyLogoUrl: string | null;
+  memberships?: CompanySwitcherOption[];
   onSearch: () => void;
 }) {
   useEffect(() => {
@@ -64,15 +74,20 @@ export function NavMobileDrawer({
         className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-navy text-white shadow-xl transition-transform duration-200 ease-out"
         aria-label="Mobile navigation"
       >
-        <div className="flex items-center justify-between px-5 py-5">
-          <Link href="/dashboard" onClick={onClose} title="Dot + Dash Accounts">
-            <Logo className="text-white" subtitle="Accounts" size={40} />
-          </Link>
+        <div className="flex items-center justify-between gap-2 px-5 py-5">
+          <CompanyNavBrand
+            companyName={companyName}
+            logoUrl={companyLogoUrl}
+            companyId={companyId}
+            memberships={memberships}
+            onNavigate={onClose}
+            className="min-w-0 flex-1"
+          />
           <button
             type="button"
             onClick={onClose}
             aria-label="Close navigation"
-            className="inline-flex items-center justify-center rounded-full p-2 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+            className="inline-flex shrink-0 items-center justify-center rounded-full p-2 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
           >
             <X className="h-5 w-5" />
           </button>

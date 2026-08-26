@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { guardPage } from "@/lib/auth";
+import { guardTenantPage } from "@/lib/auth";
 import {
   countInboundEmailIssues,
   listInboundEmailJobs,
@@ -37,7 +37,7 @@ export default async function InboundEmailPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  await guardPage("users:manage");
+  const { companyId } = await guardTenantPage("users:manage");
   const sp = await searchParams;
   const filter = (sp.filter as InboundEmailJobListFilter | undefined) ?? "attention";
 
@@ -51,8 +51,8 @@ export default async function InboundEmailPage({
   }
 
   const [rows, issueCount] = await Promise.all([
-    listInboundEmailJobs({ filter, limit: 100 }),
-    countInboundEmailIssues(),
+    listInboundEmailJobs({ companyId,  filter, limit: 100 }),
+    countInboundEmailIssues(companyId),
   ]);
 
   return (

@@ -228,7 +228,7 @@ export function ExpenseForm({
   function onReject() {
     if (!expense) return;
     setError(null);
-    startTransition(async () => {
+    void (async () => {
       const ok = await confirm({
         title: "Reject expense",
         message: "Reject and delete this pending expense?",
@@ -236,13 +236,16 @@ export function ExpenseForm({
         variant: "destructive",
       });
       if (!ok) return;
-      const result = await rejectExpense(expense.id);
-      if (!result.ok) setError(result.error);
-      else {
+      startTransition(async () => {
+        const result = await rejectExpense(expense.id);
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
         router.push("/dashboard/expenses");
         router.refresh();
-      }
-    });
+      });
+    })();
   }
 
   return (

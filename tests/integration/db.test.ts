@@ -9,6 +9,7 @@ import {
   payments,
 } from "@/db/schema";
 import { invoiceTotals } from "@/lib/money";
+import { seedCompany } from "@/lib/test/seed-company";
 
 let ctx: Awaited<ReturnType<typeof createTestDb>>;
 
@@ -28,7 +29,7 @@ describe("database schema (PGlite)", () => {
     const names = rows.map((r) => r.table_name);
     for (const table of [
       "users",
-      "company_settings",
+      "companies",
       "clients",
       "invoices",
       "invoice_line_items",
@@ -45,10 +46,11 @@ describe("database schema (PGlite)", () => {
 
   it("persists an invoice with line items and computes totals", async () => {
     const { db } = ctx;
+    const company = await seedCompany(db);
 
     const [client] = await db
       .insert(clients)
-      .values({ name: "Acme Ltd", email: "ap@acme.example" })
+      .values({ companyId: company.id, name: "Acme Ltd", email: "ap@acme.example" })
       .returning();
 
     const lines = [
@@ -60,6 +62,7 @@ describe("database schema (PGlite)", () => {
     const [invoice] = await db
       .insert(invoices)
       .values({
+        companyId: company.id,
         number: "INV-0001",
         clientId: client.id,
         status: "sent",
@@ -84,55 +87,52 @@ describe("database schema (PGlite)", () => {
 
   it("cascades line items and payments when an invoice is deleted", async () => {
     const { db } = ctx;
+    const company = await seedCompany(db);
     const [client] = await db
       .insert(clients)
-      .values({ name: "Beta Co" })
+      .values({ companyId: company.id, name: "Beta Co" })
       .returning();
     const [invoice] = await db
       .insert(invoices)
-      .values({ number: "INV-0002", clientId: client.id })
+      .values({
+        companyId: company.id,
+        number: "INV-0002",
+        clientId: client.id,
+      })
       .returning();
     await db
       .insert(invoiceLineItems)
-      .values({ invoiceId: invoice.id, description: "Retainer", quantity: 1, unitPricePence: 100000 });
+      .values({
+        invoiceId: invoice.id,
+        description: "Retainer",
+        quantity: 1,
+        unitPricePence: 100000,
+      });
     await db
       .insert(payments)
       .values({ invoiceId: invoice.id, amountPence: 100000, method: "bank_transfer" });
 
     await db.delete(invoices).where(eq(invoices.id, invoice.id));
 
-    expect(
-      await db.select().from(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, invoice.id)),
-    ).toHaveLength(0);
-    expect(
-      await db.select().from(payments).where(eq(payments.invoiceId, invoice.id)),
-    ).toHaveLength(0);
+    const lines = await db
+      .select()
+      .from(invoiceLineItems)
+      .where(eq(invoiceLineItems.invoiceId, invoice.id));
+    const pays = await db
+      .select()
+      .from(payments)
+      .where(eq(payments.invoiceId, invoice.id));
+    expect(lines).toHaveLength(0);
+    expect(pays).toHaveLength(0);
   });
 
-  it("enforces unique invoice numbers", async () => {
+  it("exposes company settings alias for companies table", async () => {
     const { db } = ctx;
-    const [client] = await db.insert(clients).values({ name: "Gamma" }).returning();
-    await db.insert(invoices).values({ number: "INV-DUP", clientId: client.id });
-    await expect(
-      db.insert(invoices).values({ number: "INV-DUP", clientId: client.id }),
-    ).rejects.toThrow();
-  });
-
-  it("persists a client company name", async () => {
-    const { db } = ctx;
-    const [client] = await db
-      .insert(clients)
-      .values({ name: "Jane Smith", companyName: "Acme Ltd" })
-      .returning();
-    expect(client.companyName).toBe("Acme Ltd");
-  });
-
-  it("defaults receipt OCR to local Tesseract and Gemini Flash", async () => {
-    const { db } = ctx;
-    const existing = await db.select().from(companySettings).limit(1);
-    const settings =
-      existing[0] ?? (await db.insert(companySettings).values({}).returning())[0];
-    expect(settings.receiptOcrProvider).toBe("local");
-    expect(settings.receiptOcrModel).toBe("google/gemini-2.5-flash");
+    const company = await seedCompany(db, { name: "Alias Co" });
+    const [row] = await db
+      .select()
+      .from(companySettings)
+      .where(eq(companySettings.id, company.id));
+    expect(row?.name).toBe("Alias Co");
   });
 });

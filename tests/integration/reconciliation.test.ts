@@ -16,16 +16,20 @@ import {
   findBankTransactionsForInvoice,
   suggestMatches,
 } from "@/lib/bank/queries";
+import { seedCompany } from "@/lib/test/seed-company";
 
 vi.mock("server-only", () => ({}));
 
 let ctx: Awaited<ReturnType<typeof createTestDb>>;
 let db: TestDatabase;
+let companyId: string;
 
 beforeEach(async () => {
   ctx = await createTestDb();
   db = ctx.db;
   setTestDb(db as unknown as Database);
+  const company = await seedCompany(db);
+  companyId = company.id;
 });
 
 afterEach(async () => {
@@ -36,17 +40,18 @@ afterEach(async () => {
 async function seedInvoicePaymentScenario() {
   const [account] = await db
     .insert(bankAccounts)
-    .values({ name: "Starling Business" })
+    .values({ companyId, name: "Starling Business" })
     .returning();
 
   const [client] = await db
     .insert(clients)
-    .values({ name: "Jane Smith", companyName: "Acme Ltd" })
+    .values({ companyId, name: "Jane Smith", companyName: "Acme Ltd" })
     .returning();
 
   const [invoice] = await db
     .insert(invoices)
     .values({
+      companyId,
       number: "DD-2026-0001",
       clientId: client.id,
       status: "sent",
@@ -76,7 +81,7 @@ describe("bank reconciliation integration", () => {
   it("suggests an unpaid invoice from fuzzy reference and counterparty match", async () => {
     await seedInvoicePaymentScenario();
 
-    const suggestions = await suggestMatches();
+    const suggestions = await suggestMatches(companyId);
     expect(suggestions).toHaveLength(1);
     expect(suggestions[0].matchType).toBe("invoice_payment");
     expect(suggestions[0].target.kind).toBe("invoice_payment");
@@ -96,7 +101,7 @@ describe("bank reconciliation integration", () => {
 
   it("confirming an invoice suggestion creates a payment and marks the invoice paid", async () => {
     const { invoice, tx } = await seedInvoicePaymentScenario();
-    const suggestions = await suggestMatches();
+    const suggestions = await suggestMatches(companyId);
     expect(suggestions).toHaveLength(1);
 
     await confirmMatch(suggestions[0].matchId);
@@ -125,17 +130,17 @@ describe("bank reconciliation integration", () => {
 
   it("dismisses a suggestion so the transaction can be suggested again", async () => {
     await seedInvoicePaymentScenario();
-    const suggestions = await suggestMatches();
+    const suggestions = await suggestMatches(companyId);
     await dismissMatch(suggestions[0].matchId);
 
-    const again = await suggestMatches();
+    const again = await suggestMatches(companyId);
     expect(again).toHaveLength(1);
   });
 
   it("finds bank transactions for an invoice from the invoice side", async () => {
     const { invoice } = await seedInvoicePaymentScenario();
 
-    const matches = await findBankTransactionsForInvoice(invoice.id);
+    const matches = await findBankTransactionsForInvoice(companyId, invoice.id);
     expect(matches.length).toBeGreaterThanOrEqual(1);
     expect(matches[0].amountPence).toBe(25_000);
     expect(matches[0].counterparty).toBe("Acme Ltd");

@@ -22,12 +22,12 @@ export default function Home() {
           Your books, in one place.
         </h1>
         <p className="mt-5 max-w-xl text-lg text-white/75">
-          Invoicing, expenses, reimbursements and reporting for Dot + Dash
-          Consulting — no more spreadsheets and shared folders.
+          Invoicing, expenses, reimbursements and reporting for limited companies
+          and sole traders — no more spreadsheets and shared folders.
         </p>
         <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-          <Link href="/dashboard" className={buttonClasses("primary", "px-6 py-2.5")}>
-            Go to dashboard
+          <Link href="/sign-up" className={buttonClasses("primary", "px-6 py-2.5")}>
+            Sign up
           </Link>
           <Link
             href="/sign-in"

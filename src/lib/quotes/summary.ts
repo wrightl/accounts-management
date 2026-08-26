@@ -41,11 +41,12 @@ export type QuotesSummaryData = {
 };
 
 export async function getQuotesSummary(
+  companyId: string,
   filters: QuoteListFilters,
 ): Promise<QuotesSummaryData> {
   const db = getDb();
-  const conditions = quoteFilterConditions(filters);
-  const where = conditions.length ? and(...conditions) : undefined;
+  const conditions = quoteFilterConditions(companyId, filters);
+  const where = and(...conditions);
 
   const rows = await db
     .select({
@@ -170,7 +171,10 @@ export type ExpiringQuoteRow = {
 };
 
 /** Open quotes expiring within 30 days, soonest first. */
-export async function listExpiringQuotes(limit = 5): Promise<ExpiringQuoteRow[]> {
+export async function listExpiringQuotes(
+  companyId: string,
+  limit = 5,
+): Promise<ExpiringQuoteRow[]> {
   const db = getDb();
   const today = new Date().toISOString().slice(0, 10);
   const soon = new Date();
@@ -190,6 +194,7 @@ export async function listExpiringQuotes(limit = 5): Promise<ExpiringQuoteRow[]>
     .innerJoin(clients, eq(quotes.clientId, clients.id))
     .where(
       and(
+        eq(quotes.companyId, companyId),
         ne(quotes.status, "declined"),
         ne(quotes.status, "accepted"),
       ),

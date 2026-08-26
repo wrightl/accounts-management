@@ -13,6 +13,7 @@ import {
   quotes,
   users,
 } from "@/db/schema";
+import { seedCompany } from "@/lib/test/seed-company";
 import {
   createQuote,
   rollbackQuote,
@@ -42,11 +43,14 @@ vi.mock("@clerk/nextjs/server", () => ({
 
 let ctx: Awaited<ReturnType<typeof createTestDb>>;
 let db: TestDatabase;
+let companyId: string;
 
 beforeEach(async () => {
   ctx = await createTestDb();
   db = ctx.db;
   setTestDb(db as unknown as Database);
+  const company = await seedCompany(db);
+  companyId = company.id;
 });
 
 afterEach(async () => {
@@ -59,6 +63,7 @@ describe("quote PDF and send", () => {
     await db
       .insert(users)
       .values({
+        companyId,
         clerkUserId: "user_clerk_1",
         email: "lee@dotanddashconsulting.com",
         name: "Lee",
@@ -67,7 +72,7 @@ describe("quote PDF and send", () => {
       .returning();
     const [client] = await db
       .insert(clients)
-      .values({ name: "Acme", email: "ap@acme.test" })
+      .values({ companyId, name: "Acme", email: "ap@acme.test" })
       .returning();
 
     const form = new FormData();
@@ -230,13 +235,13 @@ describe("quote PDF and send", () => {
     );
     await updateQuote(quoteId, form);
 
-    const v1 = await getQuoteVersionDetail(quoteId, 1);
+    const v1 = await getQuoteVersionDetail(companyId, quoteId, 1);
     expect(v1).not.toBeNull();
     expect(v1!.isCurrent).toBe(false);
     expect(v1!.lines[0].description).toBe("Workshop");
     expect(v1!.quote.grossPence).toBe(100000);
 
-    const current = await getQuoteVersionDetail(quoteId, 2);
+    const current = await getQuoteVersionDetail(companyId, quoteId, 2);
     expect(current!.isCurrent).toBe(true);
     expect(current!.lines[0].description).toBe("Revised workshop");
   });
@@ -259,6 +264,7 @@ describe("quote PDF and send", () => {
 describe("quote status workflow", () => {
   async function seedQuote(withMilestones = false) {
     await db.insert(users).values({
+      companyId,
       clerkUserId: "user_clerk_1",
       email: "lee@dotanddashconsulting.com",
       name: "Lee",
@@ -266,7 +272,7 @@ describe("quote status workflow", () => {
     });
     const [client] = await db
       .insert(clients)
-      .values({ name: "Acme", email: "ap@acme.test" })
+      .values({ companyId, name: "Acme", email: "ap@acme.test" })
       .returning();
 
     const form = new FormData();
@@ -327,10 +333,10 @@ describe("quote status workflow", () => {
     });
     expect(result.ok).toBe(true);
 
-    const categories = await listDeclineReasonCategories();
+    const categories = await listDeclineReasonCategories(companyId);
     expect(categories).toContain("Project paused");
 
-    const summary = await getQuotesSummary({});
+    const summary = await getQuotesSummary(companyId, {});
     expect(summary.declinedCount).toBe(1);
     expect(summary.declineReasons[0]?.category).toBe("Project paused");
   });

@@ -21,18 +21,26 @@ export interface ExpenseFilters {
   status?: string;
 }
 
-export async function listFounders() {
+export async function listFounders(companyId: string) {
   const db = getDb();
   return db
     .select({ id: users.id, name: users.name, email: users.email, role: users.role })
     .from(users)
-    .where(sql`${users.role} in ('admin', 'user')`)
+    .where(
+      and(
+        eq(users.companyId, companyId),
+        sql`${users.role} in ('admin', 'user')`,
+      ),
+    )
     .orderBy(users.name);
 }
 
-export async function listExpenses(filters: ExpenseFilters = {}) {
+export async function listExpenses(companyId: string, filters: ExpenseFilters = {}) {
   const db = getDb();
-  const conditions = [];
+  const paidBy = alias(users, "paid_by");
+  const createdBy = alias(users, "created_by");
+  const submittedBy = alias(users, "submitted_by");
+  const conditions = [eq(expenses.companyId, companyId)];
   if (filters.from) conditions.push(gte(expenses.spentAt, filters.from));
   if (filters.to) conditions.push(lte(expenses.spentAt, filters.to));
   if (filters.category) conditions.push(eq(expenses.category, filters.category));
@@ -54,22 +62,45 @@ export async function listExpenses(filters: ExpenseFilters = {}) {
       amountPence: expenses.amountPence,
       status: expenses.status,
       billable: expenses.billable,
-      paidByName: users.name,
+      paidByName: paidBy.name,
+      createdByName: createdBy.name,
+      createdByEmail: createdBy.email,
+      submittedByName: submittedBy.name,
+      submittedByEmail: submittedBy.email,
       clientName: clientDisplayNameSql.as("client_name"),
     })
     .from(expenses)
-    .leftJoin(users, eq(expenses.paidByUserId, users.id))
+    .leftJoin(paidBy, eq(expenses.paidByUserId, paidBy.id))
+    .leftJoin(createdBy, eq(expenses.createdByUserId, createdBy.id))
+    .leftJoin(submittedBy, eq(expenses.submittedByUserId, submittedBy.id))
     .leftJoin(clients, eq(expenses.billableClientId, clients.id))
-    .where(conditions.length ? and(...conditions) : undefined)
+    .where(and(...conditions))
     .orderBy(desc(expenses.spentAt), desc(expenses.createdAt));
 
-  return rows.map((r) => ({
-    ...r,
-    amountFormatted: formatGBP(r.amountPence),
-  }));
+  return rows.map((r) => {
+    const createdByDisplay =
+      r.createdByName ||
+      r.createdByEmail ||
+      r.submittedByName ||
+      r.submittedByEmail ||
+      null;
+    return {
+      id: r.id,
+      description: r.description,
+      category: r.category,
+      spentAt: r.spentAt,
+      amountPence: r.amountPence,
+      status: r.status,
+      billable: r.billable,
+      paidByName: r.paidByName,
+      createdByName: createdByDisplay,
+      clientName: r.clientName,
+      amountFormatted: formatGBP(r.amountPence),
+    };
+  });
 }
 
-export async function getExpenseDetail(id: string) {
+export async function getExpenseDetail(companyId: string, id: string) {
   const db = getDb();
   const submitter = alias(users, "submitter");
   const rows = await db
@@ -83,7 +114,7 @@ export async function getExpenseDetail(id: string) {
     .leftJoin(users, eq(expenses.paidByUserId, users.id))
     .leftJoin(clients, eq(expenses.billableClientId, clients.id))
     .leftJoin(submitter, eq(expenses.submittedByUserId, submitter.id))
-    .where(eq(expenses.id, id))
+    .where(and(eq(expenses.id, id), eq(expenses.companyId, companyId)))
     .limit(1);
 
   if (!rows[0]) return null;
@@ -107,9 +138,15 @@ export async function getExpenseDetail(id: string) {
   };
 }
 
-export async function getReimbursableSummary(paidByUserId?: string) {
+export async function getReimbursableSummary(
+  companyId: string,
+  paidByUserId?: string,
+) {
   const db = getDb();
-  const conditions = [eq(expenses.status, "reimbursable" as ExpenseStatus)];
+  const conditions = [
+    eq(expenses.companyId, companyId),
+    eq(expenses.status, "reimbursable" as ExpenseStatus),
+  ];
   if (paidByUserId) {
     conditions.push(eq(expenses.paidByUserId, paidByUserId));
   }
@@ -128,13 +165,17 @@ export async function getReimbursableSummary(paidByUserId?: string) {
   };
 }
 
-export async function listReimbursableExpenses(payeeUserId: string) {
+export async function listReimbursableExpenses(
+  companyId: string,
+  payeeUserId: string,
+) {
   const db = getDb();
   return db
     .select()
     .from(expenses)
     .where(
       and(
+        eq(expenses.companyId, companyId),
         eq(expenses.status, "reimbursable"),
         eq(expenses.paidByUserId, payeeUserId),
       ),

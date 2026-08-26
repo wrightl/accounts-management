@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { guardPage, hasPermission } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { guardTenantPage, hasPermission } from "@/lib/auth";
 import {
   defaultReportPeriod,
   listDividendDeclarations,
@@ -17,7 +18,10 @@ export default async function DividendsPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  await guardPage("accounts:read");
+  const { companyId, entityType } = await guardTenantPage("accounts:read");
+  if (entityType !== "limited_company") {
+    redirect("/dashboard");
+  }
   const canWrite = await hasPermission("accounts:write");
   const sp = await searchParams;
 
@@ -32,11 +36,11 @@ export default async function DividendsPage({
     );
   }
 
-  const defaults = await defaultReportPeriod();
+  const defaults = await defaultReportPeriod(companyId);
   const from = sp.from ?? defaults.from;
   const to = sp.to ?? defaults.to;
 
-  const declarations = await listDividendDeclarations({ from, to });
+  const declarations = await listDividendDeclarations(companyId, { from, to });
   const totalPence = declarations.reduce((sum, d) => sum + d.totalPence, 0);
 
   return (

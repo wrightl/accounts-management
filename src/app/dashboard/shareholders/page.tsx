@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { guardPage, hasPermission } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { listShareholders } from "@/lib/shareholders/queries";
 import { TotalSharesForm } from "@/components/shareholders/total-shares-form";
 import { buttonClasses } from "@/components/ui/button";
@@ -7,7 +8,10 @@ import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { isDatabaseConfigured } from "@/env";
 
 export default async function ShareholdersPage() {
-  await guardPage("accounts:read");
+  const { companyId, entityType } = await guardTenantPage("accounts:read");
+  if (entityType !== "limited_company") {
+    redirect("/dashboard");
+  }
   const canWrite = await hasPermission("accounts:write");
 
   if (!isDatabaseConfigured()) {
@@ -22,7 +26,7 @@ export default async function ShareholdersPage() {
   }
 
   const { shareholders, totalShares, activeShareSum, registerBalanced } =
-    await listShareholders({ includeArchived: true });
+    await listShareholders(companyId, { includeArchived: true });
   const active = shareholders.filter((s) => !s.archivedAt);
   const archived = shareholders.filter((s) => s.archivedAt);
 

@@ -1,7 +1,7 @@
 import "server-only";
-import { count, eq, sql } from "drizzle-orm";
+import { and, count, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { bankSpendingCategories, bankTransactions } from "@/db/schema";
+import { bankAccounts, bankSpendingCategories, bankTransactions } from "@/db/schema";
 import { isKnownBankCategory } from "@/lib/bank/categories";
 
 const MAX_CATEGORY_LENGTH = 120;
@@ -24,6 +24,7 @@ export function normalizeSpendingCategoryName(value: string | null | undefined):
  * Built-in Starling categories are returned unchanged and not stored in the catalog.
  */
 export async function upsertBankSpendingCategory(
+  companyId: string,
   value: string | null | undefined,
 ): Promise<string | null> {
   const normalized = normalizeSpendingCategoryName(value);
@@ -34,7 +35,12 @@ export async function upsertBankSpendingCategory(
   const [existing] = await db
     .select({ name: bankSpendingCategories.name })
     .from(bankSpendingCategories)
-    .where(sql`lower(${bankSpendingCategories.name}) = ${normalized.toLowerCase()}`)
+    .where(
+      and(
+        eq(bankSpendingCategories.companyId, companyId),
+        sql`lower(${bankSpendingCategories.name}) = ${normalized.toLowerCase()}`,
+      ),
+    )
     .limit(1);
 
   if (existing) return existing.name;
@@ -42,7 +48,7 @@ export async function upsertBankSpendingCategory(
   try {
     const [created] = await db
       .insert(bankSpendingCategories)
-      .values({ name: normalized })
+      .values({ companyId, name: normalized })
       .returning({ name: bankSpendingCategories.name });
     return created.name;
   } catch (err) {
@@ -50,13 +56,20 @@ export async function upsertBankSpendingCategory(
     const [race] = await db
       .select({ name: bankSpendingCategories.name })
       .from(bankSpendingCategories)
-      .where(sql`lower(${bankSpendingCategories.name}) = ${normalized.toLowerCase()}`)
+      .where(
+        and(
+          eq(bankSpendingCategories.companyId, companyId),
+          sql`lower(${bankSpendingCategories.name}) = ${normalized.toLowerCase()}`,
+        ),
+      )
       .limit(1);
     return race?.name ?? normalized;
   }
 }
 
-export async function listBankSpendingCategoriesWithUsage(): Promise<BankSpendingCategoryRow[]> {
+export async function listBankSpendingCategoriesWithUsage(
+  companyId: string,
+): Promise<BankSpendingCategoryRow[]> {
   const db = getDb();
   return db
     .select({
@@ -69,23 +82,33 @@ export async function listBankSpendingCategoriesWithUsage(): Promise<BankSpendin
       bankTransactions,
       sql`lower(${bankTransactions.spendingCategory}) = lower(${bankSpendingCategories.name})`,
     )
+    .leftJoin(bankAccounts, eq(bankTransactions.bankAccountId, bankAccounts.id))
+    .where(eq(bankSpendingCategories.companyId, companyId))
     .groupBy(bankSpendingCategories.id, bankSpendingCategories.name)
     .orderBy(bankSpendingCategories.name);
 }
 
-export async function listBankSpendingCategoryNames(): Promise<string[]> {
-  const rows = await listBankSpendingCategoriesWithUsage();
+export async function listBankSpendingCategoryNames(
+  companyId: string,
+): Promise<string[]> {
+  const rows = await listBankSpendingCategoriesWithUsage(companyId);
   return rows.map((row) => row.name);
 }
 
 export async function deleteUnusedBankSpendingCategory(
+  companyId: string,
   categoryId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const db = getDb();
   const [category] = await db
     .select({ id: bankSpendingCategories.id, name: bankSpendingCategories.name })
     .from(bankSpendingCategories)
-    .where(eq(bankSpendingCategories.id, categoryId))
+    .where(
+      and(
+        eq(bankSpendingCategories.id, categoryId),
+        eq(bankSpendingCategories.companyId, companyId),
+      ),
+    )
     .limit(1);
 
   if (!category) return { ok: false, error: "Category not found" };
@@ -93,13 +116,26 @@ export async function deleteUnusedBankSpendingCategory(
   const [usage] = await db
     .select({ total: count() })
     .from(bankTransactions)
-    .where(sql`lower(${bankTransactions.spendingCategory}) = ${category.name.toLowerCase()}`);
+    .innerJoin(bankAccounts, eq(bankTransactions.bankAccountId, bankAccounts.id))
+    .where(
+      and(
+        eq(bankAccounts.companyId, companyId),
+        sql`lower(${bankTransactions.spendingCategory}) = ${category.name.toLowerCase()}`,
+      ),
+    );
 
   if ((usage?.total ?? 0) > 0) {
     return { ok: false, error: "Category is still in use on bank transactions" };
   }
 
-  await db.delete(bankSpendingCategories).where(eq(bankSpendingCategories.id, categoryId));
+  await db
+    .delete(bankSpendingCategories)
+    .where(
+      and(
+        eq(bankSpendingCategories.id, categoryId),
+        eq(bankSpendingCategories.companyId, companyId),
+      ),
+    );
   return { ok: true };
 }
 

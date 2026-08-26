@@ -3,6 +3,7 @@ import { getDb } from "@/db";
 import { auditLog } from "@/db/schema";
 
 export async function writeAudit(params: {
+  companyId: string;
   actorUserId: string | null;
   action: string;
   entityType?: string;
@@ -11,6 +12,7 @@ export async function writeAudit(params: {
 }): Promise<void> {
   const db = getDb();
   await db.insert(auditLog).values({
+    companyId: params.companyId,
     actorUserId: params.actorUserId,
     action: params.action,
     entityType: params.entityType ?? null,
@@ -25,6 +27,7 @@ export async function writeAudit(params: {
       entityType: params.entityType,
       entityId: params.entityId,
       actorUserId: params.actorUserId,
+      companyId: params.companyId,
     }),
   );
 }

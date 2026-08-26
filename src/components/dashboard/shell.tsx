@@ -1,12 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { Logo } from "@/components/brand/logo";
 import { cn } from "@/lib/utils";
 import type { Role } from "@/lib/roles";
+import { CompanyNavBrand, type CompanySwitcherOption } from "./company-nav-brand";
 import { NAV_COLLAPSED_COOKIE, type NavGroup } from "./nav";
 import { NavLinks } from "./nav-links";
 import {
@@ -29,6 +28,10 @@ export function DashboardShell({
   role,
   userName,
   avatarUrl,
+  companyId,
+  companyName,
+  companyLogoUrl,
+  memberships = [],
   navCollapsed: initialNavCollapsed,
   overdueInvoiceCount = 0,
   children,
@@ -37,6 +40,10 @@ export function DashboardShell({
   role: Role;
   userName: string | null;
   avatarUrl: string | null;
+  companyId: string;
+  companyName: string;
+  companyLogoUrl: string | null;
+  memberships?: CompanySwitcherOption[];
   navCollapsed: boolean;
   overdueInvoiceCount?: number;
   children: React.ReactNode;
@@ -72,21 +79,13 @@ export function DashboardShell({
               : "items-center gap-1 py-6 pl-5 pr-2",
           )}
         >
-          <Link
-            href="/dashboard"
-            className={cn(
-              "flex items-center overflow-hidden",
-              collapsed ? "justify-center" : "min-w-0 flex-1",
-            )}
-            title="Dot + Dash Accounts"
-          >
-            <Logo
-              className="min-w-max text-white"
-              subtitle="Accounts"
-              size={collapsed ? 32 : 44}
-              showWordmark={!collapsed}
-            />
-          </Link>
+          <CompanyNavBrand
+            companyName={companyName}
+            logoUrl={companyLogoUrl}
+            companyId={companyId}
+            memberships={memberships}
+            collapsed={collapsed}
+          />
           <button
             type="button"
             onClick={toggleCollapsed}
@@ -153,6 +152,10 @@ export function DashboardShell({
         role={role}
         userName={userName}
         avatarUrl={avatarUrl}
+        companyName={companyName}
+        companyLogoUrl={companyLogoUrl}
+        companyId={companyId}
+        memberships={memberships}
         onSearch={() => {
           setMobileOpen(false);
           setCommandOpen(true);

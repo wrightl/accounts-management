@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Pencil } from "lucide-react";
-import { guardPage, hasPermission } from "@/lib/auth";
+import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
 import { canEditInvoice, type InvoiceStatus } from "@/lib/invoices/status";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
@@ -19,13 +19,13 @@ export default async function InvoiceDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await guardPage("accounts:read");
+  const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
   const { id } = await params;
 
   if (!isDatabaseConfigured()) notFound();
 
-  const detail = await getInvoiceDetail(id);
+  const detail = await getInvoiceDetail(companyId, id);
   if (!detail) notFound();
 
   const { invoice, client, lines, payments, paidFormatted, balanceFormatted } =

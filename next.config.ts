@@ -64,7 +64,12 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  serverExternalPackages: ["pdfjs-dist", "@napi-rs/canvas"],
+  serverExternalPackages: [
+    "pdfjs-dist",
+    "@napi-rs/canvas",
+    "@vercel/blob",
+    "@vercel/oidc",
+  ],
   ...(devOrigin ? { allowedDevOrigins: [devOrigin] } : {}),
   experimental: {
     serverActions: {

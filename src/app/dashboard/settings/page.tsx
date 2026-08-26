@@ -1,11 +1,11 @@
-import { guardPage } from "@/lib/auth";
+import { guardTenantPage } from "@/lib/auth";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { listReceiptOcrGatewayModels } from "@/lib/expenses/receipt-ocr-models-catalog";
 import { SettingsForm } from "@/components/settings/settings-form";
 import { isDatabaseConfigured } from "@/env";
 
 export default async function SettingsPage() {
-  await guardPage("settings:manage");
+  const { companyId } = await guardTenantPage("settings:manage");
 
   if (!isDatabaseConfigured()) {
     return (
@@ -17,7 +17,7 @@ export default async function SettingsPage() {
   }
 
   const [settings, ocrModels] = await Promise.all([
-    getOrCreateCompanySettings(),
+    getOrCreateCompanySettings(companyId),
     listReceiptOcrGatewayModels(),
   ]);
 

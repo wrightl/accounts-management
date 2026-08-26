@@ -1,7 +1,7 @@
 import "server-only";
-import { and, desc, gte, lte, lt, sql, sum } from "drizzle-orm";
+import { and, desc, eq, gte, lte, lt, sql, sum } from "drizzle-orm";
 import { getDb } from "@/db";
-import { bankTransactions } from "@/db/schema";
+import { bankAccounts, bankTransactions } from "@/db/schema";
 import { formatBankCategory } from "@/lib/bank/categories";
 import { eachDay, eachMonth, ordinalDayFromIso } from "@/lib/dates";
 import { formatGBP } from "@/lib/money";
@@ -30,15 +30,21 @@ export interface TopSpendingRow {
   sharePercent: number;
 }
 
-async function sumOutflows(from: string, to: string): Promise<number> {
+async function sumOutflows(
+  companyId: string,
+  from: string,
+  to: string,
+): Promise<number> {
   const db = getDb();
   const [row] = await db
     .select({
       total: sum(sql<number>`abs(${bankTransactions.amountPence})`).mapWith(Number),
     })
     .from(bankTransactions)
+    .innerJoin(bankAccounts, eq(bankTransactions.bankAccountId, bankAccounts.id))
     .where(
       and(
+        eq(bankAccounts.companyId, companyId),
         lt(bankTransactions.amountPence, 0),
         gte(bankTransactions.bookedAt, from),
         lte(bankTransactions.bookedAt, to),
@@ -53,15 +59,18 @@ function computeTrend(current: number, previous: number): SpendingTrend {
   return "same";
 }
 
-export async function getSpendingSummary(input: {
-  from: string;
-  to: string;
-  compareFrom: string;
-  compareTo: string;
-}): Promise<SpendingSummary> {
+export async function getSpendingSummary(
+  companyId: string,
+  input: {
+    from: string;
+    to: string;
+    compareFrom: string;
+    compareTo: string;
+  },
+): Promise<SpendingSummary> {
   const [totalPence, compareTotalPence] = await Promise.all([
-    sumOutflows(input.from, input.to),
-    sumOutflows(input.compareFrom, input.compareTo),
+    sumOutflows(companyId, input.from, input.to),
+    sumOutflows(companyId, input.compareFrom, input.compareTo),
   ]);
   const deltaPence = totalPence - compareTotalPence;
   return {
@@ -75,7 +84,11 @@ export async function getSpendingSummary(input: {
   };
 }
 
-async function outflowsByDay(from: string, to: string): Promise<Map<string, number>> {
+async function outflowsByDay(
+  companyId: string,
+  from: string,
+  to: string,
+): Promise<Map<string, number>> {
   const db = getDb();
   const rows = await db
     .select({
@@ -83,8 +96,10 @@ async function outflowsByDay(from: string, to: string): Promise<Map<string, numb
       total: sum(sql<number>`abs(${bankTransactions.amountPence})`).mapWith(Number),
     })
     .from(bankTransactions)
+    .innerJoin(bankAccounts, eq(bankTransactions.bankAccountId, bankAccounts.id))
     .where(
       and(
+        eq(bankAccounts.companyId, companyId),
         lt(bankTransactions.amountPence, 0),
         gte(bankTransactions.bookedAt, from),
         lte(bankTransactions.bookedAt, to),
@@ -99,7 +114,11 @@ async function outflowsByDay(from: string, to: string): Promise<Map<string, numb
   return map;
 }
 
-async function outflowsByMonth(from: string, to: string): Promise<Map<string, number>> {
+async function outflowsByMonth(
+  companyId: string,
+  from: string,
+  to: string,
+): Promise<Map<string, number>> {
   const db = getDb();
   const rows = await db
     .select({
@@ -107,8 +126,10 @@ async function outflowsByMonth(from: string, to: string): Promise<Map<string, nu
       total: sum(sql<number>`abs(${bankTransactions.amountPence})`).mapWith(Number),
     })
     .from(bankTransactions)
+    .innerJoin(bankAccounts, eq(bankTransactions.bankAccountId, bankAccounts.id))
     .where(
       and(
+        eq(bankAccounts.companyId, companyId),
         lt(bankTransactions.amountPence, 0),
         gte(bankTransactions.bookedAt, from),
         lte(bankTransactions.bookedAt, to),
@@ -133,19 +154,22 @@ function monthAxisLabel(key: string): string {
   return d.toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" });
 }
 
-export async function getSpendingSeries(input: {
-  from: string;
-  to: string;
-  compareFrom: string;
-  compareTo: string;
-  buckets: "day" | "month";
-}): Promise<SpendingSeriesPoint[]> {
+export async function getSpendingSeries(
+  companyId: string,
+  input: {
+    from: string;
+    to: string;
+    compareFrom: string;
+    compareTo: string;
+    buckets: "day" | "month";
+  },
+): Promise<SpendingSeriesPoint[]> {
   if (input.buckets === "day") {
     const currentDays = eachDay(input.from, input.to);
     const compareDays = eachDay(input.compareFrom, input.compareTo);
     const [currentMap, compareMap] = await Promise.all([
-      outflowsByDay(input.from, input.to),
-      outflowsByDay(input.compareFrom, input.compareTo),
+      outflowsByDay(companyId, input.from, input.to),
+      outflowsByDay(companyId, input.compareFrom, input.compareTo),
     ]);
 
     const len = Math.max(currentDays.length, compareDays.length);
@@ -172,8 +196,8 @@ export async function getSpendingSeries(input: {
   const currentMonths = eachMonth(input.from, input.to);
   const compareMonths = eachMonth(input.compareFrom, input.compareTo);
   const [currentMap, compareMap] = await Promise.all([
-    outflowsByMonth(input.from, input.to),
-    outflowsByMonth(input.compareFrom, input.compareTo),
+    outflowsByMonth(companyId, input.from, input.to),
+    outflowsByMonth(companyId, input.compareFrom, input.compareTo),
   ]);
 
   const len = Math.max(currentMonths.length, compareMonths.length);
@@ -197,12 +221,15 @@ export async function getSpendingSeries(input: {
   return toCumulativeSeries(points);
 }
 
-export async function getTopSpending(input: {
-  from: string;
-  to: string;
-  groupBy: "category" | "merchant";
-  limit?: number;
-}): Promise<TopSpendingRow[]> {
+export async function getTopSpending(
+  companyId: string,
+  input: {
+    from: string;
+    to: string;
+    groupBy: "category" | "merchant";
+    limit?: number;
+  },
+): Promise<TopSpendingRow[]> {
   const db = getDb();
   const limit = input.limit ?? 10;
 
@@ -217,8 +244,10 @@ export async function getTopSpending(input: {
       total: sum(sql<number>`abs(${bankTransactions.amountPence})`).mapWith(Number),
     })
     .from(bankTransactions)
+    .innerJoin(bankAccounts, eq(bankTransactions.bankAccountId, bankAccounts.id))
     .where(
       and(
+        eq(bankAccounts.companyId, companyId),
         lt(bankTransactions.amountPence, 0),
         gte(bankTransactions.bookedAt, input.from),
         lte(bankTransactions.bookedAt, input.to),
@@ -228,7 +257,7 @@ export async function getTopSpending(input: {
     .orderBy(desc(sum(sql<number>`abs(${bankTransactions.amountPence})`)))
     .limit(limit);
 
-  const periodTotal = await sumOutflows(input.from, input.to);
+  const periodTotal = await sumOutflows(companyId, input.from, input.to);
 
   return rows.map((row, index) => {
     const totalPence = row.total ?? 0;
@@ -251,7 +280,11 @@ export async function getTopSpending(input: {
   });
 }
 
-export async function hasSpendingOutflows(from: string, to: string): Promise<boolean> {
-  const total = await sumOutflows(from, to);
+export async function hasSpendingOutflows(
+  companyId: string,
+  from: string,
+  to: string,
+): Promise<boolean> {
+  const total = await sumOutflows(companyId, from, to);
   return total > 0;
 }

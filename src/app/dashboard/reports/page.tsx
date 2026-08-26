@@ -1,4 +1,4 @@
-import { guardPage, hasPermission } from '@/lib/auth';
+import { guardTenantPage, hasPermission } from '@/lib/auth';
 import {
     defaultReportPeriod,
     getAgedReceivables,
@@ -18,7 +18,7 @@ export default async function ReportsPage({
 }: {
     searchParams: Promise<Record<string, string | undefined>>;
 }) {
-    await guardPage('reports:read');
+    const { companyId } = await guardTenantPage('reports:read');
     const canExport = await hasPermission('reports:export');
     const sp = await searchParams;
 
@@ -33,15 +33,15 @@ export default async function ReportsPage({
         );
     }
 
-    const defaults = await defaultReportPeriod();
+    const defaults = await defaultReportPeriod(companyId);
     const from = sp.from ?? defaults.from;
     const to = sp.to ?? defaults.to;
 
     const [pnl, aged, byMonth, byCategory, vat] = await Promise.all([
-        getProfitAndLoss(from, to),
-        getAgedReceivables(),
-        getIncomeByMonth(from, to),
-        getExpenseByCategory(from, to),
+        getProfitAndLoss(companyId, from, to),
+        getAgedReceivables(companyId),
+        getIncomeByMonth(companyId, from, to),
+        getExpenseByCategory(companyId, from, to),
         getVatSummary(from, to),
     ]);
 

@@ -7,7 +7,7 @@ import { escapeHtml } from "@/lib/html";
 import { formatGBP } from "@/lib/money";
 import { getStorage } from "@/lib/storage";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
-import { getOrCreateCompanySettings } from "@/lib/settings/queries";
+import { getCompanySettings } from "@/lib/settings/queries";
 import { renderInvoicePdf } from "@/lib/invoices/pdf";
 import { storedStatus, todayIsoDate } from "@/lib/invoices/status";
 
@@ -16,7 +16,11 @@ const REMIND_COOLDOWN_DAYS = 7;
 
 export type SendJobKind = "invoice_send" | "invoice_remind";
 
-export async function enqueueSendJob(kind: SendJobKind, invoiceId: string): Promise<string> {
+export async function enqueueSendJob(
+  kind: SendJobKind,
+  companyId: string,
+  invoiceId: string,
+): Promise<string> {
   const db = getDb();
   const pending = await db
     .select({ id: sendJobs.id })
@@ -33,7 +37,7 @@ export async function enqueueSendJob(kind: SendJobKind, invoiceId: string): Prom
 
   const [created] = await db
     .insert(sendJobs)
-    .values({ kind, invoiceId, status: "pending" })
+    .values({ companyId, kind, invoiceId, status: "pending" })
     .returning({ id: sendJobs.id });
   return created.id;
 }
@@ -115,6 +119,7 @@ export async function enqueueOverdueReminders(): Promise<number> {
   const overdue = await db
     .select({
       id: invoices.id,
+      companyId: invoices.companyId,
       status: invoices.status,
       dueDate: invoices.dueDate,
     })
@@ -142,7 +147,7 @@ export async function enqueueOverdueReminders(): Promise<number> {
       )
       .limit(1);
     if (recent[0]) continue;
-    await enqueueSendJob("invoice_remind", inv.id);
+    await enqueueSendJob("invoice_remind", inv.companyId, inv.id);
     queued++;
   }
 
@@ -150,7 +155,15 @@ export async function enqueueOverdueReminders(): Promise<number> {
 }
 
 async function deliverInvoice(invoiceId: string) {
-  const detail = await getInvoiceDetail(invoiceId);
+  const db = getDb();
+  const [invRow] = await db
+    .select({ companyId: invoices.companyId })
+    .from(invoices)
+    .where(eq(invoices.id, invoiceId))
+    .limit(1);
+  if (!invRow) throw new Error("Invoice not found");
+
+  const detail = await getInvoiceDetail(invRow.companyId, invoiceId);
   if (!detail) throw new Error("Invoice not found");
   const stored = storedStatus(detail.invoice.status);
   if (stored !== "draft" && stored !== "sent") {
@@ -158,7 +171,7 @@ async function deliverInvoice(invoiceId: string) {
   }
   if (!detail.client.email) throw new Error("Client has no email address");
 
-  const company = await getOrCreateCompanySettings();
+  const company = await getCompanySettings(invRow.companyId);
   const pdfBytes = await loadOrRenderPdf(invoiceId, detail, company);
   const filename = `${detail.invoice.number}.pdf`;
   const companyName = escapeHtml(company.name);
@@ -179,7 +192,6 @@ async function deliverInvoice(invoiceId: string) {
     ],
   });
 
-  const db = getDb();
   await db
     .update(invoices)
     .set({
@@ -208,7 +220,7 @@ async function deliverReminder(invoiceId: string) {
   }
   if (!row.clientEmail) throw new Error("Client has no email address");
 
-  const company = await getOrCreateCompanySettings();
+  const company = await getCompanySettings(row.invoice.companyId);
   const name = escapeHtml(row.clientName);
   const number = escapeHtml(row.invoice.number);
   const amount = escapeHtml(formatGBP(row.invoice.grossPence));
@@ -225,7 +237,7 @@ async function deliverReminder(invoiceId: string) {
 async function loadOrRenderPdf(
   invoiceId: string,
   detail: NonNullable<Awaited<ReturnType<typeof getInvoiceDetail>>>,
-  company: Awaited<ReturnType<typeof getOrCreateCompanySettings>>,
+  company: Awaited<ReturnType<typeof getCompanySettings>>,
 ): Promise<Uint8Array> {
   if (detail.invoice.pdfBlobPath) {
     try {

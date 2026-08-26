@@ -39,12 +39,13 @@ function formatSummaryPeriod(from: string, to: string): string {
 }
 
 export async function getBankTransactionSummary(
+  companyId: string,
   filters: Partial<
     Pick<BankListParams, "q" | "type" | "category" | "reconciliation" | "from" | "to">
   >,
 ): Promise<BankTransactionSummary> {
   const db = getDb();
-  const where = bankListWhere(filters);
+  const where = bankListWhere(companyId, filters);
 
   const [totals] = await db
     .select({

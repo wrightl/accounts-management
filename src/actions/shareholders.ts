@@ -40,9 +40,10 @@ async function activeShareSumExcluding(
 }
 
 async function validateAgainstTotal(
+  companyId: string,
   nextActiveSum: number,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const settings = await getOrCreateCompanySettings();
+  const settings = await getOrCreateCompanySettings(companyId);
   if (settings.totalShares == null) return { ok: true };
   if (nextActiveSum !== settings.totalShares) {
     return {
@@ -62,18 +63,27 @@ function revalidateShareholders() {
 export async function updateTotalShares(formData: FormData): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  if (authz.user.entityType !== "limited_company") {
+    return { ok: false, error: "Shareholders are only available for limited companies." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
   const raw = String(formData.get("totalShares") ?? "").trim();
   if (raw === "") {
     const db = getDb();
-    const settings = await getOrCreateCompanySettings();
+    const settings = await getOrCreateCompanySettings(companyId);
     await db
       .update(companySettings)
       .set({ totalShares: null, updatedAt: new Date() })
       .where(eq(companySettings.id, settings.id));
     await writeAudit({
+    companyId,
       actorUserId: localUserId,
       action: "shareholder.total_shares.clear",
       entityType: "company_settings",
@@ -97,13 +107,14 @@ export async function updateTotalShares(formData: FormData): Promise<ActionResul
   }
 
   const db = getDb();
-  const settings = await getOrCreateCompanySettings();
+  const settings = await getOrCreateCompanySettings(companyId);
   await db
     .update(companySettings)
     .set({ totalShares: parsed.data, updatedAt: new Date() })
     .where(eq(companySettings.id, settings.id));
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "shareholder.total_shares.update",
     entityType: "company_settings",
@@ -118,6 +129,14 @@ export async function updateTotalShares(formData: FormData): Promise<ActionResul
 export async function createShareholder(formData: FormData): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  if (authz.user.entityType !== "limited_company") {
+    return { ok: false, error: "Shareholders are only available for limited companies." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
@@ -131,20 +150,22 @@ export async function createShareholder(formData: FormData): Promise<ActionResul
   }
 
   const nextSum = (await activeShareSumExcluding(null)) + parsed.data.shareCount;
-  const check = await validateAgainstTotal(nextSum);
+  const check = await validateAgainstTotal(companyId, nextSum);
   if (!check.ok) return check;
 
   const db = getDb();
   const [row] = await db
     .insert(shareholders)
     .values({
-      name: parsed.data.name,
+      companyId,
+        name: parsed.data.name,
       shareCount: parsed.data.shareCount,
       userId: parsed.data.userId,
     })
     .returning({ id: shareholders.id });
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "shareholder.create",
     entityType: "shareholder",
@@ -161,6 +182,14 @@ export async function updateShareholder(
 ): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  if (authz.user.entityType !== "limited_company") {
+    return { ok: false, error: "Shareholders are only available for limited companies." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
@@ -177,7 +206,7 @@ export async function updateShareholder(
   const [existing] = await db
     .select()
     .from(shareholders)
-    .where(eq(shareholders.id, id))
+    .where(and(eq(shareholders.id, id), eq(shareholders.companyId, companyId)))
     .limit(1);
   if (!existing) return { ok: false, error: "Shareholder not found" };
   if (existing.archivedAt) {
@@ -185,7 +214,7 @@ export async function updateShareholder(
   }
 
   const nextSum = (await activeShareSumExcluding(id)) + parsed.data.shareCount;
-  const check = await validateAgainstTotal(nextSum);
+  const check = await validateAgainstTotal(companyId, nextSum);
   if (!check.ok) return check;
 
   await db
@@ -195,9 +224,10 @@ export async function updateShareholder(
       shareCount: parsed.data.shareCount,
       userId: parsed.data.userId,
     })
-    .where(eq(shareholders.id, id));
+    .where(and(eq(shareholders.id, id), eq(shareholders.companyId, companyId)));
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "shareholder.update",
     entityType: "shareholder",
@@ -211,6 +241,14 @@ export async function updateShareholder(
 export async function archiveShareholder(id: string): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  if (authz.user.entityType !== "limited_company") {
+    return { ok: false, error: "Shareholders are only available for limited companies." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
@@ -218,18 +256,18 @@ export async function archiveShareholder(id: string): Promise<ActionResult> {
   const [existing] = await db
     .select()
     .from(shareholders)
-    .where(eq(shareholders.id, id))
+    .where(and(eq(shareholders.id, id), eq(shareholders.companyId, companyId)))
     .limit(1);
   if (!existing) return { ok: false, error: "Shareholder not found" };
   if (existing.archivedAt) return { ok: true, id };
 
-  const settings = await getOrCreateCompanySettings();
+  const settings = await getOrCreateCompanySettings(companyId);
   const nextSum = (await activeShareSumExcluding(id));
 
   await db
     .update(shareholders)
     .set({ archivedAt: new Date() })
-    .where(eq(shareholders.id, id));
+    .where(and(eq(shareholders.id, id), eq(shareholders.companyId, companyId)));
 
   // Keep register balanced: reduce total shares by the archived count when set.
   if (settings.totalShares != null) {
@@ -243,6 +281,7 @@ export async function archiveShareholder(id: string): Promise<ActionResult> {
   }
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "shareholder.archive",
     entityType: "shareholder",

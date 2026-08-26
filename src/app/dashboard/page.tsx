@@ -39,7 +39,9 @@ export default async function DashboardOverview() {
 
   if (isDatabaseConfigured() && can(user.role, "accounts:read")) {
     try {
-      overview = await getDashboardOverview(user);
+      if (user.companyId) {
+        overview = await getDashboardOverview(user.companyId, user);
+      }
     } catch (err) {
       console.warn(
         JSON.stringify({

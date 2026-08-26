@@ -1,18 +1,18 @@
 import Link from "next/link";
-import { guardPage } from "@/lib/auth";
+import { guardTenantPage } from "@/lib/auth";
 import { listClients } from "@/lib/clients/queries";
 import { QuoteForm } from "@/components/quotes/quote-form";
 import { buttonClasses } from "@/components/ui/button";
 import { isDatabaseConfigured } from "@/env";
 
 export default async function NewQuotePage() {
-  await guardPage("accounts:write");
+  const { companyId } = await guardTenantPage("accounts:write");
 
   if (!isDatabaseConfigured()) {
     return <p className="text-muted">Connect a database to create quotes.</p>;
   }
 
-  const clients = await listClients();
+  const clients = await listClients(companyId);
 
   return (
     <div>

@@ -13,6 +13,7 @@ import {
   reimbursements,
   users,
 } from "@/db/schema";
+import { seedCompany } from "@/lib/test/seed-company";
 import { recordPayment } from "@/actions/payments";
 import { createQuote } from "@/actions/quotes";
 import { createReimbursementRun, markReimbursementPaid, updateReimbursementRun } from "@/actions/reimbursements";
@@ -32,11 +33,14 @@ vi.mock("@clerk/nextjs/server", () => ({
 
 let ctx: Awaited<ReturnType<typeof createTestDb>>;
 let db: TestDatabase;
+let companyId: string;
 
 beforeEach(async () => {
   ctx = await createTestDb();
   db = ctx.db;
   setTestDb(db as unknown as Database);
+  const company = await seedCompany(db);
+  companyId = company.id;
 });
 
 afterEach(async () => {
@@ -49,6 +53,7 @@ describe("action-layer PGlite", () => {
     const [actor] = await db
       .insert(users)
       .values({
+        companyId,
         clerkUserId: "user_clerk_1",
         email: "lee@dotanddashconsulting.com",
         name: "Lee",
@@ -57,11 +62,12 @@ describe("action-layer PGlite", () => {
       .returning();
     const [client] = await db
       .insert(clients)
-      .values({ name: "Acme", email: "ap@acme.test" })
+      .values({ companyId, name: "Acme", email: "ap@acme.test" })
       .returning();
     const [inv] = await db
       .insert(invoices)
       .values({
+        companyId,
         number: "DD-2026-0500",
         clientId: client.id,
         status: "sent",
@@ -91,16 +97,18 @@ describe("action-layer PGlite", () => {
     const [actor] = await db
       .insert(users)
       .values({
+        companyId,
         clerkUserId: "user_clerk_1",
         email: "lee@dotanddashconsulting.com",
         name: "Lee",
         role: "admin",
       })
       .returning();
-    const [client] = await db.insert(clients).values({ name: "Beta" }).returning();
+    const [client] = await db.insert(clients).values({ companyId, name: "Beta" }).returning();
     const [inv] = await db
       .insert(invoices)
       .values({
+        companyId,
         number: "DD-2026-0501",
         clientId: client.id,
         status: "sent",
@@ -121,6 +129,7 @@ describe("action-layer PGlite", () => {
     const [actor] = await db
       .insert(users)
       .values({
+        companyId,
         clerkUserId: "user_clerk_1",
         email: "lee@dotanddashconsulting.com",
         name: "Lee",
@@ -130,6 +139,7 @@ describe("action-layer PGlite", () => {
     const [exp] = await db
       .insert(expenses)
       .values({
+        companyId,
         description: "Train",
         category: "Travel",
         spentAt: "2026-04-01",
@@ -168,6 +178,7 @@ describe("action-layer PGlite", () => {
     const [actor] = await db
       .insert(users)
       .values({
+        companyId,
         clerkUserId: "user_clerk_1",
         email: "lee@dotanddashconsulting.com",
         name: "Lee",
@@ -178,6 +189,7 @@ describe("action-layer PGlite", () => {
       .insert(expenses)
       .values([
         {
+          companyId,
           description: "Train",
           category: "Travel",
           spentAt: "2026-04-01",
@@ -187,6 +199,7 @@ describe("action-layer PGlite", () => {
           createdByUserId: actor.id,
         },
         {
+          companyId,
           description: "Taxi",
           category: "Travel",
           spentAt: "2026-04-02",
@@ -244,6 +257,7 @@ describe("action-layer PGlite", () => {
     await db
       .insert(users)
       .values({
+        companyId,
         clerkUserId: "user_clerk_1",
         email: "lee@dotanddashconsulting.com",
         name: "Lee",
@@ -252,7 +266,7 @@ describe("action-layer PGlite", () => {
       .returning();
     const [client] = await db
       .insert(clients)
-      .values({ name: "Acme", email: "ap@acme.test" })
+      .values({ companyId, name: "Acme", email: "ap@acme.test" })
       .returning();
 
     const form = new FormData();
@@ -284,13 +298,14 @@ describe("action-layer PGlite", () => {
     await db
       .insert(users)
       .values({
+        companyId,
         clerkUserId: "user_clerk_1",
         email: "lee@dotanddashconsulting.com",
         name: "Lee",
         role: "admin",
       })
       .returning();
-    const [client] = await db.insert(clients).values({ name: "Beta" }).returning();
+    const [client] = await db.insert(clients).values({ companyId, name: "Beta" }).returning();
 
     const form = new FormData();
     form.set("clientId", client.id);
@@ -310,6 +325,7 @@ describe("action-layer PGlite", () => {
     await db
       .insert(users)
       .values({
+        companyId,
         clerkUserId: "user_clerk_1",
         email: "lee@dotanddashconsulting.com",
         name: "Lee",

@@ -39,7 +39,7 @@ export type OrdersSummaryData = {
   }>;
 };
 
-export async function getOrdersSummary(): Promise<OrdersSummaryData> {
+export async function getOrdersSummary(companyId: string): Promise<OrdersSummaryData> {
   const db = getDb();
   const rows = await db
     .select({
@@ -47,7 +47,8 @@ export async function getOrdersSummary(): Promise<OrdersSummaryData> {
       grossPence: orders.grossPence,
     })
     .from(orders)
-    .innerJoin(clients, eq(orders.clientId, clients.id));
+    .innerJoin(clients, eq(orders.clientId, clients.id))
+    .where(eq(orders.companyId, companyId));
 
   let totalGrossPence = 0;
   let activeGrossPence = 0;

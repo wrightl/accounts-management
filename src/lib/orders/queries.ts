@@ -1,5 +1,5 @@
 import "server-only";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { clientDisplayNameSql } from "@/lib/clients/sql";
 import {
@@ -25,7 +25,7 @@ import {
 import type { PaymentMilestoneInput } from "@/lib/quotes/payment-schedule";
 import { APP_TIMEZONE } from "@/lib/dates";
 
-export async function listOrders() {
+export async function listOrders(companyId: string) {
   const db = getDb();
   const rows = await db
     .select({
@@ -40,6 +40,7 @@ export async function listOrders() {
     .from(orders)
     .innerJoin(clients, eq(orders.clientId, clients.id))
     .leftJoin(quotes, eq(orders.quoteId, quotes.id))
+    .where(eq(orders.companyId, companyId))
     .orderBy(desc(orders.createdAt));
 
   return rows.map((r) => ({
@@ -57,14 +58,14 @@ function formatCreatedDate(createdAt: Date): string {
   }).format(createdAt);
 }
 
-export async function getOrderDetail(id: string) {
+export async function getOrderDetail(companyId: string, id: string) {
   const db = getDb();
   const rows = await db
     .select({ order: orders, client: clients, quote: quotes })
     .from(orders)
     .innerJoin(clients, eq(orders.clientId, clients.id))
     .leftJoin(quotes, eq(orders.quoteId, quotes.id))
-    .where(eq(orders.id, id))
+    .where(and(eq(orders.id, id), eq(orders.companyId, companyId)))
     .limit(1);
   if (!rows[0]) return null;
 
@@ -91,7 +92,7 @@ export async function getOrderDetail(id: string) {
       paymentMilestoneId: invoices.paymentMilestoneId,
     })
     .from(invoices)
-    .where(eq(invoices.orderId, id))
+    .where(and(eq(invoices.orderId, id), eq(invoices.companyId, companyId)))
     .orderBy(desc(invoices.createdAt));
 
   const today = todayIsoDate();

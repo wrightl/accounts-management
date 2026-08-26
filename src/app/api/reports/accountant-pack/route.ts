@@ -8,21 +8,29 @@ export const runtime = "nodejs";
 
 /** Accountant pack: zip of CSVs, summary reports, invoice PDFs, and receipt files. */
 export async function GET(request: Request) {
+  let user;
   try {
-    await requirePermission("reports:export");
+    user = await requirePermission("reports:export");
   } catch (e) {
     if (e instanceof ForbiddenError) {
       return NextResponse.json({ error: e.message }, { status: 403 });
     }
     throw e;
   }
+  if (!user.companyId) {
+    return NextResponse.json({ error: "Complete onboarding first" }, { status: 403 });
+  }
 
   const url = new URL(request.url);
-  const defaults = await defaultReportPeriod();
+  const defaults = await defaultReportPeriod(user.companyId);
   const from = url.searchParams.get("from") ?? defaults.from;
   const to = url.searchParams.get("to") ?? defaults.to;
 
-  const { filename, zip } = await buildAccountantPack({ from, to });
+  const { filename, zip } = await buildAccountantPack({
+    companyId: user.companyId,
+    from,
+    to,
+  });
 
   return new NextResponse(Buffer.from(zip), {
     status: 200,

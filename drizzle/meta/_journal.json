@@ -141,6 +141,34 @@
       "when": 1787489000000,
       "tag": "0019_shareholders_dividends",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1787490000000,
+      "tag": "0020_multi_tenancy",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1787491000000,
+      "tag": "0021_expense_inbound_slugs",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1787492000000,
+      "tag": "0022_expense_detected_currency",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1787493000000,
+      "tag": "0023_company_memberships",
+      "breakpoints": true
     }
   ]
 }

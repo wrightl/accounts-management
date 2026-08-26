@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { guardPage, hasPermission } from "@/lib/auth";
+import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { listOrders } from "@/lib/orders/queries";
 import { buttonClasses } from "@/components/ui/button";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { isDatabaseConfigured } from "@/env";
 
 export default async function OrdersPage() {
-  await guardPage("accounts:read");
+  const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
 
   if (!isDatabaseConfigured()) {
@@ -18,7 +18,7 @@ export default async function OrdersPage() {
     );
   }
 
-  const rows = await listOrders();
+  const rows = await listOrders(companyId);
 
   return (
     <div>

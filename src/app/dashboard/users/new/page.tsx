@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { guardPage } from "@/lib/auth";
+import { guardTenantPage } from "@/lib/auth";
 import { UserForm } from "@/components/users/user-form";
 import { buttonClasses } from "@/components/ui/button";
 
 export default async function NewUserPage() {
-  await guardPage("users:manage");
+  const { companyId } = await guardTenantPage("users:manage");
 
   return (
     <div>

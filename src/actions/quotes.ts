@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq} from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
 import {
@@ -32,6 +32,7 @@ import { createOrderFromQuote, replaceQuotePaymentMilestones } from "@/lib/order
 import {
   parseMilestonesJson,
   validateMilestones,
+  type PaymentMilestoneInput,
 } from "@/lib/quotes/payment-schedule";
 import { canTransitionQuote } from "@/lib/quotes/transitions";
 import type { ActionResult } from "@/actions/result";
@@ -97,6 +98,11 @@ function parseAndValidateMilestones(formData: FormData, grossPence: number) {
 export async function createQuote(formData: FormData): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
@@ -129,10 +135,11 @@ export async function createQuote(formData: FormData): Promise<ActionResult> {
 
   const db = getDb();
   const quoteId = await db.transaction(async (tx) => {
-    const number = await allocateQuoteNumber(tx, parsed.data.issueDate);
+    const number = await allocateQuoteNumber(tx, companyId, parsed.data.issueDate);
     const [row] = await tx
       .insert(quotes)
       .values({
+        companyId,
         number,
         clientId: parsed.data.clientId,
         status: "draft",
@@ -170,6 +177,7 @@ export async function createQuote(formData: FormData): Promise<ActionResult> {
   });
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "quote.create",
     entityType: "quote",
@@ -183,11 +191,16 @@ export async function createQuote(formData: FormData): Promise<ActionResult> {
 export async function updateQuote(id: string, formData: FormData): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
   const db = getDb();
-  const [existing] = await db.select().from(quotes).where(eq(quotes.id, id)).limit(1);
+  const [existing] = await db.select().from(quotes).where(and(eq(quotes.id, id), eq(quotes.companyId, companyId))).limit(1);
   if (!existing) return { ok: false, error: "Quote not found" };
   if (!canEditQuote(existing.status)) {
     return { ok: false, error: "This quote cannot be edited" };
@@ -234,7 +247,7 @@ export async function updateQuote(id: string, formData: FormData): Promise<Actio
         ...totals,
         pdfBlobPath: null,
       })
-      .where(eq(quotes.id, id));
+      .where(and(eq(quotes.id, id), eq(quotes.companyId, companyId)));
 
     await tx.delete(quoteLineItems).where(eq(quoteLineItems.quoteId, id));
     await tx.insert(quoteLineItems).values(lineValues.map((l) => ({ ...l, quoteId: id })));
@@ -258,6 +271,7 @@ export async function updateQuote(id: string, formData: FormData): Promise<Actio
   });
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "quote.update",
     entityType: "quote",
@@ -276,6 +290,11 @@ export async function rollbackQuote(
 ): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
@@ -284,7 +303,7 @@ export async function rollbackQuote(
   }
 
   const db = getDb();
-  const [existing] = await db.select().from(quotes).where(eq(quotes.id, quoteId)).limit(1);
+  const [existing] = await db.select().from(quotes).where(and(eq(quotes.id, quoteId), eq(quotes.companyId, companyId))).limit(1);
   if (!existing) return { ok: false, error: "Quote not found" };
   if (!canRollbackQuote(existing.status)) {
     return { ok: false, error: "This quote cannot be rolled back" };
@@ -319,7 +338,7 @@ export async function rollbackQuote(
         version: nextVersion,
         pdfBlobPath: null,
       })
-      .where(eq(quotes.id, quoteId));
+      .where(and(eq(quotes.id, quoteId), eq(quotes.companyId, companyId)));
 
     await tx.delete(quoteLineItems).where(eq(quoteLineItems.quoteId, quoteId));
     await tx.insert(quoteLineItems).values(lineValues.map((l) => ({ ...l, quoteId })));
@@ -335,6 +354,7 @@ export async function rollbackQuote(
   });
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "quote.rollback",
     entityType: "quote",
@@ -359,6 +379,11 @@ export async function updateQuoteStatus(
 ): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const localUserId = await ensureLocalUser(authz.user);
 
   if (!isQuoteStatus(targetStatus)) {
@@ -366,7 +391,7 @@ export async function updateQuoteStatus(
   }
 
   const db = getDb();
-  const [existing] = await db.select().from(quotes).where(eq(quotes.id, quoteId)).limit(1);
+  const [existing] = await db.select().from(quotes).where(and(eq(quotes.id, quoteId), eq(quotes.companyId, companyId))).limit(1);
   if (!existing) return { ok: false, error: "Quote not found" };
 
   const fromStatus = existing.status as QuoteStatus;
@@ -379,7 +404,7 @@ export async function updateQuoteStatus(
     if (!parsed.success) {
       return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
     }
-    const category = await upsertDeclineReasonCategory(parsed.data.category);
+    const category = await upsertDeclineReasonCategory(companyId, parsed.data.category);
     if (!category) return { ok: false, error: "Choose a reason category" };
 
     await db
@@ -390,9 +415,10 @@ export async function updateQuoteStatus(
         declinedReasonNarrative: parsed.data.narrative,
         declinedAt: new Date(),
       })
-      .where(eq(quotes.id, quoteId));
+      .where(and(eq(quotes.id, quoteId), eq(quotes.companyId, companyId)));
 
     await writeAudit({
+    companyId,
       actorUserId: localUserId,
       action: "quote.decline",
       entityType: "quote",
@@ -400,7 +426,7 @@ export async function updateQuoteStatus(
       meta: { category },
     });
   } else if (targetStatus === "accepted") {
-    const detail = await getQuoteDetail(quoteId);
+    const detail = await getQuoteDetail(companyId, quoteId);
     if (!detail) return { ok: false, error: "Quote not found" };
 
     const milestones: PaymentMilestoneInput[] = detail.milestones.map((m) => ({
@@ -417,6 +443,7 @@ export async function updateQuoteStatus(
       orderId = await db.transaction(async (tx) => {
         const id = await createOrderFromQuote(
           tx,
+          companyId,
           { quote: detail.quote, lines: detail.lines },
           milestones,
           localUserId,
@@ -424,7 +451,7 @@ export async function updateQuoteStatus(
         await tx
           .update(quotes)
           .set({ status: "accepted", acceptedAt: new Date() })
-          .where(eq(quotes.id, quoteId));
+          .where(and(eq(quotes.id, quoteId), eq(quotes.companyId, companyId)));
         return id;
       });
     } catch (e) {
@@ -435,6 +462,7 @@ export async function updateQuoteStatus(
     }
 
     await writeAudit({
+    companyId,
       actorUserId: localUserId,
       action: "quote.accept",
       entityType: "quote",
@@ -454,9 +482,10 @@ export async function updateQuoteStatus(
         status: "sent",
         sentAt: existing.sentAt ?? now,
       })
-      .where(eq(quotes.id, quoteId));
+      .where(and(eq(quotes.id, quoteId), eq(quotes.companyId, companyId)));
 
     await writeAudit({
+    companyId,
       actorUserId: localUserId,
       action: "quote.mark_sent",
       entityType: "quote",
@@ -471,9 +500,10 @@ export async function updateQuoteStatus(
         declinedReasonNarrative: null,
         declinedAt: null,
       })
-      .where(eq(quotes.id, quoteId));
+      .where(and(eq(quotes.id, quoteId), eq(quotes.companyId, companyId)));
 
     await writeAudit({
+    companyId,
       actorUserId: localUserId,
       action: "quote.reopen",
       entityType: "quote",
@@ -498,6 +528,11 @@ function messageToHtml(message: string): string {
 export async function sendQuote(quoteId: string, formData: FormData): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
@@ -509,7 +544,7 @@ export async function sendQuote(quoteId: string, formData: FormData): Promise<Ac
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
 
-  const detail = await getQuoteDetail(quoteId);
+  const detail = await getQuoteDetail(companyId, quoteId);
   if (!detail) return { ok: false, error: "Quote not found" };
   if (detail.quote.status === "accepted") {
     return { ok: false, error: "Cannot send an accepted quote" };
@@ -518,8 +553,8 @@ export async function sendQuote(quoteId: string, formData: FormData): Promise<Ac
     return { ok: false, error: "Cannot send a declined quote" };
   }
 
-  const company = await getOrCreateCompanySettings();
-  const { bytes, filename } = await loadOrRenderQuotePdf(quoteId);
+  const company = await getOrCreateCompanySettings(companyId);
+  const { bytes, filename } = await loadOrRenderQuotePdf(companyId, quoteId);
 
   await sendEmail({
     to: parsed.data.to,
@@ -543,9 +578,10 @@ export async function sendQuote(quoteId: string, formData: FormData): Promise<Ac
       status: detail.quote.status === "draft" ? "sent" : detail.quote.status,
       sentAt: now,
     })
-    .where(eq(quotes.id, quoteId));
+    .where(and(eq(quotes.id, quoteId), eq(quotes.companyId, companyId)));
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "quote.send",
     entityType: "quote",

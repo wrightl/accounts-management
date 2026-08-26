@@ -54,6 +54,11 @@ export async function createReimbursementRun(
 ): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
@@ -112,7 +117,8 @@ export async function createReimbursementRun(
       const [run] = await tx
         .insert(reimbursements)
         .values({
-          payeeUserId: parsed.data.payeeUserId,
+          companyId,
+        payeeUserId: parsed.data.payeeUserId,
           status: "pending",
           totalPence,
           reference: parsed.data.reference,
@@ -134,6 +140,7 @@ export async function createReimbursementRun(
   }
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "reimbursement.create",
     entityType: "reimbursement",
@@ -153,6 +160,11 @@ export async function updateReimbursementRun(
 ): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
@@ -180,7 +192,7 @@ export async function updateReimbursementRun(
       const [run] = await tx
         .select()
         .from(reimbursements)
-        .where(eq(reimbursements.id, id))
+        .where(and(eq(reimbursements.id, id), eq(reimbursements.companyId, companyId)))
         .limit(1);
       if (!run) throw new ReimburseError("Reimbursement not found");
       if (!canEditReimbursement(run.status)) {
@@ -239,7 +251,7 @@ export async function updateReimbursementRun(
           reference: parsed.data.reference,
           totalPence,
         })
-        .where(eq(reimbursements.id, id));
+        .where(and(eq(reimbursements.id, id), eq(reimbursements.companyId, companyId)));
     });
   } catch (e) {
     if (e instanceof ReimburseError) return { ok: false, error: e.message };
@@ -247,6 +259,7 @@ export async function updateReimbursementRun(
   }
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "reimbursement.update",
     entityType: "reimbursement",
@@ -267,6 +280,11 @@ export async function markReimbursementPaid(
 ): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
@@ -282,13 +300,13 @@ export async function markReimbursementPaid(
   const [run] = await db
     .select()
     .from(reimbursements)
-    .where(eq(reimbursements.id, id))
+    .where(and(eq(reimbursements.id, id), eq(reimbursements.companyId, companyId)))
     .limit(1);
   if (!run) return { ok: false, error: "Reimbursement not found" };
   if (run.status === "paid") return { ok: false, error: "Already paid" };
 
   if (bankTransactionId) {
-    const bankTx = await getBankTransactionById(bankTransactionId);
+    const bankTx = await getBankTransactionById(companyId, bankTransactionId);
     if (!bankTx) return { ok: false, error: "Bank transaction not found" };
     if (bankTx.amountPence >= 0) {
       return { ok: false, error: "Only outgoing bank transactions can be linked" };
@@ -302,7 +320,7 @@ export async function markReimbursementPaid(
   }
 
   const paidAt = bankTransactionId
-    ? new Date(`${(await getBankTransactionById(bankTransactionId))!.bookedAt}T12:00:00Z`)
+    ? new Date(`${(await getBankTransactionById(companyId, bankTransactionId))!.bookedAt}T12:00:00Z`)
     : new Date();
 
   try {
@@ -334,6 +352,7 @@ export async function markReimbursementPaid(
   }
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "reimbursement.pay",
     entityType: "reimbursement",

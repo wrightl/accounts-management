@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { guardPage, hasPermission } from "@/lib/auth";
+import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { listClients } from "@/lib/clients/queries";
 import { listQuotes } from "@/lib/quotes/queries";
 import { getQuotesSummary } from "@/lib/quotes/summary";
@@ -16,7 +16,7 @@ export default async function QuotesPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  await guardPage("accounts:read");
+  const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
   const sp = await searchParams;
 
@@ -35,9 +35,9 @@ export default async function QuotesPage({
   };
 
   const [rows, clients, summary] = await Promise.all([
-    listQuotes(filters),
-    listClients(),
-    getQuotesSummary(filters),
+    listQuotes(companyId, filters),
+    listClients(companyId),
+    getQuotesSummary(companyId, filters),
   ]);
 
   const filtersActive = Boolean(sp.status || sp.client);

@@ -55,9 +55,16 @@ export type ClientOverviewData = {
   }>;
 };
 
-export async function getClientOverview(clientId: string): Promise<ClientOverviewData | null> {
+export async function getClientOverview(
+  companyId: string,
+  clientId: string,
+): Promise<ClientOverviewData | null> {
   const db = getDb();
-  const [client] = await db.select().from(clients).where(eq(clients.id, clientId)).limit(1);
+  const [client] = await db
+    .select()
+    .from(clients)
+    .where(and(eq(clients.id, clientId), eq(clients.companyId, companyId)))
+    .limit(1);
   if (!client) return null;
 
   const quoteRows = await db
@@ -69,7 +76,7 @@ export async function getClientOverview(clientId: string): Promise<ClientOvervie
       grossPence: quotes.grossPence,
     })
     .from(quotes)
-    .where(eq(quotes.clientId, clientId))
+    .where(and(eq(quotes.clientId, clientId), eq(quotes.companyId, companyId)))
     .orderBy(desc(quotes.createdAt));
 
   const orderRows = await db
@@ -80,7 +87,7 @@ export async function getClientOverview(clientId: string): Promise<ClientOvervie
       grossPence: orders.grossPence,
     })
     .from(orders)
-    .where(eq(orders.clientId, clientId))
+    .where(and(eq(orders.clientId, clientId), eq(orders.companyId, companyId)))
     .orderBy(desc(orders.createdAt));
 
   const invoiceList = await db
@@ -93,7 +100,7 @@ export async function getClientOverview(clientId: string): Promise<ClientOvervie
       grossPence: invoices.grossPence,
     })
     .from(invoices)
-    .where(eq(invoices.clientId, clientId))
+    .where(and(eq(invoices.clientId, clientId), eq(invoices.companyId, companyId)))
     .orderBy(desc(invoices.createdAt));
 
   const today = todayIsoDate();

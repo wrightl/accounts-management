@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { guardPage } from "@/lib/auth";
+import { guardTenantPage } from "@/lib/auth";
 import { getInboundEmailJob } from "@/lib/expenses/inbound-email";
 import {
   inboundJobNeedsAttention,
@@ -25,7 +25,7 @@ export default async function InboundEmailJobPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await guardPage("users:manage");
+  const { companyId } = await guardTenantPage("users:manage");
   const { id } = await params;
 
   if (!isDatabaseConfigured()) {
@@ -37,7 +37,7 @@ export default async function InboundEmailJobPage({
     );
   }
 
-  const job = await getInboundEmailJob(id);
+  const job = await getInboundEmailJob(companyId, id);
   if (!job) notFound();
 
   const status = job.status as InboundEmailJobStatus;

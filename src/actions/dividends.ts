@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq} from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
 import { dividendDeclarations, dividendPayouts } from "@/db/schema";
@@ -29,6 +29,14 @@ const declareSchema = z.object({
 export async function declareDividend(formData: FormData): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  if (authz.user.entityType !== "limited_company") {
+    return { ok: false, error: "Dividends are only available for limited companies." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
@@ -51,10 +59,10 @@ export async function declareDividend(formData: FormData): Promise<ActionResult>
     return { ok: false, error: "Amount must be greater than zero" };
   }
 
-  const balanced = await assertRegisterBalanced();
+  const balanced = await assertRegisterBalanced(companyId, );
   if (!balanced.ok) return balanced;
 
-  const { shareholders, totalShares } = await getActiveShareholdersForSplit();
+  const { shareholders, totalShares } = await getActiveShareholdersForSplit(companyId);
   if (!totalShares) {
     return { ok: false, error: "Set total shares before declaring a dividend." };
   }
@@ -70,7 +78,8 @@ export async function declareDividend(formData: FormData): Promise<ActionResult>
   const [decl] = await db
     .insert(dividendDeclarations)
     .values({
-      declaredAt: parsed.data.declaredAt,
+      companyId,
+        declaredAt: parsed.data.declaredAt,
       totalPence,
       notes: parsed.data.notes,
     })
@@ -86,6 +95,7 @@ export async function declareDividend(formData: FormData): Promise<ActionResult>
   );
 
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "dividend.declare",
     entityType: "dividend_declaration",
@@ -100,11 +110,17 @@ export async function declareDividend(formData: FormData): Promise<ActionResult>
 export async function deleteDividendDeclaration(id: string): Promise<ActionResult> {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
   const db = getDb();
   await db.delete(dividendDeclarations).where(eq(dividendDeclarations.id, id));
   await writeAudit({
+    companyId,
     actorUserId: localUserId,
     action: "dividend.delete",
     entityType: "dividend_declaration",

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { guardPage } from "@/lib/auth";
+import { guardTenantPage } from "@/lib/auth";
 import { listUsers } from "@/lib/users";
 import { userStatus, userStatusLabel } from "@/lib/users/display";
 import { isDatabaseConfigured } from "@/env";
@@ -10,7 +10,7 @@ import { roleLabel } from "@/lib/roles";
 import { buttonClasses } from "@/components/ui/button";
 
 export default async function UsersPage() {
-    const session = await guardPage('users:manage');
+    const session = await guardTenantPage('users:manage');
 
     if (!isDatabaseConfigured()) {
         return (
@@ -23,7 +23,7 @@ export default async function UsersPage() {
         );
     }
 
-    const rows = await listUsers();
+    const rows = await listUsers(session.companyId);
 
     return (
         <div>

@@ -2,6 +2,7 @@ import "server-only";
 import { and, eq, gte, inArray, lte, ne } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
+  bankAccounts,
   bankTransactions,
   clients,
   dividendDeclarations,
@@ -41,9 +42,11 @@ export type AccountantPackResult = {
 
 /** Build a period accountant pack (CSVs, summary reports, invoice PDFs, receipt files). */
 export async function buildAccountantPack({
+  companyId,
   from,
   to,
 }: {
+  companyId: string;
   from: string;
   to: string;
 }): Promise<AccountantPackResult> {
@@ -52,9 +55,9 @@ export async function buildAccountantPack({
   const binaryFiles: Record<string, Uint8Array> = {};
 
   const [pnl, vat, aged] = await Promise.all([
-    getProfitAndLoss(from, to),
+    getProfitAndLoss(companyId, from, to),
     getVatSummary(from, to),
-    getAgedReceivables(),
+    getAgedReceivables(companyId),
   ]);
 
   const invRows = await db
@@ -78,6 +81,7 @@ export async function buildAccountantPack({
     .leftJoin(orders, eq(invoices.orderId, orders.id))
     .where(
       and(
+        eq(invoices.companyId, companyId),
         ne(invoices.status, "draft"),
         ne(invoices.status, "void"),
         gte(invoices.issueDate, from),
@@ -118,6 +122,7 @@ export async function buildAccountantPack({
     .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
     .where(
       and(
+        eq(invoices.companyId, companyId),
         gte(payments.receivedAt, new Date(`${from}T00:00:00Z`)),
         lte(payments.receivedAt, new Date(`${to}T23:59:59.999Z`)),
       ),
@@ -134,6 +139,7 @@ export async function buildAccountantPack({
     .leftJoin(clients, eq(expenses.billableClientId, clients.id))
     .where(
       and(
+        eq(expenses.companyId, companyId),
         ne(expenses.status, "pending"),
         gte(expenses.spentAt, from),
         lte(expenses.spentAt, to),
@@ -155,6 +161,7 @@ export async function buildAccountantPack({
     .innerJoin(users, eq(reimbursements.payeeUserId, users.id))
     .where(
       and(
+        eq(reimbursements.companyId, companyId),
         gte(reimbursements.createdAt, new Date(`${from}T00:00:00Z`)),
         lte(reimbursements.createdAt, new Date(`${to}T23:59:59.999Z`)),
       ),
@@ -199,16 +206,31 @@ export async function buildAccountantPack({
     )
     .where(
       and(
+        eq(dividendDeclarations.companyId, companyId),
         gte(dividendDeclarations.declaredAt, from),
         lte(dividendDeclarations.declaredAt, to),
       ),
     );
 
   const bankTxRows = await db
-    .select()
+    .select({
+      id: bankTransactions.id,
+      bankAccountId: bankTransactions.bankAccountId,
+      externalId: bankTransactions.externalId,
+      bookedAt: bankTransactions.bookedAt,
+      amountPence: bankTransactions.amountPence,
+      counterparty: bankTransactions.counterparty,
+      reference: bankTransactions.reference,
+      description: bankTransactions.description,
+      spendingCategory: bankTransactions.spendingCategory,
+      tags: bankTransactions.tags,
+      createdAt: bankTransactions.createdAt,
+    })
     .from(bankTransactions)
+    .innerJoin(bankAccounts, eq(bankTransactions.bankAccountId, bankAccounts.id))
     .where(
       and(
+        eq(bankAccounts.companyId, companyId),
         gte(bankTransactions.bookedAt, from),
         lte(bankTransactions.bookedAt, to),
       ),
@@ -226,7 +248,7 @@ export async function buildAccountantPack({
   await mapWithConcurrency(invRows, FETCH_CONCURRENCY, async (inv) => {
     const pdfPath = `invoices/${safeFilename(`${inv.number}.pdf`)}`;
     try {
-      const bytes = await resolveInvoicePdf(inv.id, inv.pdfBlobPath);
+      const bytes = await resolveInvoicePdf(companyId, inv.id, inv.pdfBlobPath);
       binaryFiles[pdfPath] = bytes;
     } catch (err) {
       warnings.push(
@@ -542,6 +564,7 @@ function buildReadme({
 
 /** Resolve invoice PDF bytes from storage or regenerate (no DB cache update). */
 export async function resolveInvoicePdf(
+  companyId: string,
   invoiceId: string,
   pdfBlobPath: string | null,
 ): Promise<Uint8Array> {
@@ -554,12 +577,12 @@ export async function resolveInvoicePdf(
     }
   }
 
-  const detail = await getInvoiceDetail(invoiceId);
+  const detail = await getInvoiceDetail(companyId, invoiceId);
   if (!detail) {
     throw new Error("Invoice not found");
   }
 
-  const company = await getOrCreateCompanySettings();
+  const company = await getOrCreateCompanySettings(companyId);
   return renderInvoicePdf({
     invoice: detail.invoice,
     client: detail.client,

@@ -1,4 +1,4 @@
-import { guardPage, hasPermission } from "@/lib/auth";
+import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { listBankTransactions } from "@/lib/bank/queries";
 import { getBankTransactionSummary } from "@/lib/bank/summary";
 import { parseBankListParams, hasActiveBankFilters, BANK_PAGE_SIZE, resolveBankListDateRange } from "@/lib/bank/list-params";
@@ -20,7 +20,7 @@ export default async function TransactionsPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  await guardPage("accounts:read");
+  const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
   const params = parseBankListParams(await searchParams);
 
@@ -33,7 +33,7 @@ export default async function TransactionsPage({
     );
   }
 
-  const settings = await getOrCreateCompanySettings();
+  const settings = await getOrCreateCompanySettings(companyId);
   const dateRange = resolveBankListDateRange(params, settings.financialYearEndMonth);
 
   const listFilters =
@@ -70,9 +70,9 @@ export default async function TransactionsPage({
 
   const [{ rows, total, page, pageSize, pageCount }, summary, customCategories] =
     await Promise.all([
-      listBankTransactions(listFilters),
-      getBankTransactionSummary(summaryFilters),
-      listBankSpendingCategoriesWithUsage(),
+      listBankTransactions(companyId, listFilters),
+      getBankTransactionSummary(companyId, summaryFilters),
+      listBankSpendingCategoriesWithUsage(companyId),
     ]);
 
   const customCategoryNames = customCategories.map((c) => c.name);
