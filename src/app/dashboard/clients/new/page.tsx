@@ -4,7 +4,7 @@ import { ClientForm } from "@/components/clients/client-form";
 import { buttonClasses } from "@/components/ui/button";
 
 export default async function NewClientPage() {
-  const { companyId } = await guardTenantPage("accounts:write");
+  await guardTenantPage("accounts:write");
   const canWrite = await hasPermission("accounts:write");
 
   return (

@@ -38,14 +38,8 @@ export function BankPeriodRangeSelect({ params }: { params: BankListParams }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
-  const defaults = defaultCustomRange();
-  const [customFrom, setCustomFrom] = useState(params.from || defaults.from);
-  const [customTo, setCustomTo] = useState(params.to || defaults.to);
-
-  useEffect(() => {
-    setCustomFrom(params.from || defaults.from);
-    setCustomTo(params.to || defaults.to);
-  }, [params.from, params.to, defaults.from, defaults.to]);
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -121,6 +115,9 @@ export function BankPeriodRangeSelect({ params }: { params: BankListParams }) {
                     )}
                     onClick={() => {
                       if (option.value === "custom") {
+                        const defaults = defaultCustomRange();
+                        setCustomFrom(params.from || defaults.from);
+                        setCustomTo(params.to || defaults.to);
                         setOpen(false);
                         setCustomOpen(true);
                         return;

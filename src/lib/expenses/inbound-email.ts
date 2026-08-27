@@ -347,11 +347,8 @@ async function deliverInboundEmail(
     const bytes = Buffer.from(await response.arrayBuffer());
     if (bytes.length > MAX_RECEIPT_BYTES) continue;
 
-    const contentType =
-      resolveReceiptContentType(bytes, attachment.content_type ?? "") ??
-      attachment.content_type ??
-      "application/octet-stream";
-    if (!resolveReceiptContentType(bytes, contentType)) {
+    const contentType = resolveReceiptContentType(bytes);
+    if (!contentType) {
       console.warn(
         `[inbound-email] Skipping unsupported attachment ${attachment.filename ?? attachment.id}`,
       );

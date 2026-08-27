@@ -5,7 +5,6 @@ import {
     getExpenseByCategory,
     getIncomeByMonth,
     getProfitAndLoss,
-    getVatSummary,
 } from '@/lib/reports/queries';
 import { buttonClasses } from '@/components/ui/button';
 import { Card, CardTitle, CardValue } from '@/components/ui/card';
@@ -37,12 +36,11 @@ export default async function ReportsPage({
     const from = sp.from ?? defaults.from;
     const to = sp.to ?? defaults.to;
 
-    const [pnl, aged, byMonth, byCategory, vat] = await Promise.all([
+    const [pnl, aged, byMonth, byCategory] = await Promise.all([
         getProfitAndLoss(companyId, from, to),
         getAgedReceivables(companyId),
         getIncomeByMonth(companyId, from, to),
         getExpenseByCategory(companyId, from, to),
-        getVatSummary(from, to),
     ]);
 
     return (

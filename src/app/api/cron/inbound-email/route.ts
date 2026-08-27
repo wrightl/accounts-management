@@ -5,7 +5,7 @@ import { drainInboundEmailJobs } from "@/lib/expenses/inbound-email";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/** Retry failed or stuck inbound expense email jobs. */
+/** Retry failed or stuck inbound expense email jobs (GitHub Actions every 15m). */
 export async function GET(request: Request) {
   const denied = cronAuthError(
     request.headers.get("authorization"),

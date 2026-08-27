@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label } from "@/components/ui/form";
 import { sendInvoice } from "@/actions/invoices";
@@ -43,16 +43,23 @@ export function InvoiceActions({
   const [matches, setMatches] = useState<InvoiceBankMatch[]>([]);
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
   const [manualEntry, setManualEntry] = useState(false);
+  const matchRequestId = useRef(0);
 
   const selectedMatch = matches.find((m) => m.bankTransactionId === selectedMatchId) ?? null;
 
-  useEffect(() => {
-    if (!showPayment) return;
-    let cancelled = false;
+  function togglePayment() {
+    if (showPayment) {
+      matchRequestId.current += 1;
+      setShowPayment(false);
+      return;
+    }
+
+    setShowPayment(true);
     setLoadingMatches(true);
     setError(null);
+    const requestId = ++matchRequestId.current;
     void findInvoiceBankMatches(invoiceId).then((result) => {
-      if (cancelled) return;
+      if (requestId !== matchRequestId.current) return;
       setLoadingMatches(false);
       if (!result.ok) {
         setError(result.error);
@@ -68,10 +75,7 @@ export function InvoiceActions({
         setManualEntry(true);
       }
     });
-    return () => {
-      cancelled = true;
-    };
-  }, [showPayment, invoiceId]);
+  }
 
   if (!canWrite) return null;
 
@@ -117,7 +121,7 @@ export function InvoiceActions({
             type="button"
             variant="secondary"
             disabled={pending}
-            onClick={() => setShowPayment((v) => !v)}
+            onClick={togglePayment}
           >
             Record payment
           </Button>

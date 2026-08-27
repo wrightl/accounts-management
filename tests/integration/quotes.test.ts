@@ -4,11 +4,9 @@ import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
 import {
   clients,
-  orderLineItems,
   orderPaymentMilestones,
   orders,
   quoteLineItems,
-  quotePaymentMilestones,
   quoteVersions,
   quotes,
   users,
@@ -21,7 +19,7 @@ import {
   updateQuote,
   updateQuoteStatus,
 } from "@/actions/quotes";
-import { getQuoteDetail, getQuoteVersionDetail } from "@/lib/quotes/queries";
+import { getQuoteVersionDetail } from "@/lib/quotes/queries";
 import { getQuotesSummary } from "@/lib/quotes/summary";
 import { listDeclineReasonCategories } from "@/lib/quotes/decline-reasons";
 import { defaultQuoteEmailMessage } from "@/lib/quotes/email";

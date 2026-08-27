@@ -40,15 +40,12 @@ export function sniffReceiptContentType(bytes: Buffer): string | null {
 }
 
 /** Prefer sniffed type when the browser sends a missing or wrong MIME type. */
-export function resolveReceiptContentType(
-  bytes: Buffer,
-  _declaredType: string,
-): string | null {
+export function resolveReceiptContentType(bytes: Buffer): string | null {
   return sniffReceiptContentType(bytes);
 }
 
-export function receiptMagicOk(bytes: Buffer, contentType: string): boolean {
-  return resolveReceiptContentType(bytes, contentType) !== null;
+export function receiptMagicOk(bytes: Buffer): boolean {
+  return resolveReceiptContentType(bytes) !== null;
 }
 
 export type ParsedReceiptFile = {
@@ -91,7 +88,7 @@ export async function parseReceiptFileAsync(
   if (!parsed.ok) return parsed;
 
   const bytes = Buffer.from(await parsed.data.file.arrayBuffer());
-  const contentType = resolveReceiptContentType(bytes, parsed.data.contentType);
+  const contentType = resolveReceiptContentType(bytes);
   if (!contentType) {
     return { ok: false, error: "Receipt file contents do not match the declared type" };
   }

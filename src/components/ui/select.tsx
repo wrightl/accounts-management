@@ -95,6 +95,7 @@ export function Select({
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(-1);
   const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -126,13 +127,33 @@ export function Select({
     });
   }, []);
 
-  useEffect(() => {
-    if (!open) {
-      setMenuPosition(null);
-      return;
-    }
+  function closeMenu() {
+    setOpen(false);
+  }
 
-    updateMenuPosition();
+  function openMenu() {
+    const trigger = triggerRef.current;
+    if (trigger) {
+      const rect = trigger.getBoundingClientRect();
+      setMenuPosition({
+        top: rect.bottom + 4,
+        left: rect.left,
+        width: rect.width,
+      });
+      setPortalTarget(overlayPortalTarget(trigger) ?? document.body);
+    }
+    const idx = selectedIndex >= 0 ? selectedIndex : 0;
+    setHighlight(idx);
+    setOpen(true);
+    requestAnimationFrame(() => {
+      listRef.current
+        ?.querySelector(`[data-index="${idx}"]`)
+        ?.scrollIntoView({ block: "nearest" });
+    });
+  }
+
+  useEffect(() => {
+    if (!open) return;
     window.addEventListener("resize", updateMenuPosition);
     window.addEventListener("scroll", updateMenuPosition, true);
     return () => {
@@ -147,22 +168,11 @@ export function Select({
       const target = e.target as Node;
       if (rootRef.current?.contains(target)) return;
       if (listRef.current?.contains(target)) return;
-      setOpen(false);
+      closeMenu();
     };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const idx = selectedIndex >= 0 ? selectedIndex : 0;
-    setHighlight(idx);
-    requestAnimationFrame(() => {
-      listRef.current
-        ?.querySelector(`[data-index="${idx}"]`)
-        ?.scrollIntoView({ block: "nearest" });
-    });
-  }, [open, selectedIndex]);
 
   useEffect(() => {
     if (!open || highlight < 0) return;
@@ -180,17 +190,17 @@ export function Select({
         if (open && highlight >= 0 && enabledOptions[highlight]) {
           commit(enabledOptions[highlight].value);
         } else {
-          setOpen(true);
+          openMenu();
         }
         break;
       case "Escape":
         e.preventDefault();
-        setOpen(false);
+        closeMenu();
         break;
       case "ArrowDown":
         e.preventDefault();
         if (!open) {
-          setOpen(true);
+          openMenu();
         } else {
           setHighlight((h) => Math.min(h + 1, enabledOptions.length - 1));
         }
@@ -280,7 +290,11 @@ export function Select({
         aria-haspopup="listbox"
         aria-controls={listboxId}
         disabled={disabled}
-        onClick={() => !disabled && setOpen((o) => !o)}
+        onClick={() => {
+          if (disabled) return;
+          if (open) closeMenu();
+          else openMenu();
+        }}
         onKeyDown={onKeyDown}
         className={cn(
           field,
@@ -300,9 +314,7 @@ export function Select({
         />
       </button>
 
-      {listbox
-        ? createPortal(listbox, overlayPortalTarget(triggerRef.current) ?? document.body)
-        : null}
+      {listbox && portalTarget ? createPortal(listbox, portalTarget) : null}
     </div>
   );
 }

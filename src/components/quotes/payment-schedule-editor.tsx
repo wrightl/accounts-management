@@ -55,7 +55,7 @@ export function PaymentScheduleEditor({
   );
 
   const serialized = milestones
-    .map((draft, index) => draftToMilestoneInput(draft, index, grossPence))
+    .map((draft, index) => draftToMilestoneInput(draft, index))
     .filter(Boolean);
 
   return (

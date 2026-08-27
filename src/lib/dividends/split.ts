@@ -52,7 +52,7 @@ export function splitDividendPence(
     amountPence: Math.floor(h.exact),
     remainder: h.exact - Math.floor(h.exact),
   }));
-  let allocated = floors.reduce((s, h) => s + h.amountPence, 0);
+  const allocated = floors.reduce((s, h) => s + h.amountPence, 0);
   let leftover = totalPence - allocated;
 
   const byRemainder = [...floors].sort((a, b) => b.remainder - a.remainder);

@@ -32,11 +32,26 @@ export function BankCardsFeed({
   const sentinelRef = useRef<HTMLDivElement>(null);
   const loadingRef = useRef(false);
 
-  useEffect(() => {
+  const [prevInitialRows, setPrevInitialRows] = useState(initialRows);
+  const [prevInitialPage, setPrevInitialPage] = useState(initialPage);
+  const [prevFilters, setPrevFilters] = useState(filters);
+  if (
+    initialRows !== prevInitialRows ||
+    initialPage !== prevInitialPage ||
+    filters.q !== prevFilters.q ||
+    filters.type !== prevFilters.type ||
+    filters.category !== prevFilters.category ||
+    filters.reconciliation !== prevFilters.reconciliation ||
+    filters.from !== prevFilters.from ||
+    filters.to !== prevFilters.to
+  ) {
+    setPrevInitialRows(initialRows);
+    setPrevInitialPage(initialPage);
+    setPrevFilters(filters);
     setRows(initialRows);
     setPage(initialPage);
     setError(null);
-  }, [initialRows, initialPage, filters.q, filters.type, filters.category, filters.reconciliation, filters.from, filters.to]);
+  }
 
   const hasMore = page < pageCount;
 

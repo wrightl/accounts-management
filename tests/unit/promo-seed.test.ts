@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
-import { clients, quotes, users } from "@/db/schema";
+import { clients, quotes } from "@/db/schema";
 import {
   PROMO_NUMBERS,
   seedPromoDemo,

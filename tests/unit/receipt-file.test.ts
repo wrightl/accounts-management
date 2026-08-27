@@ -24,13 +24,11 @@ describe("sniffReceiptContentType", () => {
 describe("resolveReceiptContentType", () => {
   it("sniffs PDF even when browser sends octet-stream", () => {
     const pdf = Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34, 0, 0, 0, 0]);
-    expect(resolveReceiptContentType(pdf, "application/octet-stream")).toBe(
-      "application/pdf",
-    );
+    expect(resolveReceiptContentType(pdf)).toBe("application/pdf");
   });
 
   it("rejects unknown file contents", () => {
-    expect(resolveReceiptContentType(Buffer.from("not-a-receipt"), "image/png")).toBeNull();
+    expect(resolveReceiptContentType(Buffer.from("not-a-receipt"))).toBeNull();
   });
 });
 
@@ -39,17 +37,17 @@ describe("receiptMagicOk", () => {
     const png = Buffer.from([
       0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0,
     ]);
-    expect(receiptMagicOk(png, "image/png")).toBe(true);
+    expect(receiptMagicOk(png)).toBe(true);
   });
 
   it("accepts PDF magic bytes", () => {
     const pdf = Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34, 0, 0, 0, 0]);
-    expect(receiptMagicOk(pdf, "application/pdf")).toBe(true);
+    expect(receiptMagicOk(pdf)).toBe(true);
   });
 
   it("rejects mismatched content", () => {
     const buf = Buffer.from("not-a-png-file");
-    expect(receiptMagicOk(buf, "image/png")).toBe(false);
+    expect(receiptMagicOk(buf)).toBe(false);
   });
 });
 

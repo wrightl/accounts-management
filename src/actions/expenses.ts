@@ -174,9 +174,6 @@ export async function createExpense(formData: FormData): Promise<ActionResult> {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
 
-  let amountPence: number;
-  let mileageMiles: number | null;
-  let mileageRatePence: number | null;
   const amountResult = resolveExpenseAmount({
     amountPounds: parsed.data.amountPounds,
     useMileage: parsed.data.useMileage,
@@ -184,9 +181,7 @@ export async function createExpense(formData: FormData): Promise<ActionResult> {
     mileageRatePence: parsed.data.mileageRatePence,
   });
   if (!amountResult.ok) return { ok: false, error: amountResult.error };
-  amountPence = amountResult.amountPence;
-  mileageMiles = amountResult.mileageMiles;
-  mileageRatePence = amountResult.mileageRatePence;
+  const { amountPence, mileageMiles, mileageRatePence } = amountResult;
 
   let description = parsed.data.description;
   if (mileageMiles != null && mileageRatePence != null) {

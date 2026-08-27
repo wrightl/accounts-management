@@ -169,17 +169,29 @@ provisioning (SSO, Resend inbound MX, custom domain, DNS):
 
 ### Cron
 
-Vercel Cron (`vercel.json`) calls these routes with
-`Authorization: Bearer $CRON_SECRET`:
+Vercel Hobby only allows cron jobs **once per day**, so scheduling is split:
 
-| Path                         | Schedule      | Purpose                                      |
-| ---------------------------- | ------------- | -------------------------------------------- |
-| `/api/cron/reminders`        | 08:00 daily   | Overdue invoice reminder emails              |
-| `/api/cron/recurring`        | 06:00 daily   | Recurring invoice generation (flagged)       |
-| `/api/cron/inbound-email`    | every 15 min  | Retry stuck/failed inbound expense jobs      |
+**Vercel Cron** (`vercel.json`) — daily at 07:00 UTC, `Authorization: Bearer $CRON_SECRET`:
+
+| Path                | Schedule    | Purpose                                                      |
+| ------------------- | ----------- | ------------------------------------------------------------ |
+| `/api/cron/daily`   | 07:00 daily | Recurring invoice generation (flagged) + overdue reminders   |
+
+Manual triggers (same auth) still available: `/api/cron/reminders`,
+`/api/cron/recurring`, `/api/cron/inbound-email`.
+
+**GitHub Actions** (`.github/workflows/cron-inbound-email.yml`) — every 15 minutes:
+
+| Path                         | Purpose                                 |
+| ---------------------------- | --------------------------------------- |
+| `/api/cron/inbound-email`    | Retry stuck/failed inbound expense jobs |
+
+Requires GitHub Actions secrets `CRON_SECRET` and `APP_URL` (production base URL,
+no trailing slash).
 
 Inbound receipt email is primarily handled by the Resend webhook
-(`/api/webhooks/resend`); the cron is a drain/retry.
+(`/api/webhooks/resend`), which also opportunistically drains a few pending jobs;
+the scheduled Action is the drain/retry when no new mail arrives.
 
 ## Conventions
 

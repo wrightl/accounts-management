@@ -7,7 +7,7 @@ import { createOrder } from "@/actions/orders";
 import { PaymentScheduleEditor } from "@/components/quotes/payment-schedule-editor";
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label, Select, Textarea } from "@/components/ui/form";
-import { formatGBP, invoiceTotals, lineNetPence, poundsToPence } from "@/lib/money";
+import { formatGBP, invoiceTotals, poundsToPence } from "@/lib/money";
 import { clientDisplayName } from "@/lib/clients/display";
 
 type LineDraft = {

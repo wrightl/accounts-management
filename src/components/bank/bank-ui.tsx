@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition, type ReactNode } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogActions } from "@/components/ui/dialog";
 import { FieldError, Input, Label, Select } from "@/components/ui/form";
@@ -73,10 +73,14 @@ export function SuggestMatchesDialog({
   const [items, setItems] = useState(suggestions);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [prevOpen, setPrevOpen] = useState(open);
+  const [prevSuggestions, setPrevSuggestions] = useState(suggestions);
 
-  useEffect(() => {
+  if (open !== prevOpen || (open && suggestions !== prevSuggestions)) {
+    setPrevOpen(open);
+    setPrevSuggestions(suggestions);
     if (open) setItems(suggestions);
-  }, [open, suggestions]);
+  }
 
   const invoiceCount = items.filter((s) => s.matchType === "invoice_payment").length;
   const expenseCount = items.filter((s) => s.matchType === "expense").length;

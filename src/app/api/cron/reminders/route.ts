@@ -6,7 +6,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Vercel Cron: enqueue overdue reminders and drain the send/remind outbox.
+ * Manual / debug trigger: enqueue overdue reminders and drain the send/remind outbox.
+ * Scheduled via `/api/cron/daily` on Vercel (Hobby once-per-day limit).
  * Does not persist overdue as an invoice status — that is computed from due date.
  */
 export async function GET(request: Request) {

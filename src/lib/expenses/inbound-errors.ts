@@ -84,7 +84,7 @@ export function parseInboundErrorMessage(
     .map((part) => part.trim())
     .filter(Boolean);
 
-  let summary = parts[0] ?? rest;
+  const summary = parts[0] ?? rest;
   let cause: string | undefined;
   let code: string | undefined;
   let attachment: string | undefined;

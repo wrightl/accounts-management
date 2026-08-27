@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { requireEnv } from "@/env";
 import {
+  drainInboundEmailJobs,
   enqueueInboundEmailJob,
   processInboundEmailJob,
 } from "@/lib/expenses/inbound-email";
@@ -69,10 +70,14 @@ export async function POST(request: Request) {
     );
   }
 
+  // Opportunistic drain so other pending/failed jobs clear when mail is flowing.
+  const drained = await drainInboundEmailJobs(5);
+
   return NextResponse.json({
     ok: true,
     jobId,
     processed: result.ok,
     expenseId: result.expenseId ?? null,
+    drained,
   });
 }

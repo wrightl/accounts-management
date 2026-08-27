@@ -293,9 +293,13 @@ export async function listOverdueInvoices(
     .filter((row) => row.balancePence > 0 && row.effectiveStatus === "overdue")
     .sort((a, b) => b.balancePence - a.balancePence)
     .slice(0, limit)
-    .map(({ effectiveStatus: _s, balancePence, ...rest }) => ({
-      ...rest,
+    .map(({ id, number, clientName, dueDate, balancePence, balanceFormatted }) => ({
+      id,
+      number,
+      clientName,
+      dueDate,
       balancePence,
+      balanceFormatted,
     }));
 }
 

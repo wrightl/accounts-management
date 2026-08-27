@@ -31,6 +31,7 @@ export function ReceiptUploadField({
   onExtraction: (extraction: ReceiptExtraction | null) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const previewUrlRef = useRef<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [extractError, setExtractError] = useState<string | null>(null);
@@ -38,17 +39,28 @@ export function ReceiptUploadField({
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
-    if (!file || !file.type.startsWith("image/")) {
-      setPreviewUrl(null);
-      return;
+    return () => {
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    };
+  }, []);
+
+  function setPreviewForFile(selected: File | null) {
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
     }
-    const url = URL.createObjectURL(file);
-    setPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
+    if (selected?.type.startsWith("image/")) {
+      const url = URL.createObjectURL(selected);
+      previewUrlRef.current = url;
+      setPreviewUrl(url);
+    } else {
+      setPreviewUrl(null);
+    }
+  }
 
   function clearFile() {
     setFile(null);
+    setPreviewForFile(null);
     setExtractError(null);
     setExtractMessage(null);
     onFileChange(null);
@@ -60,6 +72,7 @@ export function ReceiptUploadField({
     setExtractError(null);
     setExtractMessage(null);
     setFile(selected);
+    setPreviewForFile(selected);
     onFileChange(selected);
     onExtraction(null);
 

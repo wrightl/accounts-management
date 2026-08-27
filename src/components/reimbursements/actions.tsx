@@ -22,22 +22,22 @@ export function ReimbursementActions({
   const { confirm } = useAlert();
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const [matches, setMatches] = useState<ReimbursementBankMatch[]>([]);
+  const [matches, setMatches] = useState<ReimbursementBankMatch[] | null>(null);
   const [selectedMatchId, setSelectedMatchId] = useState<string>("");
-  const [loadingMatches, setLoadingMatches] = useState(false);
+  const loadingMatches = matches === null && status === "pending" && canWrite;
 
   useEffect(() => {
     if (status !== "pending" || !canWrite) return;
     let cancelled = false;
-    setLoadingMatches(true);
     void findReimbursementBankMatchesAction(id).then((result) => {
       if (cancelled) return;
-      setLoadingMatches(false);
       if (result.ok) {
         setMatches(result.matches);
         if (result.matches[0]) {
           setSelectedMatchId(result.matches[0].bankTransactionId);
         }
+      } else {
+        setMatches([]);
       }
     });
     return () => {
@@ -66,7 +66,7 @@ export function ReimbursementActions({
         </a>
         {canWrite && status === "pending" && (
           <>
-            {matches.length > 0 && (
+            {matches && matches.length > 0 && (
               <div className="flex min-w-[240px] flex-col gap-1">
                 <Label htmlFor="bankMatch">Link bank transaction</Label>
                 <Select
@@ -86,7 +86,7 @@ export function ReimbursementActions({
             )}
             <Button
               type="button"
-              disabled={pending || (matches.length > 0 && !selectedMatchId)}
+              disabled={pending || (Boolean(matches?.length) && !selectedMatchId)}
               onClick={async () => {
                 const ok = await confirm({
                   title: "Mark as paid",

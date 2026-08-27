@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
@@ -59,9 +60,9 @@ export function DividendDeclareForm({
       <p className="mt-4 text-sm text-muted">
         {registerError ??
           "Set up a balanced shareholders register (total shares must equal the sum of active share counts) before declaring a dividend."}{" "}
-        <a href="/dashboard/shareholders" className="underline">
+        <Link href="/dashboard/shareholders" className="underline">
           Manage shareholders
-        </a>
+        </Link>
       </p>
     );
   }

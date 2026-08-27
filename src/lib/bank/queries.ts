@@ -534,7 +534,6 @@ async function findIncomingMatch(
       ),
     );
 
-  const today = todayIsoDate();
   const invoiceCandidates = [];
   for (const inv of invoiceRows) {
     const paid = await paidTotalForInvoice(db, inv.id);

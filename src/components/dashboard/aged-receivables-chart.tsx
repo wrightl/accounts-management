@@ -27,8 +27,6 @@ const BUCKET_LABELS = [
   { key: "d90", label: "90+ days" },
 ] as const;
 
-type BucketKey = (typeof BUCKET_LABELS)[number]["key"];
-
 export function AgedReceivablesChart({
   raw,
   formatted,

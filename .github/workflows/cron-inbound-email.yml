@@ -1,0 +1,34 @@
+name: Cron inbound email
+
+# Hobby Vercel Cron only runs once per day; inbound retries need ~15m cadence.
+# Requires repo secrets: CRON_SECRET, APP_URL (e.g. https://accounts.dotanddashconsulting.com)
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  drain:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Drain inbound email jobs
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ secrets.APP_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CRON_SECRET:-}" ] || [ -z "${APP_URL:-}" ]; then
+            echo "Missing CRON_SECRET or APP_URL secret" >&2
+            exit 1
+          fi
+          url="${APP_URL%/}/api/cron/inbound-email"
+          code=$(curl -sS -o /tmp/cron-inbound.json -w "%{http_code}" \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "$url")
+          cat /tmp/cron-inbound.json
+          echo
+          if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
+            echo "Request failed with HTTP $code" >&2
+            exit 1
+          fi

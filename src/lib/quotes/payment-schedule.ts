@@ -137,7 +137,6 @@ export function newMilestoneDraft(): PaymentMilestoneDraft {
 export function draftToMilestoneInput(
   draft: PaymentMilestoneDraft,
   position: number,
-  grossPence: number,
 ): PaymentMilestoneInput | null {
   const label = draft.label.trim();
   if (!label) return null;

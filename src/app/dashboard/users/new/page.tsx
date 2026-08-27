@@ -4,7 +4,7 @@ import { UserForm } from "@/components/users/user-form";
 import { buttonClasses } from "@/components/ui/button";
 
 export default async function NewUserPage() {
-  const { companyId } = await guardTenantPage("users:manage");
+  await guardTenantPage("users:manage");
 
   return (
     <div>
