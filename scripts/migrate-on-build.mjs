@@ -10,6 +10,10 @@
  * Postgres will not let you *use* a newly added enum value in the same
  * transaction that added it. Drizzle wraps every pending file in one
  * transaction, so `role = pending` is applied here after migrate commits.
+ *
+ * Do not ALTER TYPE "role" before migrate: on a fresh database the type is
+ * created in 0000_init.sql, so a pre-migrate ALTER fails with
+ * `type "role" does not exist`.
  */
 import { config } from "dotenv";
 import pg from "pg";
@@ -33,18 +37,28 @@ if (!process.env.DATABASE_URL_UNPOOLED && url.includes("-pooler")) {
 
 const client = new pg.Client({ connectionString: url });
 
+async function roleTypeExists() {
+  const { rowCount } = await client.query(
+    `SELECT 1 FROM pg_type WHERE typname = 'role' LIMIT 1`,
+  );
+  return (rowCount ?? 0) > 0;
+}
+
 try {
   await client.connect();
-  await client.query(
-    `ALTER TYPE "role" ADD VALUE IF NOT EXISTS 'pending'`,
-  );
 
   const db = drizzle(client);
   await migrate(db, { migrationsFolder: "drizzle" });
 
-  await client.query(
-    `ALTER TABLE "users" ALTER COLUMN "role" SET DEFAULT 'pending'`,
-  );
+  if (await roleTypeExists()) {
+    await client.query(
+      `ALTER TYPE "role" ADD VALUE IF NOT EXISTS 'pending'`,
+    );
+    await client.query(
+      `ALTER TABLE "users" ALTER COLUMN "role" SET DEFAULT 'pending'`,
+    );
+  }
+
   console.log("Migrations applied");
 } catch (err) {
   const cause = err && typeof err === "object" && "cause" in err ? err.cause : undefined;
