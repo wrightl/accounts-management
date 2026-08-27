@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ChangeEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { useAlert } from "@/components/ui/alert-dialog";
 import { FieldError, Input, Label, Select } from "@/components/ui/form";
@@ -33,6 +33,15 @@ export function ShareholderForm({
   const { confirm } = useAlert();
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [name, setName] = useState(shareholder?.name ?? "");
+
+  function onLinkedUserChange(event: ChangeEvent<HTMLSelectElement>) {
+    const userId = event.target.value;
+    if (!userId) return;
+    const user = users.find((u) => u.id === userId);
+    if (!user) return;
+    setName(user.name?.trim() || user.email);
+  }
 
   if (!canWrite && mode === "create") {
     return (
@@ -56,9 +65,7 @@ export function ShareholderForm({
       router.push(
         mode === "edit" && shareholder
           ? `/dashboard/shareholders/${shareholder.id}`
-          : result.id
-            ? `/dashboard/shareholders/${result.id}`
-            : "/dashboard/shareholders",
+          : "/dashboard/shareholders",
       );
       router.refresh();
     });
@@ -94,7 +101,8 @@ export function ShareholderForm({
           id="name"
           name="name"
           required
-          defaultValue={shareholder?.name ?? ""}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
           disabled={!canWrite || pending}
         />
       </div>
@@ -117,6 +125,7 @@ export function ShareholderForm({
           id="userId"
           name="userId"
           defaultValue={shareholder?.userId ?? ""}
+          onChange={onLinkedUserChange}
           disabled={!canWrite || pending}
         >
           <option value="">None</option>

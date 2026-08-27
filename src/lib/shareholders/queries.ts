@@ -35,7 +35,7 @@ export async function listShareholders(
 
   const activeSum = rows
     .filter((r) => !r.archivedAt)
-    .reduce((s, r) => s + r.shareCount, 0);
+    .reduce((s, r) => s + Number(r.shareCount), 0);
 
   return {
     totalShares,
@@ -88,16 +88,23 @@ export async function getActiveShareholdersForSplit(companyId: string) {
     )
     .orderBy(asc(shareholders.name));
 
-  const activeSum = active.reduce((s, r) => s + r.shareCount, 0);
-  const totalShares = settings.totalShares;
+  const activeSum = active.reduce((s, r) => s + Number(r.shareCount), 0);
+  const lockedTotal = settings.totalShares;
+  const totalShares = lockedTotal ?? (activeSum > 0 ? activeSum : null);
   const balanced =
-    totalShares != null && totalShares > 0 && activeSum === totalShares && active.length > 0;
+    totalShares != null &&
+    totalShares > 0 &&
+    activeSum === totalShares &&
+    active.length > 0;
 
   return {
     totalShares,
     activeSum,
     balanced,
-    shareholders: active,
+    shareholders: active.map((r) => ({
+      ...r,
+      shareCount: Number(r.shareCount),
+    })),
   };
 }
 
@@ -111,9 +118,6 @@ export async function assertRegisterBalanced(
     .from(companySettings)
     .where(eq(companySettings.id, companyId))
     .limit(1);
-  if (!settings?.totalShares) {
-    return { ok: false as const, error: "Set total shares on the Shareholders page first." };
-  }
   const [sumRow] = await db
     .select({
       sum: sql<number>`coalesce(sum(${shareholders.shareCount}), 0)`.mapWith(Number),
@@ -123,14 +127,17 @@ export async function assertRegisterBalanced(
       and(eq(shareholders.companyId, companyId), isNull(shareholders.archivedAt)),
     );
   const sum = sumRow?.sum ?? 0;
+  if (sum === 0) {
+    return { ok: false as const, error: "Add at least one active shareholder." };
+  }
+  if (settings?.totalShares == null) {
+    return { ok: true as const, totalShares: sum };
+  }
   if (sum !== settings.totalShares) {
     return {
       ok: false as const,
       error: `Active share counts (${sum}) must equal total shares (${settings.totalShares}).`,
     };
-  }
-  if (sum === 0) {
-    return { ok: false as const, error: "Add at least one active shareholder." };
   }
   return { ok: true as const, totalShares: settings.totalShares };
 }

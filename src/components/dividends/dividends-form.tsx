@@ -56,7 +56,7 @@ export function DividendDeclareForm({
 
   if (!balanced) {
     return (
-      <p className="text-sm text-muted">
+      <p className="mt-4 text-sm text-muted">
         {registerError ??
           "Set up a balanced shareholders register (total shares must equal the sum of active share counts) before declaring a dividend."}{" "}
         <a href="/dashboard/shareholders" className="underline">
@@ -132,7 +132,7 @@ export function DividendDeclareForm({
       )}
 
       <FieldError>{error}</FieldError>
-      <Button type="submit" disabled={pending || !preview}>
+      <Button type="submit" disabled={pending || !amountPounds.trim()}>
         Declare dividend
       </Button>
     </form>

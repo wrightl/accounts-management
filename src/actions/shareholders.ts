@@ -25,10 +25,14 @@ const shareholderSchema = z.object({
 });
 
 async function activeShareSumExcluding(
+  companyId: string,
   excludeId: string | null,
 ): Promise<number> {
   const db = getDb();
-  const conditions = [isNull(shareholders.archivedAt)];
+  const conditions = [
+    eq(shareholders.companyId, companyId),
+    isNull(shareholders.archivedAt),
+  ];
   if (excludeId) conditions.push(ne(shareholders.id, excludeId));
   const [row] = await db
     .select({
@@ -98,7 +102,7 @@ export async function updateTotalShares(formData: FormData): Promise<ActionResul
     return { ok: false, error: "Total shares must be a positive integer" };
   }
 
-  const otherSum = await activeShareSumExcluding(null);
+  const otherSum = await activeShareSumExcluding(companyId, null);
   if (otherSum !== parsed.data) {
     return {
       ok: false,
@@ -149,7 +153,7 @@ export async function createShareholder(formData: FormData): Promise<ActionResul
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
 
-  const nextSum = (await activeShareSumExcluding(null)) + parsed.data.shareCount;
+  const nextSum = (await activeShareSumExcluding(companyId, null)) + parsed.data.shareCount;
   const check = await validateAgainstTotal(companyId, nextSum);
   if (!check.ok) return check;
 
@@ -213,7 +217,7 @@ export async function updateShareholder(
     return { ok: false, error: "Cannot edit an archived shareholder" };
   }
 
-  const nextSum = (await activeShareSumExcluding(id)) + parsed.data.shareCount;
+  const nextSum = (await activeShareSumExcluding(companyId, id)) + parsed.data.shareCount;
   const check = await validateAgainstTotal(companyId, nextSum);
   if (!check.ok) return check;
 
@@ -262,7 +266,7 @@ export async function archiveShareholder(id: string): Promise<ActionResult> {
   if (existing.archivedAt) return { ok: true, id };
 
   const settings = await getOrCreateCompanySettings(companyId);
-  const nextSum = (await activeShareSumExcluding(id));
+  const nextSum = await activeShareSumExcluding(companyId, id);
 
   await db
     .update(shareholders)

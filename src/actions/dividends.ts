@@ -59,12 +59,12 @@ export async function declareDividend(formData: FormData): Promise<ActionResult>
     return { ok: false, error: "Amount must be greater than zero" };
   }
 
-  const balanced = await assertRegisterBalanced(companyId, );
+  const balanced = await assertRegisterBalanced(companyId);
   if (!balanced.ok) return balanced;
 
   const { shareholders, totalShares } = await getActiveShareholdersForSplit(companyId);
   if (!totalShares) {
-    return { ok: false, error: "Set total shares before declaring a dividend." };
+    return { ok: false, error: "Add at least one active shareholder before declaring a dividend." };
   }
 
   let splits;

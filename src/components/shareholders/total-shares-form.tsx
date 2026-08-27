@@ -56,8 +56,8 @@ export function TotalSharesForm({
           type="number"
           min={1}
           step={1}
-          defaultValue={totalShares ?? ""}
-          placeholder={String(activeShareSum || "")}
+          defaultValue={totalShares ?? (activeShareSum > 0 ? String(activeShareSum) : "")}
+          placeholder="e.g. 100"
           disabled={pending}
         />
         <p className="mt-1 text-xs text-muted">
