@@ -3,16 +3,20 @@ import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
 import { clients, orders } from "@/db/schema";
 import { getOrdersSummary } from "@/lib/orders/summary";
+import { seedCompany } from "@/lib/test/seed-company";
 
 vi.mock("server-only", () => ({}));
 
 let ctx: Awaited<ReturnType<typeof createTestDb>>;
 let db: TestDatabase;
+let companyId: string;
 
 beforeEach(async () => {
   ctx = await createTestDb();
   db = ctx.db;
   setTestDb(db as unknown as Database);
+  const company = await seedCompany(db);
+  companyId = company.id;
 });
 
 afterEach(async () => {
@@ -24,11 +28,12 @@ describe("getOrdersSummary", () => {
   it("buckets orders by status and counts active pipeline", async () => {
     const [client] = await db
       .insert(clients)
-      .values({ name: "Acme Ltd", email: "acme@test.com" })
+      .values({ companyId, name: "Acme Ltd", email: "acme@test.com" })
       .returning();
 
     await db.insert(orders).values([
       {
+        companyId,
         clientId: client.id,
         number: "ORD-001",
         status: "active",
@@ -38,6 +43,7 @@ describe("getOrdersSummary", () => {
         vatPence: 0,
       },
       {
+        companyId,
         clientId: client.id,
         number: "ORD-002",
         status: "active",
@@ -47,6 +53,7 @@ describe("getOrdersSummary", () => {
         vatPence: 0,
       },
       {
+        companyId,
         clientId: client.id,
         number: "ORD-003",
         status: "draft",
@@ -56,6 +63,7 @@ describe("getOrdersSummary", () => {
         vatPence: 0,
       },
       {
+        companyId,
         clientId: client.id,
         number: "ORD-004",
         status: "completed",
@@ -66,7 +74,7 @@ describe("getOrdersSummary", () => {
       },
     ]);
 
-    const summary = await getOrdersSummary();
+    const summary = await getOrdersSummary(companyId);
 
     expect(summary.totalCount).toBe(4);
     expect(summary.totalGrossFormatted).toBe("£2,500.00");
@@ -84,7 +92,7 @@ describe("getOrdersSummary", () => {
   });
 
   it("returns empty summary when no orders exist", async () => {
-    const summary = await getOrdersSummary();
+    const summary = await getOrdersSummary(companyId);
     expect(summary.totalCount).toBe(0);
     expect(summary.activeCount).toBe(0);
     expect(summary.byStatus).toEqual([]);

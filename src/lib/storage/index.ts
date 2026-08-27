@@ -1,5 +1,4 @@
 import "server-only";
-import { arrayBuffer as consumeArrayBuffer } from "node:stream/consumers";
 import { serverEnv } from "@/env";
 
 export interface StoredObject {
@@ -89,7 +88,8 @@ class VercelBlobStorage implements StorageProvider {
       throw new Error(`Object not found: ${path}`);
     }
     return {
-      body: await consumeArrayBuffer(result.stream),
+      // Blob SDK returns a Web ReadableStream; Response handles both web & node runtimes.
+      body: await new Response(result.stream).arrayBuffer(),
       contentType: result.blob.contentType ?? null,
     };
   }

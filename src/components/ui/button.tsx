@@ -1,12 +1,13 @@
 import { cn } from "@/lib/utils";
 import type { ComponentProps } from "react";
 
-export type Variant = "primary" | "secondary" | "ghost";
+export type Variant = "primary" | "secondary" | "ghost" | "destructive";
 
 const variants: Record<Variant, string> = {
   primary: "bg-brand text-brand-foreground hover:bg-brand-hover",
   secondary: "bg-navy text-white hover:bg-navy/90",
   ghost: "bg-transparent text-foreground hover:bg-wash",
+  destructive: "bg-red-700 text-white hover:bg-red-800",
 };
 
 const base =

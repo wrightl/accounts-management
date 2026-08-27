@@ -336,7 +336,10 @@ export function ProfilePictureField({
             variant="secondary"
             disabled={pending}
             onClick={() => {
-              if (typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia) {
+              if (
+                typeof navigator !== "undefined" &&
+                typeof navigator.mediaDevices?.getUserMedia === "function"
+              ) {
                 setCameraOpen(true);
                 return;
               }

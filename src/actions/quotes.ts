@@ -40,7 +40,7 @@ import type { ActionResult } from "@/actions/result";
 const lineSchema = z.object({
   description: z.string().trim().min(1, "Description is required"),
   quantity: z.coerce
-    .number({ invalid_type_error: "Enter a valid quantity" })
+    .number({ error: "Enter a valid quantity" })
     .int("Quantity must be a whole number")
     .min(1, "Quantity must be at least 1"),
   unitPricePounds: z.string().trim().min(1, "Unit price is required"),
