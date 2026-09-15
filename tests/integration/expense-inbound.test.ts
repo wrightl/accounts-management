@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
-import { companies, inboundEmailJobs, expenses, users } from "@/db/schema";
+import { inboundEmailJobs, expenses, users } from "@/db/schema";
 import {
   adminDismissInboundEmailJob,
   adminRetryInboundEmailJob,
@@ -66,7 +66,7 @@ beforeEach(async () => {
   ctx = await createTestDb();
   db = ctx.db;
   setTestDb(db as unknown as Database);
-  const [company] = await db.select().from(companies).limit(1);
+  const company = await seedCompany(db);
   companyId = company.id;
   companySlug = company.slug;
   mockInboundDomain = "dotanddashconsulting.com";

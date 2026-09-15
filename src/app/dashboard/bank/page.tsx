@@ -1,10 +1,12 @@
 import { redirect } from "next/navigation";
+import { requireUser } from "@/lib/auth";
 
 export default async function BankRedirect({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
+  await requireUser();
   const sp = await searchParams;
   const qs = new URLSearchParams();
   for (const [key, value] of Object.entries(sp)) {

@@ -208,9 +208,10 @@ the scheduled Action is the drain/retry when no new mail arrives.
 
 ## Security
 
-- Non-public routes are gated in [`src/proxy.ts`](./src/proxy.ts) (Next.js 16
-  proxy = former middleware) and re-checked server-side. Fine-grained RBAC:
-  [`src/lib/roles.ts`](./src/lib/roles.ts).
+- Clerk session handshake stays in [`src/proxy.ts`](./src/proxy.ts) (Next.js 16
+  proxy = former middleware). Auth is enforced in pages, layouts, route
+  handlers, and server actions (`requirePermission` in `src/lib/auth.ts`).
+  Fine-grained RBAC: [`src/lib/roles.ts`](./src/lib/roles.ts).
 - Tenants cannot read each other’s rows (enforced in queries +
   `tests/integration/tenant-isolation.test.ts`).
 - Uploaded files are **private** Blob objects, never public URLs.

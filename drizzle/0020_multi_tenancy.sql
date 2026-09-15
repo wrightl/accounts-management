@@ -6,10 +6,6 @@ ALTER TABLE "companies" DROP COLUMN IF EXISTS "singleton";--> statement-breakpoi
 ALTER TABLE "companies" ADD COLUMN "entity_type" "entity_type" DEFAULT 'limited_company' NOT NULL;--> statement-breakpoint
 ALTER TABLE "companies" ADD COLUMN "utr" text;--> statement-breakpoint
 ALTER TABLE "companies" ADD COLUMN "created_at" timestamp with time zone DEFAULT now() NOT NULL;--> statement-breakpoint
--- Ensure at least one company exists for backfill (empty DBs / fresh installs).
-INSERT INTO "companies" ("name", "legal_name", "entity_type")
-SELECT 'Dot + Dash Consulting', 'Dot and Dash Consulting Ltd', 'limited_company'
-WHERE NOT EXISTS (SELECT 1 FROM "companies" LIMIT 1);--> statement-breakpoint
 ALTER TABLE "users" ADD COLUMN "company_id" uuid;--> statement-breakpoint
 ALTER TABLE "clients" ADD COLUMN "company_id" uuid;--> statement-breakpoint
 ALTER TABLE "invoices" ADD COLUMN "company_id" uuid;--> statement-breakpoint
@@ -26,7 +22,7 @@ ALTER TABLE "quotes" ADD COLUMN "company_id" uuid;--> statement-breakpoint
 ALTER TABLE "send_jobs" ADD COLUMN "company_id" uuid;--> statement-breakpoint
 ALTER TABLE "inbound_email_jobs" ADD COLUMN "company_id" uuid;--> statement-breakpoint
 ALTER TABLE "recurring_invoices" ADD COLUMN "company_id" uuid;--> statement-breakpoint
--- Backfill every existing row onto the first (Dot + Dash) company.
+-- Backfill every existing row onto the first company (if any).
 UPDATE "users" SET "company_id" = (SELECT "id" FROM "companies" ORDER BY "created_at" ASC LIMIT 1) WHERE "company_id" IS NULL;--> statement-breakpoint
 UPDATE "clients" SET "company_id" = (SELECT "id" FROM "companies" ORDER BY "created_at" ASC LIMIT 1) WHERE "company_id" IS NULL;--> statement-breakpoint
 UPDATE "invoices" SET "company_id" = (SELECT "id" FROM "companies" ORDER BY "created_at" ASC LIMIT 1) WHERE "company_id" IS NULL;--> statement-breakpoint
@@ -43,6 +39,22 @@ UPDATE "quotes" SET "company_id" = (SELECT "id" FROM "companies" ORDER BY "creat
 UPDATE "send_jobs" SET "company_id" = (SELECT "id" FROM "companies" ORDER BY "created_at" ASC LIMIT 1) WHERE "company_id" IS NULL;--> statement-breakpoint
 UPDATE "inbound_email_jobs" SET "company_id" = (SELECT "id" FROM "companies" ORDER BY "created_at" ASC LIMIT 1) WHERE "company_id" IS NULL;--> statement-breakpoint
 UPDATE "recurring_invoices" SET "company_id" = (SELECT "id" FROM "companies" ORDER BY "created_at" ASC LIMIT 1) WHERE "company_id" IS NULL;--> statement-breakpoint
+-- Without a placeholder company, drop unscoped rows that could not be backfilled
+-- (e.g. global quote decline seeds from 0011) so NOT NULL constraints can apply.
+DELETE FROM "quote_decline_reason_categories" WHERE "company_id" IS NULL;--> statement-breakpoint
+DELETE FROM "bank_spending_categories" WHERE "company_id" IS NULL;--> statement-breakpoint
+DELETE FROM "clients" WHERE "company_id" IS NULL;--> statement-breakpoint
+DELETE FROM "invoices" WHERE "company_id" IS NULL;--> statement-breakpoint
+DELETE FROM "expenses" WHERE "company_id" IS NULL;--> statement-breakpoint
+DELETE FROM "reimbursements" WHERE "company_id" IS NULL;--> statement-breakpoint
+DELETE FROM "bank_accounts" WHERE "company_id" IS NULL;--> statement-breakpoint
+DELETE FROM "shareholders" WHERE "company_id" IS NULL;--> statement-breakpoint
+DELETE FROM "dividend_declarations" WHERE "company_id" IS NULL;--> statement-breakpoint
+DELETE FROM "orders" WHERE "company_id" IS NULL;--> statement-breakpoint
+DELETE FROM "quotes" WHERE "company_id" IS NULL;--> statement-breakpoint
+DELETE FROM "send_jobs" WHERE "company_id" IS NULL;--> statement-breakpoint
+DELETE FROM "inbound_email_jobs" WHERE "company_id" IS NULL;--> statement-breakpoint
+DELETE FROM "recurring_invoices" WHERE "company_id" IS NULL;--> statement-breakpoint
 ALTER TABLE "clients" ALTER COLUMN "company_id" SET NOT NULL;--> statement-breakpoint
 ALTER TABLE "invoices" ALTER COLUMN "company_id" SET NOT NULL;--> statement-breakpoint
 ALTER TABLE "expenses" ALTER COLUMN "company_id" SET NOT NULL;--> statement-breakpoint

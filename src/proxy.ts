@@ -1,25 +1,12 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { clerkMiddleware } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { isAuthConfigured } from "@/env";
 
 // Next.js 16 renamed the network-boundary file from `middleware.ts` to
-// `proxy.ts`. Clerk's helper is unchanged.
-const isPublicRoute = createRouteMatcher([
-  "/",
-  "/sign-in(.*)",
-  "/sign-up(.*)",
-  "/api/health",
-  "/api/cron(.*)",
-  "/api/webhooks(.*)",
-]);
-
-const clerkProxy = clerkMiddleware(async (auth, req) => {
-  // Coarse gate: any non-public route requires a session. Fine-grained role
-  // checks happen in layouts / route handlers / server actions.
-  if (!isPublicRoute(req)) {
-    await auth.protect();
-  }
-});
+// `proxy.ts`. Clerk still needs this helper for the session handshake.
+// Auth itself is enforced on each page, layout, route handler, and server
+// action — not via createRouteMatcher (deprecated).
+const clerkProxy = clerkMiddleware();
 
 // Before Clerk keys are configured, fall back to a pass-through so the app can
 // still build, run public pages, and be tested. Auth activates automatically

@@ -8,6 +8,7 @@ import {
   seedPromoDemo,
 } from "@/db/seed-promo-demo";
 import { seedAdminUsers } from "@/db/seed";
+import { seedCompany } from "@/lib/test/seed-company";
 
 let ctx: Awaited<ReturnType<typeof createTestDb>>;
 let db: TestDatabase;
@@ -16,6 +17,7 @@ beforeEach(async () => {
   ctx = await createTestDb();
   db = ctx.db;
   setTestDb(db as unknown as Database);
+  await seedCompany(db);
   await seedAdminUsers(db as unknown as Database, ["lee@dotanddashconsulting.com"]);
 });
 

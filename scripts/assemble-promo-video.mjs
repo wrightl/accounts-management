@@ -9,7 +9,6 @@ import { execSync, spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
-  readFileSync,
   writeFileSync,
   copyFileSync,
 } from "node:fs";

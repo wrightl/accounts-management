@@ -24,8 +24,8 @@ test("invoices route redirects to sign-in or shows not-configured notice", async
   page,
 }) => {
   await page.goto("/dashboard/invoices");
-  // Without a Clerk session: either proxy redirects to sign-in, or (when auth
-  // env is absent) the dashboard layout shows AuthNotConfigured.
+  // Without a Clerk session: the dashboard layout redirects to sign-in, or
+  // (when auth env is absent) shows AuthNotConfigured.
   await expect(page.locator("body")).toContainText(
     /sign in|not configured|authentication/i,
   );
