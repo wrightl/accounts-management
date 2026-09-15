@@ -40,7 +40,7 @@ export function SettingsForm({
     utr: string | null;
     addressLines: string | null;
     email: string | null;
-    bankName: string;
+    bankName: string | null;
     bankAccountName: string | null;
     sortCode: string | null;
     accountNumber: string | null;
@@ -190,7 +190,7 @@ export function SettingsForm({
         <h2 className="pt-4 font-display text-lg font-semibold">Bank details (Starling)</h2>
         <div>
           <Label htmlFor="bankName">Bank</Label>
-          <Input id="bankName" name="bankName" required defaultValue={settings.bankName} disabled={pending} />
+          <Input id="bankName" name="bankName" required defaultValue={settings.bankName ?? ""} disabled={pending} />
         </div>
         <div>
           <Label htmlFor="bankAccountName">Account name</Label>

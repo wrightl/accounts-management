@@ -36,7 +36,7 @@ afterEach(async () => {
 async function seedReimbursementScenario() {
   const [account] = await db
     .insert(bankAccounts)
-    .values({ companyId, name: "Starling Business" })
+    .values({ companyId, name: "Starling Business", provider: "starling" })
     .returning();
 
   const [founder] = await db
@@ -133,7 +133,7 @@ describe("reimbursement bank reconciliation", () => {
   it("does not suggest reimbursable expenses for outgoing bank transactions", async () => {
     const [account] = await db
       .insert(bankAccounts)
-      .values({ companyId, name: "Starling Business" })
+      .values({ companyId, name: "Starling Business", provider: "starling" })
       .returning();
     const [founder] = await db
       .insert(users)
@@ -172,7 +172,7 @@ describe("reimbursement bank reconciliation", () => {
   it("suggests company_paid expenses for outgoing transactions", async () => {
     const [account] = await db
       .insert(bankAccounts)
-      .values({ companyId, name: "Starling Business" })
+      .values({ companyId, name: "Starling Business", provider: "starling" })
       .returning();
 
     await db.insert(expenses).values({

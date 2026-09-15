@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { completeOnboarding } from "@/actions/onboarding";
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label, Textarea } from "@/components/ui/form";
@@ -31,7 +31,19 @@ export function OnboardingForm({
 }) {
   const [entityType, setEntityType] = useState<EntityChoice>(null);
   const [error, setError] = useState<string | null>(null);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (!logoFile) {
+      setLogoPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(logoFile);
+    setLogoPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [logoFile]);
 
   if (!entityType) {
     return (
@@ -92,7 +104,10 @@ export function OnboardingForm({
         <button
           type="button"
           className="text-sm text-muted underline-offset-2 hover:underline"
-          onClick={() => setEntityType(null)}
+          onClick={() => {
+            setEntityType(null);
+            setLogoFile(null);
+          }}
           disabled={pending}
         >
           ← Change business type
@@ -181,16 +196,27 @@ export function OnboardingForm({
         </select>
       </div>
 
-      <div>
+      <div className="space-y-3 rounded-xl border border-border bg-surface/50 p-4">
         <Label htmlFor="logo">Company logo (optional)</Label>
+        {logoPreview ? (
+          // eslint-disable-next-line @next/next/no-img-element -- local file preview
+          <img
+            src={logoPreview}
+            alt="Company logo preview"
+            className="max-h-24 rounded-md border border-border bg-surface object-contain p-2"
+          />
+        ) : null}
         <Input
           id="logo"
           name="logo"
           type="file"
           accept="image/*"
           disabled={pending}
+          onChange={(event) => {
+            setLogoFile(event.target.files?.[0] ?? null);
+          }}
         />
-        <p className="mt-1 text-xs text-muted">
+        <p className="text-xs text-muted">
           Shown in the app and on invoices. PNG or JPG, under 2 MB.
         </p>
       </div>

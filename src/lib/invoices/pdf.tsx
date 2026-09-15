@@ -21,7 +21,7 @@ export interface PdfCompany {
   companyNumber: string | null;
   addressLines: string | null;
   email?: string | null;
-  bankName: string;
+  bankName: string | null;
   bankAccountName: string | null;
   sortCode: string | null;
   accountNumber: string | null;
@@ -249,7 +249,7 @@ function InvoiceDocument({
 
         <View style={styles.bank}>
           <Text style={styles.sectionTitle}>Payment details</Text>
-          <Text>{company.bankName}</Text>
+          {company.bankName ? <Text>{company.bankName}</Text> : null}
           {company.bankAccountName ? (
             <Text>Account name: {company.bankAccountName}</Text>
           ) : null}

@@ -60,9 +60,9 @@ export const sendJobStatusEnum = pgEnum("send_job_status", [
  */
 export const companies = pgTable("companies", {
   id: uuid("id").primaryKey().defaultRandom(),
-  entityType: entityTypeEnum("entity_type").notNull().default("limited_company"),
-  name: text("name").notNull().default("Dot + Dash Consulting"),
-  legalName: text("legal_name").notNull().default("Dot and Dash Consulting Ltd"),
+  entityType: entityTypeEnum("entity_type").notNull(),
+  name: text("name").notNull(),
+  legalName: text("legal_name").notNull(),
   /**
    * Stable slug for inbound expense plus-addresses
    * (`expenses+{slug}.{user}@domain`). Generated once; not renamed.
@@ -74,7 +74,7 @@ export const companies = pgTable("companies", {
   vatNumber: text("vat_number"), // null: not VAT registered
   addressLines: text("address_lines"),
   email: text("email"),
-  bankName: text("bank_name").notNull().default("Starling"),
+  bankName: text("bank_name"),
   bankAccountName: text("bank_account_name"),
   sortCode: text("sort_code"),
   accountNumber: text("account_number"),
@@ -392,8 +392,8 @@ export const bankAccounts = pgTable(
     companyId: uuid("company_id")
       .notNull()
       .references(() => companies.id, { onDelete: "cascade" }),
-    name: text("name").notNull().default("Starling Business"),
-    provider: text("provider").notNull().default("starling"),
+    name: text("name").notNull(),
+    provider: text("provider").notNull(),
     currency: text("currency").notNull().default("GBP"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },

@@ -147,7 +147,7 @@ describe("accountant pack integration", () => {
 
     const [account] = await db
       .insert(bankAccounts)
-      .values({ companyId, name: "Starling Business" })
+      .values({ companyId, name: "Starling Business", provider: "starling" })
       .returning();
 
     const [bankTx] = await db

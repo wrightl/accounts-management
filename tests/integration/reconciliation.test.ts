@@ -40,7 +40,7 @@ afterEach(async () => {
 async function seedInvoicePaymentScenario() {
   const [account] = await db
     .insert(bankAccounts)
-    .values({ companyId, name: "Starling Business" })
+    .values({ companyId, name: "Starling Business", provider: "starling" })
     .returning();
 
   const [client] = await db

@@ -108,7 +108,7 @@ export async function updateCompany(formData: FormData): Promise<ActionResult> {
     utr: formData.get("utr") ?? "",
     addressLines: formData.get("addressLines") ?? "",
     email: formData.get("email") ?? "",
-    bankName: formData.get("bankName") ?? "Starling",
+    bankName: formData.get("bankName") ?? "",
     bankAccountName: formData.get("bankAccountName") ?? "",
     sortCode: formData.get("sortCode") ?? "",
     accountNumber: formData.get("accountNumber") ?? "",

@@ -52,7 +52,7 @@ describe("phases 2–4 integration", () => {
     const { db } = ctx;
     const [account] = await db
       .insert(bankAccounts)
-      .values({ companyId, name: "Starling" })
+      .values({ companyId, name: "Starling", provider: "starling" })
       .returning();
 
     const csv = [

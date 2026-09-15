@@ -27,7 +27,7 @@ beforeEach(async () => {
 
   const [account] = await db
     .insert(bankAccounts)
-    .values({ companyId, name: "Starling Business" })
+    .values({ companyId, name: "Starling Business", provider: "starling" })
     .returning();
   accountId = account.id;
 });
