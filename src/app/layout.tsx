@@ -70,7 +70,12 @@ export default function RootLayout({
   }
 
   return (
-    <ClerkProvider afterSignOutUrl="/" appearance={clerkAppearance}>
+    <ClerkProvider
+      afterSignOutUrl="/"
+      signInForceRedirectUrl="/dashboard"
+      signUpForceRedirectUrl="/onboarding"
+      appearance={clerkAppearance}
+    >
       {body}
     </ClerkProvider>
   );

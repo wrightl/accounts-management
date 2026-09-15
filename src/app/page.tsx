@@ -1,8 +1,16 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { auth } from "@clerk/nextjs/server";
 import { Logo } from "@/components/brand/logo";
 import { buttonClasses } from "@/components/ui/button";
+import { isAuthConfigured } from "@/env";
 
-export default function Home() {
+export default async function Home() {
+  if (isAuthConfigured()) {
+    const { userId } = await auth();
+    if (userId) redirect("/dashboard");
+  }
+
   return (
     <main className="flex flex-1 flex-col bg-navy text-white">
       <header className="flex items-center justify-between bg-accent px-6 py-4 text-white">
