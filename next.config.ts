@@ -1,21 +1,7 @@
 import type { NextConfig } from "next";
+import { clerkFrontendApiHost } from "./src/lib/clerk-frontend-api";
 
-// Clerk frontend API host is derived from the publishable key (base64 payload).
-function clerkFrontendApi(): string | null {
-  const key = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-  if (!key?.startsWith("pk_")) return null;
-  try {
-    const payload = key.split("_").slice(1).join("_");
-    // Clerk pk_test_<base64> encodes the frontend API hostname.
-    const decoded = Buffer.from(payload, "base64").toString("utf8").replace(/\$+$/, "");
-    if (decoded.includes(".")) return decoded;
-  } catch {
-    /* ignore */
-  }
-  return null;
-}
-
-const clerkHost = clerkFrontendApi();
+const clerkHost = clerkFrontendApiHost();
 
 /** Hostname from NEXT_PUBLIC_APP_URL — allows ngrok/tunnel origins in dev. */
 function appDevOrigin(): string | null {
