@@ -46,8 +46,33 @@ export default async function Home() {
         </div>
       </section>
 
+      <section className="border-t border-white/10 px-6 py-16">
+        <div className="mx-auto max-w-4xl text-center">
+          <h2 className="font-display text-3xl font-normal tracking-tight">
+            Understanding UK Tax Requirements
+          </h2>
+          <p className="mt-4 text-base leading-relaxed text-white/75">
+            Get clear guidance on your financial obligations as a limited company
+            or sole trader. Our comprehensive guides cover record keeping, filing
+            deadlines, and tax requirements.
+          </p>
+          <Link
+            href="/guides"
+            className={buttonClasses("ghost", "mt-6 border border-white/30 text-white hover:bg-white/10")}
+          >
+            View UK Financial Guides
+          </Link>
+        </div>
+      </section>
+
       <footer className="px-6 py-8 text-center text-sm text-white/50">
-        © {new Date().getFullYear()} Dot and Dash Consulting Ltd
+        <div className="flex flex-wrap items-center justify-center gap-4">
+          <span>© {new Date().getFullYear()} Dot and Dash Consulting Ltd</span>
+          <span className="text-white/30">·</span>
+          <Link href="/guides" className="hover:text-white/75">
+            UK Financial Guides
+          </Link>
+        </div>
       </footer>
     </main>
   );

@@ -511,6 +511,25 @@ export function HelpGuide({
           <p className="mt-4 text-sm text-muted">
             Your accountant still handles tax and Companies House filings.
           </p>
+          <div className="mt-6 rounded-lg border border-periwinkle/30 bg-periwinkle/5 p-4">
+            <p className="text-sm text-foreground/90">
+              <strong className="text-foreground">
+                Need detailed UK tax guidance?
+              </strong>{" "}
+              Our{" "}
+              <HelpLink
+                href={
+                  entityType === "limited_company"
+                    ? "/guides/limited-companies"
+                    : "/guides/sole-traders"
+                }
+              >
+                comprehensive financial requirements guide
+              </HelpLink>{" "}
+              covers record keeping, filing deadlines, tax obligations, and
+              penalties for {entityType === "limited_company" ? "limited companies" : "sole traders"}.
+            </p>
+          </div>
         </section>
       </div>
     </div>
