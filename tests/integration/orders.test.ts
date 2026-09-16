@@ -160,7 +160,11 @@ describe("orders", () => {
     const [invoice] = await db.select().from(invoices).where(eq(invoices.orderId, orderId));
     expect(invoice.grossPence).toBe(30000);
     expect(invoice.paymentMilestoneId).toBe(milestone.id);
-    expect(invoice.dueDate).toBe("2026-09-06");
+    
+    // Invoice due date is calculated from today + dueInDays (14 days)
+    const expectedDueDate = new Date();
+    expectedDueDate.setDate(expectedDueDate.getDate() + 14);
+    expect(invoice.dueDate).toBe(expectedDueDate.toISOString().split('T')[0]);
 
     const lines = await db
       .select()
@@ -280,7 +284,11 @@ describe("orders", () => {
     expect(result.ok).toBe(true);
 
     const [invoice] = await db.select().from(invoices).where(eq(invoices.orderId, orderId));
-    expect(invoice.dueDate).toBe("2026-09-22");
+    
+    // Invoice due date is calculated from today + payment terms (30 days)
+    const expectedDueDate = new Date();
+    expectedDueDate.setDate(expectedDueDate.getDate() + 30);
+    expect(invoice.dueDate).toBe(expectedDueDate.toISOString().split('T')[0]);
   });
 });
 
