@@ -61,15 +61,13 @@ export async function POST(
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    await storage.put(blobKey, buffer, {
-      access: "private",
-    } as { access: string });
+    const storedObject = await storage.put(blobKey, buffer, file.type);
 
     const [receipt] = await db
       .insert(expenseReceipts)
       .values({
         expenseId: params.id,
-        blobPath: blobKey,
+        blobPath: storedObject.path,
         filename: safeFileName,
         sizeBytes: buffer.length,
         contentType: file.type,
