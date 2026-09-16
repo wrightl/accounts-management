@@ -30,7 +30,7 @@ import {
 import type { ReceiptExtraction } from "@/lib/expenses/receipt-parse";
 import { isReceiptOcrProvider } from "@/lib/expenses/receipt-parse";
 import { listFounders } from "@/lib/expenses/queries";
-import { getOrCreateCompanySettings } from "@/lib/settings/queries";
+import { getReceiptOcrSettings } from "@/lib/platform-settings";
 import type { ActionResult } from "@/actions/result";
 
 export type ExpenseImportPreviewResult =
@@ -594,8 +594,8 @@ export async function extractReceiptFields(
   const parsed = await parseReceiptFileAsync(formData);
   if (!parsed.ok) return parsed;
 
-  const settings = await getOrCreateCompanySettings(companyId);
-  const providerRaw = settings.receiptOcrProvider ?? "local";
+  const ocr = await getReceiptOcrSettings();
+  const providerRaw = ocr.provider ?? "local";
   const provider: ReceiptOcrProvider = isReceiptOcrProvider(providerRaw)
     ? providerRaw
     : "local";
@@ -605,7 +605,7 @@ export async function extractReceiptFields(
       parsed.data.bytes,
       parsed.data.contentType,
       provider,
-      settings.receiptOcrModel,
+      ocr.model,
     );
     return { ok: true, extraction };
   } catch (e) {

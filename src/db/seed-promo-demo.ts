@@ -2,7 +2,7 @@
  * Idempotent fictional demo dataset for the promo video.
  * All entities use fixed document numbers (900x suffix) and fictional UK clients.
  */
-import { asc, eq, inArray, sql } from "drizzle-orm";
+import { asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import type { Database } from "@/db";
 import {
   bankAccounts,
@@ -23,7 +23,6 @@ import {
   reimbursements,
   users,
 } from "@/db/schema";
-import { bootstrapAdminEmails } from "@/lib/bootstrap";
 
 /** Fixed promo document numbers — safe to upsert by. */
 export const PROMO_NUMBERS = {
@@ -73,19 +72,24 @@ function assertPromoSeedAllowed() {
   }
 }
 
-async function findAdminUser(db: Database) {
-  const emails = bootstrapAdminEmails();
-  for (const raw of emails) {
-    const email = raw.trim().toLowerCase();
-    const [row] = await db
-      .select()
-      .from(users)
-      .where(sql`lower(${users.email}) = ${email}`)
-      .limit(1);
-    if (row) return row;
-  }
+async function findDemoActor(db: Database) {
+  const [withCompany] = await db
+    .select()
+    .from(users)
+    .where(isNotNull(users.companyId))
+    .orderBy(asc(users.createdAt))
+    .limit(1);
+  if (withCompany) return withCompany;
+
+  const [anyUser] = await db
+    .select()
+    .from(users)
+    .orderBy(asc(users.createdAt))
+    .limit(1);
+  if (anyUser) return anyUser;
+
   throw new Error(
-    "No bootstrap admin user in database. Run npm run db:seed first.",
+    "No user in database. Complete onboarding (create a company) before running promo seed.",
   );
 }
 
@@ -172,7 +176,7 @@ export async function seedPromoDemo(
     cleared = true;
   }
 
-  const admin = await findAdminUser(db);
+  const admin = await findDemoActor(db);
 
   const [primary] = await db
     .select({ id: companies.id })

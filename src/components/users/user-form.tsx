@@ -7,9 +7,9 @@ import { RevokeInviteButton } from "@/components/users/revoke-invite-button";
 import { DeleteUserButton } from "@/components/users/delete-user-button";
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label, Select } from "@/components/ui/form";
-import type { Role } from "@/lib/roles";
+import type { TenantRole } from "@/lib/roles";
 
-const ROLE_OPTIONS: { value: Role; label: string }[] = [
+const ROLE_OPTIONS: { value: TenantRole; label: string }[] = [
   { value: "pending", label: "Pending access" },
   { value: "user", label: "Co-founder" },
   { value: "accountant", label: "Accountant" },
@@ -20,7 +20,7 @@ type EditUser = {
   id: string;
   email: string;
   name: string | null;
-  role: Role;
+  role: TenantRole;
   clerkUserId: string | null;
 };
 
@@ -28,10 +28,12 @@ export function UserForm({
   mode,
   user,
   isSelf,
+  pendingReimbursementCount = 0,
 }: {
   mode: "invite" | "edit";
   user?: EditUser;
   isSelf?: boolean;
+  pendingReimbursementCount?: number;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -119,6 +121,7 @@ export function UserForm({
               userId={user.id}
               email={user.email}
               redirectTo="/users"
+              pendingReimbursementCount={pendingReimbursementCount}
             />
           ) : (
             <RevokeInviteButton

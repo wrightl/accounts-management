@@ -6,6 +6,7 @@ import { ExpenseForm } from "@/components/expenses/expense-form";
 import { buttonClasses } from "@/components/ui/button";
 import { isDatabaseConfigured } from "@/env";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
+import { getReceiptOcrSettings } from "@/lib/platform-settings";
 import { findLocalUserId } from "@/lib/users";
 
 export default async function NewExpensePage() {
@@ -17,11 +18,12 @@ export default async function NewExpensePage() {
     return <p className="text-muted">Connect a database to create expenses.</p>;
   }
 
-  const [founders, clients, localUserId, settings] = await Promise.all([
+  const [founders, clients, localUserId, settings, ocr] = await Promise.all([
     listFounders(companyId),
     listClients(companyId),
     findLocalUserId(user.userId),
     getOrCreateCompanySettings(companyId),
+    getReceiptOcrSettings(),
   ]);
 
   return (
@@ -39,8 +41,8 @@ export default async function NewExpensePage() {
         canWrite={canWrite}
         defaultPaidByUserId={localUserId}
         defaultMileageRatePence={settings.defaultMileageRatePence}
-        receiptOcrProvider={settings.receiptOcrProvider ?? "local"}
-        receiptOcrModel={settings.receiptOcrModel}
+        receiptOcrProvider={ocr.provider ?? "local"}
+        receiptOcrModel={ocr.model}
       />
     </div>
   );

@@ -11,6 +11,7 @@ import {
 import { hasDatabaseClient, getDb } from "@/db";
 import { companies, type EntityType } from "@/db/schema";
 import { findLocalUser } from "@/lib/users";
+import { resolvePlatformAdmin } from "@/lib/bootstrap";
 
 export interface SessionUser {
   userId: string;
@@ -69,7 +70,15 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     }
   }
 
-  return { userId, email, name, role, localUserId, companyId, entityType };
+  return {
+    userId,
+    email,
+    name,
+    role,
+    localUserId,
+    companyId,
+    entityType,
+  };
 }
 
 /** Require an authenticated session, redirecting to sign-in otherwise. */
@@ -129,6 +138,14 @@ export async function guardTenantPage(
 ): Promise<SessionUser & { companyId: string; entityType: NonNullable<SessionUser["entityType"]> }> {
   const user = await guardPage(permission);
   if (!user.companyId || !user.entityType) {
+    if (
+      resolvePlatformAdmin({
+        role: user.role,
+        email: user.email,
+      })
+    ) {
+      redirect("/platform");
+    }
     redirect("/onboarding");
   }
   return {

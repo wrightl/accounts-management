@@ -1,7 +1,7 @@
 import "server-only";
-import { and, eq, lt, or, sql } from "drizzle-orm";
+import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { clients, invoices, sendJobs } from "@/db/schema";
+import { clients, companies, invoices, sendJobs } from "@/db/schema";
 import { sendEmail } from "@/lib/email";
 import { escapeHtml } from "@/lib/html";
 import { formatGBP } from "@/lib/money";
@@ -47,6 +47,20 @@ export async function processSendJob(jobId: string): Promise<{ ok: boolean; erro
   const [job] = await db.select().from(sendJobs).where(eq(sendJobs.id, jobId)).limit(1);
   if (!job) return { ok: false, error: "Send job not found" };
   if (job.status === "sent") return { ok: true };
+
+  const [company] = await db
+    .select({ suspendedAt: companies.suspendedAt })
+    .from(companies)
+    .where(eq(companies.id, job.companyId))
+    .limit(1);
+  if (company?.suspendedAt) {
+    await db
+      .update(sendJobs)
+      .set({ status: "failed", lastError: "Company is suspended" })
+      .where(eq(sendJobs.id, jobId));
+    return { ok: false, error: "Company is suspended" };
+  }
+
   if (job.attempts >= MAX_ATTEMPTS) {
     await db
       .update(sendJobs)
@@ -124,7 +138,14 @@ export async function enqueueOverdueReminders(): Promise<number> {
       dueDate: invoices.dueDate,
     })
     .from(invoices)
-    .where(and(eq(invoices.status, "sent"), lt(invoices.dueDate, today)));
+    .innerJoin(companies, eq(companies.id, invoices.companyId))
+    .where(
+      and(
+        eq(invoices.status, "sent"),
+        lt(invoices.dueDate, today),
+        isNull(companies.suspendedAt),
+      ),
+    );
 
   const cooldown = new Date(Date.now() - REMIND_COOLDOWN_DAYS * 24 * 60 * 60 * 1000);
   let queued = 0;

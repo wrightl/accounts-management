@@ -1,6 +1,5 @@
 import { guardTenantPage } from "@/lib/auth";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
-import { listReceiptOcrGatewayModels } from "@/lib/expenses/receipt-ocr-models-catalog";
 import { SettingsForm } from "@/components/settings/settings-form";
 import { isDatabaseConfigured } from "@/env";
 
@@ -16,18 +15,15 @@ export default async function SettingsPage() {
     );
   }
 
-  const [settings, ocrModels] = await Promise.all([
-    getOrCreateCompanySettings(companyId),
-    listReceiptOcrGatewayModels(),
-  ]);
+  const settings = await getOrCreateCompanySettings(companyId);
 
   return (
     <div>
       <h1 className="mb-2 font-display text-2xl font-semibold">Settings</h1>
       <p className="mb-8 text-muted">
-        Company profile, financial year, Starling bank details, and invoice/quote numbering.
+        Company profile, financial year, bank details, and invoice/quote numbering.
       </p>
-      <SettingsForm settings={settings} ocrModels={ocrModels} />
+      <SettingsForm settings={settings} />
     </div>
   );
 }

@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { isAuthConfigured } from "@/env";
 import { requireUser } from "@/lib/auth";
-import { ensureLocalUser } from "@/lib/users";
+import { isPlatformAdmin } from "@/lib/platform";
+import { ensureLocalUser, findLocalUser } from "@/lib/users";
 import { hasDatabaseClient } from "@/db";
 import { OnboardingForm } from "@/components/onboarding/onboarding-form";
 import { AuthNotConfigured } from "@/components/auth-notice";
@@ -10,9 +11,23 @@ import { Logo } from "@/components/brand/logo";
 export default async function OnboardingPage() {
   if (!isAuthConfigured()) return <AuthNotConfigured />;
 
-  const user = await requireUser();
+  let user = await requireUser();
   if (hasDatabaseClient()) {
     await ensureLocalUser(user);
+    const local = await findLocalUser(user.userId);
+    if (local) {
+      user = {
+        ...user,
+        role: local.role,
+        name: user.name ?? local.name,
+        companyId: local.companyId,
+        localUserId: local.id,
+      };
+    }
+  }
+
+  if (isPlatformAdmin(user)) {
+    redirect("/platform");
   }
   if (user.companyId) {
     redirect("/dashboard");

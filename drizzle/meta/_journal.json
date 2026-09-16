@@ -204,6 +204,41 @@
       "when": 1787498000000,
       "tag": "0028_multi_bank_csv_import",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1787499000000,
+      "tag": "0029_platform_admin",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1787500000000,
+      "tag": "0030_drop_company_receipt_ocr",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1787501000000,
+      "tag": "0031_platform_admin_role",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1787502000000,
+      "tag": "0032_platform_admin_detach_company",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1787503000000,
+      "tag": "0033_platform_admin_invariants",
+      "breakpoints": true
     }
   ]
 }

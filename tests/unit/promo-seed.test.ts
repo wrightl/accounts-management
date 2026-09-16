@@ -2,12 +2,11 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
-import { clients, quotes } from "@/db/schema";
+import { clients, quotes, users } from "@/db/schema";
 import {
   PROMO_NUMBERS,
   seedPromoDemo,
 } from "@/db/seed-promo-demo";
-import { seedAdminUsers } from "@/db/seed";
 import { seedCompany } from "@/lib/test/seed-company";
 
 let ctx: Awaited<ReturnType<typeof createTestDb>>;
@@ -17,8 +16,12 @@ beforeEach(async () => {
   ctx = await createTestDb();
   db = ctx.db;
   setTestDb(db as unknown as Database);
-  await seedCompany(db);
-  await seedAdminUsers(db as unknown as Database, ["lee@dotanddashconsulting.com"]);
+  const company = await seedCompany(db);
+  await db.insert(users).values({
+    email: "demo@example.com",
+    role: "admin",
+    companyId: company.id,
+  });
 });
 
 afterEach(async () => {

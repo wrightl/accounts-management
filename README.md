@@ -89,13 +89,10 @@ Clerk is identity only. Role and company come from Postgres
 | **accountant**| Read-only + export. May belong to **multiple** companies.              |
 | **pending**   | Signed in, no books access. Assigned from Dashboard → Users.           |
 
-Bootstrap defaults (override with env):
-
-- `BOOTSTRAP_ADMIN_EMAILS` — `lee@dotanddashconsulting.com` → admin
-- `BOOTSTRAP_USER_EMAILS` — `angel@dotanddashconsulting.com` → co-founder
-
 Self-serve onboarding creates a company and makes that user **admin**. Invited
-users skip onboarding and attach to the inviting company.
+users skip onboarding and attach to the inviting company. Platform operators
+are provisioned separately via `PLATFORM_ADMIN_EMAILS` / `npm run db:seed`
+(not a company role).
 
 ## Getting started
 
@@ -108,15 +105,16 @@ npm run dev                  # http://localhost:3001
 The app runs **without credentials**: public pages work, and auth/DB activate
 once their env vars are present (see [Configuration](#configuration)).
 
-When `DATABASE_URL` is set, apply schema then seed the bootstrap admin:
+When `DATABASE_URL` is set, apply schema then seed platform admins:
 
 ```bash
 npm run db:migrate
-npm run db:seed    # inserts BOOTSTRAP_ADMIN_EMAILS as admin
+npm run db:seed    # inserts PLATFORM_ADMIN_EMAILS + Clerk invites
 ```
 
-First sign-in with a bootstrap email attaches the Clerk user and keeps that
-role. Do not run seed on every production deploy.
+Seeded operators get the `platform_admin` role (no company) and use `/platform` only —
+they never join a tenant. Clerk sends an invitation so they set a password on
+first login. Do not run seed on every production deploy.
 
 ## Scripts
 
@@ -132,7 +130,7 @@ role. Do not run seed on every production deploy.
 | `npm run test:e2e`      | Playwright e2e (own server on port 3100)                             |
 | `npm run db:generate`   | Generate a Drizzle migration from the schema                         |
 | `npm run db:migrate`    | Apply migrations over a direct Postgres connection (`pg`)            |
-| `npm run db:seed`       | Seed bootstrap admin (`BOOTSTRAP_ADMIN_EMAILS`)                      |
+| `npm run db:seed`       | Seed platform admins (`PLATFORM_ADMIN_EMAILS` + Clerk invites)       |
 | `npm run db:push`       | Push schema without a migration (dev only)                           |
 | `npm run db:studio`     | Drizzle Studio                                                       |
 | `npm run tunnel`        | ngrok to port 3001 (inbound webhooks in local dev)                   |

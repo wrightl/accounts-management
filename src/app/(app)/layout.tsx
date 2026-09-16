@@ -4,10 +4,12 @@ import { currentUser } from "@clerk/nextjs/server";
 import { isAuthConfigured, isDatabaseConfigured } from "@/env";
 import { hasDatabaseClient } from "@/db";
 import { requireUser } from "@/lib/auth";
+import { isPlatformAdmin } from "@/lib/platform";
 import { ensureLocalUser, findLocalUser, listUserMemberships } from "@/lib/users";
 import { can } from "@/lib/roles";
 import { countOverdueInvoices } from "@/lib/invoices/queries";
 import { getCompanySettings } from "@/lib/settings/queries";
+import { getPlatformSettings } from "@/lib/platform-settings";
 import {
   NAV_COLLAPSED_COOKIE,
   NAV_GROUPS,
@@ -43,7 +45,7 @@ export default async function AppLayout({
   }
 
   if (!user.companyId) {
-    redirect("/onboarding");
+    redirect(isPlatformAdmin(user) ? "/platform" : "/onboarding");
   }
 
   const company = await getCompanySettings(user.companyId);
@@ -79,6 +81,18 @@ export default async function AppLayout({
     }
   }
 
+  let maintenanceBanner: string | null = null;
+  if (hasDatabaseClient()) {
+    try {
+      const settings = await getPlatformSettings();
+      maintenanceBanner = settings.maintenanceBanner;
+    } catch {
+      maintenanceBanner = null;
+    }
+  }
+
+  const showPlatformLink = isPlatformAdmin(user);
+
   return (
     <DashboardShell
       groups={groups}
@@ -95,6 +109,14 @@ export default async function AppLayout({
       }))}
       navCollapsed={navCollapsed}
       overdueInvoiceCount={overdueInvoiceCount}
+      showPlatformLink={showPlatformLink}
+      maintenanceBanner={maintenanceBanner}
+      suspendedReason={
+        company.suspendedAt
+          ? company.suspendedReason ??
+            "This company is suspended. Contact support for help."
+          : null
+      }
     >
       {children}
     </DashboardShell>

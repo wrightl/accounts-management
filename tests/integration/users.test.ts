@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
-import { companyMemberships, users } from "@/db/schema";
+import { companyMemberships, expenses, reimbursementItems, reimbursements, users } from "@/db/schema";
 import {
   inviteUser,
   deleteUser,
@@ -19,6 +19,7 @@ import {
   listUsers,
   upsertMembership,
 } from "@/lib/users";
+import { listFounders } from "@/lib/expenses/queries";
 import { seedCompany } from "@/lib/test/seed-company";
 import type { Role } from "@/lib/roles";
 
@@ -47,6 +48,13 @@ vi.mock("@clerk/nextjs/server", () => ({
     publicMetadata: {},
   })),
   clerkClient: vi.fn(async () => ({
+    invitations: { createInvitation, getInvitationList, revokeInvitation },
+    users: { updateUser: updateClerkUser, deleteUser: deleteClerkUser },
+  })),
+}));
+
+vi.mock("@clerk/backend", () => ({
+  createClerkClient: vi.fn(() => ({
     invitations: { createInvitation, getInvitationList, revokeInvitation },
     users: { updateUser: updateClerkUser, deleteUser: deleteClerkUser },
   })),
@@ -119,6 +127,44 @@ afterEach(async () => {
 });
 
 describe("inviteUser", () => {
+  it("rejects inviting a PLATFORM_ADMIN_EMAILS address", async () => {
+    await seedAdmin();
+    const prev = process.env.PLATFORM_ADMIN_EMAILS;
+    process.env.PLATFORM_ADMIN_EMAILS = "ops@example.com";
+
+    const form = new FormData();
+    form.set("email", "ops@example.com");
+    form.set("role", "user");
+
+    try {
+      const result = await inviteUser(form);
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error).toMatch(/platform operators/i);
+      expect(createInvitation).not.toHaveBeenCalled();
+    } finally {
+      if (prev === undefined) delete process.env.PLATFORM_ADMIN_EMAILS;
+      else process.env.PLATFORM_ADMIN_EMAILS = prev;
+    }
+  });
+
+  it("rejects inviting an existing platform_admin user", async () => {
+    await seedAdmin();
+    await db.insert(users).values({
+      email: "portal@example.com",
+      role: "platform_admin",
+      companyId: null,
+    });
+
+    const form = new FormData();
+    form.set("email", "portal@example.com");
+    form.set("role", "user");
+
+    const result = await inviteUser(form);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/platform operators/i);
+    expect(createInvitation).not.toHaveBeenCalled();
+  });
+
   it("creates an invited row and sends a Clerk invitation", async () => {
     await seedAdmin();
 
@@ -475,6 +521,204 @@ describe("deleteUser", () => {
     expect(await getMembership(accountant.id, companyB.id)).toEqual({
       role: "accountant",
     });
+  });
+
+  it("keeps the user row when a paid reimbursement remains", async () => {
+    await seedAdmin();
+    const founder = await insertMember({
+      companyId,
+      clerkUserId: "user_clerk_founder",
+      email: "founder@example.com",
+      name: "Founder",
+      role: "user",
+    });
+
+    await db.insert(reimbursements).values({
+      companyId,
+      payeeUserId: founder.id,
+      status: "paid",
+      totalPence: 5000,
+      paidAt: new Date(),
+      reference: "REIMB-PAID",
+    });
+
+    const result = await deleteUser(founder.id);
+    expect(result.ok).toBe(true);
+    expect(deleteClerkUser).toHaveBeenCalledWith("user_clerk_founder");
+
+    const local = await findUserByEmail("founder@example.com");
+    expect(local).not.toBeNull();
+    expect(local?.clerkUserId).toBeNull();
+    expect(local?.companyId).toBeNull();
+    expect(await getMembership(founder.id, companyId)).toBeNull();
+    expect((await listUsers(companyId)).map((u) => u.id)).not.toContain(founder.id);
+    expect((await listFounders(companyId)).map((u) => u.id)).not.toContain(founder.id);
+
+    const runs = await db
+      .select()
+      .from(reimbursements)
+      .where(eq(reimbursements.payeeUserId, founder.id));
+    expect(runs).toHaveLength(1);
+    expect(runs[0].status).toBe("paid");
+  });
+
+  it("cancels pending reimbursements and hard-deletes when none remain", async () => {
+    await seedAdmin();
+    const founder = await insertMember({
+      companyId,
+      clerkUserId: "user_clerk_pending_payee",
+      email: "pending-payee@example.com",
+      name: "Pending Payee",
+      role: "user",
+    });
+
+    const [exp] = await db
+      .insert(expenses)
+      .values({
+        companyId,
+        description: "Train",
+        amountPence: 2500,
+        status: "reimbursable",
+        paidByUserId: founder.id,
+      })
+      .returning();
+
+    const [run] = await db
+      .insert(reimbursements)
+      .values({
+        companyId,
+        payeeUserId: founder.id,
+        status: "pending",
+        totalPence: 2500,
+        reference: "REIMB-PENDING",
+      })
+      .returning();
+
+    await db.insert(reimbursementItems).values({
+      reimbursementId: run.id,
+      expenseId: exp.id,
+    });
+
+    const result = await deleteUser(founder.id);
+    expect(result.ok).toBe(true);
+    expect(deleteClerkUser).toHaveBeenCalledWith("user_clerk_pending_payee");
+
+    const runs = await db.select().from(reimbursements);
+    expect(runs).toHaveLength(0);
+
+    const [expense] = await db.select().from(expenses).where(eq(expenses.id, exp.id));
+    expect(expense.status).toBe("reimbursable");
+
+    const rows = await db.select().from(users).where(eq(users.id, founder.id));
+    expect(rows).toHaveLength(0);
+  });
+
+  it("cancels pending runs but keeps the user when a paid run remains", async () => {
+    await seedAdmin();
+    const founder = await insertMember({
+      companyId,
+      clerkUserId: "user_clerk_mixed_payee",
+      email: "mixed@example.com",
+      name: "Mixed",
+      role: "user",
+    });
+
+    const [exp] = await db
+      .insert(expenses)
+      .values({
+        companyId,
+        description: "Taxi",
+        amountPence: 1200,
+        status: "reimbursable",
+        paidByUserId: founder.id,
+      })
+      .returning();
+
+    const [pendingRun] = await db
+      .insert(reimbursements)
+      .values({
+        companyId,
+        payeeUserId: founder.id,
+        status: "pending",
+        totalPence: 1200,
+        reference: "REIMB-PEND",
+      })
+      .returning();
+
+    await db.insert(reimbursementItems).values({
+      reimbursementId: pendingRun.id,
+      expenseId: exp.id,
+    });
+
+    await db.insert(reimbursements).values({
+      companyId,
+      payeeUserId: founder.id,
+      status: "paid",
+      totalPence: 9000,
+      paidAt: new Date(),
+      reference: "REIMB-DONE",
+    });
+
+    const result = await deleteUser(founder.id);
+    expect(result.ok).toBe(true);
+
+    const runs = await db
+      .select()
+      .from(reimbursements)
+      .where(eq(reimbursements.payeeUserId, founder.id));
+    expect(runs).toHaveLength(1);
+    expect(runs[0].status).toBe("paid");
+
+    const [expense] = await db.select().from(expenses).where(eq(expenses.id, exp.id));
+    expect(expense.status).toBe("reimbursable");
+
+    const local = await findUserByEmail("mixed@example.com");
+    expect(local).not.toBeNull();
+    expect(local?.clerkUserId).toBeNull();
+    expect(local?.companyId).toBeNull();
+  });
+
+  it("reuses a retained user row when re-inviting the same email", async () => {
+    await seedAdmin();
+    const founder = await insertMember({
+      companyId,
+      clerkUserId: "user_clerk_rehire",
+      email: "rehire@example.com",
+      name: "Rehire",
+      role: "user",
+    });
+
+    await db.insert(reimbursements).values({
+      companyId,
+      payeeUserId: founder.id,
+      status: "paid",
+      totalPence: 3000,
+      paidAt: new Date(),
+    });
+
+    const deleted = await deleteUser(founder.id);
+    expect(deleted.ok).toBe(true);
+
+    const form = new FormData();
+    form.set("email", "rehire@example.com");
+    form.set("name", "Rehire Again");
+    form.set("role", "user");
+
+    const invited = await inviteUser(form);
+    expect(invited.ok).toBe(true);
+    if (invited.ok) expect(invited.id).toBe(founder.id);
+
+    const local = await findUserByEmail("rehire@example.com");
+    expect(local?.id).toBe(founder.id);
+    expect(local?.companyId).toBe(companyId);
+    expect(local?.name).toBe("Rehire Again");
+    expect(await getMembership(founder.id, companyId)).toEqual({ role: "user" });
+
+    const runs = await db
+      .select()
+      .from(reimbursements)
+      .where(eq(reimbursements.payeeUserId, founder.id));
+    expect(runs).toHaveLength(1);
   });
 });
 

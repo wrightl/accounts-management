@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -34,6 +35,9 @@ export function DashboardShell({
   memberships = [],
   navCollapsed: initialNavCollapsed,
   overdueInvoiceCount = 0,
+  showPlatformLink = false,
+  maintenanceBanner = null,
+  suspendedReason = null,
   children,
 }: {
   groups: NavGroup[];
@@ -46,6 +50,9 @@ export function DashboardShell({
   memberships?: CompanySwitcherOption[];
   navCollapsed: boolean;
   overdueInvoiceCount?: number;
+  showPlatformLink?: boolean;
+  maintenanceBanner?: string | null;
+  suspendedReason?: string | null;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -122,6 +129,18 @@ export function DashboardShell({
               collapsed={collapsed}
               onClick={() => setCommandOpen(true)}
             />
+            {showPlatformLink ? (
+              <Link
+                href="/platform"
+                title="Platform"
+                className={cn(
+                  "mt-1 flex items-center rounded-full text-sm text-white/70 transition-colors hover:bg-white/5 hover:text-white",
+                  collapsed ? "justify-center py-2" : "mx-3 px-3 py-2",
+                )}
+              >
+                {collapsed ? "P" : "Platform"}
+              </Link>
+            ) : null}
             <NavUserProfile
               collapsed={collapsed}
               role={role}
@@ -138,6 +157,20 @@ export function DashboardShell({
           onClick={() => setMobileOpen(true)}
           className="absolute left-4 top-4 z-10 bg-navy text-white shadow-sm hover:bg-navy/90"
         />
+        {(maintenanceBanner || suspendedReason) && (
+          <div className="shrink-0 space-y-0 border-b border-border">
+            {maintenanceBanner ? (
+              <div className="bg-amber-50 px-6 py-2 text-sm text-amber-950">
+                {maintenanceBanner}
+              </div>
+            ) : null}
+            {suspendedReason ? (
+              <div className="bg-red-50 px-6 py-2 text-sm text-red-900">
+                {suspendedReason}
+              </div>
+            ) : null}
+          </div>
+        )}
         <main className="min-h-0 flex-1 overflow-y-auto px-6 py-8 pt-16 md:pt-8">
           {children}
         </main>
@@ -156,6 +189,7 @@ export function DashboardShell({
         companyLogoUrl={companyLogoUrl}
         companyId={companyId}
         memberships={memberships}
+        showPlatformLink={showPlatformLink}
         onSearch={() => {
           setMobileOpen(false);
           setCommandOpen(true);

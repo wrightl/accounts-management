@@ -9,6 +9,7 @@ import {
   type SessionUser,
 } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { resolvePlatformAdmin } from "@/lib/bootstrap";
 
 // ForbiddenError is the canonical name in auth.ts.
 
@@ -55,8 +56,8 @@ export async function getPrimaryCompany(): Promise<Company | null> {
 }
 
 /**
- * Require a signed-in user with a completed company. Redirects to onboarding
- * when companyId is null.
+ * Require a signed-in user with a completed company. Redirects platform
+ * operators to the portal and everyone else to onboarding when companyId is null.
  */
 export async function requireTenant(): Promise<{
   session: SessionUser;
@@ -65,6 +66,14 @@ export async function requireTenant(): Promise<{
 }> {
   const session = await requireUser();
   if (!session.companyId || !session.entityType) {
+    if (
+      resolvePlatformAdmin({
+        role: session.role,
+        email: session.email,
+      })
+    ) {
+      redirect("/platform");
+    }
     redirect("/onboarding");
   }
   return {

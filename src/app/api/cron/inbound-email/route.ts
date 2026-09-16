@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { cronAuthError } from "@/lib/cron";
 import { drainInboundEmailJobs } from "@/lib/expenses/inbound-email";
+import { updatePlatformSettings } from "@/lib/platform-settings";
+import { logPlatformEvent } from "@/lib/platform-log";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -20,6 +22,7 @@ export async function GET(request: Request) {
   }
 
   const drained = await drainInboundEmailJobs();
+  await updatePlatformSettings({ lastCronInboundAt: new Date() });
 
   console.info(
     JSON.stringify({
@@ -28,6 +31,13 @@ export async function GET(request: Request) {
       ...drained,
     }),
   );
+
+  await logPlatformEvent({
+    level: "info",
+    source: "cron.inbound-email",
+    message: "Inbound email drain completed",
+    meta: { ...drained },
+  });
 
   return NextResponse.json({ ok: true, ...drained });
 }

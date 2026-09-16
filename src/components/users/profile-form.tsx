@@ -11,10 +11,13 @@ export function ProfileForm({
   email,
   name,
   role,
+  roleDisplay,
 }: {
   email: string;
   name: string | null;
   role: Role;
+  /** Override the role field label (e.g. platform operators). */
+  roleDisplay?: string;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +63,13 @@ export function ProfileForm({
       </div>
       <div>
         <Label htmlFor="role">Role</Label>
-        <Input id="role" name="role" defaultValue={roleLabel(role)} readOnly disabled />
+        <Input
+          id="role"
+          name="role"
+          defaultValue={roleDisplay ?? roleLabel(role)}
+          readOnly
+          disabled
+        />
       </div>
       <FieldError>{error}</FieldError>
       <Button type="submit" disabled={pending}>

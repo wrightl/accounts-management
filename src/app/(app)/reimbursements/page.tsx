@@ -6,6 +6,7 @@ import {
 } from "@/lib/reimbursements/queries";
 import { listFounders } from "@/lib/expenses/queries";
 import { CreateReimbursementButton } from "@/components/reimbursements/create-button";
+import { ReimbursementActions } from "@/components/reimbursements/actions";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { buttonClasses } from "@/components/ui/button";
@@ -130,6 +131,7 @@ export default async function ReimbursementsPage({
                 <TH>Reference</TH>
                 <TH>Created</TH>
                 <TH className="text-right">Total</TH>
+                {canWrite ? <TH className="text-right">Actions</TH> : null}
               </TR>
             </THead>
             <TBody>
@@ -149,6 +151,16 @@ export default async function ReimbursementsPage({
                     {r.createdAt.toISOString().slice(0, 10)}
                   </TD>
                   <TD className="text-right font-medium">{r.totalFormatted}</TD>
+                  {canWrite ? (
+                    <TD className="text-right">
+                      <ReimbursementActions
+                        id={r.id}
+                        status={r.status}
+                        canWrite={canWrite}
+                        compact
+                      />
+                    </TD>
+                  ) : null}
                 </TR>
               ))}
             </TBody>

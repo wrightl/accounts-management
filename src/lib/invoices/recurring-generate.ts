@@ -1,9 +1,10 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { getDb } from "@/db";
-import { invoiceLineItems, invoices, recurringInvoices } from "@/db/schema";
+import { companies, invoiceLineItems, invoices, recurringInvoices } from "@/db/schema";
 import { invoiceTotals } from "@/lib/money";
 import { allocateInvoiceNumber } from "@/lib/invoices/allocate";
 import { defaultDueDate, todayIsoDate } from "@/lib/invoices/status";
+import { isRecurringInvoicesEnabled } from "@/lib/platform-settings";
 
 export type RecurringGenerateResult =
   | { skipped: "feature flag off" | "no database"; generated?: undefined }
@@ -11,10 +12,11 @@ export type RecurringGenerateResult =
 
 /**
  * Generate draft invoices from enabled recurring templates for today's day-of-month.
- * Behind RECURRING_INVOICES_ENABLED=true.
+ * Enabled via platform settings (or RECURRING_INVOICES_ENABLED env override).
+ * Skips suspended companies.
  */
 export async function generateRecurringInvoices(): Promise<RecurringGenerateResult> {
-  if (process.env.RECURRING_INVOICES_ENABLED !== "true") {
+  if (!(await isRecurringInvoicesEnabled())) {
     return { skipped: "feature flag off" };
   }
   if (!process.env.DATABASE_URL) {
@@ -26,10 +28,22 @@ export async function generateRecurringInvoices(): Promise<RecurringGenerateResu
   const day = Number(today.slice(8, 10));
 
   const templates = await db
-    .select()
+    .select({
+      id: recurringInvoices.id,
+      companyId: recurringInvoices.companyId,
+      clientId: recurringInvoices.clientId,
+      lineTemplate: recurringInvoices.lineTemplate,
+      notes: recurringInvoices.notes,
+      lastGeneratedAt: recurringInvoices.lastGeneratedAt,
+    })
     .from(recurringInvoices)
+    .innerJoin(companies, eq(companies.id, recurringInvoices.companyId))
     .where(
-      and(eq(recurringInvoices.enabled, true), eq(recurringInvoices.dayOfMonth, day)),
+      and(
+        eq(recurringInvoices.enabled, true),
+        eq(recurringInvoices.dayOfMonth, day),
+        isNull(companies.suspendedAt),
+      ),
     );
 
   let generated = 0;

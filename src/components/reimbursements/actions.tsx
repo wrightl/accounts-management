@@ -13,10 +13,13 @@ export function ReimbursementActions({
   id,
   status,
   canWrite,
+  compact = false,
 }: {
   id: string;
   status: string;
   canWrite: boolean;
+  /** List-row control: mark paid without export or bank matching. */
+  compact?: boolean;
 }) {
   const router = useRouter();
   const { confirm } = useAlert();
@@ -24,10 +27,11 @@ export function ReimbursementActions({
   const [pending, startTransition] = useTransition();
   const [matches, setMatches] = useState<ReimbursementBankMatch[] | null>(null);
   const [selectedMatchId, setSelectedMatchId] = useState<string>("");
-  const loadingMatches = matches === null && status === "pending" && canWrite;
+  const loadingMatches =
+    !compact && matches === null && status === "pending" && canWrite;
 
   useEffect(() => {
-    if (status !== "pending" || !canWrite) return;
+    if (compact || status !== "pending" || !canWrite) return;
     let cancelled = false;
     void findReimbursementBankMatchesAction(id).then((result) => {
       if (cancelled) return;
@@ -43,7 +47,7 @@ export function ReimbursementActions({
     return () => {
       cancelled = true;
     };
-  }, [id, status, canWrite]);
+  }, [compact, id, status, canWrite]);
 
   function markPaid(bankTransactionId?: string) {
     setError(null);
@@ -54,6 +58,40 @@ export function ReimbursementActions({
       if (!result.ok) setError(result.error);
       else router.refresh();
     });
+  }
+
+  async function onMarkPaid() {
+    const ok = await confirm({
+      title: "Mark as paid",
+      message: selectedMatchId
+        ? "Mark this reimbursement as paid and link the bank transaction?"
+        : "Mark this reimbursement as paid?",
+      confirmLabel: "Mark as paid",
+    });
+    if (!ok) return;
+    markPaid(selectedMatchId || undefined);
+  }
+
+  const markPaidButton = canWrite && status === "pending" && (
+    <Button
+      type="button"
+      variant={compact ? "secondary" : "primary"}
+      className={compact ? "text-sm" : undefined}
+      disabled={pending || (!compact && Boolean(matches?.length) && !selectedMatchId)}
+      onClick={onMarkPaid}
+    >
+      {pending ? "Saving…" : "Mark as paid"}
+    </Button>
+  );
+
+  if (compact) {
+    if (!markPaidButton) return null;
+    return (
+      <div className="flex flex-col items-end">
+        {markPaidButton}
+        <FieldError>{error}</FieldError>
+      </div>
+    );
   }
 
   return (
@@ -84,23 +122,7 @@ export function ReimbursementActions({
                 </Select>
               </div>
             )}
-            <Button
-              type="button"
-              disabled={pending || (Boolean(matches?.length) && !selectedMatchId)}
-              onClick={async () => {
-                const ok = await confirm({
-                  title: "Mark as paid",
-                  message: selectedMatchId
-                    ? "Mark this reimbursement as paid and link the bank transaction?"
-                    : "Mark this reimbursement as paid?",
-                  confirmLabel: "Mark as paid",
-                });
-                if (!ok) return;
-                markPaid(selectedMatchId || undefined);
-              }}
-            >
-              {pending ? "Saving…" : "Mark as paid"}
-            </Button>
+            {markPaidButton}
           </>
         )}
       </div>

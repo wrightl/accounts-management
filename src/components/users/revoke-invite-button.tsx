@@ -1,11 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { revokeUserInvite } from "@/actions/users";
 import { Button } from "@/components/ui/button";
 import { useAlert } from "@/components/ui/alert-dialog";
-import { FieldError } from "@/components/ui/form";
 
 export function RevokeInviteButton({
   userId,
@@ -23,9 +22,8 @@ export function RevokeInviteButton({
   className?: string;
 }) {
   const router = useRouter();
-  const { confirm } = useAlert();
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const { confirm, alert } = useAlert();
+  const [pending, setPending] = useState(false);
 
   async function onRevoke() {
     const ok = await confirm({
@@ -36,16 +34,22 @@ export function RevokeInviteButton({
     });
     if (!ok) return;
 
-    setError(null);
-    startTransition(async () => {
+    setPending(true);
+    try {
       const result = await revokeUserInvite(userId);
       if (!result.ok) {
-        setError(result.error);
+        setPending(false);
+        await alert({
+          title: "Couldn't revoke invitation",
+          message: result.error,
+        });
         return;
       }
       if (redirectTo) router.push(redirectTo);
       router.refresh();
-    });
+    } finally {
+      setPending(false);
+    }
   }
 
   return (
@@ -64,7 +68,6 @@ export function RevokeInviteButton({
           {pending ? "Revoking…" : "Revoke"}
         </Button>
       )}
-      <FieldError>{error}</FieldError>
     </span>
   );
 }

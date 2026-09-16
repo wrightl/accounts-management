@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import { Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Role } from "@/lib/roles";
@@ -26,6 +27,7 @@ export function NavMobileDrawer({
   companyName,
   companyLogoUrl,
   memberships = [],
+  showPlatformLink = false,
   onSearch,
 }: {
   open: boolean;
@@ -40,6 +42,7 @@ export function NavMobileDrawer({
   companyName: string;
   companyLogoUrl: string | null;
   memberships?: CompanySwitcherOption[];
+  showPlatformLink?: boolean;
   onSearch: () => void;
 }) {
   useEffect(() => {
@@ -104,6 +107,15 @@ export function NavMobileDrawer({
           </div>
           <div className="shrink-0 pt-2">
             <NavSearchTrigger collapsed={false} onClick={onSearch} />
+            {showPlatformLink ? (
+              <Link
+                href="/platform"
+                onClick={onClose}
+                className="mx-3 mt-1 block rounded-full px-3 py-2 text-sm text-white/70 transition-colors hover:bg-white/5 hover:text-white"
+              >
+                Platform
+              </Link>
+            ) : null}
             <NavUserProfile
               collapsed={false}
               role={role}

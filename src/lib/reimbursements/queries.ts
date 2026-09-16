@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, ne, sum } from "drizzle-orm";
+import { and, count, desc, eq, ne, sum } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   expenses,
@@ -10,6 +10,28 @@ import {
 import { formatGBP } from "@/lib/money";
 import { findLocalUserId } from "@/lib/users";
 import type { SessionUser } from "@/lib/auth";
+
+/** Pending reimbursement run counts keyed by payee user id. */
+export async function countPendingReimbursementsByPayee(
+  companyId: string,
+): Promise<Map<string, number>> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      payeeUserId: reimbursements.payeeUserId,
+      count: count().mapWith(Number),
+    })
+    .from(reimbursements)
+    .where(
+      and(
+        eq(reimbursements.companyId, companyId),
+        eq(reimbursements.status, "pending"),
+      ),
+    )
+    .groupBy(reimbursements.payeeUserId);
+
+  return new Map(rows.map((r) => [r.payeeUserId, r.count]));
+}
 
 export async function listReimbursements(companyId: string) {
   const db = getDb();

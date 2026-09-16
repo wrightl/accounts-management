@@ -2,8 +2,15 @@ import "server-only";
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { companies, companyMemberships, users } from "@/db/schema";
-import { DEFAULT_ROLE, isRole, type Role } from "@/lib/roles";
-import { bootstrapRole } from "@/lib/bootstrap";
+import { DEFAULT_ROLE, isRole, isTenantRole, PLATFORM_ADMIN_ROLE, type Role, type TenantRole } from "@/lib/roles";
+import { isPlatformAdminEmail, resolvePlatformAdmin } from "@/lib/bootstrap";
+
+export class PlatformAdminCompanyError extends Error {
+  constructor(message = "Platform operators cannot join a company.") {
+    super(message);
+    this.name = "PlatformAdminCompanyError";
+  }
+}
 
 export interface LocalUser {
   id: string;
@@ -25,7 +32,7 @@ export interface UserMembership {
   companyId: string;
   companyName: string;
   logoUrl: string | null;
-  role: Role;
+  role: TenantRole;
 }
 
 function mapUserRow(row: typeof users.$inferSelect): LocalUser {
@@ -91,7 +98,7 @@ export async function findLocalUserId(clerkUserId: string): Promise<string | nul
 export async function getMembership(
   userId: string,
   companyId: string,
-): Promise<{ role: Role } | null> {
+): Promise<{ role: TenantRole } | null> {
   const db = getDb();
   const [row] = await db
     .select({ role: companyMemberships.role })
@@ -104,7 +111,7 @@ export async function getMembership(
     )
     .limit(1);
   if (!row) return null;
-  return { role: isRole(row.role) ? row.role : DEFAULT_ROLE };
+  return { role: isTenantRole(row.role) ? row.role : DEFAULT_ROLE };
 }
 
 export async function countUserMemberships(userId: string): Promise<number> {
@@ -136,20 +143,39 @@ export async function listUserMemberships(
     companyId: row.companyId,
     companyName: row.companyName,
     logoUrl: row.logoUrl,
-    role: isRole(row.role) ? row.role : DEFAULT_ROLE,
+    role: isTenantRole(row.role) ? row.role : DEFAULT_ROLE,
   }));
 }
 
 /**
  * Upsert a membership. Does not change `users.companyId` unless the user has
- * no selected company yet.
+ * no selected company yet. Refuses platform operators.
  */
 export async function upsertMembership(
   userId: string,
   companyId: string,
-  role: Role,
+  role: TenantRole,
 ): Promise<void> {
+  if (!isTenantRole(role)) {
+    throw new Error("Invalid company membership role");
+  }
+
   const db = getDb();
+  const [target] = await db
+    .select({ role: users.role, email: users.email })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (
+    target &&
+    resolvePlatformAdmin({
+      role: target.role,
+      email: target.email,
+    })
+  ) {
+    throw new PlatformAdminCompanyError();
+  }
+
   const existing = await getMembership(userId, companyId);
   if (existing) {
     await db
@@ -242,7 +268,7 @@ export async function listUsers(companyId: string): Promise<LocalUser[]> {
     clerkUserId: row.clerkUserId,
     email: row.email,
     name: row.name,
-    role: isRole(row.role) ? row.role : DEFAULT_ROLE,
+    role: isTenantRole(row.role) ? row.role : DEFAULT_ROLE,
     companyId: row.companyId,
     expenseInboundSlug: row.expenseInboundSlug ?? null,
   }));
@@ -263,10 +289,11 @@ export async function countAdminUsers(companyId: string): Promise<number> {
 }
 
 /**
- * Ensure a local `users` row exists. Inserts with a bootstrap role (or pending).
- * Claims a seeded/invited row (same email, no Clerk id) instead of inserting a duplicate.
- * Updates email/name only — never overwrites role from Clerk.
+ * Ensure a local `users` row exists. Inserts as pending (company via onboarding
+ * or invite). Claims a seeded/invited row (same email, no Clerk id) instead of
+ * inserting a duplicate. Updates email/name only — never overwrites role from Clerk.
  * New self-serve users get companyId = null until onboarding.
+ * Platform allowlist emails get role `platform_admin` on insert.
  */
 export async function ensureLocalUser(identity: Identity): Promise<string> {
   const db = getDb();
@@ -318,7 +345,7 @@ export async function ensureLocalUser(identity: Identity): Promise<string> {
       clerkUserId: identity.userId,
       email: identity.email ?? `${identity.userId}@clerk.local`,
       name: identity.name?.trim() || null,
-      role: bootstrapRole(identity.email),
+      role: isPlatformAdminEmail(identity.email) ? PLATFORM_ADMIN_ROLE : DEFAULT_ROLE,
       companyId: null,
     })
     .returning({ id: users.id });
@@ -330,7 +357,7 @@ export async function ensureLocalUser(identity: Identity): Promise<string> {
 export async function assignUserCompany(
   localUserId: string,
   companyId: string,
-  options?: { role?: Role; name?: string | null },
+  options?: { role?: TenantRole; name?: string | null },
 ): Promise<void> {
   const db = getDb();
   const [current] = await db
@@ -340,7 +367,20 @@ export async function assignUserCompany(
     .limit(1);
   if (!current) return;
 
-  const role = options?.role ?? (isRole(current.role) ? current.role : DEFAULT_ROLE);
+  if (
+    resolvePlatformAdmin({
+      role: current.role,
+      email: current.email,
+    })
+  ) {
+    throw new PlatformAdminCompanyError();
+  }
+
+  const role: TenantRole = options?.role
+    ?? (isTenantRole(current.role) ? current.role : DEFAULT_ROLE);
+  if (!isTenantRole(role)) {
+    throw new PlatformAdminCompanyError();
+  }
   const name =
     options?.name !== undefined
       ? options.name?.trim() || null
@@ -348,7 +388,7 @@ export async function assignUserCompany(
 
   const patch: {
     companyId: string;
-    role?: Role;
+    role?: TenantRole;
     name?: string | null;
     expenseInboundSlug?: string;
   } = { companyId, role };

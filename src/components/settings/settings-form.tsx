@@ -7,12 +7,6 @@ import { FieldError, Input, Label, Select, Textarea } from "@/components/ui/form
 import { BankFields } from "@/components/settings/bank-fields";
 import { financialYearStartMonth } from "@/lib/dates";
 import { updateCompany } from "@/actions/settings";
-import {
-  CUSTOM_RECEIPT_OCR_MODEL,
-  DEFAULT_RECEIPT_OCR_MODEL,
-  receiptOcrModelOptions,
-  type ReceiptOcrModelOption,
-} from "@/lib/expenses/receipt-ocr-models";
 
 const MONTHS = [
   "January",
@@ -31,7 +25,6 @@ const MONTHS = [
 
 export function SettingsForm({
   settings,
-  ocrModels = [],
 }: {
   settings: {
     entityType: "limited_company" | "sole_trader";
@@ -52,29 +45,13 @@ export function SettingsForm({
     orderNumberPrefix: string;
     invoicePaymentTermsDays: number;
     defaultMileageRatePence: number;
-    receiptOcrProvider: string;
-    receiptOcrModel: string;
     logoUrl: string | null;
   };
-  ocrModels?: ReceiptOcrModelOption[];
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const [ocrProvider, setOcrProvider] = useState(settings.receiptOcrProvider ?? "local");
-  const savedModel = settings.receiptOcrModel || DEFAULT_RECEIPT_OCR_MODEL;
-  const modelOptions = receiptOcrModelOptions(ocrModels, savedModel);
-  const savedInCatalog = modelOptions.some((item) => item.id === savedModel);
-  const [modelChoice, setModelChoice] = useState(
-    savedInCatalog ? savedModel : CUSTOM_RECEIPT_OCR_MODEL,
-  );
-  const [customModel, setCustomModel] = useState(savedInCatalog ? "" : savedModel);
-  const gatewaySelected = ocrProvider === "ai_gateway";
-  const resolvedModel =
-    modelChoice === CUSTOM_RECEIPT_OCR_MODEL
-      ? customModel.trim()
-      : modelChoice;
 
   return (
     <div className="mx-auto max-w-2xl space-y-10">
@@ -268,57 +245,6 @@ export function SettingsForm({
             HMRC-style allowance for Travel expenses, e.g. 45 = 45p per mile.
           </p>
         </div>
-        <div>
-          <Label htmlFor="receiptOcrProvider">Receipt OCR provider</Label>
-          <Select
-            id="receiptOcrProvider"
-            name="receiptOcrProvider"
-            value={ocrProvider}
-            onChange={(e) => setOcrProvider(e.target.value)}
-            disabled={pending}
-          >
-            <option value="local">Local extraction (PDF text + Tesseract for images)</option>
-            <option value="ai_gateway">Vercel AI Gateway (vision model)</option>
-          </Select>
-          <p className="mt-1 text-xs text-muted">
-            Used when uploading a receipt on the new expense form to pre-fill fields.
-            AI Gateway requires AI_GATEWAY_API_KEY.
-          </p>
-        </div>
-        {gatewaySelected ? (
-          <div>
-            <Label htmlFor="receiptOcrModelChoice">AI Gateway model</Label>
-            <Select
-              id="receiptOcrModelChoice"
-              value={modelChoice}
-              onChange={(e) => setModelChoice(e.target.value)}
-              disabled={pending}
-            >
-              {modelOptions.map((model) => (
-                <option key={model.id} value={model.id}>
-                  {model.name} — {model.id}
-                </option>
-              ))}
-              <option value={CUSTOM_RECEIPT_OCR_MODEL}>Custom model ID…</option>
-            </Select>
-            {modelChoice === CUSTOM_RECEIPT_OCR_MODEL ? (
-              <Input
-                id="receiptOcrModelCustom"
-                className="mt-2"
-                value={customModel}
-                onChange={(e) => setCustomModel(e.target.value)}
-                disabled={pending}
-                placeholder={DEFAULT_RECEIPT_OCR_MODEL}
-                autoComplete="off"
-              />
-            ) : null}
-            <p className="mt-1 text-xs text-muted">
-              Vision model used to read receipt images and PDFs. Use a
-              provider/model slug such as {DEFAULT_RECEIPT_OCR_MODEL}.
-            </p>
-          </div>
-        ) : null}
-        <input type="hidden" name="receiptOcrModel" value={resolvedModel || DEFAULT_RECEIPT_OCR_MODEL} />
 
         <FieldError>{error}</FieldError>
         {message && <p className="text-sm text-success">{message}</p>}

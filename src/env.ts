@@ -36,6 +36,9 @@ const serverSchema = z.object({
   CRON_SECRET: z.string().optional(),
   RECURRING_INVOICES_ENABLED: z.enum(["true", "false"]).optional(),
 
+  // Platform ops break-glass emails (comma-separated). Combined with users.role = platform_admin.
+  PLATFORM_ADMIN_EMAILS: z.string().optional(),
+
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 });
 

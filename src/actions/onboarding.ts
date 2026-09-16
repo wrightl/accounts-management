@@ -8,7 +8,8 @@ import { requireUser } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { storeCompanyLogo } from "@/lib/company-logo";
 import { uniquifyCompanySlug } from "@/lib/expenses/inbound-mailbox";
-import { ensureLocalUser, assignUserCompany } from "@/lib/users";
+import { isPlatformAdmin } from "@/lib/platform";
+import { ensureLocalUser, assignUserCompany, findLocalUser } from "@/lib/users";
 import { resolveBankFieldsFromForm } from "@/lib/bank/resolve-bank-fields";
 import type { ActionResult } from "@/actions/result";
 
@@ -61,7 +62,24 @@ const onboardingSchema = z.discriminatedUnion("entityType", [
 export async function completeOnboarding(
   formData: FormData,
 ): Promise<ActionResult> {
-  const session = await requireUser();
+  let session = await requireUser();
+  const localUserId = await ensureLocalUser(session);
+  const local = await findLocalUser(session.userId);
+  if (local) {
+    session = {
+      ...session,
+        role: local.role,
+        companyId: local.companyId,
+        localUserId: local.id,
+      };
+  }
+
+  if (isPlatformAdmin(session)) {
+    return {
+      ok: false,
+      error: "Platform operators cannot join a company. Use the platform portal.",
+    };
+  }
   if (session.companyId) {
     redirect("/dashboard");
   }
@@ -105,7 +123,6 @@ export async function completeOnboarding(
   });
   if (!bank.ok) return { ok: false, error: bank.error };
 
-  const localUserId = await ensureLocalUser(session);
   const db = getDb();
   const data = parsed.data;
 

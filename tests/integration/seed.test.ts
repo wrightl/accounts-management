@@ -1,9 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
-import { users } from "@/db/schema";
-import { seedAdminUsers } from "@/db/seed";
-import { ensureLocalUser, findLocalUser } from "@/lib/users";
+import { users, companyMemberships } from "@/db/schema";
+import { seedPlatformAdmins } from "@/db/seed";
+import {
+  assignUserCompany,
+  ensureLocalUser,
+  findLocalUser,
+  PlatformAdminCompanyError,
+} from "@/lib/users";
+import { seedCompany } from "@/lib/test/seed-company";
 
 vi.mock("server-only", () => ({}));
 
@@ -21,66 +27,111 @@ afterEach(async () => {
   await ctx.client.close();
 });
 
-describe("seedAdminUsers", () => {
-  it("inserts the bootstrap admin once", async () => {
-    const first = await seedAdminUsers(db as unknown as Database);
-    expect(first.inserted).toEqual(["lee@dotanddashconsulting.com"]);
+describe("seedPlatformAdmins", () => {
+  it("inserts the platform admin once", async () => {
+    const first = await seedPlatformAdmins(db as unknown as Database, [
+      "admin@dotanddashconsulting.com",
+    ]);
+    expect(first.inserted).toEqual(["admin@dotanddashconsulting.com"]);
 
-    const second = await seedAdminUsers(db as unknown as Database);
+    const second = await seedPlatformAdmins(db as unknown as Database, [
+      "admin@dotanddashconsulting.com",
+    ]);
     expect(second.inserted).toEqual([]);
-    expect(second.skipped).toEqual(["lee@dotanddashconsulting.com"]);
+    expect(second.skipped).toEqual(["admin@dotanddashconsulting.com"]);
 
     const rows = await db.select().from(users);
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.role).toBe("admin");
+    expect(rows[0]?.role).toBe("platform_admin");
+    expect(rows[0]?.companyId).toBeNull();
     expect(rows[0]?.clerkUserId).toBeNull();
   });
 
-  it("promotes a pending row for the same email", async () => {
-    await db.insert(users).values({
-      email: "lee@dotanddashconsulting.com",
-      role: "pending",
-    });
-
-    const result = await seedAdminUsers(db as unknown as Database);
-    expect(result.promoted).toEqual(["lee@dotanddashconsulting.com"]);
-
-    const rows = await db.select().from(users);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.role).toBe("admin");
-  });
-
-  it("does not overwrite a non-pending role", async () => {
-    await db.insert(users).values({
-      email: "lee@dotanddashconsulting.com",
+  it("grants platform_admin on an existing row and detaches any company", async () => {
+    const company = await seedCompany(db);
+    const [existing] = await db
+      .insert(users)
+      .values({
+        email: "admin@dotanddashconsulting.com",
+        role: "accountant",
+        companyId: company.id,
+        expenseInboundSlug: "admin",
+      })
+      .returning();
+    await db.insert(companyMemberships).values({
+      userId: existing.id,
+      companyId: company.id,
       role: "accountant",
     });
 
-    const result = await seedAdminUsers(db as unknown as Database);
-    expect(result.skipped).toEqual(["lee@dotanddashconsulting.com"]);
-    expect(result.promoted).toEqual([]);
-
-    const [row] = await db.select().from(users);
-    expect(row?.role).toBe("accountant");
-  });
-});
-
-describe("ensureLocalUser with a seeded admin", () => {
-  it("attaches the Clerk id and keeps admin", async () => {
-    await seedAdminUsers(db as unknown as Database);
-
-    const id = await ensureLocalUser({
-      userId: "user_clerk_lee",
-      email: "Lee@dotanddashconsulting.com",
-      name: "Lee Wright",
-    });
-
-    const local = await findLocalUser("user_clerk_lee");
-    expect(local?.id).toBe(id);
-    expect(local?.role).toBe("admin");
-    expect(local?.name).toBe("Lee Wright");
+    const result = await seedPlatformAdmins(db as unknown as Database, [
+      "admin@dotanddashconsulting.com",
+    ]);
+    expect(result.updated).toEqual(["admin@dotanddashconsulting.com"]);
 
     const rows = await db.select().from(users);
     expect(rows).toHaveLength(1);
+    expect(rows[0]?.role).toBe("platform_admin");
+    expect(rows[0]?.companyId).toBeNull();
+    expect(rows[0]?.expenseInboundSlug).toBeNull();
+
+    const memberships = await db.select().from(companyMemberships);
+    expect(memberships).toHaveLength(0);
+  });
+
+  it("does not overwrite when already platform admin", async () => {
+    await db.insert(users).values({
+      email: "admin@dotanddashconsulting.com",
+      role: "platform_admin",
+    });
+
+    const result = await seedPlatformAdmins(db as unknown as Database, [
+      "admin@dotanddashconsulting.com",
+    ]);
+    expect(result.skipped).toEqual(["admin@dotanddashconsulting.com"]);
+    expect(result.updated).toEqual([]);
+  });
+});
+
+describe("ensureLocalUser with a seeded platform admin", () => {
+  it("attaches the Clerk id and keeps platform_admin", async () => {
+    await seedPlatformAdmins(db as unknown as Database, [
+      "admin@dotanddashconsulting.com",
+    ]);
+
+    const id = await ensureLocalUser({
+      userId: "user_clerk_admin",
+      email: "Admin@dotanddashconsulting.com",
+      name: "Platform Admin",
+    });
+
+    const local = await findLocalUser("user_clerk_admin");
+    expect(local?.id).toBe(id);
+    expect(local?.role).toBe("platform_admin");
+    expect(local?.name).toBe("Platform Admin");
+
+    const rows = await db.select().from(users);
+    expect(rows).toHaveLength(1);
+  });
+});
+
+describe("assignUserCompany", () => {
+  it("refuses to attach a platform operator to a company", async () => {
+    const company = await seedCompany(db);
+    await seedPlatformAdmins(db as unknown as Database, [
+      "admin@dotanddashconsulting.com",
+    ]);
+    const id = await ensureLocalUser({
+      userId: "user_clerk_ops",
+      email: "admin@dotanddashconsulting.com",
+      name: "Ops",
+    });
+
+    await expect(assignUserCompany(id, company.id, { role: "admin" })).rejects.toBeInstanceOf(
+      PlatformAdminCompanyError,
+    );
+
+    const local = await findLocalUser("user_clerk_ops");
+    expect(local?.companyId).toBeNull();
   });
 });

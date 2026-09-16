@@ -1,17 +1,17 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { deleteUser } from "@/actions/users";
 import { Button } from "@/components/ui/button";
 import { useAlert } from "@/components/ui/alert-dialog";
-import { FieldError } from "@/components/ui/form";
 
 export function DeleteUserButton({
   userId,
   email,
   invited,
   redirectTo,
+  pendingReimbursementCount = 0,
   variant = "ghost",
   appearance = "button",
   className,
@@ -20,36 +20,50 @@ export function DeleteUserButton({
   email: string;
   invited?: boolean;
   redirectTo?: string;
+  pendingReimbursementCount?: number;
   variant?: "ghost" | "secondary";
   appearance?: "button" | "link";
   className?: string;
 }) {
   const router = useRouter();
-  const { confirm } = useAlert();
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const { confirm, alert } = useAlert();
+  const [pending, setPending] = useState(false);
 
   async function onDelete() {
+    const base = invited
+      ? `Delete the invitation for ${email}? They will no longer be able to sign up with this invite.`
+      : `Delete ${email}? They will lose access immediately.`;
+    const pendingNote =
+      pendingReimbursementCount > 0
+        ? ` Their ${pendingReimbursementCount} pending reimbursement run${
+            pendingReimbursementCount === 1 ? "" : "s"
+          } will be cancelled. Those expenses will stay reimbursable.`
+        : "";
+
     const ok = await confirm({
       title: invited ? "Delete invited user" : "Delete user",
-      message: invited
-        ? `Delete the invitation for ${email}? They will no longer be able to sign up with this invite.`
-        : `Delete ${email}? They will lose access immediately.`,
+      message: `${base}${pendingNote}`,
       confirmLabel: "Delete",
       variant: "destructive",
     });
     if (!ok) return;
 
-    setError(null);
-    startTransition(async () => {
+    setPending(true);
+    try {
       const result = await deleteUser(userId);
       if (!result.ok) {
-        setError(result.error);
+        setPending(false);
+        await alert({
+          title: "Couldn't delete user",
+          message: result.error,
+        });
         return;
       }
       if (redirectTo) router.push(redirectTo);
       router.refresh();
-    });
+    } finally {
+      setPending(false);
+    }
   }
 
   return (
@@ -68,7 +82,6 @@ export function DeleteUserButton({
           {pending ? "Deleting…" : "Delete"}
         </Button>
       )}
-      <FieldError>{error}</FieldError>
     </span>
   );
 }

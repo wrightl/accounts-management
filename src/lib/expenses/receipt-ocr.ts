@@ -40,6 +40,13 @@ async function extractPdfTextWithFallback(bytes: Buffer): Promise<string> {
       "[receipt-ocr] PDF text extraction failed:",
       error instanceof Error ? error.message : error,
     );
+    void import("@/lib/platform-log").then(({ logPlatformEvent }) =>
+      logPlatformEvent({
+        level: "error",
+        source: "receipt-ocr.pdf_text",
+        message: error instanceof Error ? error.message : String(error),
+      }),
+    );
   }
 
   if (text.trim()) {
@@ -90,7 +97,7 @@ async function runAiGatewayOcr(
   const apiKey = serverEnv().AI_GATEWAY_API_KEY;
   if (!apiKey) {
     throw new Error(
-      "AI Gateway is not configured. Add AI_GATEWAY_API_KEY or switch to Local OCR in Settings.",
+      "AI Gateway is not configured. Add AI_GATEWAY_API_KEY or switch to Local OCR in Platform settings.",
     );
   }
 

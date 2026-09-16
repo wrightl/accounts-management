@@ -9,7 +9,6 @@ import { requireActionPermission } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { ensureLocalUser } from "@/lib/users";
 import { financialYearEndMonth } from "@/lib/dates";
-import { DEFAULT_RECEIPT_OCR_MODEL, isGatewayModelId } from "@/lib/expenses/receipt-ocr-models";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { storeCompanyLogo } from "@/lib/company-logo";
 import { resolveBankFieldsFromForm } from "@/lib/bank/resolve-bank-fields";
@@ -78,16 +77,6 @@ const settingsSchema = z.object({
     .regex(/^[A-Za-z0-9]+$/, "Prefix must be alphanumeric"),
   invoicePaymentTermsDays: z.coerce.number().int().min(1).max(365),
   defaultMileageRatePence: z.coerce.number().int().min(1).max(1000),
-  receiptOcrProvider: z.enum(["local", "ai_gateway"]),
-  receiptOcrModel: z
-    .string()
-    .trim()
-    .min(1, "Choose an AI Gateway model")
-    .max(120)
-    .refine(
-      isGatewayModelId,
-      "Enter a model as provider/model, e.g. google/gemini-2.5-flash",
-    ),
 });
 
 export async function updateCompany(formData: FormData): Promise<ActionResult> {
@@ -124,8 +113,6 @@ export async function updateCompany(formData: FormData): Promise<ActionResult> {
     orderNumberPrefix: formData.get("orderNumberPrefix") ?? "O",
     invoicePaymentTermsDays: formData.get("invoicePaymentTermsDays") ?? "14",
     defaultMileageRatePence: formData.get("defaultMileageRatePence") ?? "45",
-    receiptOcrProvider: formData.get("receiptOcrProvider") ?? "local",
-    receiptOcrModel: formData.get("receiptOcrModel") ?? DEFAULT_RECEIPT_OCR_MODEL,
   });
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };

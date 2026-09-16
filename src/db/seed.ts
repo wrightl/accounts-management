@@ -1,59 +1,26 @@
-import { and, asc, eq, sql } from "drizzle-orm";
-import { bootstrapAdminEmails } from "@/lib/bootstrap";
+import { eq, sql } from "drizzle-orm";
+import { platformAdminEmails } from "@/lib/bootstrap";
+import { PLATFORM_ADMIN_ROLE } from "@/lib/roles";
 import type { Database } from "@/db";
-import { companies, companyMemberships, users } from "./schema";
-import { slugifyInbound } from "@/lib/expenses/inbound-merge";
+import { companyMemberships, users } from "./schema";
 
 export interface SeedResult {
   inserted: string[];
-  promoted: string[];
+  updated: string[];
   skipped: string[];
 }
 
-async function ensureMembership(
-  db: Database,
-  userId: string,
-  companyId: string,
-  role: "admin" | "user" | "accountant" | "pending",
-) {
-  const [existing] = await db
-    .select({ id: companyMemberships.id })
-    .from(companyMemberships)
-    .where(
-      and(
-        eq(companyMemberships.userId, userId),
-        eq(companyMemberships.companyId, companyId),
-      ),
-    )
-    .limit(1);
-  if (existing) {
-    await db
-      .update(companyMemberships)
-      .set({ role })
-      .where(eq(companyMemberships.id, existing.id));
-  } else {
-    await db.insert(companyMemberships).values({ userId, companyId, role });
-  }
-}
-
 /**
- * Idempotent admin seed. Inserts a `users` row for each bootstrap admin email
- * (or promotes a pending row). Existing non-pending roles are left alone.
- * Clerk id is attached later on first sign-in.
- * When a primary company exists (post-migration), new/promoted admins are attached to it.
+ * Idempotent platform-admin seed. Inserts a `users` row for each
+ * PLATFORM_ADMIN_EMAILS address (or sets role `platform_admin` on an existing
+ * row and detaches any company). Clerk invitations are sent by scripts/seed.ts
+ * when Clerk is configured.
  */
-export async function seedAdminUsers(
+export async function seedPlatformAdmins(
   db: Database,
-  emails: string[] = bootstrapAdminEmails(),
+  emails: string[] = platformAdminEmails(),
 ): Promise<SeedResult> {
-  const result: SeedResult = { inserted: [], promoted: [], skipped: [] };
-
-  const [primary] = await db
-    .select({ id: companies.id })
-    .from(companies)
-    .orderBy(asc(companies.createdAt))
-    .limit(1);
-  const companyId = primary?.id ?? null;
+  const result: SeedResult = { inserted: [], updated: [], skipped: [] };
 
   for (const raw of emails) {
     const email = raw.trim().toLowerCase();
@@ -63,64 +30,35 @@ export async function seedAdminUsers(
       .select({
         id: users.id,
         role: users.role,
-        expenseInboundSlug: users.expenseInboundSlug,
       })
       .from(users)
       .where(sql`lower(${users.email}) = ${email}`)
       .limit(1);
 
-    const inboundSlug =
-      companyId && !existing?.expenseInboundSlug
-        ? slugifyInbound(email.split("@")[0] ?? "admin", "admin")
-        : null;
-
     if (!existing) {
-      const [created] = await db
-        .insert(users)
-        .values({
-          email,
-          role: "admin",
-          companyId,
-          expenseInboundSlug: inboundSlug,
-        })
-        .returning({ id: users.id });
-      if (companyId) {
-        await ensureMembership(db, created.id, companyId, "admin");
-      }
+      await db.insert(users).values({
+        email,
+        role: PLATFORM_ADMIN_ROLE,
+        companyId: null,
+      });
       result.inserted.push(email);
       continue;
     }
 
-    if (existing.role === "pending") {
+    if (existing.role !== PLATFORM_ADMIN_ROLE) {
+      await db
+        .delete(companyMemberships)
+        .where(eq(companyMemberships.userId, existing.id));
       await db
         .update(users)
         .set({
-          role: "admin",
-          ...(companyId ? { companyId } : {}),
-          ...(inboundSlug ? { expenseInboundSlug: inboundSlug } : {}),
+          role: PLATFORM_ADMIN_ROLE,
+          companyId: null,
+          expenseInboundSlug: null,
         })
         .where(eq(users.id, existing.id));
-      if (companyId) {
-        await ensureMembership(db, existing.id, companyId, "admin");
-      }
-      result.promoted.push(email);
+      result.updated.push(email);
       continue;
-    }
-
-    if (companyId && !existing.expenseInboundSlug && inboundSlug) {
-      await db
-        .update(users)
-        .set({ expenseInboundSlug: inboundSlug })
-        .where(eq(users.id, existing.id));
-    }
-    if (companyId) {
-      const role =
-        existing.role === "admin" ||
-        existing.role === "user" ||
-        existing.role === "accountant"
-          ? existing.role
-          : "admin";
-      await ensureMembership(db, existing.id, companyId, role);
     }
 
     result.skipped.push(email);

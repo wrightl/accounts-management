@@ -39,7 +39,7 @@ import {
 } from "@/lib/expenses/inbound-mailbox";
 import { formatGBP, poundsToPence } from "@/lib/money";
 import { getResendClient } from "@/lib/resend/client";
-import { getCompanySettings } from "@/lib/settings/queries";
+import { getReceiptOcrSettings } from "@/lib/platform-settings";
 import { getStorage } from "@/lib/storage";
 import { findUserByEmail, getUser, normalizeEmail } from "@/lib/users";
 import { isForeignCurrency } from "@/lib/expenses/receipt-parse";
@@ -64,6 +64,20 @@ function logInboundJobFailure(
       error: message,
       cause: detail.cause,
       code: detail.code,
+    }),
+  );
+  void import("@/lib/platform-log").then(({ logPlatformEvent }) =>
+    logPlatformEvent({
+      level: "error",
+      source: "inbound-email.process",
+      message,
+      companyId: job.companyId,
+      meta: {
+        jobId: job.id,
+        resendEmailId: job.resendEmailId,
+        cause: detail.cause,
+        code: detail.code,
+      },
     }),
   );
   return message;
@@ -295,8 +309,8 @@ async function deliverInboundEmail(
   }
 
   const companyId = job.companyId;
-  const settings = await getCompanySettings(companyId);
-  const providerRaw = settings.receiptOcrProvider ?? "local";
+  const ocr = await getReceiptOcrSettings();
+  const providerRaw = ocr.provider ?? "local";
   const provider: ReceiptOcrProvider = isReceiptOcrProvider(providerRaw)
     ? providerRaw
     : "local";
@@ -360,7 +374,7 @@ async function deliverInboundEmail(
         bytes,
         contentType,
         provider,
-        settings.receiptOcrModel,
+        ocr.model,
       );
       attachmentExtractions.push(extraction);
     } catch (error) {

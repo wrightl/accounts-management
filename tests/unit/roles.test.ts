@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { can, isRole, roleLabel, ROLES } from "@/lib/roles";
+import { can, isRole, isTenantRole, roleLabel, ROLES } from "@/lib/roles";
 
 describe("roles", () => {
   it("recognises valid roles", () => {
@@ -7,6 +7,9 @@ describe("roles", () => {
     expect(isRole("user")).toBe(true);
     expect(isRole("accountant")).toBe(true);
     expect(isRole("pending")).toBe(true);
+    expect(isRole("platform_admin")).toBe(true);
+    expect(isTenantRole("admin")).toBe(true);
+    expect(isTenantRole("platform_admin")).toBe(false);
     expect(isRole("superuser")).toBe(false);
     expect(isRole(undefined)).toBe(false);
   });
@@ -38,11 +41,14 @@ describe("roles", () => {
   it("denies everything for pending, unknown, or absent roles", () => {
     expect(can("pending", "accounts:read")).toBe(false);
     expect(can("pending", "accounts:write")).toBe(false);
+    expect(can("platform_admin", "accounts:read")).toBe(false);
+    expect(can("platform_admin", "users:manage")).toBe(false);
     expect(can(null, "accounts:read")).toBe(false);
     expect(can(undefined, "reports:read")).toBe(false);
   });
 
   it("labels every role", () => {
+    expect(roleLabel("platform_admin")).toBe("Platform admin");
     for (const role of ROLES) {
       expect(roleLabel(role)).toBeTruthy();
     }

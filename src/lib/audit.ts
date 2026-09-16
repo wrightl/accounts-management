@@ -3,7 +3,7 @@ import { getDb } from "@/db";
 import { auditLog } from "@/db/schema";
 
 export async function writeAudit(params: {
-  companyId: string;
+  companyId: string | null;
   actorUserId: string | null;
   action: string;
   entityType?: string;

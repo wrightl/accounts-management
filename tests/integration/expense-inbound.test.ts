@@ -21,14 +21,24 @@ let mockInboundPrefix = "expenses";
 vi.mock("@/lib/settings/queries", () => ({
   getCompanySettings: vi.fn(async (companyId: string) => ({
     id: companyId,
-    receiptOcrProvider: "local",
-    receiptOcrModel: "google/gemini-2.5-flash",
   })),
   getOrCreateCompanySettings: vi.fn(async (companyId: string) => ({
     id: companyId,
-    receiptOcrProvider: "local",
-    receiptOcrModel: "google/gemini-2.5-flash",
   })),
+}));
+
+vi.mock("@/lib/platform-settings", () => ({
+  getPlatformSettings: vi.fn(async () => ({
+    id: 1,
+    defaultReceiptOcrProvider: "local",
+    defaultReceiptOcrModel: "google/gemini-2.5-flash",
+  })),
+  getReceiptOcrSettings: vi.fn(async () => ({
+    provider: "local",
+    model: "google/gemini-2.5-flash",
+  })),
+  isRecurringInvoicesEnabled: vi.fn(async () => false),
+  updatePlatformSettings: vi.fn(),
 }));
 
 vi.mock("@/lib/resend/client", () => ({

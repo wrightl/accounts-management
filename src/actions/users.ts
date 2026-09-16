@@ -5,12 +5,13 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { clerkClient } from "@clerk/nextjs/server";
 import { getDb } from "@/db";
-import { users, reimbursements } from "@/db/schema";
-import { clientEnv, isAuthConfigured } from "@/env";
+import { reimbursements, users } from "@/db/schema";
+import { isAuthConfigured } from "@/env";
 import { requireUser } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { mutate } from "@/lib/mutate";
-import { isRole, type Role } from "@/lib/roles";
+import { cancelPendingReimbursementRunsForPayee } from "@/lib/reimbursements/cancel";
+import { isPlatformAdminRole, isTenantRole, TENANT_ROLES, type TenantRole } from "@/lib/roles";
 import {
   countAdminUsers,
   countUserMemberships,
@@ -22,14 +23,19 @@ import {
   removeMembership,
   upsertMembership,
 } from "@/lib/users";
+import { isPlatformAdminEmail } from "@/lib/bootstrap";
 import {
   uniquifyUserInboundSlug,
   userInboundSlugSeed,
 } from "@/lib/expenses/inbound-mailbox";
+import {
+  clerkErrorMessage,
+  sendClerkInvitation,
+} from "@/lib/clerk-invite";
 import type { ActionResult } from "@/actions/result";
 import { redirect } from "next/navigation";
 
-const roleSchema = z.enum(["admin", "user", "accountant", "pending"]);
+const roleSchema = z.enum(TENANT_ROLES);
 
 const roleUpdateSchema = z.object({
   userId: z.string().uuid(),
@@ -62,36 +68,11 @@ function splitName(name: string | null | undefined): { firstName?: string; lastN
   return { firstName, lastName };
 }
 
-function inviteRedirectUrl(): string {
-  const base = clientEnv.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  return `${base.replace(/\/$/, "")}/sign-up`;
-}
-
-function clerkErrorMessage(err: unknown): string {
-  if (err && typeof err === "object" && "errors" in err) {
-    const errors = (err as { errors?: { message?: string }[] }).errors;
-    const msg = errors?.[0]?.message;
-    if (msg) return msg;
-  }
-  if (err instanceof Error) {
-    if (err.message === "fetch failed") {
-      return "Could not reach Clerk to update your profile picture. Check your connection and try again.";
-    }
-    return err.message;
-  }
-  return "Clerk request failed";
-}
-
 async function clerkProfileImageFile(file: File): Promise<File> {
   const bytes = Buffer.from(await file.arrayBuffer());
   const contentType = file.type?.startsWith("image/") ? file.type : "image/jpeg";
   const name = file.name?.trim() || "profile.jpg";
   return new File([bytes], name, { type: contentType });
-}
-
-function isExistingInviteError(message: string): boolean {
-  const lower = message.toLowerCase();
-  return lower.includes("already") || lower.includes("exists");
 }
 
 async function revokeClerkInvitations(email: string): Promise<ActionResult> {
@@ -124,9 +105,6 @@ export async function updateUserRole(
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
-  if (!isRole(parsed.data.role)) {
-    return { ok: false, error: "Unknown role" };
-  }
 
   return mutate(
     "users:manage",
@@ -152,7 +130,7 @@ export async function updateUserRole(
           return { ok: false, error: "You cannot change your own role" };
         }
 
-        const nextRole = parsed.data.role as Role;
+        const nextRole = parsed.data.role;
         const membershipCount = await countUserMemberships(parsed.data.userId);
         if (membershipCount > 1 && nextRole !== "accountant") {
           return {
@@ -161,7 +139,7 @@ export async function updateUserRole(
           };
         }
 
-        const patch: { role?: Role; expenseInboundSlug?: string } = {};
+        const patch: { role?: TenantRole; expenseInboundSlug?: string } = {};
         if (target.companyId === companyId) {
           patch.role = nextRole;
         }
@@ -213,18 +191,32 @@ export async function inviteUser(formData: FormData): Promise<ActionResult> {
 
   const email = normalizeEmail(parsed.data.email);
   const name = parsed.data.name?.trim() || null;
-  const role = parsed.data.role as Role;
+  const role = parsed.data.role;
 
   return mutate(
     "users:manage",
     async ({ companyId }) => {
+      if (isPlatformAdminEmail(email)) {
+        return {
+          ok: false,
+          error: "Platform operators cannot be invited to a company.",
+        };
+      }
+
       const existing = await findUserByEmail(email);
+      if (isPlatformAdminRole(existing?.role)) {
+        return {
+          ok: false,
+          error: "Platform operators cannot be invited to a company.",
+        };
+      }
       if (existing) {
         const alreadyMember = await getMembership(existing.id, companyId);
         if (alreadyMember || existing.companyId === companyId) {
           // Heal legacy rows that have companyId but no membership yet.
           if (!alreadyMember && existing.companyId === companyId) {
-            await upsertMembership(existing.id, companyId, existing.role);
+            const healRole = isTenantRole(existing.role) ? existing.role : role;
+            await upsertMembership(existing.id, companyId, healRole);
           }
           return {
             ok: false,
@@ -261,18 +253,8 @@ export async function inviteUser(formData: FormData): Promise<ActionResult> {
           await upsertMembership(existing.id, companyId, "accountant");
 
           if (!existing.clerkUserId) {
-            try {
-              const client = await clerkClient();
-              await client.invitations.createInvitation({
-                emailAddress: email,
-                redirectUrl: inviteRedirectUrl(),
-              });
-            } catch (err) {
-              const message = clerkErrorMessage(err);
-              if (!isExistingInviteError(message)) {
-                return { ok: false, error: message };
-              }
-            }
+            const invited = await sendClerkInvitation(email);
+            if (!invited.ok) return invited;
           }
 
           return { ok: true, id: existing.id };
@@ -327,19 +309,8 @@ export async function inviteUser(formData: FormData): Promise<ActionResult> {
         await upsertMembership(userId, companyId, role);
       }
 
-      try {
-        const client = await clerkClient();
-        await client.invitations.createInvitation({
-          emailAddress: email,
-          redirectUrl: inviteRedirectUrl(),
-        });
-      } catch (err) {
-        const message = clerkErrorMessage(err);
-        if (isExistingInviteError(message)) {
-          return { ok: true, id: userId };
-        }
-        return { ok: false, error: message };
-      }
+      const invited = await sendClerkInvitation(email);
+      if (!invited.ok) return invited;
 
       return { ok: true, id: userId };
     },
@@ -419,19 +390,9 @@ export async function deleteUser(userId: string): Promise<ActionResult> {
       }
 
       const membershipCount = await countUserMemberships(userId);
-      if (membershipCount <= 1) {
-        const [linkedReimbursement] = await db
-          .select({ id: reimbursements.id })
-          .from(reimbursements)
-          .where(eq(reimbursements.payeeUserId, userId))
-          .limit(1);
-        if (linkedReimbursement) {
-          return {
-            ok: false,
-            error: "Cannot delete a user linked to reimbursements.",
-          };
-        }
+      const isLastMembership = membershipCount <= 1;
 
+      if (isLastMembership) {
         if (!target.clerkUserId) {
           if (isAuthConfigured()) {
             const clerkResult = await revokeClerkInvitations(target.email);
@@ -445,11 +406,33 @@ export async function deleteUser(userId: string): Promise<ActionResult> {
             return { ok: false, error: clerkErrorMessage(err) };
           }
         }
+      }
 
+      await db.transaction(async (tx) => {
+        await cancelPendingReimbursementRunsForPayee(tx, companyId, userId);
+      });
+
+      if (!isLastMembership) {
         await removeMembership(userId, companyId);
-        await db.delete(users).where(eq(users.id, userId));
+        return { ok: true, id: userId };
+      }
+
+      const [remainingReimbursement] = await db
+        .select({ id: reimbursements.id })
+        .from(reimbursements)
+        .where(eq(reimbursements.payeeUserId, userId))
+        .limit(1);
+
+      await removeMembership(userId, companyId);
+
+      if (remainingReimbursement) {
+        // Keep the row for payee history; null clerk so re-invite/sign-in can claim.
+        await db
+          .update(users)
+          .set({ clerkUserId: null })
+          .where(eq(users.id, userId));
       } else {
-        await removeMembership(userId, companyId);
+        await db.delete(users).where(eq(users.id, userId));
       }
 
       return { ok: true, id: userId };
@@ -460,7 +443,13 @@ export async function deleteUser(userId: string): Promise<ActionResult> {
         entityType: "user",
         entityId: userId,
       },
-      paths: ["/users", `/users/${userId}/edit`],
+      paths: [
+        "/users",
+        `/users/${userId}/edit`,
+        "/reimbursements",
+        "/expenses",
+        "/dashboard",
+      ],
     },
   );
 }
@@ -475,12 +464,9 @@ export async function updateUser(userId: string, formData: FormData): Promise<Ac
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
-  if (!isRole(parsed.data.role)) {
-    return { ok: false, error: "Unknown role" };
-  }
 
   const name = parsed.data.name?.trim() || null;
-  const role = parsed.data.role as Role;
+  const role = parsed.data.role;
 
   return mutate(
     "users:manage",
@@ -536,7 +522,7 @@ export async function updateUser(userId: string, formData: FormData): Promise<Ac
       const userPatch: {
         name: string | null;
         email: string;
-        role?: Role;
+        role?: TenantRole;
         expenseInboundSlug?: string;
       } = {
         name,
@@ -622,6 +608,7 @@ export async function updateOwnProfile(formData: FormData): Promise<ActionResult
   }
 
   revalidatePath("/profile");
+  revalidatePath("/platform/profile");
   revalidatePath("/", "layout");
 
   return { ok: true, id: localUserId };
@@ -655,9 +642,6 @@ export async function uploadProfilePicture(formData: FormData): Promise<ActionRe
   if (validationError) return { ok: false, error: validationError };
 
   const session = await requireUser();
-  if (!session.companyId) {
-    return { ok: false, error: "Complete onboarding before updating your profile." };
-  }
   const localUserId = await ensureLocalUser(session);
 
   try {
@@ -677,6 +661,7 @@ export async function uploadProfilePicture(formData: FormData): Promise<ActionRe
   });
 
   revalidatePath("/profile");
+  revalidatePath("/platform/profile");
   revalidatePath("/", "layout");
 
   return { ok: true, id: localUserId };
@@ -688,9 +673,6 @@ export async function removeProfilePicture(): Promise<ActionResult> {
   }
 
   const session = await requireUser();
-  if (!session.companyId) {
-    return { ok: false, error: "Complete onboarding before updating your profile." };
-  }
   const localUserId = await ensureLocalUser(session);
 
   try {
@@ -701,7 +683,7 @@ export async function removeProfilePicture(): Promise<ActionResult> {
   }
 
   await writeAudit({
-    companyId: session.companyId!,
+    companyId: session.companyId,
     actorUserId: localUserId,
     action: "user.profile.picture.remove",
     entityType: "user",
@@ -709,6 +691,7 @@ export async function removeProfilePicture(): Promise<ActionResult> {
   });
 
   revalidatePath("/profile");
+  revalidatePath("/platform/profile");
   revalidatePath("/", "layout");
 
   return { ok: true, id: localUserId };

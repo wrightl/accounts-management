@@ -55,6 +55,9 @@ try {
       `ALTER TYPE "role" ADD VALUE IF NOT EXISTS 'pending'`,
     );
     await client.query(
+      `ALTER TYPE "role" ADD VALUE IF NOT EXISTS 'platform_admin'`,
+    );
+    await client.query(
       `ALTER TABLE "users" ALTER COLUMN "role" SET DEFAULT 'pending'`,
     );
   }

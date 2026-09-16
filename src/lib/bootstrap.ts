@@ -1,7 +1,6 @@
-import { DEFAULT_ROLE, type Role } from "@/lib/roles";
+import { isPlatformAdminRole } from "@/lib/roles";
 
-const DEFAULT_ADMIN_EMAILS = ["lee@dotanddashconsulting.com"];
-const DEFAULT_USER_EMAILS = ["angel@dotanddashconsulting.com"];
+const DEFAULT_PLATFORM_ADMIN_EMAILS = ["admin@dotanddashconsulting.com"];
 
 function parseEmailList(value: string | undefined, fallback: string[]): string[] {
   if (value === undefined) return fallback;
@@ -11,20 +10,32 @@ function parseEmailList(value: string | undefined, fallback: string[]): string[]
     .filter(Boolean);
 }
 
-/** Bootstrap admin emails (`BOOTSTRAP_ADMIN_EMAILS`, comma-separated). */
-export function bootstrapAdminEmails(): string[] {
-  return parseEmailList(process.env.BOOTSTRAP_ADMIN_EMAILS, DEFAULT_ADMIN_EMAILS);
+/**
+ * Break-glass platform admin emails (`PLATFORM_ADMIN_EMAILS`).
+ * These always have portal access regardless of `users.role`.
+ * Also used by `npm run db:seed` to provision operator rows + Clerk invites.
+ */
+export function platformAdminEmails(): string[] {
+  return parseEmailList(
+    process.env.PLATFORM_ADMIN_EMAILS,
+    DEFAULT_PLATFORM_ADMIN_EMAILS,
+  );
 }
 
-/** Bootstrap co-founder emails (`BOOTSTRAP_USER_EMAILS`, comma-separated). */
-export function bootstrapUserEmails(): string[] {
-  return parseEmailList(process.env.BOOTSTRAP_USER_EMAILS, DEFAULT_USER_EMAILS);
-}
-
-/** First-insert only. After that, role is assigned in the Users page. */
-export function bootstrapRole(email: string | null): Role {
+/** Whether an email is on the break-glass platform admin allowlist. */
+export function isPlatformAdminEmail(email: string | null | undefined): boolean {
   const normalised = email?.trim().toLowerCase() ?? "";
-  if (normalised && bootstrapAdminEmails().includes(normalised)) return "admin";
-  if (normalised && bootstrapUserEmails().includes(normalised)) return "user";
-  return DEFAULT_ROLE;
+  if (!normalised) return false;
+  return platformAdminEmails().includes(normalised);
+}
+
+/**
+ * Combined check: `platform_admin` role or env break-glass email.
+ * Pure helper for tests and session resolution.
+ */
+export function resolvePlatformAdmin(params: {
+  role?: string | null;
+  email: string | null | undefined;
+}): boolean {
+  return isPlatformAdminRole(params.role) || isPlatformAdminEmail(params.email);
 }

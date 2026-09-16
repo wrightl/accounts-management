@@ -15,7 +15,13 @@ import {
 } from "drizzle-orm/pg-core";
 import type { GenericCsvMapping } from "@/lib/bank/types";
 
-export const roleEnum = pgEnum("role", ["admin", "user", "accountant", "pending"]);
+export const roleEnum = pgEnum("role", [
+  "admin",
+  "user",
+  "accountant",
+  "pending",
+  "platform_admin",
+]);
 export const entityTypeEnum = pgEnum("entity_type", [
   "limited_company",
   "sole_trader",
@@ -107,12 +113,11 @@ export const companies = pgTable("companies", {
   invoicePaymentTermsDays: integer("invoice_payment_terms_days").notNull().default(14),
   /** Default HMRC mileage rate in pence per mile (e.g. 45 = 45p/mi). */
   defaultMileageRatePence: integer("default_mileage_rate_pence").notNull().default(45),
-  /** Receipt OCR provider: "local" (Tesseract) or "ai_gateway". */
-  receiptOcrProvider: text("receipt_ocr_provider").notNull().default("local"),
-  /** AI Gateway model slug used when receiptOcrProvider is "ai_gateway". */
-  receiptOcrModel: text("receipt_ocr_model").notNull().default("google/gemini-2.5-flash"),
   /** Total issued ordinary shares (Ltd only; must match active shareholder sum). */
   totalShares: integer("total_shares"),
+  /** When set, tenant writes and outbound cron for this company are blocked. */
+  suspendedAt: timestamp("suspended_at", { withTimezone: true }),
+  suspendedReason: text("suspended_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -120,7 +125,9 @@ export const companies = pgTable("companies", {
 /** @deprecated Use `companies`. Alias kept for gradual migration of imports. */
 export const companySettings = companies;
 
-/** Local mirror of Clerk users, with the app role and optional tenant. */
+/** Local mirror of Clerk users, with the app role and optional tenant.
+ *  Platform operators use role `platform_admin` and have no company.
+ */
 export const users = pgTable(
   "users",
   {
@@ -145,6 +152,10 @@ export const users = pgTable(
     uniqueIndex("uniq_users_company_expense_inbound_slug")
       .on(t.companyId, t.expenseInboundSlug)
       .where(sql`${t.companyId} is not null and ${t.expenseInboundSlug} is not null`),
+    check(
+      "users_platform_admin_detached",
+      sql`${t.role} <> 'platform_admin' or (${t.companyId} is null and ${t.expenseInboundSlug} is null)`,
+    ),
   ],
 );
 
@@ -152,6 +163,7 @@ export const users = pgTable(
  * Per-company membership. Accountants may belong to many companies;
  * founders (admin/user) stay 1:1. `users.companyId` / `users.role` mirror
  * the currently selected membership for session tenancy.
+ * `platform_admin` is a users-only role, never stored on memberships.
  */
 export const companyMemberships = pgTable(
   "company_memberships",
@@ -170,6 +182,10 @@ export const companyMemberships = pgTable(
     uniqueIndex("uniq_company_memberships_user_company").on(t.userId, t.companyId),
     index("idx_company_memberships_company").on(t.companyId),
     index("idx_company_memberships_user").on(t.userId),
+    check(
+      "company_memberships_tenant_role",
+      sql`${t.role} <> 'platform_admin'`,
+    ),
   ],
 );
 
@@ -823,8 +839,72 @@ export const recurringInvoices = pgTable(
   (t) => [index("idx_recurring_invoices_company").on(t.companyId)],
 );
 
+/** Singleton platform knobs (id = 1). Secrets stay in env. */
+export const platformSettings = pgTable("platform_settings", {
+  id: integer("id").primaryKey(),
+  maintenanceBanner: text("maintenance_banner"),
+  recurringInvoicesEnabled: boolean("recurring_invoices_enabled")
+    .notNull()
+    .default(false),
+  /** Platform-wide receipt OCR provider: "local" (Tesseract) or "ai_gateway". */
+  defaultReceiptOcrProvider: text("default_receipt_ocr_provider")
+    .notNull()
+    .default("local"),
+  /** Platform-wide AI Gateway model when provider is "ai_gateway". */
+  defaultReceiptOcrModel: text("default_receipt_ocr_model")
+    .notNull()
+    .default("google/gemini-2.5-flash"),
+  lastCronDailyAt: timestamp("last_cron_daily_at", { withTimezone: true }),
+  lastCronInboundAt: timestamp("last_cron_inbound_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/** Persisted app-level errors/warnings for the platform portal. */
+export const platformLogs = pgTable(
+  "platform_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    level: text("level").notNull(),
+    source: text("source").notNull(),
+    message: text("message").notNull(),
+    digest: text("digest"),
+    companyId: uuid("company_id").references(() => companies.id, {
+      onDelete: "set null",
+    }),
+    actorUserId: uuid("actor_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    meta: jsonb("meta"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("idx_platform_logs_level_created").on(t.level, t.createdAt),
+    index("idx_platform_logs_source").on(t.source),
+    index("idx_platform_logs_created").on(t.createdAt),
+  ],
+);
+
+/** Append-only support notes visible only in the platform portal. */
+export const companySupportNotes = pgTable(
+  "company_support_notes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    authorUserId: uuid("author_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("idx_company_support_notes_company").on(t.companyId)],
+);
+
 export type EntityType = (typeof entityTypeEnum.enumValues)[number];
 export type Company = typeof companies.$inferSelect;
+export type PlatformSettings = typeof platformSettings.$inferSelect;
+export type PlatformLogLevel = "error" | "warn" | "info";
 
 export const schema = {
   users,
@@ -858,4 +938,7 @@ export const schema = {
   recurringInvoices,
   sendJobs,
   inboundEmailJobs,
+  platformSettings,
+  platformLogs,
+  companySupportNotes,
 };

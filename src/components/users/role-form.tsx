@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { updateUserRole } from "@/actions/users";
 import { Button } from "@/components/ui/button";
 import { FieldError, Select } from "@/components/ui/form";
-import type { Role } from "@/lib/roles";
+import type { TenantRole } from "@/lib/roles";
 
-const OPTIONS: { value: Role; label: string }[] = [
+const OPTIONS: { value: TenantRole; label: string }[] = [
   { value: "pending", label: "Pending access" },
   { value: "user", label: "Co-founder" },
   { value: "accountant", label: "Accountant" },
@@ -21,7 +21,7 @@ export function UserRoleForm({
   isSelf,
 }: {
   userId: string;
-  role: Role;
+  role: TenantRole;
   roleLabel: string;
   isSelf: boolean;
 }) {

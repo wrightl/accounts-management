@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
 import { buttonClasses } from "@/components/ui/button";
+import { reportClientError } from "@/actions/platform";
 
 export default function Error({
   error,
@@ -9,6 +11,13 @@ export default function Error({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  useEffect(() => {
+    void reportClientError({
+      message: error.message || "Client error boundary",
+      digest: error.digest,
+    });
+  }, [error]);
+
   return (
     <div className="mx-auto max-w-lg px-6 py-16">
       <h1 className="font-display text-2xl font-semibold">Something went wrong</h1>

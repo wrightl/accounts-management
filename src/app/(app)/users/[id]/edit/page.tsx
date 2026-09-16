@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { guardTenantPage } from "@/lib/auth";
 import { getMembership, getUser } from "@/lib/users";
+import { countPendingReimbursementsByPayee } from "@/lib/reimbursements/queries";
 import { UserForm } from "@/components/users/user-form";
 import { buttonClasses } from "@/components/ui/button";
 import { isDatabaseConfigured } from "@/env";
@@ -22,6 +23,10 @@ export default async function EditUserPage({
   const user = await getUser(id);
   if (!user) notFound();
 
+  const pendingByPayee = await countPendingReimbursementsByPayee(
+    session.companyId,
+  );
+
   return (
     <div>
       <div className="mb-6 flex items-center gap-3">
@@ -34,6 +39,7 @@ export default async function EditUserPage({
         mode="edit"
         user={{ ...user, role: membership.role }}
         isSelf={user.clerkUserId === session.userId}
+        pendingReimbursementCount={pendingByPayee.get(id) ?? 0}
       />
     </div>
   );

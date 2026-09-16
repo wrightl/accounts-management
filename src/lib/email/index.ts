@@ -38,6 +38,14 @@ export function getEmailProvider(): EmailProvider {
     console.warn(
       "[email] EMAIL_PROVIDER=console in production — outbound emails are logged only, not delivered.",
     );
+    void import("@/lib/platform-log").then(({ logPlatformEvent }) =>
+      logPlatformEvent({
+        level: "warn",
+        source: "email.misconfig",
+        message:
+          "EMAIL_PROVIDER=console in production — outbound emails are logged only",
+      }),
+    );
   }
   cached =
     env.EMAIL_PROVIDER === "resend"

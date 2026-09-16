@@ -68,6 +68,13 @@ export async function POST(request: Request) {
         error: result.error,
       }),
     );
+    const { logPlatformEvent } = await import("@/lib/platform-log");
+    await logPlatformEvent({
+      level: "error",
+      source: "webhook.resend.inbound",
+      message: result.error ?? "Inbound processing failed",
+      meta: { jobId, resendEmailId: email_id },
+    });
   }
 
   // Opportunistic drain so other pending/failed jobs clear when mail is flowing.
