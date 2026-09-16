@@ -1,0 +1,15 @@
+# Mobile Flutter app - not needed for web deployment
+mobile/
+
+# Mobile build artifacts
+mobile/build/
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/.packages
+mobile/pubspec.lock
+
+# Flutter generated files
+mobile/ios/Pods/
+mobile/android/.gradle/
+mobile/android/app/build/
