@@ -588,8 +588,6 @@ export async function extractReceiptFields(
   if (!authz.user.companyId) {
     return { ok: false, error: "Complete onboarding before using the dashboard." };
   }
-  const companyId = authz.user.companyId;
-
 
   const parsed = await parseReceiptFileAsync(formData);
   if (!parsed.ok) return parsed;

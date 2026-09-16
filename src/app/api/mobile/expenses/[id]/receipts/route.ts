@@ -63,7 +63,7 @@ export async function POST(
 
     await storage.put(blobKey, buffer, {
       access: "private",
-    } as any);
+    } as { access: string });
 
     const [receipt] = await db
       .insert(expenseReceipts)

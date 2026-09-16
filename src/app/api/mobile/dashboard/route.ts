@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { getDashboardKpis, countOverdueInvoices } from "@/lib/invoices/queries";
-import { getReimbursableSummary } from "@/lib/expenses/queries";
 import { listPendingExpenses } from "@/lib/expenses/inbound-email";
 import { countUnreconciledBankTransactions } from "@/lib/bank/queries";
-import { getIncomeByMonth, getExpenseByMonth } from "@/lib/reports/queries";
+import { getExpenseByMonth } from "@/lib/reports/queries";
 import { todayIsoDate } from "@/lib/dates";
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const user = await getCurrentUser();
     
@@ -26,18 +25,14 @@ export async function GET(request: NextRequest) {
     const [
       invoiceKpis,
       overdueCount,
-      reimbursable,
       pendingExpenses,
       unreconciledCount,
-      incomeThisMonth,
       expensesThisMonth,
     ] = await Promise.all([
       getDashboardKpis(companyId),
       countOverdueInvoices(companyId),
-      getReimbursableSummary(companyId),
       listPendingExpenses(companyId, 10),
       countUnreconciledBankTransactions(companyId),
-      getIncomeByMonth(companyId, monthStart, today),
       getExpenseByMonth(companyId, monthStart, today),
     ]);
 

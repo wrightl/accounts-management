@@ -38,6 +38,7 @@ export function OnboardingForm({
 
   useEffect(() => {
     if (!logoFile) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLogoPreview(null);
       return;
     }

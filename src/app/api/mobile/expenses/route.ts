@@ -4,8 +4,6 @@ import { listExpenses } from "@/lib/expenses/queries";
 import { getDb } from "@/db";
 import { expenses, expenseReceipts } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { poundsToPence } from "@/lib/money";
-import { ensureLocalUser } from "@/lib/users";
 
 export async function GET(request: NextRequest) {
   try {
@@ -83,7 +81,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { description, amountPence, category, expenseDate, notes, billable } = body;
+    const { description, amountPence, category, expenseDate, billable } = body;
 
     if (!description || !amountPence || !category || !expenseDate) {
       return NextResponse.json(
