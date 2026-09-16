@@ -51,7 +51,7 @@ export function AttentionPanel({
                 {items.overdueInvoices.map((invoice) => (
                   <li key={invoice.id}>
                     <Link
-                      href={`/dashboard/invoices/${invoice.id}`}
+                      href={`/invoices/${invoice.id}`}
                       className="group block rounded-lg border border-border px-3 py-2 transition-colors hover:bg-wash/30"
                     >
                       <span className="font-medium group-hover:underline">
@@ -80,7 +80,7 @@ export function AttentionPanel({
                 {items.expiringQuotes.map((quote) => (
                   <li key={quote.id}>
                     <Link
-                      href={`/dashboard/quotes/${quote.id}`}
+                      href={`/quotes/${quote.id}`}
                       className="group block rounded-lg border border-border px-3 py-2 transition-colors hover:bg-wash/30"
                     >
                       <span className="font-medium group-hover:underline">
@@ -104,7 +104,7 @@ export function AttentionPanel({
           >
             {items.unreconciledCount > 0 ? (
               <Link
-                href="/dashboard/transactions"
+                href="/transactions"
                 className="block rounded-lg border border-border px-3 py-2 text-sm transition-colors hover:bg-wash/30"
               >
                 <span className="font-display text-2xl tabular-nums text-brand">
@@ -129,7 +129,7 @@ export function AttentionPanel({
                 {items.pendingExpenses.map((expense) => (
                   <li key={expense.id}>
                     <Link
-                      href={`/dashboard/expenses/${expense.id}`}
+                      href={`/expenses/${expense.id}`}
                       className="group block rounded-lg border border-border px-3 py-2 transition-colors hover:bg-wash/30"
                     >
                       <span className="font-medium group-hover:underline">
@@ -155,7 +155,7 @@ export function AttentionPanel({
                 {items.inboundEmailIssues.map((job) => (
                   <li key={job.id}>
                     <Link
-                      href={`/dashboard/inbound-email/${job.id}`}
+                      href={`/inbound-email/${job.id}`}
                       className="group block rounded-lg border border-destructive/30 px-3 py-2 transition-colors hover:bg-destructive/5"
                     >
                       <span className="font-medium group-hover:underline">
@@ -171,7 +171,7 @@ export function AttentionPanel({
                 ))}
                 <li>
                   <Link
-                    href="/dashboard/inbound-email"
+                    href="/inbound-email"
                     className="inline-block text-brand hover:underline"
                   >
                     View all inbound jobs →

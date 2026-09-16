@@ -205,9 +205,9 @@ export async function recordPayment(
     meta: { invoiceId, amountPence, bankTransactionId },
   });
 
-  revalidatePath("/dashboard/invoices");
-  revalidatePath(`/dashboard/invoices/${invoiceId}`);
-  revalidatePath("/dashboard/transactions");
+  revalidatePath("/invoices");
+  revalidatePath(`/invoices/${invoiceId}`);
+  revalidatePath("/transactions");
   revalidatePath("/dashboard");
   return { ok: true, id: paymentId };
 }

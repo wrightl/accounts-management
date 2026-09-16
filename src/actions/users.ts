@@ -193,7 +193,7 @@ export async function updateUserRole(
         entityId: parsed.data.userId,
         meta: { role: parsed.data.role },
       },
-      paths: ["/dashboard/users"],
+      paths: ["/users"],
     },
   );
 }
@@ -349,7 +349,7 @@ export async function inviteUser(formData: FormData): Promise<ActionResult> {
         entityType: "user",
         meta: { email, role },
       },
-      paths: ["/dashboard/users"],
+      paths: ["/users"],
     },
   );
 }
@@ -392,7 +392,7 @@ export async function revokeUserInvite(userId: string): Promise<ActionResult> {
         entityType: "user",
         entityId: userId,
       },
-      paths: ["/dashboard/users", `/dashboard/users/${userId}/edit`],
+      paths: ["/users", `/users/${userId}/edit`],
     },
   );
 }
@@ -460,7 +460,7 @@ export async function deleteUser(userId: string): Promise<ActionResult> {
         entityType: "user",
         entityId: userId,
       },
-      paths: ["/dashboard/users", `/dashboard/users/${userId}/edit`],
+      paths: ["/users", `/users/${userId}/edit`],
     },
   );
 }
@@ -571,7 +571,7 @@ export async function updateUser(userId: string, formData: FormData): Promise<Ac
         entityId: parsed.data.userId,
         meta: { role },
       },
-      paths: ["/dashboard/users", `/dashboard/users/${parsed.data.userId}/edit`],
+      paths: ["/users", `/users/${parsed.data.userId}/edit`],
     },
   );
 }
@@ -621,8 +621,8 @@ export async function updateOwnProfile(formData: FormData): Promise<ActionResult
     });
   }
 
-  revalidatePath("/dashboard/profile");
-  revalidatePath("/dashboard", "layout");
+  revalidatePath("/profile");
+  revalidatePath("/", "layout");
 
   return { ok: true, id: localUserId };
 }
@@ -676,8 +676,8 @@ export async function uploadProfilePicture(formData: FormData): Promise<ActionRe
     entityId: localUserId,
   });
 
-  revalidatePath("/dashboard/profile");
-  revalidatePath("/dashboard", "layout");
+  revalidatePath("/profile");
+  revalidatePath("/", "layout");
 
   return { ok: true, id: localUserId };
 }
@@ -708,8 +708,8 @@ export async function removeProfilePicture(): Promise<ActionResult> {
     entityId: localUserId,
   });
 
-  revalidatePath("/dashboard/profile");
-  revalidatePath("/dashboard", "layout");
+  revalidatePath("/profile");
+  revalidatePath("/", "layout");
 
   return { ok: true, id: localUserId };
 }
@@ -745,6 +745,6 @@ export async function switchCompany(companyId: string): Promise<ActionResult> {
     entityId: parsed.data,
   });
 
-  revalidatePath("/dashboard", "layout");
+  revalidatePath("/", "layout");
   redirect("/dashboard");
 }

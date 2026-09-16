@@ -1,10 +1,20 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { eq } from "drizzle-orm";
 import { requireActionPermission } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { ensureLocalUser } from "@/lib/users";
-import { getBankFeedAdapter } from "@/lib/bank/starling-csv";
+import { getDb } from "@/db";
+import { companies } from "@/db/schema";
+import { getBankFeedAdapter } from "@/lib/bank/adapters";
+import { parseGenericCsvMapping, isGenericCsvMapping } from "@/lib/bank/generic-csv";
+import {
+  bankLabel,
+  isBankProviderId,
+  parseProviderFromLegacyName,
+  type BankProviderId,
+} from "@/lib/bank/providers";
 import {
   BANK_PAGE_SIZE,
   parseBankPageSize,
@@ -17,10 +27,11 @@ import {
   dismissMatchesBatch,
   findBankTransactionsForInvoice,
   findReimbursementBankMatches,
-  getOrCreateDefaultBankAccount,
+  getOrCreateBankAccount,
   importBankRows,
   listBankTransactions,
   ReconciliationError,
+  saveBankAccountCsvMapping,
   suggestMatches,
   updateTransactionCategory,
   type BankTransactionListResult,
@@ -32,7 +43,43 @@ import { deleteUnusedBankSpendingCategory } from "@/lib/bank/spending-categories
 import type { ActionResult } from "@/actions/result";
 
 function revalidateTransactions() {
-  revalidatePath("/dashboard/transactions");
+  revalidatePath("/transactions");
+}
+
+async function resolveCompanyBankProvider(
+  companyId: string,
+): Promise<
+  | { ok: true; provider: BankProviderId; bankName: string | null }
+  | { ok: false; error: string }
+> {
+  const db = getDb();
+  const [company] = await db
+    .select({
+      bankProvider: companies.bankProvider,
+      bankName: companies.bankName,
+    })
+    .from(companies)
+    .where(eq(companies.id, companyId))
+    .limit(1);
+  if (!company) {
+    return { ok: false, error: "Company not found" };
+  }
+
+  let provider: BankProviderId | null = null;
+  if (company.bankProvider && isBankProviderId(company.bankProvider)) {
+    provider = company.bankProvider;
+  } else if (company.bankName) {
+    provider = parseProviderFromLegacyName(company.bankName);
+  }
+
+  if (!provider) {
+    return {
+      ok: false,
+      error: "Choose your bank in Settings before importing a CSV.",
+    };
+  }
+
+  return { ok: true, provider, bankName: company.bankName };
 }
 
 export async function loadBankTransactionsPage(input: {
@@ -73,8 +120,50 @@ export async function loadBankTransactionsPage(input: {
   return { ok: true, result };
 }
 
-export async function importStarlingCsv(formData: FormData): Promise<
-  ActionResult & { inserted?: number; skipped?: number; suggestions?: SuggestedMatch[] }
+export async function getBankImportContext(): Promise<
+  | {
+      ok: true;
+      provider: BankProviderId;
+      bankLabel: string;
+      savedMapping: import("@/lib/bank/types").GenericCsvMapping | null;
+    }
+  | { ok: false; error: string }
+> {
+  const authz = await requireActionPermission("accounts:write");
+  if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+
+  const resolved = await resolveCompanyBankProvider(companyId);
+  if (!resolved.ok) return resolved;
+
+  const account = await getOrCreateBankAccount(
+    companyId,
+    resolved.provider,
+    resolved.bankName,
+  );
+  const mapping = account.csvMapping ?? null;
+
+  return {
+    ok: true,
+    provider: resolved.provider,
+    bankLabel:
+      resolved.provider === "other"
+        ? resolved.bankName?.trim() || "Other bank"
+        : bankLabel(resolved.provider),
+    savedMapping: mapping,
+  };
+}
+
+export async function importBankCsv(formData: FormData): Promise<
+  ActionResult & {
+    inserted?: number;
+    skipped?: number;
+    skippedNonGbp?: number;
+    suggestions?: SuggestedMatch[];
+  }
 > {
   const authz = await requireActionPermission("accounts:write");
   if (!authz.ok) return authz;
@@ -86,21 +175,48 @@ export async function importStarlingCsv(formData: FormData): Promise<
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
+  const resolved = await resolveCompanyBankProvider(companyId);
+  if (!resolved.ok) return resolved;
+
   const file = formData.get("csv");
   if (!(file instanceof File) || file.size === 0) {
-    return { ok: false, error: "Choose a Starling CSV file" };
+    return { ok: false, error: "Choose a CSV statement file" };
+  }
+
+  const mapping =
+    resolved.provider === "other"
+      ? parseGenericCsvMapping(formData.get("csvMapping"))
+      : null;
+  if (resolved.provider === "other" && !mapping) {
+    return {
+      ok: false,
+      error: "Map the CSV columns for your bank before importing.",
+    };
   }
 
   const text = await file.text();
   let rows;
   try {
-    rows = getBankFeedAdapter().parse(text);
+    rows = getBankFeedAdapter(resolved.provider, mapping).parse(text);
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Parse failed" };
   }
 
-  const account = await getOrCreateDefaultBankAccount(companyId);
-  const { inserted, skipped } = await importBankRows(companyId, account.id, rows);
+  const account = await getOrCreateBankAccount(
+    companyId,
+    resolved.provider,
+    resolved.bankName,
+  );
+  const { inserted, skipped, skippedNonGbp } = await importBankRows(
+    companyId,
+    account.id,
+    rows,
+  );
+
+  if (resolved.provider === "other" && mapping && isGenericCsvMapping(mapping)) {
+    await saveBankAccountCsvMapping(companyId, account.id, mapping);
+  }
+
   const suggestions = await suggestMatches(companyId);
 
   await writeAudit({
@@ -109,11 +225,29 @@ export async function importStarlingCsv(formData: FormData): Promise<
     action: "bank.import",
     entityType: "bank_account",
     entityId: account.id,
-    meta: { inserted, skipped, suggested: suggestions.length },
+    meta: {
+      provider: resolved.provider,
+      inserted,
+      skipped,
+      skippedNonGbp,
+      suggested: suggestions.length,
+    },
   });
 
   revalidateTransactions();
-  return { ok: true, id: account.id, inserted, skipped, suggestions };
+  return {
+    ok: true,
+    id: account.id,
+    inserted,
+    skipped,
+    skippedNonGbp,
+    suggestions,
+  };
+}
+
+/** @deprecated Use importBankCsv. */
+export async function importStarlingCsv(formData: FormData) {
+  return importBankCsv(formData);
 }
 
 export async function runSuggestMatches(): Promise<
@@ -163,9 +297,9 @@ export async function confirmBankMatch(matchId: string): Promise<ActionResult> {
     entityId: matchId,
   });
   revalidateTransactions();
-  revalidatePath("/dashboard/invoices");
-  revalidatePath("/dashboard/reimbursements");
-  revalidatePath("/dashboard/expenses");
+  revalidatePath("/invoices");
+  revalidatePath("/reimbursements");
+  revalidatePath("/expenses");
   return { ok: true, id: matchId };
 }
 
@@ -209,9 +343,9 @@ export async function confirmBankMatchesBatch(matchIds: string[]): Promise<Actio
     meta: { count: matchIds.length },
   });
   revalidateTransactions();
-  revalidatePath("/dashboard/invoices");
-  revalidatePath("/dashboard/reimbursements");
-  revalidatePath("/dashboard/expenses");
+  revalidatePath("/invoices");
+  revalidatePath("/reimbursements");
+  revalidatePath("/expenses");
   return { ok: true };
 }
 

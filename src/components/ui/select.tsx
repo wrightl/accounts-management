@@ -32,15 +32,21 @@ type MenuPosition = {
   width: number;
 };
 
+function optionValue(value: unknown): string {
+  if (value == null) return "";
+  return String(value);
+}
+
 function optionsFromChildren(children: ReactNode): SelectOption[] {
   const opts: SelectOption[] = [];
   Children.forEach(children, (child) => {
     if (isValidElement(child) && child.type === "option") {
-      const props = (child as ReactElement<{ value?: string; disabled?: boolean; children?: ReactNode }>)
+      const props = (child as ReactElement<{ value?: string | number; disabled?: boolean; children?: ReactNode }>)
         .props;
+      const value = optionValue(props.value);
       opts.push({
-        value: props.value ?? "",
-        label: props.children ?? props.value ?? "",
+        value,
+        label: props.children ?? value,
         disabled: props.disabled,
       });
     }
@@ -86,11 +92,14 @@ export function Select({
   const uid = useId();
   const id = idProp ?? uid;
   const listboxId = `${id}-listbox`;
-  const options = optionsProp ?? optionsFromChildren(children);
+  const options = (optionsProp ?? optionsFromChildren(children)).map((opt) => ({
+    ...opt,
+    value: optionValue(opt.value),
+  }));
   const isControlled = valueProp !== undefined;
 
-  const [internalValue, setInternalValue] = useState(defaultValue);
-  const value = isControlled ? valueProp : internalValue;
+  const [internalValue, setInternalValue] = useState(optionValue(defaultValue));
+  const value = optionValue(isControlled ? valueProp : internalValue);
 
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(-1);

@@ -12,6 +12,7 @@ import { financialYearEndMonth } from "@/lib/dates";
 import { DEFAULT_RECEIPT_OCR_MODEL, isGatewayModelId } from "@/lib/expenses/receipt-ocr-models";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { storeCompanyLogo } from "@/lib/company-logo";
+import { resolveBankFieldsFromForm } from "@/lib/bank/resolve-bank-fields";
 import type { ActionResult } from "@/actions/result";
 
 const settingsSchema = z.object({
@@ -38,7 +39,6 @@ const settingsSchema = z.object({
   email: z
     .union([z.literal(""), z.string().trim().email("Enter a valid email address")])
     .transform((v) => (v === "" ? null : v)),
-  bankName: z.string().trim().min(1).max(100),
   bankAccountName: z
     .string()
     .trim()
@@ -101,6 +101,13 @@ export async function updateCompany(formData: FormData): Promise<ActionResult> {
   const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
+  const bank = resolveBankFieldsFromForm({
+    bankProvider: formData.get("bankProvider"),
+    bankName: formData.get("bankName"),
+    required: true,
+  });
+  if (!bank.ok) return { ok: false, error: bank.error };
+
   const parsed = settingsSchema.safeParse({
     name: formData.get("name"),
     legalName: formData.get("legalName"),
@@ -108,7 +115,6 @@ export async function updateCompany(formData: FormData): Promise<ActionResult> {
     utr: formData.get("utr") ?? "",
     addressLines: formData.get("addressLines") ?? "",
     email: formData.get("email") ?? "",
-    bankName: formData.get("bankName") ?? "",
     bankAccountName: formData.get("bankAccountName") ?? "",
     sortCode: formData.get("sortCode") ?? "",
     accountNumber: formData.get("accountNumber") ?? "",
@@ -129,6 +135,8 @@ export async function updateCompany(formData: FormData): Promise<ActionResult> {
   const current = await getOrCreateCompanySettings(companyId);
   const patch = {
     ...rest,
+    bankProvider: bank.value.bankProvider,
+    bankName: bank.value.bankName,
     companyNumber:
       current.entityType === "limited_company" ? rest.companyNumber : null,
     utr: current.entityType === "sole_trader" ? rest.utr : null,
@@ -157,10 +165,11 @@ export async function updateCompany(formData: FormData): Promise<ActionResult> {
     entityId: current.id,
   });
 
-  revalidatePath("/dashboard/settings");
+  revalidatePath("/settings");
   revalidatePath("/dashboard");
-  revalidatePath("/dashboard/spending");
-  revalidatePath("/dashboard/reports");
+  revalidatePath("/spending");
+  revalidatePath("/reports");
+  revalidatePath("/transactions");
   return { ok: true, id: current.id };
 }
 
@@ -192,7 +201,7 @@ export async function uploadLogo(formData: FormData): Promise<ActionResult> {
     meta: { path: uploaded.path },
   });
 
-  revalidatePath("/dashboard/settings");
+  revalidatePath("/settings");
   revalidatePath("/dashboard");
   return { ok: true, id: companyId };
 }

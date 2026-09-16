@@ -28,7 +28,7 @@ export function NavUserProfile({
 }) {
   return (
     <Link
-      href="/dashboard/profile"
+      href="/profile"
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
       title={userName ?? "Profile"}

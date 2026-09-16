@@ -91,7 +91,7 @@ export function resolveBankListDateRange(
   return { from: resolved.from, to: resolved.to };
 }
 
-/** Build `/dashboard/transactions?...`, omitting defaults so URLs stay short. */
+/** Build `/transactions?...`, omitting defaults so URLs stay short. */
 export function bankListHref(
   params: BankListParams,
   overrides: Partial<BankListParams> = {},
@@ -113,7 +113,7 @@ export function bankListHref(
   if (next.pageSize !== BANK_PAGE_SIZE) qs.set("pageSize", String(next.pageSize));
   if (next.view !== "table") qs.set("view", next.view);
   const s = qs.toString();
-  return s ? `/dashboard/transactions?${s}` : "/dashboard/transactions";
+  return s ? `/transactions?${s}` : "/transactions";
 }
 
 export function groupByBookedAt<T extends { bookedAt: string }>(

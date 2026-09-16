@@ -4,6 +4,7 @@ export const NAV_COLLAPSED_COOKIE = 'dd-nav-collapsed';
 
 export type NavIcon =
     | 'overview'
+    | 'help'
     | 'clients'
     | 'invoices'
     | 'expenses'
@@ -46,6 +47,12 @@ export const NAV_GROUPS: NavGroup[] = [
                 icon: 'overview',
                 permission: 'accounts:read',
             },
+            {
+                href: '/help',
+                label: 'Help',
+                icon: 'help',
+                permission: 'accounts:read',
+            },
         ],
     },
     {
@@ -53,25 +60,25 @@ export const NAV_GROUPS: NavGroup[] = [
         label: 'Banking',
         items: [
             {
-                href: '/dashboard/transactions',
+                href: '/transactions',
                 label: 'Transactions',
                 icon: 'bank',
                 permission: 'accounts:read',
             },
             {
-                href: '/dashboard/spending',
+                href: '/spending',
                 label: 'Spending',
                 icon: 'spending',
                 permission: 'accounts:read',
             },
             {
-                href: '/dashboard/dividends',
+                href: '/dividends',
                 label: 'Dividends',
                 icon: 'dividends',
                 permission: 'accounts:read',
             },
             {
-                href: '/dashboard/shareholders',
+                href: '/shareholders',
                 label: 'Shareholders',
                 icon: 'shareholders',
                 permission: 'accounts:read',
@@ -83,13 +90,13 @@ export const NAV_GROUPS: NavGroup[] = [
         label: 'Expenses',
         items: [
             {
-                href: '/dashboard/expenses',
+                href: '/expenses',
                 label: 'Expenses',
                 icon: 'expenses',
                 permission: 'accounts:read',
             },
             {
-                href: '/dashboard/reimbursements',
+                href: '/reimbursements',
                 label: 'Reimbursements',
                 icon: 'reimbursements',
                 permission: 'accounts:read',
@@ -101,25 +108,25 @@ export const NAV_GROUPS: NavGroup[] = [
         label: 'Sales',
         items: [
             {
-                href: '/dashboard/clients',
+                href: '/clients',
                 label: 'Clients',
                 icon: 'clients',
                 permission: 'accounts:read',
             },
             {
-                href: '/dashboard/quotes',
+                href: '/quotes',
                 label: 'Quotes',
                 icon: 'quotes',
                 permission: 'accounts:read',
             },
             {
-                href: '/dashboard/orders',
+                href: '/orders',
                 label: 'Orders',
                 icon: 'orders',
                 permission: 'accounts:read',
             },
             {
-                href: '/dashboard/invoices',
+                href: '/invoices',
                 label: 'Invoices',
                 icon: 'invoices',
                 permission: 'accounts:read',
@@ -131,7 +138,7 @@ export const NAV_GROUPS: NavGroup[] = [
         label: 'Reporting',
         items: [
             {
-                href: '/dashboard/reports',
+                href: '/reports',
                 label: 'Reports',
                 icon: 'reports',
                 permission: 'reports:read',
@@ -143,25 +150,25 @@ export const NAV_GROUPS: NavGroup[] = [
         label: 'Administration',
         items: [
             {
-                href: '/dashboard/audit',
+                href: '/audit',
                 label: 'Audit log',
                 icon: 'audit',
                 permission: 'users:manage',
             },
             {
-                href: '/dashboard/inbound-email',
+                href: '/inbound-email',
                 label: 'Inbound email',
                 icon: 'inboundEmail',
                 permission: 'users:manage',
             },
             {
-                href: '/dashboard/settings',
+                href: '/settings',
                 label: 'Settings',
                 icon: 'settings',
                 permission: 'settings:manage',
             },
             {
-                href: '/dashboard/users',
+                href: '/users',
                 label: 'Users',
                 icon: 'users',
                 permission: 'users:manage',
@@ -176,8 +183,8 @@ export function flattenNavItems(groups: NavGroup[]): NavItem[] {
 }
 
 const LTD_ONLY_HREFS = new Set([
-    '/dashboard/dividends',
-    '/dashboard/shareholders',
+    '/dividends',
+    '/shareholders',
 ]);
 
 /** Filter groups by permission (and entity type), dropping empty groups. */

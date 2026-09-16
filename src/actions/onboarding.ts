@@ -9,6 +9,7 @@ import { writeAudit } from "@/lib/audit";
 import { storeCompanyLogo } from "@/lib/company-logo";
 import { uniquifyCompanySlug } from "@/lib/expenses/inbound-mailbox";
 import { ensureLocalUser, assignUserCompany } from "@/lib/users";
+import { resolveBankFieldsFromForm } from "@/lib/bank/resolve-bank-fields";
 import type { ActionResult } from "@/actions/result";
 
 const onboardingSchema = z.discriminatedUnion("entityType", [
@@ -97,6 +98,13 @@ export async function completeOnboarding(
     };
   }
 
+  const bank = resolveBankFieldsFromForm({
+    bankProvider: formData.get("bankProvider"),
+    bankName: formData.get("bankName"),
+    required: false,
+  });
+  if (!bank.ok) return { ok: false, error: bank.error };
+
   const localUserId = await ensureLocalUser(session);
   const db = getDb();
   const data = parsed.data;
@@ -121,6 +129,20 @@ export async function completeOnboarding(
       utr: data.entityType === "sole_trader" ? data.utr : null,
       addressLines: data.addressLines,
       email: data.email ?? session.email,
+      bankProvider: bank.value.bankProvider,
+      bankName: bank.value.bankName,
+      bankAccountName: (() => {
+        const v = formData.get("bankAccountName");
+        return typeof v === "string" && v.trim() ? v.trim() : null;
+      })(),
+      sortCode: (() => {
+        const v = formData.get("sortCode");
+        return typeof v === "string" && v.trim() ? v.trim() : null;
+      })(),
+      accountNumber: (() => {
+        const v = formData.get("accountNumber");
+        return typeof v === "string" && v.trim() ? v.trim() : null;
+      })(),
       financialYearEndMonth: data.financialYearEndMonth,
       invoiceNumberPrefix: prefix.slice(0, 10) || "INV",
     })

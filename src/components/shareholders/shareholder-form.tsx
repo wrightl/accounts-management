@@ -64,8 +64,8 @@ export function ShareholderForm({
       }
       router.push(
         mode === "edit" && shareholder
-          ? `/dashboard/shareholders/${shareholder.id}`
-          : "/dashboard/shareholders",
+          ? `/shareholders/${shareholder.id}`
+          : "/shareholders",
       );
       router.refresh();
     });
@@ -88,7 +88,7 @@ export function ShareholderForm({
         setError(result.error);
         return;
       }
-      router.push("/dashboard/shareholders");
+      router.push("/shareholders");
       router.refresh();
     });
   }

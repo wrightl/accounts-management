@@ -148,8 +148,8 @@ export async function createReimbursementRun(
     meta: { totalPence, count: parsed.data.expenseIds.length },
   });
 
-  revalidatePath("/dashboard/reimbursements");
-  revalidatePath("/dashboard/expenses");
+  revalidatePath("/reimbursements");
+  revalidatePath("/expenses");
   revalidatePath("/dashboard");
   return { ok: true, id: runId };
 }
@@ -267,9 +267,9 @@ export async function updateReimbursementRun(
     meta: { totalPence, count: parsed.data.expenseIds.length },
   });
 
-  revalidatePath("/dashboard/reimbursements");
-  revalidatePath(`/dashboard/reimbursements/${id}`);
-  revalidatePath("/dashboard/expenses");
+  revalidatePath("/reimbursements");
+  revalidatePath(`/reimbursements/${id}`);
+  revalidatePath("/expenses");
   revalidatePath("/dashboard");
   return { ok: true, id };
 }
@@ -360,10 +360,10 @@ export async function markReimbursementPaid(
     meta: bankTransactionId ? { bankTransactionId } : undefined,
   });
 
-  revalidatePath("/dashboard/reimbursements");
-  revalidatePath(`/dashboard/reimbursements/${id}`);
-  revalidatePath("/dashboard/expenses");
-  revalidatePath("/dashboard/transactions");
+  revalidatePath("/reimbursements");
+  revalidatePath(`/reimbursements/${id}`);
+  revalidatePath("/expenses");
+  revalidatePath("/transactions");
   revalidatePath("/dashboard");
   return { ok: true, id };
 }

@@ -72,7 +72,7 @@ export function OrderForm({
       const result = await createOrder(formData);
       if (!result.ok) setError(result.error);
       else {
-        router.push(`/dashboard/orders/${result.id}`);
+        router.push(`/orders/${result.id}`);
         router.refresh();
       }
     });

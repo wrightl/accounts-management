@@ -86,7 +86,7 @@ export function InvoiceForm({
         setError(result.error);
         return;
       }
-      router.push(`/dashboard/invoices/${result.id}`);
+      router.push(`/invoices/${result.id}`);
       router.refresh();
     });
   }

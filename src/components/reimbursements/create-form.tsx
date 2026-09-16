@@ -56,7 +56,7 @@ export function CreateReimbursementForm({
           const result = await createReimbursementRun(formData);
           if (!result.ok) setError(result.error);
           else {
-            router.push(`/dashboard/reimbursements/${result.id}`);
+            router.push(`/reimbursements/${result.id}`);
             router.refresh();
           }
         });

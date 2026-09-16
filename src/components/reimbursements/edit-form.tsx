@@ -49,7 +49,7 @@ export function EditReimbursementForm({
           const result = await updateReimbursementRun(id, formData);
           if (!result.ok) setError(result.error);
           else {
-            router.push(`/dashboard/reimbursements/${id}`);
+            router.push(`/reimbursements/${id}`);
             router.refresh();
           }
         });
@@ -119,7 +119,7 @@ export function EditReimbursementForm({
           type="button"
           variant="ghost"
           disabled={pending}
-          onClick={() => router.push(`/dashboard/reimbursements/${id}`)}
+          onClick={() => router.push(`/reimbursements/${id}`)}
         >
           Cancel
         </Button>

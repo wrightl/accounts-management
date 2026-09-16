@@ -60,7 +60,7 @@ export function DividendDeclareForm({
       <p className="mt-4 text-sm text-muted">
         {registerError ??
           "Set up a balanced shareholders register (total shares must equal the sum of active share counts) before declaring a dividend."}{" "}
-        <Link href="/dashboard/shareholders" className="underline">
+        <Link href="/shareholders" className="underline">
           Manage shareholders
         </Link>
       </p>
@@ -75,7 +75,7 @@ export function DividendDeclareForm({
         startTransition(async () => {
           const result = await declareDividend(formData);
           if (!result.ok) setError(result.error);
-          else router.push("/dashboard/dividends");
+          else router.push("/dividends");
         });
       }}
     >

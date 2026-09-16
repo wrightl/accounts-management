@@ -44,9 +44,9 @@ export function ClientForm({
         return;
       }
       if (mode === "edit") {
-        router.push(`/dashboard/clients/${client!.id}`);
+        router.push(`/clients/${client!.id}`);
       } else {
-        router.push(result.id ? `/dashboard/clients/${result.id}` : "/dashboard/clients");
+        router.push(result.id ? `/clients/${result.id}` : "/clients");
       }
       router.refresh();
     });
@@ -68,7 +68,7 @@ export function ClientForm({
         setError(result.error);
         return;
       }
-      router.push("/dashboard/clients");
+      router.push("/clients");
       router.refresh();
     });
   }

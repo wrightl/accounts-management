@@ -76,7 +76,7 @@ export function QuoteHistory({
                 <div className="flex justify-end gap-2">
                   {!row.isCurrent ? (
                     <Link
-                      href={`/dashboard/quotes/${quoteId}/versions/${row.version}`}
+                      href={`/quotes/${quoteId}/versions/${row.version}`}
                       className={buttonClasses("secondary")}
                     >
                       View

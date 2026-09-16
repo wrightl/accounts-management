@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { completeOnboarding } from "@/actions/onboarding";
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label, Textarea } from "@/components/ui/form";
+import { BankFields } from "@/components/settings/bank-fields";
 
 const MONTHS = [
   "January",
@@ -53,8 +54,8 @@ export function OnboardingForm({
             Set up your business
           </h1>
           <p className="mt-2 text-muted">
-            Choose how your business is registered. Bank details can be added
-            later in Settings.
+            Choose how your business is registered. You can add bank details
+            now or later in Settings.
           </p>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -219,6 +220,16 @@ export function OnboardingForm({
         <p className="text-xs text-muted">
           Shown in the app and on invoices. PNG or JPG, under 2 MB.
         </p>
+      </div>
+
+      <div className="space-y-3 rounded-xl border border-border bg-surface/50 p-4">
+        <h2 className="font-display text-base font-semibold">Bank details</h2>
+        <BankFields
+          disabled={pending}
+          required={false}
+          showAccountDetails
+          optionalHint="Optional — needed for invoice payment details and CSV import."
+        />
       </div>
 
       <FieldError>{error}</FieldError>

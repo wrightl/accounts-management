@@ -23,7 +23,7 @@ test("sign-in route is reachable", async ({ page }) => {
 test("invoices route redirects to sign-in or shows not-configured notice", async ({
   page,
 }) => {
-  await page.goto("/dashboard/invoices");
+  await page.goto("/invoices");
   // Without a Clerk session: the dashboard layout redirects to sign-in, or
   // (when auth env is absent) shows AuthNotConfigured.
   await expect(page.locator("body")).toContainText(

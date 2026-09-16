@@ -59,9 +59,9 @@ async function validateAgainstTotal(
 }
 
 function revalidateShareholders() {
-  revalidatePath("/dashboard/shareholders");
-  revalidatePath("/dashboard/dividends");
-  revalidatePath("/dashboard/dividends/new");
+  revalidatePath("/shareholders");
+  revalidatePath("/dividends");
+  revalidatePath("/dividends/new");
 }
 
 export async function updateTotalShares(formData: FormData): Promise<ActionResult> {

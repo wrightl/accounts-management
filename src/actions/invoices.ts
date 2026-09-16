@@ -137,7 +137,7 @@ export async function createInvoice(formData: FormData): Promise<ActionResult> {
     entityId: invoiceId,
   });
 
-  revalidatePath("/dashboard/invoices");
+  revalidatePath("/invoices");
   revalidatePath("/dashboard");
   return { ok: true, id: invoiceId };
 }
@@ -221,8 +221,8 @@ export async function updateInvoice(
     entityId: id,
   });
 
-  revalidatePath("/dashboard/invoices");
-  revalidatePath(`/dashboard/invoices/${id}`);
+  revalidatePath("/invoices");
+  revalidatePath(`/invoices/${id}`);
   revalidatePath("/dashboard");
   return { ok: true, id };
 }
@@ -264,8 +264,8 @@ export async function voidInvoice(id: string): Promise<ActionResult> {
     entityId: id,
   });
 
-  revalidatePath("/dashboard/invoices");
-  revalidatePath(`/dashboard/invoices/${id}`);
+  revalidatePath("/invoices");
+  revalidatePath(`/invoices/${id}`);
   revalidatePath("/dashboard");
   return { ok: true, id };
 }
@@ -310,8 +310,8 @@ export async function sendInvoice(id: string): Promise<ActionResult> {
     meta: { to: detail.client.email, jobId },
   });
 
-  revalidatePath("/dashboard/invoices");
-  revalidatePath(`/dashboard/invoices/${id}`);
+  revalidatePath("/invoices");
+  revalidatePath(`/invoices/${id}`);
   revalidatePath("/dashboard");
   return { ok: true, id };
 }
@@ -378,8 +378,8 @@ export async function updateInvoiceStatus(
     meta: { from: storedStatus(current), to: target },
   });
 
-  revalidatePath("/dashboard/invoices");
-  revalidatePath(`/dashboard/invoices/${id}`);
+  revalidatePath("/invoices");
+  revalidatePath(`/invoices/${id}`);
   revalidatePath("/dashboard");
   return { ok: true, id };
 }

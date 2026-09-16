@@ -11,11 +11,11 @@ import {
   deleteBankSpendingCategory,
   dismissBankMatch,
   dismissBankMatchesBatch,
-  importStarlingCsv,
   runSuggestMatches,
   updateBankCategory,
   type SuggestedMatch,
 } from "@/actions/bank";
+import { BankImportForm } from "@/components/bank/bank-import-form";
 import {
   bankCategorySelectOptions,
   formatBankCategory,
@@ -222,55 +222,6 @@ export function SuggestMatchesDialog({
   );
 }
 
-export function BankImportForm({
-  onSuccess,
-  onSuggestions,
-}: {
-  onSuccess?: () => void;
-  onSuggestions?: (suggestions: SuggestedMatch[]) => void;
-}) {
-  const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
-
-  return (
-    <form
-      className="space-y-3"
-      action={(formData) => {
-        setError(null);
-        setMessage(null);
-        startTransition(async () => {
-          const result = await importStarlingCsv(formData);
-          if (!result.ok) setError(result.error);
-          else {
-            setMessage(
-              `Imported ${result.inserted ?? 0} new rows (${result.skipped ?? 0} duplicates skipped).`,
-            );
-            router.refresh();
-            onSuccess?.();
-            if (result.suggestions?.length) {
-              onSuggestions?.(result.suggestions);
-            }
-          }
-        });
-      }}
-    >
-      <div>
-        <Label htmlFor="csv">Statement file</Label>
-        <Input id="csv" name="csv" type="file" accept=".csv,text/csv" required disabled={pending} />
-      </div>
-      <FieldError>{error}</FieldError>
-      {message && <p className="text-sm text-success">{message}</p>}
-      <DialogActions>
-        <Button type="submit" disabled={pending}>
-          {pending ? "Importing…" : "Import"}
-        </Button>
-      </DialogActions>
-    </form>
-  );
-}
-
 export function BankToolbar({ canWrite }: { canWrite: boolean }) {
   const router = useRouter();
   const [importOpen, setImportOpen] = useState(false);
@@ -310,7 +261,8 @@ export function BankToolbar({ canWrite }: { canWrite: boolean }) {
       <Dialog
         open={importOpen}
         onClose={() => setImportOpen(false)}
-        title="Import Starling CSV"
+        title="Import bank CSV"
+        className="max-w-2xl"
       >
         <BankImportForm
           onSuccess={() => setImportOpen(false)}

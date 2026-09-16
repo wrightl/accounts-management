@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label, Select, Textarea } from "@/components/ui/form";
+import { BankFields } from "@/components/settings/bank-fields";
 import { financialYearStartMonth } from "@/lib/dates";
 import { updateCompany } from "@/actions/settings";
 import {
@@ -40,6 +41,7 @@ export function SettingsForm({
     utr: string | null;
     addressLines: string | null;
     email: string | null;
+    bankProvider: string | null;
     bankName: string | null;
     bankAccountName: string | null;
     sortCode: string | null;
@@ -158,7 +160,7 @@ export function SettingsForm({
             disabled={pending}
           >
             {MONTHS.map((m, i) => (
-              <option key={m} value={i + 1}>
+              <option key={m} value={String(i + 1)}>
                 {m}
               </option>
             ))}
@@ -187,40 +189,16 @@ export function SettingsForm({
           </p>
         </div>
 
-        <h2 className="pt-4 font-display text-lg font-semibold">Bank details (Starling)</h2>
-        <div>
-          <Label htmlFor="bankName">Bank</Label>
-          <Input id="bankName" name="bankName" required defaultValue={settings.bankName ?? ""} disabled={pending} />
-        </div>
-        <div>
-          <Label htmlFor="bankAccountName">Account name</Label>
-          <Input
-            id="bankAccountName"
-            name="bankAccountName"
-            defaultValue={settings.bankAccountName ?? ""}
-            disabled={pending}
-          />
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <Label htmlFor="sortCode">Sort code</Label>
-            <Input
-              id="sortCode"
-              name="sortCode"
-              defaultValue={settings.sortCode ?? ""}
-              disabled={pending}
-            />
-          </div>
-          <div>
-            <Label htmlFor="accountNumber">Account number</Label>
-            <Input
-              id="accountNumber"
-              name="accountNumber"
-              defaultValue={settings.accountNumber ?? ""}
-              disabled={pending}
-            />
-          </div>
-        </div>
+        <h2 className="pt-4 font-display text-lg font-semibold">Bank details</h2>
+        <BankFields
+          bankProvider={settings.bankProvider}
+          bankName={settings.bankName}
+          bankAccountName={settings.bankAccountName}
+          sortCode={settings.sortCode}
+          accountNumber={settings.accountNumber}
+          disabled={pending}
+          required
+        />
 
         <h2 className="pt-4 font-display text-lg font-semibold">Invoicing</h2>
         <div>

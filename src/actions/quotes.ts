@@ -184,7 +184,7 @@ export async function createQuote(formData: FormData): Promise<ActionResult> {
     entityId: quoteId,
   });
 
-  revalidatePath("/dashboard/quotes");
+  revalidatePath("/quotes");
   return { ok: true, id: quoteId };
 }
 
@@ -279,8 +279,8 @@ export async function updateQuote(id: string, formData: FormData): Promise<Actio
     meta: { version: nextVersion },
   });
 
-  revalidatePath("/dashboard/quotes");
-  revalidatePath(`/dashboard/quotes/${id}`);
+  revalidatePath("/quotes");
+  revalidatePath(`/quotes/${id}`);
   return { ok: true, id };
 }
 
@@ -362,8 +362,8 @@ export async function rollbackQuote(
     meta: { fromVersion: targetVersion, toVersion: nextVersion },
   });
 
-  revalidatePath("/dashboard/quotes");
-  revalidatePath(`/dashboard/quotes/${quoteId}`);
+  revalidatePath("/quotes");
+  revalidatePath(`/quotes/${quoteId}`);
   return { ok: true, id: quoteId };
 }
 
@@ -470,9 +470,9 @@ export async function updateQuoteStatus(
       meta: { orderId },
     });
 
-    revalidatePath("/dashboard/quotes");
-    revalidatePath(`/dashboard/quotes/${quoteId}`);
-    revalidatePath("/dashboard/orders");
+    revalidatePath("/quotes");
+    revalidatePath(`/quotes/${quoteId}`);
+    revalidatePath("/orders");
     return { ok: true, id: orderId };
   } else if (targetStatus === "sent") {
     const now = new Date();
@@ -511,8 +511,8 @@ export async function updateQuoteStatus(
     });
   }
 
-  revalidatePath("/dashboard/quotes");
-  revalidatePath(`/dashboard/quotes/${quoteId}`);
+  revalidatePath("/quotes");
+  revalidatePath(`/quotes/${quoteId}`);
   return { ok: true, id: quoteId };
 }
 
@@ -589,7 +589,7 @@ export async function sendQuote(quoteId: string, formData: FormData): Promise<Ac
     meta: { to: parsed.data.to },
   });
 
-  revalidatePath("/dashboard/quotes");
-  revalidatePath(`/dashboard/quotes/${quoteId}`);
+  revalidatePath("/quotes");
+  revalidatePath(`/quotes/${quoteId}`);
   return { ok: true, id: quoteId };
 }

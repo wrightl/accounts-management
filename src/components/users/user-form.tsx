@@ -50,7 +50,7 @@ export function UserForm({
         setError(result.error);
         return;
       }
-      router.push("/dashboard/users");
+      router.push("/users");
       router.refresh();
     });
   }
@@ -118,13 +118,13 @@ export function UserForm({
             <DeleteUserButton
               userId={user.id}
               email={user.email}
-              redirectTo="/dashboard/users"
+              redirectTo="/users"
             />
           ) : (
             <RevokeInviteButton
               userId={user.id}
               email={user.email}
-              redirectTo="/dashboard/users"
+              redirectTo="/users"
             />
           )
         ) : null}

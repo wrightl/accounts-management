@@ -127,7 +127,7 @@ export function DashboardShell({
               role={role}
               userName={userName}
               avatarUrl={avatarUrl}
-              active={pathname === "/dashboard/profile"}
+              active={pathname === "/profile"}
             />
           </div>
         </nav>

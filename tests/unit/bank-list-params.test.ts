@@ -81,17 +81,17 @@ describe("parseBankListParams", () => {
 describe("bankListHref", () => {
   it("omits default table view and page 1", () => {
     const base = parseBankListParams({ q: "starling", view: "table" });
-    expect(bankListHref(base)).toBe("/dashboard/transactions?q=starling");
+    expect(bankListHref(base)).toBe("/transactions?q=starling");
   });
 
   it("keeps cards view and later pages", () => {
     const base = parseBankListParams({ view: "cards", page: "3", type: "outgoing" });
-    expect(bankListHref(base)).toBe("/dashboard/transactions?type=outgoing&page=3&view=cards");
+    expect(bankListHref(base)).toBe("/transactions?type=outgoing&page=3&view=cards");
   });
 
   it("includes non-default pageSize in href", () => {
     const base = parseBankListParams({ pageSize: "50", q: "acme" });
-    expect(bankListHref(base)).toBe("/dashboard/transactions?q=acme&pageSize=50");
+    expect(bankListHref(base)).toBe("/transactions?q=acme&pageSize=50");
   });
 
   it("resets filters while keeping view", () => {
@@ -107,7 +107,7 @@ describe("bankListHref", () => {
         to: "",
         page: 1,
       }),
-    ).toBe("/dashboard/transactions?view=cards");
+    ).toBe("/transactions?view=cards");
   });
 
   it("includes period and custom dates in href", () => {
@@ -118,16 +118,16 @@ describe("bankListHref", () => {
       q: "acme",
     });
     expect(bankListHref(base)).toBe(
-      "/dashboard/transactions?q=acme&period=custom&from=2026-01-01&to=2026-01-31",
+      "/transactions?q=acme&period=custom&from=2026-01-01&to=2026-01-31",
     );
     expect(bankListHref(parseBankListParams({ period: "last-month" }))).toBe(
-      "/dashboard/transactions?period=last-month",
+      "/transactions?period=last-month",
     );
   });
 
   it("includes reconciliation filter in href", () => {
     const base = parseBankListParams({ reconciliation: "unreconciled", q: "acme" });
-    expect(bankListHref(base)).toBe("/dashboard/transactions?q=acme&reconciliation=unreconciled");
+    expect(bankListHref(base)).toBe("/transactions?q=acme&reconciliation=unreconciled");
   });
 });
 

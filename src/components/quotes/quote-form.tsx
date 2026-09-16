@@ -115,7 +115,7 @@ export function QuoteForm({
           : await updateQuote(quote!.id, formData);
       if (!result.ok) setError(result.error);
       else {
-        router.push(`/dashboard/quotes/${result.id}`);
+        router.push(`/quotes/${result.id}`);
         router.refresh();
       }
     });

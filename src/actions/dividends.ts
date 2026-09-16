@@ -103,7 +103,7 @@ export async function declareDividend(formData: FormData): Promise<ActionResult>
     meta: { totalPence, payoutCount: splits.length },
   });
 
-  revalidatePath("/dashboard/dividends");
+  revalidatePath("/dividends");
   return { ok: true, id: decl.id };
 }
 
@@ -126,6 +126,6 @@ export async function deleteDividendDeclaration(id: string): Promise<ActionResul
     entityType: "dividend_declaration",
     entityId: id,
   });
-  revalidatePath("/dashboard/dividends");
+  revalidatePath("/dividends");
   return { ok: true, id };
 }

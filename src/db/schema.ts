@@ -13,6 +13,7 @@ import {
   uniqueIndex,
   check,
 } from "drizzle-orm/pg-core";
+import type { GenericCsvMapping } from "@/lib/bank/types";
 
 export const roleEnum = pgEnum("role", ["admin", "user", "accountant", "pending"]);
 export const entityTypeEnum = pgEnum("entity_type", [
@@ -74,6 +75,12 @@ export const companies = pgTable("companies", {
   vatNumber: text("vat_number"), // null: not VAT registered
   addressLines: text("address_lines"),
   email: text("email"),
+  /**
+   * Catalog slug from `BANK_PROVIDERS` (`starling`, `monzo`, …, `other`).
+   * Null until the company picks a bank in Settings / onboarding.
+   */
+  bankProvider: text("bank_provider"),
+  /** Invoice PDF display name; catalog label for known banks, freetext for other. */
   bankName: text("bank_name"),
   bankAccountName: text("bank_account_name"),
   sortCode: text("sort_code"),
@@ -395,6 +402,10 @@ export const bankAccounts = pgTable(
     name: text("name").notNull(),
     provider: text("provider").notNull(),
     currency: text("currency").notNull().default("GBP"),
+    /**
+     * Last successful generic CSV column mapping (Other bank only).
+     */
+    csvMapping: jsonb("csv_mapping").$type<GenericCsvMapping>(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("idx_bank_accounts_company").on(t.companyId)],

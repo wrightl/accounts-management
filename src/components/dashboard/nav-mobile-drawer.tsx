@@ -109,7 +109,7 @@ export function NavMobileDrawer({
               role={role}
               userName={userName}
               avatarUrl={avatarUrl}
-              active={pathname === "/dashboard/profile"}
+              active={pathname === "/profile"}
               onNavigate={onClose}
             />
           </div>

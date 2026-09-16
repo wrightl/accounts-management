@@ -35,7 +35,7 @@ import {
 } from "@/db/schema";
 import { formatGBP } from "@/lib/money";
 import { payReimbursementRun } from "@/lib/reimbursements/pay";
-import type { ParsedBankRow } from "@/lib/bank/starling-csv";
+import type { ParsedBankRow, GenericCsvMapping } from "@/lib/bank/types";
 import {
   pickBestMatch,
   scoreBankTxForInvoice,
@@ -49,31 +49,61 @@ import {
   type InvoiceStatus,
 } from "@/lib/invoices/status";
 import { clientDisplayName } from "@/lib/clients/display";
+import {
+  resolveBankDisplayName,
+  type BankProviderId,
+} from "@/lib/bank/providers";
 
-export async function getOrCreateDefaultBankAccount(companyId: string) {
+export async function getOrCreateBankAccount(
+  companyId: string,
+  provider: BankProviderId,
+  displayName?: string | null,
+) {
   const db = getDb();
   const existing = await db
     .select()
     .from(bankAccounts)
-    .where(eq(bankAccounts.companyId, companyId))
+    .where(
+      and(eq(bankAccounts.companyId, companyId), eq(bankAccounts.provider, provider)),
+    )
     .limit(1);
   if (existing[0]) return existing[0];
+  const name = resolveBankDisplayName(provider, displayName);
   const [created] = await db
     .insert(bankAccounts)
     .values({
       companyId,
-      name: "Starling Business",
-      provider: "starling",
+      name,
+      provider,
     })
     .returning();
   return created;
+}
+
+/** @deprecated Prefer getOrCreateBankAccount(companyId, provider). */
+export async function getOrCreateDefaultBankAccount(companyId: string) {
+  return getOrCreateBankAccount(companyId, "starling");
+}
+
+export async function saveBankAccountCsvMapping(
+  companyId: string,
+  accountId: string,
+  mapping: GenericCsvMapping,
+) {
+  const db = getDb();
+  await db
+    .update(bankAccounts)
+    .set({ csvMapping: mapping })
+    .where(
+      and(eq(bankAccounts.id, accountId), eq(bankAccounts.companyId, companyId)),
+    );
 }
 
 export async function importBankRows(
   companyId: string,
   accountId: string,
   rows: ParsedBankRow[],
-): Promise<{ inserted: number; skipped: number }> {
+): Promise<{ inserted: number; skipped: number; skippedNonGbp: number }> {
   const db = getDb();
   const [account] = await db
     .select({ id: bankAccounts.id })
@@ -86,8 +116,14 @@ export async function importBankRows(
 
   let inserted = 0;
   let skipped = 0;
+  let skippedNonGbp = 0;
 
   for (const row of rows) {
+    if (row.skipReason === "non_gbp") {
+      skippedNonGbp++;
+      continue;
+    }
+
     const spendingCategory = row.spendingCategory
       ? await upsertBankSpendingCategory(companyId, row.spendingCategory)
       : null;
@@ -127,7 +163,7 @@ export async function importBankRows(
       throw err;
     }
   }
-  return { inserted, skipped };
+  return { inserted, skipped, skippedNonGbp };
 }
 
 export type BankTransactionListItem = {

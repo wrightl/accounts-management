@@ -186,13 +186,13 @@ export function ExpenseForm({
         return;
       }
 
-      let targetUrl = `/dashboard/expenses/${result.id}`;
+      let targetUrl = `/expenses/${result.id}`;
       if (mode === "create" && pendingReceipt && result.id) {
         const receiptForm = new FormData();
         receiptForm.set("receipt", pendingReceipt);
         const uploadResult = await uploadReceipt(result.id, receiptForm);
         if (!uploadResult.ok) {
-          targetUrl = `/dashboard/expenses/${result.id}?receiptUploadFailed=${encodeURIComponent(uploadResult.error)}`;
+          targetUrl = `/expenses/${result.id}?receiptUploadFailed=${encodeURIComponent(uploadResult.error)}`;
         }
       }
 
@@ -220,7 +220,7 @@ export function ExpenseForm({
         setError(result.error);
         return;
       }
-      router.push(`/dashboard/expenses/${result.id}`);
+      router.push(`/expenses/${result.id}`);
       router.refresh();
     });
   }
@@ -242,7 +242,7 @@ export function ExpenseForm({
           setError(result.error);
           return;
         }
-        router.push("/dashboard/expenses");
+        router.push("/expenses");
         router.refresh();
       });
     })();
@@ -520,7 +520,7 @@ export function ExpenseForm({
                   const result = await deleteExpense(expense!.id);
                   if (!result.ok) setError(result.error);
                   else {
-                    router.push("/dashboard/expenses");
+                    router.push("/expenses");
                     router.refresh();
                   }
                 });

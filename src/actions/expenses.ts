@@ -226,8 +226,8 @@ export async function createExpense(formData: FormData): Promise<ActionResult> {
     entityId: row.id,
   });
 
-  revalidatePath("/dashboard/expenses");
-  revalidatePath("/dashboard/reimbursements");
+  revalidatePath("/expenses");
+  revalidatePath("/reimbursements");
   revalidatePath("/dashboard");
   return { ok: true, id: row.id };
 }
@@ -322,9 +322,9 @@ export async function updateExpense(
     entityId: id,
   });
 
-  revalidatePath("/dashboard/expenses");
-  revalidatePath(`/dashboard/expenses/${id}`);
-  revalidatePath("/dashboard/reimbursements");
+  revalidatePath("/expenses");
+  revalidatePath(`/expenses/${id}`);
+  revalidatePath("/reimbursements");
   revalidatePath("/dashboard");
   return { ok: true, id };
 }
@@ -415,9 +415,9 @@ export async function approveExpense(
     meta: { status: normalized.status },
   });
 
-  revalidatePath("/dashboard/expenses");
-  revalidatePath(`/dashboard/expenses/${id}`);
-  revalidatePath("/dashboard/reimbursements");
+  revalidatePath("/expenses");
+  revalidatePath(`/expenses/${id}`);
+  revalidatePath("/reimbursements");
   revalidatePath("/dashboard");
   return { ok: true, id };
 }
@@ -463,7 +463,7 @@ export async function rejectExpense(id: string): Promise<ActionResult> {
     entityId: id,
   });
 
-  revalidatePath("/dashboard/expenses");
+  revalidatePath("/expenses");
   revalidatePath("/dashboard");
   return { ok: true };
 }
@@ -518,7 +518,7 @@ export async function deleteExpense(id: string): Promise<ActionResult> {
     entityId: id,
   });
 
-  revalidatePath("/dashboard/expenses");
+  revalidatePath("/expenses");
   revalidatePath("/dashboard");
   return { ok: true };
 }
@@ -576,7 +576,7 @@ export async function uploadReceipt(
     meta: { expenseId, filename: file.name },
   });
 
-  revalidatePath(`/dashboard/expenses/${expenseId}`);
+  revalidatePath(`/expenses/${expenseId}`);
   return { ok: true, id: row.id };
 }
 
@@ -650,7 +650,7 @@ export async function deleteReceipt(receiptId: string): Promise<ActionResult> {
     entityId: receiptId,
   });
 
-  revalidatePath(`/dashboard/expenses/${receipt.expenseId}`);
+  revalidatePath(`/expenses/${receipt.expenseId}`);
   return { ok: true };
 }
 
@@ -744,8 +744,8 @@ export async function commitExpenseImport(
     meta: { count: rows.length },
   });
 
-  revalidatePath("/dashboard/expenses");
-  revalidatePath("/dashboard/reimbursements");
+  revalidatePath("/expenses");
+  revalidatePath("/reimbursements");
   revalidatePath("/dashboard");
   return { ok: true, count: rows.length };
 }

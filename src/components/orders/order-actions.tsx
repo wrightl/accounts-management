@@ -94,7 +94,7 @@ export function OrderActions({
         return;
       }
       setOpen(false);
-      router.push(`/dashboard/invoices/${result.id}`);
+      router.push(`/invoices/${result.id}`);
       router.refresh();
     });
   }

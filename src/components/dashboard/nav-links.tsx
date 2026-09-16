@@ -3,6 +3,7 @@
 import Link from "next/link";
 import {
   LayoutDashboard,
+  CircleHelp,
   UsersRound,
   FileText,
   Receipt,
@@ -25,6 +26,7 @@ import type { NavGroup, NavIcon, NavItem } from "./nav";
 
 export const NAV_ICONS: Record<NavIcon, LucideIcon> = {
   overview: LayoutDashboard,
+  help: CircleHelp,
   clients: UsersRound,
   invoices: FileText,
   expenses: Receipt,
@@ -84,7 +86,7 @@ function NavLink({
   const Icon = NAV_ICONS[item.icon];
   const active = isNavItemActive(pathname, item.href);
   const showOverdueBadge =
-    item.href === "/dashboard/invoices" && overdueInvoiceCount > 0;
+    item.href === "/invoices" && overdueInvoiceCount > 0;
 
   return (
     <Link

@@ -26,7 +26,7 @@ export function SpendingSnapshot({
           <p className="mt-1 text-xs text-muted">{periodLabel}</p>
         </div>
         <Link
-          href="/dashboard/spending"
+          href="/spending"
           className="text-sm text-brand hover:underline"
         >
           View spending

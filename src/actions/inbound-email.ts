@@ -22,7 +22,7 @@ export async function retryInboundEmailJob(jobId: string): Promise<ActionResult>
         entityType: "inbound_email_job",
         entityId: jobId,
       },
-      paths: ["/dashboard/inbound-email", "/dashboard", `/dashboard/inbound-email/${jobId}`],
+      paths: ["/inbound-email", "/dashboard", `/inbound-email/${jobId}`],
     },
   );
 }
@@ -45,7 +45,7 @@ export async function dismissInboundEmailJob(
         entityId: jobId,
         meta: reason?.trim() ? { reason: reason.trim() } : undefined,
       },
-      paths: ["/dashboard/inbound-email", "/dashboard", `/dashboard/inbound-email/${jobId}`],
+      paths: ["/inbound-email", "/dashboard", `/inbound-email/${jobId}`],
     },
   );
 }
@@ -65,7 +65,7 @@ export async function retryAllInboundEmailIssues(): Promise<ActionResult> {
         action: "inbound_email.retry_all",
         entityType: "inbound_email_job",
       },
-      paths: ["/dashboard/inbound-email", "/dashboard"],
+      paths: ["/inbound-email", "/dashboard"],
     },
   );
 }

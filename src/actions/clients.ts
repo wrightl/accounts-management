@@ -74,7 +74,7 @@ export async function createClient(formData: FormData): Promise<ActionResult> {
     entityId: row.id,
   });
 
-  revalidatePath("/dashboard/clients");
+  revalidatePath("/clients");
   revalidatePath("/dashboard");
   return { ok: true, id: row.id };
 }
@@ -124,8 +124,8 @@ export async function updateClient(
     entityId: id,
   });
 
-  revalidatePath("/dashboard/clients");
-  revalidatePath(`/dashboard/clients/${id}`);
+  revalidatePath("/clients");
+  revalidatePath(`/clients/${id}`);
   return { ok: true, id };
 }
 
@@ -164,7 +164,7 @@ export async function deleteClient(id: string): Promise<ActionResult> {
     entityId: id,
   });
 
-  revalidatePath("/dashboard/clients");
+  revalidatePath("/clients");
   revalidatePath("/dashboard");
   return { ok: true };
 }

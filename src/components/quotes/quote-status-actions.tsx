@@ -96,7 +96,7 @@ export function QuoteStatusActions({
         return;
       }
       if (target === "accepted" && result.id) {
-        router.push(`/dashboard/orders/${result.id}`);
+        router.push(`/orders/${result.id}`);
       } else {
         router.refresh();
       }

@@ -31,8 +31,8 @@ export function PeriodChips({
           const active = period === option.value;
           const href =
             option.value === "custom"
-              ? `/dashboard/spending?period=custom&from=${customFrom || defaultCustomFrom}&to=${customTo || today}&breakdown=${breakdown}`
-              : `/dashboard/spending?period=${option.value}&breakdown=${breakdown}`;
+              ? `/spending?period=custom&from=${customFrom || defaultCustomFrom}&to=${customTo || today}&breakdown=${breakdown}`
+              : `/spending?period=${option.value}&breakdown=${breakdown}`;
           return (
             <Link
               key={option.value}
@@ -51,7 +51,7 @@ export function PeriodChips({
       </div>
       {period === "custom" ? (
         <CustomPeriodForm
-          action="/dashboard/spending"
+          action="/spending"
           from={customFrom}
           to={customTo}
           hiddenFields={{ breakdown }}
@@ -72,7 +72,7 @@ export function BreakdownChips({
     <div className="flex flex-wrap gap-2">
       {BREAKDOWN_OPTIONS.map((option) => {
         const active = breakdown === option.value;
-        const href = `/dashboard/spending?period=${period}&breakdown=${option.value}`;
+        const href = `/spending?period=${period}&breakdown=${option.value}`;
         return (
           <Link
             key={option.value}

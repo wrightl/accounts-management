@@ -142,7 +142,7 @@ export async function createOrder(formData: FormData): Promise<ActionResult> {
     entityId: orderId,
   });
 
-  revalidatePath("/dashboard/orders");
+  revalidatePath("/orders");
   return { ok: true, id: orderId };
 }
 
@@ -317,10 +317,10 @@ export async function createInvoiceFromOrder(
     meta: { invoiceId, mode, amountPence },
   });
 
-  revalidatePath("/dashboard/orders");
-  revalidatePath(`/dashboard/orders/${orderId}`);
-  revalidatePath("/dashboard/invoices");
-  revalidatePath(`/dashboard/invoices/${invoiceId}`);
+  revalidatePath("/orders");
+  revalidatePath(`/orders/${orderId}`);
+  revalidatePath("/invoices");
+  revalidatePath(`/invoices/${invoiceId}`);
   return { ok: true, id: invoiceId };
 }
 
