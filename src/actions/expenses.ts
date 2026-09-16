@@ -28,6 +28,7 @@ import {
   type ReceiptOcrProvider,
 } from "@/lib/expenses/receipt-ocr";
 import type { ReceiptExtraction } from "@/lib/expenses/receipt-parse";
+import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { isReceiptOcrProvider } from "@/lib/expenses/receipt-parse";
 import { listFounders } from "@/lib/expenses/queries";
 import { getReceiptOcrSettings } from "@/lib/platform-settings";
