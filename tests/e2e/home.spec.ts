@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 test("landing page renders the brand and primary actions", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Your books, in one place." })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Go to dashboard" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Sign up" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Sign in" }).first()).toBeVisible();
 });
 
