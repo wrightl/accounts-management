@@ -50,6 +50,8 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Hide the bottom-left Next.js DevTools chip so marketing screenshots stay clean.
+  devIndicators: false,
   serverExternalPackages: [
     "pdfjs-dist",
     "@napi-rs/canvas",

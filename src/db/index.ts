@@ -2,6 +2,7 @@ import { Pool } from "pg";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { attachDatabasePool } from "@vercel/functions";
 import { requireEnv } from "@/env";
+import { postgresConnectionString } from "./connection-string";
 import { schema } from "./schema";
 
 export type Database = NodePgDatabase<typeof schema>;
@@ -34,7 +35,7 @@ export function getDb(): Database {
   if (testOverride) return testOverride;
   if (cached) return cached;
   const pool = new Pool({
-    connectionString: requireEnv("DATABASE_URL"),
+    connectionString: postgresConnectionString(requireEnv("DATABASE_URL")),
     max: 10,
   });
   attachDatabasePool(pool);

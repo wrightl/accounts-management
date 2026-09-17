@@ -12,6 +12,7 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import pg from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
+import { postgresConnectionString } from "../src/db/connection-string";
 import { schema } from "../src/db/schema";
 import { seedPromoDemo } from "../src/db/seed-promo-demo";
 import type { Database } from "../src/db";
@@ -33,7 +34,9 @@ async function main() {
   }
 
   const actorEmail = actorEmailFromArgs();
-  const client = new pg.Client({ connectionString: url });
+  const client = new pg.Client({
+    connectionString: postgresConnectionString(url),
+  });
 
   try {
     await client.connect();

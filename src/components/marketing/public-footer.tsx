@@ -18,12 +18,12 @@ export function PublicFooter() {
             <p className="font-medium text-white">Product</p>
             <ul className="mt-3 space-y-2 text-white/60">
               <li>
-                <Link href="#product" className="hover:text-white">
+                <Link href="/#product" className="hover:text-white">
                   Features
                 </Link>
               </li>
               <li>
-                <Link href="#how" className="hover:text-white">
+                <Link href="/#how" className="hover:text-white">
                   How it works
                 </Link>
               </li>

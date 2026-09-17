@@ -78,9 +78,9 @@ Captions mirror this text. Record your own VO over the picture-lock, or ship cap
 | --- | --- | --- | --- |
 | Hook | 18s | `/` → hard cut to `/dashboard` | Landing hero line visible; no sign-in form linger |
 | Dashboard | 22s | `/dashboard` | Slow scroll: KPIs → charts → Needs attention |
-| Money in | 40s | `/dashboard/quotes/[hero]` → order → invoice → PDF | Hero quote **Harbor Digital**; open invoice PDF in new tab briefly |
-| Money out | 35s | `/dashboard/inbound-email` → expense → reimbursement | Show processed inbound job + pending reimbursement |
-| Trust | 30s | `/dashboard/transactions` → match UI → `/dashboard/reports` | Hover Download accountant pack; do not download live pack on camera |
+| Money in | 40s | `/quotes/[hero]` → order → invoice → PDF | Hero quote **Harbor Digital**; open invoice PDF in new tab briefly |
+| Money out | 35s | `/inbound-email` → expense → reimbursement | Show processed inbound job + pending reimbursement |
+| Trust | 30s | `/transactions` → match UI → `/reports` | Hover Download accountant pack; do not download live pack on camera |
 | Close | 10s | End card (assembled) | Logo, waitlist line, mailto URL |
 
 Hide Clerk user chip where possible (crop or scroll). Demo data only — run `npm run promo:seed` first.

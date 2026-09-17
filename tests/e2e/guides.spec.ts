@@ -14,8 +14,12 @@ test.describe("Guides - Public Access", () => {
     // Verify comparison table is present
     await expect(page.getByRole("table")).toBeVisible();
     
-    // Verify sign in link is available but not required
-    await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
+    // Verify the shared marketing navbar is present
+    const nav = page.getByRole("navigation", { name: "Marketing" });
+    await expect(nav).toBeVisible();
+    await expect(nav.getByRole("link", { name: "Guides" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Sign in" }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: "Sign up" }).first()).toBeVisible();
   });
 
   test("limited companies guide is accessible without authentication", async ({ page }) => {

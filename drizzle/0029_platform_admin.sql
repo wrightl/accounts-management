@@ -69,7 +69,3 @@ END $$;
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_company_support_notes_company" ON "company_support_notes" USING btree ("company_id");
 --> statement-breakpoint
--- Seed break-glass platform admins from known bootstrap emails when present.
-UPDATE "users"
-SET "platform_admin" = true
-WHERE lower("email") IN ('lee@dotanddashconsulting.com');

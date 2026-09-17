@@ -35,7 +35,24 @@ if (!process.env.DATABASE_URL_UNPOOLED && url.includes("-pooler")) {
   );
 }
 
-const client = new pg.Client({ connectionString: url });
+/** Keep in sync with src/db/connection-string.ts — this script is plain Node. */
+function postgresConnectionString(connectionString) {
+  const qIndex = connectionString.indexOf("?");
+  if (qIndex === -1) return connectionString;
+  const base = connectionString.slice(0, qIndex);
+  const params = new URLSearchParams(connectionString.slice(qIndex + 1));
+  if (params.get("uselibpqcompat") === "true") return connectionString;
+  const mode = params.get("sslmode")?.toLowerCase();
+  if (!mode || !["prefer", "require", "verify-ca"].includes(mode)) {
+    return connectionString;
+  }
+  params.set("sslmode", "verify-full");
+  return `${base}?${params.toString()}`;
+}
+
+const client = new pg.Client({
+  connectionString: postgresConnectionString(url),
+});
 
 async function roleTypeExists() {
   const { rowCount } = await client.query(

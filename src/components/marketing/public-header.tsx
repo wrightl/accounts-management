@@ -4,9 +4,9 @@ import { buttonClasses } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const NAV_LINKS = [
-  { href: "#product", label: "Product" },
-  { href: "#who", label: "Who it's for" },
-  { href: "#how", label: "How it works" },
+  { href: "/#product", label: "Product" },
+  { href: "/#who", label: "Who it's for" },
+  { href: "/#how", label: "How it works" },
   { href: "/guides", label: "Guides" },
 ] as const;
 
