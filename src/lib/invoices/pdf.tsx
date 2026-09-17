@@ -266,6 +266,10 @@ function InvoiceDocument({
   );
 }
 
+/**
+ * @deprecated Use {@link renderInvoicePdfV2} from `@/lib/invoices/pdf-v2`.
+ * Kept for quotes type re-exports and any external callers still importing this path.
+ */
 export async function renderInvoicePdf(params: {
   invoice: PdfInvoice;
   client: PdfClient;

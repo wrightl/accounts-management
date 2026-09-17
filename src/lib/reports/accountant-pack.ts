@@ -21,7 +21,7 @@ import {
 import { clientDisplayNameSql } from "@/lib/clients/sql";
 import { safeFilename } from "@/lib/files";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
-import { renderInvoicePdf } from "@/lib/invoices/pdf";
+import { renderInvoicePdfV2 } from "@/lib/invoices/pdf-v2";
 import { lineNetPence } from "@/lib/money";
 import {
   getAgedReceivables,
@@ -568,7 +568,7 @@ export async function resolveInvoicePdf(
   invoiceId: string,
   pdfBlobPath: string | null,
 ): Promise<Uint8Array> {
-  if (pdfBlobPath) {
+  if (pdfBlobPath?.includes(".v2.")) {
     try {
       const obj = await getStorage().get(pdfBlobPath);
       return new Uint8Array(obj.body);
@@ -583,7 +583,7 @@ export async function resolveInvoicePdf(
   }
 
   const company = await getOrCreateCompanySettings(companyId);
-  return renderInvoicePdf({
+  return renderInvoicePdfV2({
     invoice: detail.invoice,
     client: detail.client,
     lines: detail.lines,

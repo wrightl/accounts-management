@@ -5,12 +5,17 @@ import { invoices } from "@/db/schema";
 import { requirePermission, ForbiddenError } from "@/lib/auth";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
-import { renderInvoicePdf } from "@/lib/invoices/pdf";
+import { renderInvoicePdfV2 } from "@/lib/invoices/pdf-v2";
 import { getStorage } from "@/lib/storage";
 import { contentDispositionAttachment } from "@/lib/files";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+/** Cached invoice PDF path for the v2 template (avoids serving legacy layouts). */
+function isV2PdfCache(path: string | null | undefined): boolean {
+  return Boolean(path?.includes(".v2."));
+}
 
 export async function GET(
   _request: Request,
@@ -38,10 +43,10 @@ export async function GET(
 
   let bytes: Uint8Array;
 
-  if (detail.invoice.pdfBlobPath) {
+  if (isV2PdfCache(detail.invoice.pdfBlobPath)) {
     try {
       const storage = getStorage();
-      const obj = await storage.get(detail.invoice.pdfBlobPath);
+      const obj = await storage.get(detail.invoice.pdfBlobPath!);
       bytes = new Uint8Array(obj.body);
     } catch {
       bytes = await generatePdf(companyId, detail);
@@ -66,7 +71,7 @@ async function generatePdf(
   detail: NonNullable<Awaited<ReturnType<typeof getInvoiceDetail>>>,
 ) {
   const company = await getOrCreateCompanySettings(companyId);
-  const bytes = await renderInvoicePdf({
+  const bytes = await renderInvoicePdfV2({
     invoice: detail.invoice,
     client: detail.client,
     lines: detail.lines,
@@ -76,7 +81,7 @@ async function generatePdf(
   try {
     const storage = getStorage();
     const stored = await storage.put(
-      `invoices/${detail.invoice.id}.pdf`,
+      `invoices/${detail.invoice.id}.v2.pdf`,
       Buffer.from(bytes),
       "application/pdf",
     );

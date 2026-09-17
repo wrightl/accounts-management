@@ -27,7 +27,11 @@ const lineSchema = z.object({
 });
 
 const invoiceSchema = z.object({
-  clientId: z.string().uuid(),
+  clientId: z
+    .string()
+    .trim()
+    .min(1, "Choose a client")
+    .uuid("Choose a client"),
   issueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   dueDate: z
     .string()
@@ -42,11 +46,21 @@ const invoiceSchema = z.object({
   lines: z.array(lineSchema).min(1, "Add at least one line item"),
 });
 
+function isCompleteLine(line: unknown): boolean {
+  if (!line || typeof line !== "object") return false;
+  const row = line as Record<string, unknown>;
+  const description = String(row.description ?? "").trim();
+  const unitPricePounds = String(row.unitPricePounds ?? "").trim();
+  return description.length > 0 && unitPricePounds.length > 0;
+}
+
 function parseLinesFromForm(formData: FormData) {
   const raw = formData.get("linesJson");
   if (typeof raw !== "string") return [];
   try {
-    return JSON.parse(raw) as unknown[];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(isCompleteLine);
   } catch {
     return [];
   }

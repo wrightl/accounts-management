@@ -8,7 +8,7 @@ import { formatGBP } from "@/lib/money";
 import { getStorage } from "@/lib/storage";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
 import { getCompanySettings } from "@/lib/settings/queries";
-import { renderInvoicePdf } from "@/lib/invoices/pdf";
+import { renderInvoicePdfV2 } from "@/lib/invoices/pdf-v2";
 import { storedStatus, todayIsoDate } from "@/lib/invoices/status";
 
 const MAX_ATTEMPTS = 8;
@@ -260,7 +260,7 @@ async function loadOrRenderPdf(
   detail: NonNullable<Awaited<ReturnType<typeof getInvoiceDetail>>>,
   company: Awaited<ReturnType<typeof getCompanySettings>>,
 ): Promise<Uint8Array> {
-  if (detail.invoice.pdfBlobPath) {
+  if (detail.invoice.pdfBlobPath?.includes(".v2.")) {
     try {
       const stored = await getStorage().get(detail.invoice.pdfBlobPath);
       return new Uint8Array(stored.body);
@@ -269,14 +269,14 @@ async function loadOrRenderPdf(
     }
   }
 
-  const pdfBytes = await renderInvoicePdf({
+  const pdfBytes = await renderInvoicePdfV2({
     invoice: detail.invoice,
     client: detail.client,
     lines: detail.lines,
     company,
   });
   const stored = await getStorage().put(
-    `invoices/${invoiceId}.pdf`,
+    `invoices/${invoiceId}.v2.pdf`,
     Buffer.from(pdfBytes),
     "application/pdf",
   );

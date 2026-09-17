@@ -25,6 +25,10 @@ function newLine(): LineDraft {
   };
 }
 
+function isCompleteLine(line: LineDraft): boolean {
+  return line.description.trim().length > 0 && line.unitPricePounds.trim().length > 0;
+}
+
 export function InvoiceForm({
   mode,
   clients,
@@ -70,7 +74,7 @@ export function InvoiceForm({
     formData.set(
       "linesJson",
       JSON.stringify(
-        lines.map((l) => ({
+        lines.filter(isCompleteLine).map((l) => ({
           description: l.description,
           quantity: Number(l.quantity),
           unitPricePounds: l.unitPricePounds,
@@ -137,79 +141,87 @@ export function InvoiceForm({
         </div>
       </div>
 
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <Label>Line items</Label>
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={pending}
-            onClick={() => setLines((prev) => [...prev, newLine()])}
+      <div className="space-y-2">
+        <Label>Line items</Label>
+        <div className="hidden gap-2 text-xs font-medium text-muted sm:grid sm:grid-cols-[1fr_80px_120px_2.5rem]">
+          <span>Description</span>
+          <span>Qty</span>
+          <span>Unit £</span>
+          <span className="sr-only">Remove</span>
+        </div>
+        {lines.map((line, index) => (
+          <div
+            key={line.key}
+            className="grid gap-2 sm:grid-cols-[1fr_80px_120px_2.5rem]"
           >
-            <Plus className="h-4 w-4" />
-            Add line
-          </Button>
-        </div>
-        <div className="space-y-3">
-          {lines.map((line, index) => (
-            <div
-              key={line.key}
-              className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-[1fr_80px_120px_40px]"
+            <Input
+              placeholder="Description"
+              value={line.description}
+              disabled={pending}
+              onChange={(e) =>
+                setLines((prev) =>
+                  prev.map((l, i) =>
+                    i === index ? { ...l, description: e.target.value } : l,
+                  ),
+                )
+              }
+            />
+            <Input
+              type="number"
+              min={1}
+              step={1}
+              placeholder="Qty"
+              value={line.quantity}
+              disabled={pending}
+              onChange={(e) =>
+                setLines((prev) =>
+                  prev.map((l, i) =>
+                    i === index ? { ...l, quantity: e.target.value } : l,
+                  ),
+                )
+              }
+            />
+            <Input
+              placeholder="£ unit"
+              value={line.unitPricePounds}
+              disabled={pending}
+              onChange={(e) =>
+                setLines((prev) =>
+                  prev.map((l, i) =>
+                    i === index ? { ...l, unitPricePounds: e.target.value } : l,
+                  ),
+                )
+              }
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              className="size-9 shrink-0 px-0"
+              disabled={pending || lines.length === 1}
+              onClick={() =>
+                setLines((prev) => prev.filter((_, i) => i !== index))
+              }
+              aria-label="Remove line"
+              title={
+                lines.length === 1
+                  ? "At least one line is required"
+                  : "Remove line"
+              }
             >
-              <Input
-                placeholder="Description"
-                value={line.description}
-                disabled={pending}
-                onChange={(e) =>
-                  setLines((prev) =>
-                    prev.map((l, i) =>
-                      i === index ? { ...l, description: e.target.value } : l,
-                    ),
-                  )
-                }
-              />
-              <Input
-                type="number"
-                min={1}
-                step={1}
-                placeholder="Qty"
-                value={line.quantity}
-                disabled={pending}
-                onChange={(e) =>
-                  setLines((prev) =>
-                    prev.map((l, i) =>
-                      i === index ? { ...l, quantity: e.target.value } : l,
-                    ),
-                  )
-                }
-              />
-              <Input
-                placeholder="£ unit"
-                value={line.unitPricePounds}
-                disabled={pending}
-                onChange={(e) =>
-                  setLines((prev) =>
-                    prev.map((l, i) =>
-                      i === index ? { ...l, unitPricePounds: e.target.value } : l,
-                    ),
-                  )
-                }
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                disabled={pending || lines.length === 1}
-                onClick={() =>
-                  setLines((prev) => prev.filter((_, i) => i !== index))
-                }
-                aria-label="Remove line"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          ))}
-        </div>
-        <p className="mt-3 text-right font-display text-lg font-semibold">
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        ))}
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={pending}
+          onClick={() => setLines((prev) => [...prev, newLine()])}
+        >
+          <Plus className="h-4 w-4" />
+          Add line
+        </Button>
+        <p className="text-right font-display text-lg font-semibold">
           Total {formatGBP(totals.grossPence)}
         </p>
       </div>
