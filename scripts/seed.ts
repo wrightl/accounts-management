@@ -5,6 +5,9 @@
  * Emails come from PLATFORM_ADMIN_EMAILS (default: admin@dotanddashconsulting.com).
  * Idempotent: existing `platform_admin` roles are left alone; Clerk "already exists"
  * invitation errors are non-fatal.
+ *
+ * Safety: refuses NODE_ENV=production / Vercel production unless ALLOW_PROD_SEED=1
+ * (mirrors promo seed intent). Local Neon URLs are allowed in development.
  */
 import { config } from "dotenv";
 
@@ -22,12 +25,32 @@ import { platformAdminEmails } from "../src/lib/bootstrap";
 import { isAuthConfigured } from "../src/env";
 import { sendClerkInvitation } from "../src/lib/clerk-invite";
 
+function assertSeedAllowed(url: string) {
+  const allow = process.env.ALLOW_PROD_SEED === "1";
+  const isProdRuntime =
+    process.env.NODE_ENV === "production" ||
+    process.env.VERCEL_ENV === "production";
+  if (isProdRuntime && !allow) {
+    throw new Error(
+      "db:seed refused: production environment. Set ALLOW_PROD_SEED=1 for a one-time ops seed.",
+    );
+  }
+  // Remote Neon in non-production: allow (local .env.local often points at Neon)
+  // but require an explicit override when Vercel Preview would otherwise elevate admins.
+  if (process.env.VERCEL_ENV === "preview" && /neon\.tech/i.test(url) && !allow) {
+    throw new Error(
+      "db:seed refused on Vercel Preview. Set ALLOW_PROD_SEED=1 only for intentional preview seeding.",
+    );
+  }
+}
+
 async function main() {
   const url = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
   if (!url) {
     console.error("DATABASE_URL is required to seed");
     process.exit(1);
   }
+  assertSeedAllowed(url);
 
   const client = new pg.Client({ connectionString: url });
 

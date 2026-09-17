@@ -52,6 +52,11 @@ type ClientEnv = z.infer<typeof clientSchema>;
 
 let cachedServer: ServerEnv | null = null;
 
+/** Test helper — clear the lazy env cache after mutating process.env. */
+export function resetServerEnvCache() {
+  cachedServer = null;
+}
+
 export function serverEnv(): ServerEnv {
   if (cachedServer) return cachedServer;
   const parsed = serverSchema.safeParse(process.env);

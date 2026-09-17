@@ -1,5 +1,5 @@
-import { currentUser } from "@clerk/nextjs/server";
 import { requirePlatformAdmin } from "@/lib/platform";
+import { safeCurrentUser } from "@/lib/auth";
 import { PlatformShell } from "@/components/platform/shell";
 import { AuthNotConfigured } from "@/components/auth-notice";
 import { isAuthConfigured } from "@/env";
@@ -13,7 +13,7 @@ export default async function PlatformLayout({
 }) {
   if (!isAuthConfigured()) return <AuthNotConfigured />;
   let user = await requirePlatformAdmin();
-  const clerkUser = await currentUser();
+  const clerkUser = await safeCurrentUser();
   const avatarUrl = clerkUser?.imageUrl ?? null;
 
   if (hasDatabaseClient()) {

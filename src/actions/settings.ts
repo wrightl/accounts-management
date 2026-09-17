@@ -1,13 +1,11 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
 import { companySettings } from "@/db/schema";
-import { requireActionPermission } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
-import { ensureLocalUser } from "@/lib/users";
+import { mutate } from "@/lib/mutate";
 import { financialYearEndMonth } from "@/lib/dates";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { storeCompanyLogo } from "@/lib/company-logo";
@@ -80,16 +78,6 @@ const settingsSchema = z.object({
 });
 
 export async function updateCompany(formData: FormData): Promise<ActionResult> {
-  const authz = await requireActionPermission("settings:manage");
-  if (!authz.ok) return authz;
-  if (!authz.user.companyId) {
-    return { ok: false, error: "Complete onboarding before using the dashboard." };
-  }
-  const companyId = authz.user.companyId;
-
-  const session = authz.user;
-  const localUserId = await ensureLocalUser(session);
-
   const bank = resolveBankFieldsFromForm({
     bankProvider: formData.get("bankProvider"),
     bankName: formData.get("bankName"),
@@ -118,77 +106,67 @@ export async function updateCompany(formData: FormData): Promise<ActionResult> {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
 
-  const { financialYearStartMonth: fyStart, ...rest } = parsed.data;
-  const current = await getOrCreateCompanySettings(companyId);
-  const patch = {
-    ...rest,
-    bankProvider: bank.value.bankProvider,
-    bankName: bank.value.bankName,
-    companyNumber:
-      current.entityType === "limited_company" ? rest.companyNumber : null,
-    utr: current.entityType === "sole_trader" ? rest.utr : null,
-  };
-  const db = getDb();
-  await db
-    .update(companySettings)
-    .set({
-      ...patch,
-      financialYearEndMonth: financialYearEndMonth(fyStart),
-      updatedAt: new Date(),
-    })
-    .where(eq(companySettings.id, current.id));
+  return mutate(
+    "settings:manage",
+    async ({ companyId }) => {
+      const { financialYearStartMonth: fyStart, ...rest } = parsed.data;
+      const current = await getOrCreateCompanySettings(companyId);
+      const patch = {
+        ...rest,
+        bankProvider: bank.value.bankProvider,
+        bankName: bank.value.bankName,
+        companyNumber:
+          current.entityType === "limited_company" ? rest.companyNumber : null,
+        utr: current.entityType === "sole_trader" ? rest.utr : null,
+      };
+      const db = getDb();
+      await db
+        .update(companySettings)
+        .set({
+          ...patch,
+          financialYearEndMonth: financialYearEndMonth(fyStart),
+          updatedAt: new Date(),
+        })
+        .where(eq(companySettings.id, current.id));
 
-  const logo = formData.get("logo");
-  if (logo instanceof File && logo.size > 0) {
-    const uploaded = await storeCompanyLogo(companyId, logo);
-    if (!uploaded.ok) return uploaded;
-  }
+      const logo = formData.get("logo");
+      if (logo instanceof File && logo.size > 0) {
+        const uploaded = await storeCompanyLogo(companyId, logo);
+        if (!uploaded.ok) return uploaded;
+      }
 
-  await writeAudit({
-    companyId,
-    actorUserId: localUserId,
-    action: "settings.update",
-    entityType: "company_settings",
-    entityId: current.id,
-  });
-
-  revalidatePath("/settings");
-  revalidatePath("/dashboard");
-  revalidatePath("/spending");
-  revalidatePath("/reports");
-  revalidatePath("/transactions");
-  return { ok: true, id: current.id };
+      return { ok: true, id: current.id };
+    },
+    {
+      audit: { action: "settings.update", entityType: "company_settings" },
+      paths: ["/settings", "/dashboard", "/spending", "/reports", "/transactions"],
+    },
+  );
 }
 
 export async function uploadLogo(formData: FormData): Promise<ActionResult> {
-  const authz = await requireActionPermission("settings:manage");
-  if (!authz.ok) return authz;
-  if (!authz.user.companyId) {
-    return { ok: false, error: "Complete onboarding before using the dashboard." };
-  }
-  const companyId = authz.user.companyId;
-
-  const session = authz.user;
-  const localUserId = await ensureLocalUser(session);
-
   const file = formData.get("logo");
   if (!(file instanceof File)) {
     return { ok: false, error: "Choose an image file" };
   }
 
-  const uploaded = await storeCompanyLogo(companyId, file);
-  if (!uploaded.ok) return uploaded;
+  return mutate(
+    "settings:manage",
+    async ({ companyId, localUserId }) => {
+      const uploaded = await storeCompanyLogo(companyId, file);
+      if (!uploaded.ok) return uploaded;
 
-  await writeAudit({
-    companyId,
-    actorUserId: localUserId,
-    action: "settings.logo",
-    entityType: "company_settings",
-    entityId: companyId,
-    meta: { path: uploaded.path },
-  });
+      await writeAudit({
+        companyId,
+        actorUserId: localUserId,
+        action: "settings.logo",
+        entityType: "company_settings",
+        entityId: companyId,
+        meta: { path: uploaded.path },
+      });
 
-  revalidatePath("/settings");
-  revalidatePath("/dashboard");
-  return { ok: true, id: companyId };
+      return { ok: true, id: companyId };
+    },
+    { paths: ["/settings", "/dashboard"] },
+  );
 }

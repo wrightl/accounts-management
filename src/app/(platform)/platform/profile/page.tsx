@@ -1,5 +1,5 @@
-import { currentUser } from "@clerk/nextjs/server";
 import { requirePlatformAdmin } from "@/lib/platform";
+import { safeCurrentUser } from "@/lib/auth";
 import { ensureLocalUser, findLocalUser } from "@/lib/users";
 import { ProfileForm } from "@/components/users/profile-form";
 import { ProfilePictureField } from "@/components/users/profile-picture-field";
@@ -49,7 +49,7 @@ export default async function PlatformProfilePage() {
       <h1 className="mb-6 font-display text-2xl font-semibold">Profile</h1>
       <div className="mx-auto max-w-xl space-y-8">
         <ProfilePictureField
-          avatarUrl={(await currentUser())?.imageUrl ?? null}
+          avatarUrl={(await safeCurrentUser())?.imageUrl ?? null}
           userName={session.name ?? local.name}
           clerkConfigured={isAuthConfigured()}
         />

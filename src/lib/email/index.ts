@@ -31,20 +31,17 @@ export interface EmailProvider {
 
 let cached: EmailProvider | null = null;
 
+/** Test helper — clear the cached provider between cases. */
+export function resetEmailProviderCache() {
+  cached = null;
+}
+
 export function getEmailProvider(): EmailProvider {
   if (cached) return cached;
   const env = serverEnv();
   if (env.NODE_ENV === "production" && env.EMAIL_PROVIDER === "console") {
-    console.warn(
-      "[email] EMAIL_PROVIDER=console in production — outbound emails are logged only, not delivered.",
-    );
-    void import("@/lib/platform-log").then(({ logPlatformEvent }) =>
-      logPlatformEvent({
-        level: "warn",
-        source: "email.misconfig",
-        message:
-          "EMAIL_PROVIDER=console in production — outbound emails are logged only",
-      }),
+    throw new Error(
+      "EMAIL_PROVIDER=console is not allowed in production. Set EMAIL_PROVIDER=resend and RESEND_API_KEY.",
     );
   }
   cached =

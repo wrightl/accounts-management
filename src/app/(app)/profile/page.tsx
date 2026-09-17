@@ -1,10 +1,9 @@
-import { requireUser } from "@/lib/auth";
+import { requireUser, safeCurrentUser } from "@/lib/auth";
 import { findLocalUser } from "@/lib/users";
 import { ProfileForm } from "@/components/users/profile-form";
 import { ProfilePictureField } from "@/components/users/profile-picture-field";
 import { SignOutSection } from "@/components/users/sign-out-section";
 import { isAuthConfigured, isDatabaseConfigured } from "@/env";
-import { currentUser } from "@clerk/nextjs/server";
 
 export default async function ProfilePage() {
   const session = await requireUser();
@@ -44,7 +43,7 @@ export default async function ProfilePage() {
       <h1 className="mb-6 font-display text-2xl font-semibold">Profile</h1>
       <div className="mx-auto max-w-xl space-y-8">
         <ProfilePictureField
-          avatarUrl={(await currentUser())?.imageUrl ?? null}
+          avatarUrl={(await safeCurrentUser())?.imageUrl ?? null}
           userName={session.name ?? local.name}
           clerkConfigured={isAuthConfigured()}
         />

@@ -12,6 +12,9 @@ import { hasDatabaseClient, getDb } from "@/db";
 import { companies, type EntityType } from "@/db/schema";
 import { findLocalUser } from "@/lib/users";
 import { resolvePlatformAdmin } from "@/lib/bootstrap";
+import { clerkErrorMessage } from "@/lib/clerk-invite";
+
+type ClerkUser = Awaited<ReturnType<typeof currentUser>>;
 
 export interface SessionUser {
   userId: string;
@@ -30,6 +33,31 @@ export type ActionAuth =
   | { ok: false; error: string };
 
 /**
+ * Clerk Backend `currentUser()` makes a network call. A blip ("fetch failed")
+ * must not 500 the page — signed-in identity still comes from `auth()`, and
+ * email/name can fall back to the local `users` row.
+ */
+export async function safeCurrentUser(): Promise<ClerkUser> {
+  try {
+    return await currentUser();
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        level: "warn",
+        msg: "clerk_current_user_failed",
+        error: clerkErrorMessage(error),
+      }),
+    );
+    return null;
+  }
+}
+
+function clerkDisplayName(user: ClerkUser): string | null {
+  if (!user) return null;
+  return [user.firstName, user.lastName].filter(Boolean).join(" ") || null;
+}
+
+/**
  * Resolve the currently signed-in user. Identity comes from Clerk; role and
  * company come from the local `users` row. Clerk metadata is never used for
  * authorisation.
@@ -38,15 +66,16 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
   const { userId } = await auth();
   if (!userId) return null;
 
-  const user = await currentUser();
-  const email = user?.primaryEmailAddress?.emailAddress ?? null;
-  const name =
-    [user?.firstName, user?.lastName].filter(Boolean).join(" ") || null;
+  const clerkUser = await safeCurrentUser();
+  const clerkEmail = clerkUser?.primaryEmailAddress?.emailAddress ?? null;
+  const clerkName = clerkDisplayName(clerkUser);
 
   let role: Role = DEFAULT_ROLE;
   let localUserId: string | null = null;
   let companyId: string | null = null;
   let entityType: EntityType | null = null;
+  let localEmail: string | null = null;
+  let localName: string | null = null;
 
   if (hasDatabaseClient()) {
     try {
@@ -55,6 +84,8 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
         role = local.role;
         localUserId = local.id;
         companyId = local.companyId;
+        localEmail = local.email;
+        localName = local.name;
         if (companyId) {
           const db = getDb();
           const [company] = await db
@@ -72,8 +103,8 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
 
   return {
     userId,
-    email,
-    name,
+    email: clerkEmail ?? localEmail,
+    name: clerkName ?? localName,
     role,
     localUserId,
     companyId,

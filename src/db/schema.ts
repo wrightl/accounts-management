@@ -241,6 +241,10 @@ export const invoices = pgTable(
   },
   (t) => [
     uniqueIndex("uniq_invoices_company_number").on(t.companyId, t.number),
+    /** One non-void invoice per payment milestone (matches drizzle/0012). */
+    uniqueIndex("uniq_invoice_milestone_active")
+      .on(t.paymentMilestoneId)
+      .where(sql`${t.status} <> 'void' AND ${t.paymentMilestoneId} IS NOT NULL`),
     index("idx_invoices_company").on(t.companyId),
     index("idx_invoices_client").on(t.clientId),
     index("idx_invoices_status").on(t.status),

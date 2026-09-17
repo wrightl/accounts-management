@@ -13,11 +13,11 @@ const outfit = Outfit({
 
 export const metadata: Metadata = {
   title: {
-    default: "Dot + Dash Consulting — Accounts",
+    default: "Dot + Dash Accounts — books for UK consultancies",
     template: "%s — Dot + Dash Accounts",
   },
   description:
-    "Invoicing, expenses, reimbursements and reporting for Dot + Dash Consulting.",
+    "Quotes, invoices, expenses, reimbursements and reporting for UK consultancies, studios, and small agencies. Limited companies and sole traders — your books in one place.",
   applicationName: "Dot + Dash Accounts",
 };
 

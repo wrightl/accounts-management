@@ -55,6 +55,7 @@ const nextConfig: NextConfig = {
     "@napi-rs/canvas",
     "@vercel/blob",
     "@vercel/oidc",
+    "pg",
   ],
   ...(devOrigin ? { allowedDevOrigins: [devOrigin] } : {}),
   experimental: {

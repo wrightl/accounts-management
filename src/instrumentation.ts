@@ -1,26 +1,22 @@
 import type { Instrumentation } from "next";
-import { logPlatformEvent } from "@/lib/platform-log";
+import { reportError } from "@/lib/errors/report";
 
 export function register() {
-  // Reserved for future OpenTelemetry / provider hooks.
+  // Hook for future OpenTelemetry / Sentry init.
 }
 
+/**
+ * Next.js request-error instrumentation. Routes through {@link reportError}
+ * so production errors land in platform_logs (and a future Sentry SDK).
+ */
 export const onRequestError: Instrumentation.onRequestError = async (
   err,
   request,
   context,
 ) => {
-  const message = err instanceof Error ? err.message : String(err);
-  const digest =
-    typeof err === "object" && err !== null && "digest" in err
-      ? String((err as { digest?: unknown }).digest)
-      : undefined;
-
-  await logPlatformEvent({
-    level: "error",
+  await reportError({
     source: "next.onRequestError",
-    message,
-    digest,
+    error: err,
     meta: {
       path: request.path,
       method: request.method,

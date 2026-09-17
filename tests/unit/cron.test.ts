@@ -22,9 +22,24 @@ describe("cronAuthError", () => {
       status: 401,
       error: "Unauthorized",
     });
+    expect(cronAuthError("Basic secret", "secret")).toEqual({
+      status: 401,
+      error: "Unauthorized",
+    });
   });
 
   it("allows a matching bearer token", () => {
     expect(cronAuthError("Bearer secret", "secret")).toBeNull();
+  });
+
+  it("rejects tokens that differ only by length", () => {
+    expect(cronAuthError("Bearer secre", "secret")).toEqual({
+      status: 401,
+      error: "Unauthorized",
+    });
+    expect(cronAuthError("Bearer secrets", "secret")).toEqual({
+      status: 401,
+      error: "Unauthorized",
+    });
   });
 });

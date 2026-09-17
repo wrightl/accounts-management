@@ -1,13 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq} from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
 import { expenseReceipts, expenses, reimbursementItems } from "@/db/schema";
-import { requireActionPermission } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
-import { ensureLocalUser } from "@/lib/users";
+import { mutate, mutateWide } from "@/lib/mutate";
 import { poundsToPence } from "@/lib/money";
 import { getStorage } from "@/lib/storage";
 import { safeFilename } from "@/lib/files";
@@ -160,16 +159,6 @@ function normalizeExpensePaymentFields(data: {
 }
 
 export async function createExpense(formData: FormData): Promise<ActionResult> {
-  const authz = await requireActionPermission("accounts:write");
-  if (!authz.ok) return authz;
-  if (!authz.user.companyId) {
-    return { ok: false, error: "Complete onboarding before using the dashboard." };
-  }
-  const companyId = authz.user.companyId;
-
-  const session = authz.user;
-  const localUserId = await ensureLocalUser(session);
-
   const parsed = parseExpense(formData);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -189,168 +178,142 @@ export async function createExpense(formData: FormData): Promise<ActionResult> {
     description = appendMileageDescription(description, mileageMiles, mileageRatePence);
   }
 
-  const paidByDefault =
-    parsed.data.status === "reimbursable"
-      ? (parsed.data.paidByUserId ?? localUserId)
-      : parsed.data.paidByUserId;
-  const normalized = normalizeExpensePaymentFields({
-    status: parsed.data.status,
-    paidByUserId: paidByDefault,
-  });
-  if (!normalized.ok) return { ok: false, error: normalized.error };
+  return mutate(
+    "accounts:write",
+    async ({ companyId, localUserId }) => {
+      const paidByDefault =
+        parsed.data.status === "reimbursable"
+          ? (parsed.data.paidByUserId ?? localUserId)
+          : parsed.data.paidByUserId;
+      const normalized = normalizeExpensePaymentFields({
+        status: parsed.data.status,
+        paidByUserId: paidByDefault,
+      });
+      if (!normalized.ok) return { ok: false, error: normalized.error };
 
-  const db = getDb();
-  const [row] = await db
-    .insert(expenses)
-    .values({
-      companyId,
-        description,
-      category: parsed.data.category || null,
-      spentAt: parsed.data.spentAt || null,
-      amountPence,
-      vatPence: 0,
-      status: normalized.status,
-      billable: parsed.data.billable,
-      billableClientId: parsed.data.billable ? parsed.data.billableClientId : null,
-      paidByUserId: normalized.paidByUserId,
-      mileageMiles,
-      mileageRatePence,
-      createdByUserId: localUserId,
-    })
-    .returning({ id: expenses.id });
+      const db = getDb();
+      const [row] = await db
+        .insert(expenses)
+        .values({
+          companyId,
+          description,
+          category: parsed.data.category || null,
+          spentAt: parsed.data.spentAt || null,
+          amountPence,
+          vatPence: 0,
+          status: normalized.status,
+          billable: parsed.data.billable,
+          billableClientId: parsed.data.billable ? parsed.data.billableClientId : null,
+          paidByUserId: normalized.paidByUserId,
+          mileageMiles,
+          mileageRatePence,
+          createdByUserId: localUserId,
+        })
+        .returning({ id: expenses.id });
 
-  await writeAudit({
-    companyId,
-    actorUserId: localUserId,
-    action: "expense.create",
-    entityType: "expense",
-    entityId: row.id,
-  });
-
-  revalidatePath("/expenses");
-  revalidatePath("/reimbursements");
-  revalidatePath("/dashboard");
-  return { ok: true, id: row.id };
+      return { ok: true, id: row.id };
+    },
+    {
+      audit: { action: "expense.create", entityType: "expense" },
+      paths: ["/expenses", "/reimbursements", "/dashboard"],
+    },
+  );
 }
 
 export async function updateExpense(
   id: string,
   formData: FormData,
 ): Promise<ActionResult> {
-  const authz = await requireActionPermission("accounts:write");
-  if (!authz.ok) return authz;
-  if (!authz.user.companyId) {
-    return { ok: false, error: "Complete onboarding before using the dashboard." };
-  }
-  const companyId = authz.user.companyId;
-
-  const session = authz.user;
-  const localUserId = await ensureLocalUser(session);
-
-  const db = getDb();
-  const [existing] = await db.select().from(expenses).where(and(eq(expenses.id, id), eq(expenses.companyId, companyId))).limit(1);
-  if (!existing) return { ok: false, error: "Expense not found" };
-  if (existing.status === "reimbursed") {
-    return { ok: false, error: "Cannot edit a reimbursed expense" };
-  }
-
   const parsed = parseExpense(formData);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
 
-  const amountResult = resolveExpenseAmount({
-    amountPounds: parsed.data.amountPounds,
-    useMileage: parsed.data.useMileage,
-    mileageMiles: parsed.data.mileageMiles,
-    mileageRatePence: parsed.data.mileageRatePence,
-    allowZero: existing.status === "pending",
-  });
-  if (!amountResult.ok) return { ok: false, error: amountResult.error };
-  const amountPence = amountResult.amountPence;
-  const mileageMiles = parsed.data.useMileage ? amountResult.mileageMiles : null;
-  const mileageRatePence = parsed.data.useMileage ? amountResult.mileageRatePence : null;
+  return mutate(
+    "accounts:write",
+    async ({ companyId }) => {
+      const db = getDb();
+      const [existing] = await db
+        .select()
+        .from(expenses)
+        .where(and(eq(expenses.id, id), eq(expenses.companyId, companyId)))
+        .limit(1);
+      if (!existing) return { ok: false, error: "Expense not found" };
+      if (existing.status === "reimbursed") {
+        return { ok: false, error: "Cannot edit a reimbursed expense" };
+      }
 
-  let description = parsed.data.description;
-  if (mileageMiles != null && mileageRatePence != null) {
-    description = appendMileageDescription(description, mileageMiles, mileageRatePence);
-  }
+      const amountResult = resolveExpenseAmount({
+        amountPounds: parsed.data.amountPounds,
+        useMileage: parsed.data.useMileage,
+        mileageMiles: parsed.data.mileageMiles,
+        mileageRatePence: parsed.data.mileageRatePence,
+        allowZero: existing.status === "pending",
+      });
+      if (!amountResult.ok) return { ok: false, error: amountResult.error };
+      const amountPence = amountResult.amountPence;
+      const mileageMiles = parsed.data.useMileage ? amountResult.mileageMiles : null;
+      const mileageRatePence = parsed.data.useMileage
+        ? amountResult.mileageRatePence
+        : null;
 
-  // Pending expenses stay pending until explicitly approved.
-  const status =
-    existing.status === "pending"
-      ? "pending"
-      : parsed.data.status === "reimbursable" ||
-          parsed.data.status === "recorded" ||
-          parsed.data.status === "company_paid"
-        ? parsed.data.status
-        : existing.status;
+      let description = parsed.data.description;
+      if (mileageMiles != null && mileageRatePence != null) {
+        description = appendMileageDescription(description, mileageMiles, mileageRatePence);
+      }
 
-  const normalized = normalizeExpensePaymentFields({
-    status: status === "pending" ? "recorded" : status,
-    paidByUserId: parsed.data.paidByUserId,
-  });
-  if (existing.status !== "pending" && !normalized.ok) {
-    return { ok: false, error: normalized.error };
-  }
-
-  await db
-    .update(expenses)
-    .set({
-      description,
-      category: parsed.data.category || null,
-      spentAt: parsed.data.spentAt || null,
-      amountPence,
-      status,
-      billable: parsed.data.billable,
-      billableClientId: parsed.data.billable ? parsed.data.billableClientId : null,
-      paidByUserId:
+      // Pending expenses stay pending until explicitly approved.
+      const status =
         existing.status === "pending"
-          ? existing.paidByUserId
-          : normalized.ok
-            ? normalized.paidByUserId
-            : existing.paidByUserId,
-      mileageMiles,
-      mileageRatePence,
-    })
-    .where(and(eq(expenses.id, id), eq(expenses.companyId, companyId)));
+          ? "pending"
+          : parsed.data.status === "reimbursable" ||
+              parsed.data.status === "recorded" ||
+              parsed.data.status === "company_paid"
+            ? parsed.data.status
+            : existing.status;
 
-  await writeAudit({
-    companyId,
-    actorUserId: localUserId,
-    action: "expense.update",
-    entityType: "expense",
-    entityId: id,
-  });
+      const normalized = normalizeExpensePaymentFields({
+        status: status === "pending" ? "recorded" : status,
+        paidByUserId: parsed.data.paidByUserId,
+      });
+      if (existing.status !== "pending" && !normalized.ok) {
+        return { ok: false, error: normalized.error };
+      }
 
-  revalidatePath("/expenses");
-  revalidatePath(`/expenses/${id}`);
-  revalidatePath("/reimbursements");
-  revalidatePath("/dashboard");
-  return { ok: true, id };
+      await db
+        .update(expenses)
+        .set({
+          description,
+          category: parsed.data.category || null,
+          spentAt: parsed.data.spentAt || null,
+          amountPence,
+          status,
+          billable: parsed.data.billable,
+          billableClientId: parsed.data.billable ? parsed.data.billableClientId : null,
+          paidByUserId:
+            existing.status === "pending"
+              ? existing.paidByUserId
+              : normalized.ok
+                ? normalized.paidByUserId
+                : existing.paidByUserId,
+          mileageMiles,
+          mileageRatePence,
+        })
+        .where(and(eq(expenses.id, id), eq(expenses.companyId, companyId)));
+
+      return { ok: true, id };
+    },
+    {
+      audit: { action: "expense.update", entityType: "expense", entityId: id },
+      paths: ["/expenses", `/expenses/${id}`, "/reimbursements", "/dashboard"],
+    },
+  );
 }
 
 export async function approveExpense(
   id: string,
   formData: FormData,
 ): Promise<ActionResult> {
-  const authz = await requireActionPermission("accounts:write");
-  if (!authz.ok) return authz;
-  if (!authz.user.companyId) {
-    return { ok: false, error: "Complete onboarding before using the dashboard." };
-  }
-  const companyId = authz.user.companyId;
-
-  const session = authz.user;
-  const localUserId = await ensureLocalUser(session);
-
-  const db = getDb();
-  const [existing] = await db.select().from(expenses).where(and(eq(expenses.id, id), eq(expenses.companyId, companyId))).limit(1);
-  if (!existing) return { ok: false, error: "Expense not found" };
-  if (existing.status !== "pending") {
-    return { ok: false, error: "Only pending expenses can be approved" };
-  }
-
   const parsed = parseExpense(formData);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -380,292 +343,266 @@ export async function approveExpense(
     return { ok: false, error: "Enter a positive amount before approving" };
   }
 
-  const paidByDefault =
-    targetStatus === "reimbursable"
-      ? (parsed.data.paidByUserId ?? existing.submittedByUserId ?? localUserId)
-      : parsed.data.paidByUserId;
+  return mutate(
+    "accounts:write",
+    async ({ companyId, localUserId }) => {
+      const db = getDb();
+      const [existing] = await db
+        .select()
+        .from(expenses)
+        .where(and(eq(expenses.id, id), eq(expenses.companyId, companyId)))
+        .limit(1);
+      if (!existing) return { ok: false, error: "Expense not found" };
+      if (existing.status !== "pending") {
+        return { ok: false, error: "Only pending expenses can be approved" };
+      }
 
-  const normalized = normalizeExpensePaymentFields({
-    status: targetStatus,
-    paidByUserId: paidByDefault,
-  });
-  if (!normalized.ok) return { ok: false, error: normalized.error };
+      const paidByDefault =
+        targetStatus === "reimbursable"
+          ? (parsed.data.paidByUserId ?? existing.submittedByUserId ?? localUserId)
+          : parsed.data.paidByUserId;
 
-  await db
-    .update(expenses)
-    .set({
-      description: parsed.data.description,
-      category: parsed.data.category || null,
-      spentAt: parsed.data.spentAt || null,
-      amountPence: amountResult.amountPence,
-      status: normalized.status,
-      billable: parsed.data.billable,
-      billableClientId: parsed.data.billable ? parsed.data.billableClientId : null,
-      paidByUserId: normalized.paidByUserId,
-      mileageMiles: null,
-      mileageRatePence: null,
-    })
-    .where(and(eq(expenses.id, id), eq(expenses.companyId, companyId)));
+      const normalized = normalizeExpensePaymentFields({
+        status: targetStatus,
+        paidByUserId: paidByDefault,
+      });
+      if (!normalized.ok) return { ok: false, error: normalized.error };
 
-  await writeAudit({
-    companyId,
-    actorUserId: localUserId,
-    action: "expense.approve",
-    entityType: "expense",
-    entityId: id,
-    meta: { status: normalized.status },
-  });
+      await db
+        .update(expenses)
+        .set({
+          description: parsed.data.description,
+          category: parsed.data.category || null,
+          spentAt: parsed.data.spentAt || null,
+          amountPence: amountResult.amountPence,
+          status: normalized.status,
+          billable: parsed.data.billable,
+          billableClientId: parsed.data.billable ? parsed.data.billableClientId : null,
+          paidByUserId: normalized.paidByUserId,
+          mileageMiles: null,
+          mileageRatePence: null,
+        })
+        .where(and(eq(expenses.id, id), eq(expenses.companyId, companyId)));
 
-  revalidatePath("/expenses");
-  revalidatePath(`/expenses/${id}`);
-  revalidatePath("/reimbursements");
-  revalidatePath("/dashboard");
-  return { ok: true, id };
+      await writeAudit({
+        companyId,
+        actorUserId: localUserId,
+        action: "expense.approve",
+        entityType: "expense",
+        entityId: id,
+        meta: { status: normalized.status },
+      });
+
+      return { ok: true, id };
+    },
+    { paths: ["/expenses", `/expenses/${id}`, "/reimbursements", "/dashboard"] },
+  );
 }
 
 export async function rejectExpense(id: string): Promise<ActionResult> {
-  const authz = await requireActionPermission("accounts:write");
-  if (!authz.ok) return authz;
-  if (!authz.user.companyId) {
-    return { ok: false, error: "Complete onboarding before using the dashboard." };
-  }
-  const companyId = authz.user.companyId;
+  return mutate(
+    "accounts:write",
+    async ({ companyId }) => {
+      const db = getDb();
+      const [existing] = await db
+        .select()
+        .from(expenses)
+        .where(and(eq(expenses.id, id), eq(expenses.companyId, companyId)))
+        .limit(1);
+      if (!existing) return { ok: false, error: "Expense not found" };
+      if (existing.status !== "pending") {
+        return { ok: false, error: "Only pending expenses can be rejected" };
+      }
 
-  const session = authz.user;
-  const localUserId = await ensureLocalUser(session);
+      const receipts = await db
+        .select()
+        .from(expenseReceipts)
+        .where(eq(expenseReceipts.expenseId, id));
+      const storage = getStorage();
+      for (const r of receipts) {
+        try {
+          await storage.delete(r.blobPath);
+        } catch {
+          /* ignore missing blob */
+        }
+      }
 
-  const db = getDb();
-  const [existing] = await db.select().from(expenses).where(and(eq(expenses.id, id), eq(expenses.companyId, companyId))).limit(1);
-  if (!existing) return { ok: false, error: "Expense not found" };
-  if (existing.status !== "pending") {
-    return { ok: false, error: "Only pending expenses can be rejected" };
-  }
-
-  const receipts = await db
-    .select()
-    .from(expenseReceipts)
-    .where(eq(expenseReceipts.expenseId, id));
-  const storage = getStorage();
-  for (const r of receipts) {
-    try {
-      await storage.delete(r.blobPath);
-    } catch {
-      /* ignore missing blob */
-    }
-  }
-
-  await db.delete(expenses).where(and(eq(expenses.id, id), eq(expenses.companyId, companyId)));
-
-  await writeAudit({
-    companyId,
-    actorUserId: localUserId,
-    action: "expense.reject",
-    entityType: "expense",
-    entityId: id,
-  });
-
-  revalidatePath("/expenses");
-  revalidatePath("/dashboard");
-  return { ok: true };
+      await db.delete(expenses).where(and(eq(expenses.id, id), eq(expenses.companyId, companyId)));
+      return { ok: true };
+    },
+    {
+      audit: { action: "expense.reject", entityType: "expense", entityId: id },
+      paths: ["/expenses", "/dashboard"],
+    },
+  );
 }
 
 export async function deleteExpense(id: string): Promise<ActionResult> {
-  const authz = await requireActionPermission("accounts:write");
-  if (!authz.ok) return authz;
-  if (!authz.user.companyId) {
-    return { ok: false, error: "Complete onboarding before using the dashboard." };
-  }
-  const companyId = authz.user.companyId;
+  return mutate(
+    "accounts:write",
+    async ({ companyId }) => {
+      const db = getDb();
+      const [existing] = await db
+        .select()
+        .from(expenses)
+        .where(and(eq(expenses.id, id), eq(expenses.companyId, companyId)))
+        .limit(1);
+      if (!existing) return { ok: false, error: "Expense not found" };
+      if (existing.status === "reimbursed") {
+        return { ok: false, error: "Cannot delete a reimbursed expense" };
+      }
 
-  const session = authz.user;
-  const localUserId = await ensureLocalUser(session);
+      const linked = await db
+        .select({ id: reimbursementItems.id })
+        .from(reimbursementItems)
+        .where(eq(reimbursementItems.expenseId, id))
+        .limit(1);
+      if (linked[0]) {
+        return { ok: false, error: "Expense is part of a reimbursement run" };
+      }
 
-  const db = getDb();
-  const [existing] = await db.select().from(expenses).where(and(eq(expenses.id, id), eq(expenses.companyId, companyId))).limit(1);
-  if (!existing) return { ok: false, error: "Expense not found" };
-  if (existing.status === "reimbursed") {
-    return { ok: false, error: "Cannot delete a reimbursed expense" };
-  }
+      const receipts = await db
+        .select()
+        .from(expenseReceipts)
+        .where(eq(expenseReceipts.expenseId, id));
+      const storage = getStorage();
+      for (const r of receipts) {
+        try {
+          await storage.delete(r.blobPath);
+        } catch {
+          /* ignore missing blob */
+        }
+      }
 
-  const linked = await db
-    .select({ id: reimbursementItems.id })
-    .from(reimbursementItems)
-    .where(eq(reimbursementItems.expenseId, id))
-    .limit(1);
-  if (linked[0]) {
-    return { ok: false, error: "Expense is part of a reimbursement run" };
-  }
-
-  const receipts = await db
-    .select()
-    .from(expenseReceipts)
-    .where(eq(expenseReceipts.expenseId, id));
-  const storage = getStorage();
-  for (const r of receipts) {
-    try {
-      await storage.delete(r.blobPath);
-    } catch {
-      /* ignore missing blob */
-    }
-  }
-
-  await db.delete(expenses).where(and(eq(expenses.id, id), eq(expenses.companyId, companyId)));
-
-  await writeAudit({
-    companyId,
-    actorUserId: localUserId,
-    action: "expense.delete",
-    entityType: "expense",
-    entityId: id,
-  });
-
-  revalidatePath("/expenses");
-  revalidatePath("/dashboard");
-  return { ok: true };
+      await db.delete(expenses).where(and(eq(expenses.id, id), eq(expenses.companyId, companyId)));
+      return { ok: true };
+    },
+    {
+      audit: { action: "expense.delete", entityType: "expense", entityId: id },
+      paths: ["/expenses", "/dashboard"],
+    },
+  );
 }
 
 export async function uploadReceipt(
   expenseId: string,
   formData: FormData,
 ): Promise<ActionResult> {
-  const authz = await requireActionPermission("accounts:write");
-  if (!authz.ok) return authz;
-  if (!authz.user.companyId) {
-    return { ok: false, error: "Complete onboarding before using the dashboard." };
-  }
-  const companyId = authz.user.companyId;
+  return mutate(
+    "accounts:write",
+    async ({ companyId, localUserId }) => {
+      const db = getDb();
+      const [expense] = await db
+        .select()
+        .from(expenses)
+        .where(and(eq(expenses.id, expenseId), eq(expenses.companyId, companyId)))
+        .limit(1);
+      if (!expense) return { ok: false, error: "Expense not found" };
 
-  const session = authz.user;
-  const localUserId = await ensureLocalUser(session);
+      const parsed = await parseReceiptFileAsync(formData);
+      if (!parsed.ok) return parsed;
+      const { file, bytes, contentType } = parsed.data;
 
-  const db = getDb();
-  const [expense] = await db
-    .select()
-    .from(expenses)
-    .where(and(eq(expenses.id, expenseId), eq(expenses.companyId, companyId)))
-    .limit(1);
-  if (!expense) return { ok: false, error: "Expense not found" };
+      const storage = getStorage();
+      const stored = await storage.put(
+        `receipts/${expenseId}/${Date.now()}-${safeFilename(file.name)}`,
+        bytes,
+        contentType,
+      );
 
-  const parsed = await parseReceiptFileAsync(formData);
-  if (!parsed.ok) return parsed;
-  const { file, bytes, contentType } = parsed.data;
+      const [row] = await db
+        .insert(expenseReceipts)
+        .values({
+          expenseId,
+          blobPath: stored.path,
+          filename: safeFilename(file.name),
+          contentType,
+          sizeBytes: stored.size,
+        })
+        .returning({ id: expenseReceipts.id });
 
-  const storage = getStorage();
-  const stored = await storage.put(
-    `receipts/${expenseId}/${Date.now()}-${safeFilename(file.name)}`,
-    bytes,
-    contentType,
+      await writeAudit({
+        companyId,
+        actorUserId: localUserId,
+        action: "expense.receipt_upload",
+        entityType: "expense_receipt",
+        entityId: row.id,
+        meta: { expenseId, filename: file.name },
+      });
+
+      return { ok: true, id: row.id };
+    },
+    { paths: [`/expenses/${expenseId}`] },
   );
-
-  const [row] = await db
-    .insert(expenseReceipts)
-    .values({
-      expenseId,
-      blobPath: stored.path,
-      filename: safeFilename(file.name),
-      contentType,
-      sizeBytes: stored.size,
-    })
-    .returning({ id: expenseReceipts.id });
-
-  await writeAudit({
-    companyId,
-    actorUserId: localUserId,
-    action: "expense.receipt_upload",
-    entityType: "expense_receipt",
-    entityId: row.id,
-    meta: { expenseId, filename: file.name },
-  });
-
-  revalidatePath(`/expenses/${expenseId}`);
-  return { ok: true, id: row.id };
 }
 
 export async function extractReceiptFields(
   formData: FormData,
 ): Promise<ReceiptExtractionResult> {
-  const authz = await requireActionPermission("accounts:write");
-  if (!authz.ok) return authz;
-  if (!authz.user.companyId) {
-    return { ok: false, error: "Complete onboarding before using the dashboard." };
-  }
-  const companyId = authz.user.companyId;
+  return mutateWide("accounts:write", async () => {
+    const parsed = await parseReceiptFileAsync(formData);
+    if (!parsed.ok) return parsed;
 
+    const ocr = await getReceiptOcrSettings();
+    const providerRaw = ocr.provider ?? "local";
+    const provider: ReceiptOcrProvider = isReceiptOcrProvider(providerRaw)
+      ? providerRaw
+      : "local";
 
-  const parsed = await parseReceiptFileAsync(formData);
-  if (!parsed.ok) return parsed;
-
-  const ocr = await getReceiptOcrSettings();
-  const providerRaw = ocr.provider ?? "local";
-  const provider: ReceiptOcrProvider = isReceiptOcrProvider(providerRaw)
-    ? providerRaw
-    : "local";
-
-  try {
-    const extraction = await extractReceiptFromBytes(
-      parsed.data.bytes,
-      parsed.data.contentType,
-      provider,
-      ocr.model,
-    );
-    return { ok: true, extraction };
-  } catch (e) {
-    return {
-      ok: false,
-      error: e instanceof Error ? e.message : "Could not read receipt",
-    };
-  }
+    try {
+      const extraction = await extractReceiptFromBytes(
+        parsed.data.bytes,
+        parsed.data.contentType,
+        provider,
+        ocr.model,
+      );
+      return { ok: true, extraction };
+    } catch (e) {
+      return {
+        ok: false,
+        error: e instanceof Error ? e.message : "Could not read receipt",
+      };
+    }
+  });
 }
 
 export async function deleteReceipt(receiptId: string): Promise<ActionResult> {
-  const authz = await requireActionPermission("accounts:write");
-  if (!authz.ok) return authz;
-  if (!authz.user.companyId) {
-    return { ok: false, error: "Complete onboarding before using the dashboard." };
-  }
-  const companyId = authz.user.companyId;
+  return mutate(
+    "accounts:write",
+    async ({ companyId }) => {
+      const db = getDb();
+      const [row] = await db
+        .select({ receipt: expenseReceipts })
+        .from(expenseReceipts)
+        .innerJoin(expenses, eq(expenseReceipts.expenseId, expenses.id))
+        .where(and(eq(expenseReceipts.id, receiptId), eq(expenses.companyId, companyId)))
+        .limit(1);
+      if (!row) return { ok: false, error: "Receipt not found" };
+      const { receipt } = row;
 
-  const session = authz.user;
-  const localUserId = await ensureLocalUser(session);
+      try {
+        await getStorage().delete(receipt.blobPath);
+      } catch {
+        /* ignore */
+      }
+      await db.delete(expenseReceipts).where(eq(expenseReceipts.id, receipt.id));
 
-  const db = getDb();
-  const [receipt] = await db
-    .select()
-    .from(expenseReceipts)
-    .where(eq(expenseReceipts.id, receiptId))
-    .limit(1);
-  if (!receipt) return { ok: false, error: "Receipt not found" };
-
-  try {
-    await getStorage().delete(receipt.blobPath);
-  } catch {
-    /* ignore */
-  }
-  await db.delete(expenseReceipts).where(eq(expenseReceipts.id, receiptId));
-
-  await writeAudit({
-    companyId,
-    actorUserId: localUserId,
-    action: "expense.receipt_delete",
-    entityType: "expense_receipt",
-    entityId: receiptId,
-  });
-
-  revalidatePath(`/expenses/${receipt.expenseId}`);
-  return { ok: true };
+      revalidatePath(`/expenses/${receipt.expenseId}`);
+      return { ok: true };
+    },
+    {
+      audit: {
+        action: "expense.receipt_delete",
+        entityType: "expense_receipt",
+        entityId: receiptId,
+      },
+    },
+  );
 }
 
 export async function previewExpenseImport(
   formData: FormData,
 ): Promise<ExpenseImportPreviewResult> {
-  const authz = await requireActionPermission("accounts:write");
-  if (!authz.ok) return authz;
-  if (!authz.user.companyId) {
-    return { ok: false, error: "Complete onboarding before using the dashboard." };
-  }
-  const companyId = authz.user.companyId;
-
-
   const file = formData.get("csv");
   if (!(file instanceof File) || file.size === 0) {
     return { ok: false, error: "Choose a CSV file" };
@@ -674,35 +611,27 @@ export async function previewExpenseImport(
     return { ok: false, error: "CSV must be under 2 MB" };
   }
 
-  const [founders, settings] = await Promise.all([
-    listFounders(companyId),
-    getOrCreateCompanySettings(companyId),
-  ]);
-  const text = await file.text();
-  const rows = parseExpenseImportCsv(
-    text,
-    founders,
-    settings.defaultMileageRatePence ?? DEFAULT_MILEAGE_RATE_PENCE,
-  );
-  if (rows.length === 0) {
-    return { ok: false, error: "No data rows found in CSV" };
-  }
-  return { ok: true, rows };
+  return mutateWide("accounts:write", async ({ companyId }) => {
+    const [founders, settings] = await Promise.all([
+      listFounders(companyId),
+      getOrCreateCompanySettings(companyId),
+    ]);
+    const text = await file.text();
+    const rows = parseExpenseImportCsv(
+      text,
+      founders,
+      settings.defaultMileageRatePence ?? DEFAULT_MILEAGE_RATE_PENCE,
+    );
+    if (rows.length === 0) {
+      return { ok: false, error: "No data rows found in CSV" };
+    }
+    return { ok: true, rows };
+  });
 }
 
 export async function commitExpenseImport(
   rowsJson: string,
 ): Promise<ActionResult & { count?: number }> {
-  const authz = await requireActionPermission("accounts:write");
-  if (!authz.ok) return authz;
-  if (!authz.user.companyId) {
-    return { ok: false, error: "Complete onboarding before using the dashboard." };
-  }
-  const companyId = authz.user.companyId;
-
-  const session = authz.user;
-  const localUserId = await ensureLocalUser(session);
-
   let rows: ParsedExpenseImportRow[];
   try {
     rows = JSON.parse(rowsJson) as ParsedExpenseImportRow[];
@@ -716,37 +645,40 @@ export async function commitExpenseImport(
     return { ok: false, error: "Fix validation errors before importing" };
   }
 
-  const db = getDb();
-  await db.transaction(async (tx) => {
-    for (const row of rows) {
-      await tx.insert(expenses).values({
-        companyId,
-        description: row.description,
-        category: row.category,
-        spentAt: row.spentAt,
-        amountPence: row.amountPence,
-        vatPence: 0,
-        status: row.status,
-        billable: false,
-        paidByUserId: row.status === "company_paid" ? null : row.paidByUserId,
-        mileageMiles: row.mileageMiles,
-        mileageRatePence: row.mileageRatePence,
-        createdByUserId: localUserId,
+  return mutateWide(
+    "accounts:write",
+    async ({ companyId, localUserId }) => {
+      const db = getDb();
+      await db.transaction(async (tx) => {
+        for (const row of rows) {
+          await tx.insert(expenses).values({
+            companyId,
+            description: row.description,
+            category: row.category,
+            spentAt: row.spentAt,
+            amountPence: row.amountPence,
+            vatPence: 0,
+            status: row.status,
+            billable: false,
+            paidByUserId: row.status === "company_paid" ? null : row.paidByUserId,
+            mileageMiles: row.mileageMiles,
+            mileageRatePence: row.mileageRatePence,
+            createdByUserId: localUserId,
+          });
+        }
       });
-    }
-  });
 
-  await writeAudit({
-    companyId,
-    actorUserId: localUserId,
-    action: "expense.import",
-    entityType: "expense",
-    entityId: localUserId,
-    meta: { count: rows.length },
-  });
+      await writeAudit({
+        companyId,
+        actorUserId: localUserId,
+        action: "expense.import",
+        entityType: "expense",
+        entityId: localUserId,
+        meta: { count: rows.length },
+      });
 
-  revalidatePath("/expenses");
-  revalidatePath("/reimbursements");
-  revalidatePath("/dashboard");
-  return { ok: true, count: rows.length };
+      return { ok: true, count: rows.length };
+    },
+    { paths: ["/expenses", "/reimbursements", "/dashboard"] },
+  );
 }

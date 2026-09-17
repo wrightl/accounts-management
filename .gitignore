@@ -26,6 +26,8 @@
 # misc
 .DS_Store
 *.pem
+/test-results/
+/playwright.local.config.ts
 
 # debug
 npm-debug.log*
@@ -50,9 +52,14 @@ next-env.d.ts
 # promo video outputs (scripts + captions stay in repo)
 /promo/output/
 /promo/raw/
+/promo/raw-marketing/
 /promo/assets/
 /promo/routes.json
 /.playwright-browsers/
+
+# marketing capture metadata (contains demo Clerk email)
+/public/marketing/capture-meta.json
+/public/marketing/product-tour.mp4
 
 # secrets
 /.secrets

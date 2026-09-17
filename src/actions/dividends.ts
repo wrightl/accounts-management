@@ -1,13 +1,11 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
 import { dividendDeclarations, dividendPayouts } from "@/db/schema";
-import { requireActionPermission } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
-import { ensureLocalUser } from "@/lib/users";
+import { mutate } from "@/lib/mutate";
 import { poundsToPence } from "@/lib/money";
 import { splitDividendPence } from "@/lib/dividends/split";
 import {
@@ -27,19 +25,6 @@ const declareSchema = z.object({
 });
 
 export async function declareDividend(formData: FormData): Promise<ActionResult> {
-  const authz = await requireActionPermission("accounts:write");
-  if (!authz.ok) return authz;
-  if (!authz.user.companyId) {
-    return { ok: false, error: "Complete onboarding before using the dashboard." };
-  }
-  if (authz.user.entityType !== "limited_company") {
-    return { ok: false, error: "Dividends are only available for limited companies." };
-  }
-  const companyId = authz.user.companyId;
-
-  const session = authz.user;
-  const localUserId = await ensureLocalUser(session);
-
   const parsed = declareSchema.safeParse({
     declaredAt: formData.get("declaredAt"),
     amountPounds: formData.get("amountPounds"),
@@ -59,73 +44,94 @@ export async function declareDividend(formData: FormData): Promise<ActionResult>
     return { ok: false, error: "Amount must be greater than zero" };
   }
 
-  const balanced = await assertRegisterBalanced(companyId);
-  if (!balanced.ok) return balanced;
+  return mutate(
+    "accounts:write",
+    async ({ companyId, localUserId, entityType }) => {
+      if (entityType !== "limited_company") {
+        return { ok: false, error: "Dividends are only available for limited companies." };
+      }
 
-  const { shareholders, totalShares } = await getActiveShareholdersForSplit(companyId);
-  if (!totalShares) {
-    return { ok: false, error: "Add at least one active shareholder before declaring a dividend." };
-  }
+      const balanced = await assertRegisterBalanced(companyId);
+      if (!balanced.ok) return balanced;
 
-  let splits;
-  try {
-    splits = splitDividendPence(totalPence, shareholders, totalShares);
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Could not split dividend" };
-  }
+      const { shareholders, totalShares } = await getActiveShareholdersForSplit(companyId);
+      if (!totalShares) {
+        return {
+          ok: false,
+          error: "Add at least one active shareholder before declaring a dividend.",
+        };
+      }
 
-  const db = getDb();
-  const [decl] = await db
-    .insert(dividendDeclarations)
-    .values({
-      companyId,
-        declaredAt: parsed.data.declaredAt,
-      totalPence,
-      notes: parsed.data.notes,
-    })
-    .returning({ id: dividendDeclarations.id });
+      let splits;
+      try {
+        splits = splitDividendPence(totalPence, shareholders, totalShares);
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : "Could not split dividend" };
+      }
 
-  await db.insert(dividendPayouts).values(
-    splits.map((s) => ({
-      declarationId: decl.id,
-      shareholderId: s.id,
-      shareholderName: s.name,
-      amountPence: s.amountPence,
-    })),
+      const db = getDb();
+      const [decl] = await db
+        .insert(dividendDeclarations)
+        .values({
+          companyId,
+          declaredAt: parsed.data.declaredAt,
+          totalPence,
+          notes: parsed.data.notes,
+        })
+        .returning({ id: dividendDeclarations.id });
+
+      await db.insert(dividendPayouts).values(
+        splits.map((s) => ({
+          declarationId: decl.id,
+          shareholderId: s.id,
+          shareholderName: s.name,
+          amountPence: s.amountPence,
+        })),
+      );
+
+      await writeAudit({
+        companyId,
+        actorUserId: localUserId,
+        action: "dividend.declare",
+        entityType: "dividend_declaration",
+        entityId: decl.id,
+        meta: { totalPence, payoutCount: splits.length },
+      });
+
+      return { ok: true, id: decl.id };
+    },
+    { paths: ["/dividends"] },
   );
-
-  await writeAudit({
-    companyId,
-    actorUserId: localUserId,
-    action: "dividend.declare",
-    entityType: "dividend_declaration",
-    entityId: decl.id,
-    meta: { totalPence, payoutCount: splits.length },
-  });
-
-  revalidatePath("/dividends");
-  return { ok: true, id: decl.id };
 }
 
 export async function deleteDividendDeclaration(id: string): Promise<ActionResult> {
-  const authz = await requireActionPermission("accounts:write");
-  if (!authz.ok) return authz;
-  if (!authz.user.companyId) {
-    return { ok: false, error: "Complete onboarding before using the dashboard." };
-  }
-  const companyId = authz.user.companyId;
+  return mutate(
+    "accounts:write",
+    async ({ companyId }) => {
+      const db = getDb();
+      const [existing] = await db
+        .select({ id: dividendDeclarations.id })
+        .from(dividendDeclarations)
+        .where(
+          and(eq(dividendDeclarations.id, id), eq(dividendDeclarations.companyId, companyId)),
+        )
+        .limit(1);
+      if (!existing) return { ok: false, error: "Dividend declaration not found" };
 
-  const session = authz.user;
-  const localUserId = await ensureLocalUser(session);
-  const db = getDb();
-  await db.delete(dividendDeclarations).where(eq(dividendDeclarations.id, id));
-  await writeAudit({
-    companyId,
-    actorUserId: localUserId,
-    action: "dividend.delete",
-    entityType: "dividend_declaration",
-    entityId: id,
-  });
-  revalidatePath("/dividends");
-  return { ok: true, id };
+      await db
+        .delete(dividendDeclarations)
+        .where(
+          and(eq(dividendDeclarations.id, id), eq(dividendDeclarations.companyId, companyId)),
+        );
+      return { ok: true, id };
+    },
+    {
+      audit: {
+        action: "dividend.delete",
+        entityType: "dividend_declaration",
+        entityId: id,
+      },
+      paths: ["/dividends"],
+    },
+  );
 }

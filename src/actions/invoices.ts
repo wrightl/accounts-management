@@ -1,13 +1,11 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-import { and, eq} from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
 import { invoiceLineItems, invoices } from "@/db/schema";
-import { requireActionPermission } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
-import { ensureLocalUser } from "@/lib/users";
+import { mutate } from "@/lib/mutate";
 import { invoiceTotals, poundsToPence } from "@/lib/money";
 import { allocateInvoiceNumber } from "@/lib/invoices/allocate";
 import {
@@ -68,16 +66,6 @@ function buildLineValues(lines: z.infer<typeof lineSchema>[]) {
 }
 
 export async function createInvoice(formData: FormData): Promise<ActionResult> {
-  const authz = await requireActionPermission("accounts:write");
-  if (!authz.ok) return authz;
-  if (!authz.user.companyId) {
-    return { ok: false, error: "Complete onboarding before using the dashboard." };
-  }
-  const companyId = authz.user.companyId;
-
-  const session = authz.user;
-  const localUserId = await ensureLocalUser(session);
-
   const parsed = invoiceSchema.safeParse({
     clientId: formData.get("clientId"),
     issueDate: formData.get("issueDate") || todayIsoDate(),
@@ -103,70 +91,48 @@ export async function createInvoice(formData: FormData): Promise<ActionResult> {
   }
   const totals = invoiceTotals(lineValues);
 
-  const db = getDb();
-  const invoiceId = await db.transaction(async (tx) => {
-    const number = await allocateInvoiceNumber(tx, companyId, issueDate);
-    const [inv] = await tx
-      .insert(invoices)
-      .values({
-        companyId,
-        number,
-        clientId: parsed.data.clientId,
-        status: "draft",
-        issueDate,
-        dueDate,
-        notes: parsed.data.notes,
-        netPence: totals.netPence,
-        vatPence: totals.vatPence,
-        grossPence: totals.grossPence,
-        createdByUserId: localUserId,
-      })
-      .returning({ id: invoices.id });
+  return mutate(
+    "accounts:write",
+    async ({ companyId, localUserId }) => {
+      const db = getDb();
+      const invoiceId = await db.transaction(async (tx) => {
+        const number = await allocateInvoiceNumber(tx, companyId, issueDate);
+        const [inv] = await tx
+          .insert(invoices)
+          .values({
+            companyId,
+            number,
+            clientId: parsed.data.clientId,
+            status: "draft",
+            issueDate,
+            dueDate,
+            notes: parsed.data.notes,
+            netPence: totals.netPence,
+            vatPence: totals.vatPence,
+            grossPence: totals.grossPence,
+            createdByUserId: localUserId,
+          })
+          .returning({ id: invoices.id });
 
-    await tx.insert(invoiceLineItems).values(
-      lineValues.map((l) => ({ ...l, invoiceId: inv.id })),
-    );
-    return inv.id;
-  });
+        await tx.insert(invoiceLineItems).values(
+          lineValues.map((l) => ({ ...l, invoiceId: inv.id })),
+        );
+        return inv.id;
+      });
 
-  await writeAudit({
-    companyId,
-    actorUserId: localUserId,
-    action: "invoice.create",
-    entityType: "invoice",
-    entityId: invoiceId,
-  });
-
-  revalidatePath("/invoices");
-  revalidatePath("/dashboard");
-  return { ok: true, id: invoiceId };
+      return { ok: true, id: invoiceId };
+    },
+    {
+      audit: { action: "invoice.create", entityType: "invoice" },
+      paths: ["/invoices", "/dashboard"],
+    },
+  );
 }
 
 export async function updateInvoice(
   id: string,
   formData: FormData,
 ): Promise<ActionResult> {
-  const authz = await requireActionPermission("accounts:write");
-  if (!authz.ok) return authz;
-  if (!authz.user.companyId) {
-    return { ok: false, error: "Complete onboarding before using the dashboard." };
-  }
-  const companyId = authz.user.companyId;
-
-  const session = authz.user;
-  const localUserId = await ensureLocalUser(session);
-
-  const db = getDb();
-  const [existing] = await db
-    .select()
-    .from(invoices)
-    .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)))
-    .limit(1);
-  if (!existing) return { ok: false, error: "Invoice not found" };
-  if (!canEditInvoice(existing.status as InvoiceStatus)) {
-    return { ok: false, error: "Only draft invoices can be edited" };
-  }
-
   const parsed = invoiceSchema.safeParse({
     clientId: formData.get("clientId"),
     issueDate: formData.get("issueDate") || todayIsoDate(),
@@ -192,128 +158,118 @@ export async function updateInvoice(
   }
   const totals = invoiceTotals(lineValues);
 
-  await db.transaction(async (tx) => {
-    await tx
-      .update(invoices)
-      .set({
-        clientId: parsed.data.clientId,
-        issueDate,
-        dueDate,
-        notes: parsed.data.notes,
-        netPence: totals.netPence,
-        vatPence: totals.vatPence,
-        grossPence: totals.grossPence,
-        pdfBlobPath: null,
-      })
-      .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)));
+  return mutate(
+    "accounts:write",
+    async ({ companyId }) => {
+      const db = getDb();
+      const [existing] = await db
+        .select()
+        .from(invoices)
+        .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)))
+        .limit(1);
+      if (!existing) return { ok: false, error: "Invoice not found" };
+      if (!canEditInvoice(existing.status as InvoiceStatus)) {
+        return { ok: false, error: "Only draft invoices can be edited" };
+      }
 
-    await tx.delete(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, id));
-    await tx.insert(invoiceLineItems).values(
-      lineValues.map((l) => ({ ...l, invoiceId: id })),
-    );
-  });
+      await db.transaction(async (tx) => {
+        await tx
+          .update(invoices)
+          .set({
+            clientId: parsed.data.clientId,
+            issueDate,
+            dueDate,
+            notes: parsed.data.notes,
+            netPence: totals.netPence,
+            vatPence: totals.vatPence,
+            grossPence: totals.grossPence,
+            pdfBlobPath: null,
+          })
+          .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)));
 
-  await writeAudit({
-    companyId,
-    actorUserId: localUserId,
-    action: "invoice.update",
-    entityType: "invoice",
-    entityId: id,
-  });
+        await tx.delete(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, id));
+        await tx.insert(invoiceLineItems).values(
+          lineValues.map((l) => ({ ...l, invoiceId: id })),
+        );
+      });
 
-  revalidatePath("/invoices");
-  revalidatePath(`/invoices/${id}`);
-  revalidatePath("/dashboard");
-  return { ok: true, id };
+      return { ok: true, id };
+    },
+    {
+      audit: { action: "invoice.update", entityType: "invoice", entityId: id },
+      paths: ["/invoices", `/invoices/${id}`, "/dashboard"],
+    },
+  );
 }
 
 export async function voidInvoice(id: string): Promise<ActionResult> {
-  const authz = await requireActionPermission("accounts:write");
-  if (!authz.ok) return authz;
-  if (!authz.user.companyId) {
-    return { ok: false, error: "Complete onboarding before using the dashboard." };
-  }
-  const companyId = authz.user.companyId;
+  return mutate(
+    "accounts:write",
+    async ({ companyId }) => {
+      const db = getDb();
+      const [existing] = await db
+        .select()
+        .from(invoices)
+        .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)))
+        .limit(1);
+      if (!existing) return { ok: false, error: "Invoice not found" };
 
-  const session = authz.user;
-  const localUserId = await ensureLocalUser(session);
+      const from = storedStatus(existing.status);
+      if (!canTransition(from, "void")) {
+        return { ok: false, error: `Cannot void an invoice in status "${from}"` };
+      }
 
-  const db = getDb();
-  const [existing] = await db
-    .select()
-    .from(invoices)
-    .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)))
-    .limit(1);
-  if (!existing) return { ok: false, error: "Invoice not found" };
+      await db
+        .update(invoices)
+        .set({ status: "void" })
+        .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)));
 
-  const from = storedStatus(existing.status);
-  if (!canTransition(from, "void")) {
-    return { ok: false, error: `Cannot void an invoice in status "${from}"` };
-  }
-
-  await db
-    .update(invoices)
-    .set({ status: "void" })
-    .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)));
-
-  await writeAudit({
-    companyId,
-    actorUserId: localUserId,
-    action: "invoice.void",
-    entityType: "invoice",
-    entityId: id,
-  });
-
-  revalidatePath("/invoices");
-  revalidatePath(`/invoices/${id}`);
-  revalidatePath("/dashboard");
-  return { ok: true, id };
+      return { ok: true, id };
+    },
+    {
+      audit: { action: "invoice.void", entityType: "invoice", entityId: id },
+      paths: ["/invoices", `/invoices/${id}`, "/dashboard"],
+    },
+  );
 }
 
 export async function sendInvoice(id: string): Promise<ActionResult> {
-  const authz = await requireActionPermission("accounts:write");
-  if (!authz.ok) return authz;
-  if (!authz.user.companyId) {
-    return { ok: false, error: "Complete onboarding before using the dashboard." };
-  }
-  const companyId = authz.user.companyId;
+  return mutate(
+    "accounts:write",
+    async ({ companyId, localUserId }) => {
+      const detail = await getInvoiceDetail(companyId, id);
+      if (!detail) return { ok: false, error: "Invoice not found" };
 
-  const session = authz.user;
-  const localUserId = await ensureLocalUser(session);
+      const from = storedStatus(detail.invoice.status);
+      if (from !== "draft" && from !== "sent") {
+        return { ok: false, error: `Cannot send an invoice in status "${from}"` };
+      }
+      if (!detail.client.email) {
+        return { ok: false, error: "Client has no email address" };
+      }
 
-  const detail = await getInvoiceDetail(companyId, id);
-  if (!detail) return { ok: false, error: "Invoice not found" };
+      const jobId = await enqueueSendJob("invoice_send", companyId, id);
+      const delivered = await processSendJob(jobId);
+      if (!delivered.ok) {
+        return {
+          ok: false,
+          error: delivered.error ?? "Failed to send invoice. It will retry automatically.",
+        };
+      }
 
-  const from = storedStatus(detail.invoice.status);
-  if (from !== "draft" && from !== "sent") {
-    return { ok: false, error: `Cannot send an invoice in status "${from}"` };
-  }
-  if (!detail.client.email) {
-    return { ok: false, error: "Client has no email address" };
-  }
+      await writeAudit({
+        companyId,
+        actorUserId: localUserId,
+        action: "invoice.send",
+        entityType: "invoice",
+        entityId: id,
+        meta: { to: detail.client.email, jobId },
+      });
 
-  const jobId = await enqueueSendJob("invoice_send", companyId, id);
-  const delivered = await processSendJob(jobId);
-  if (!delivered.ok) {
-    return {
-      ok: false,
-      error: delivered.error ?? "Failed to send invoice. It will retry automatically.",
-    };
-  }
-
-  await writeAudit({
-    companyId,
-    actorUserId: localUserId,
-    action: "invoice.send",
-    entityType: "invoice",
-    entityId: id,
-    meta: { to: detail.client.email, jobId },
-  });
-
-  revalidatePath("/invoices");
-  revalidatePath(`/invoices/${id}`);
-  revalidatePath("/dashboard");
-  return { ok: true, id };
+      return { ok: true, id };
+    },
+    { paths: ["/invoices", `/invoices/${id}`, "/dashboard"] },
+  );
 }
 
 const updateStatusSchema = z.object({
@@ -324,62 +280,56 @@ export async function updateInvoiceStatus(
   id: string,
   status: string,
 ): Promise<ActionResult> {
-  const authz = await requireActionPermission("accounts:write");
-  if (!authz.ok) return authz;
-  if (!authz.user.companyId) {
-    return { ok: false, error: "Complete onboarding before using the dashboard." };
-  }
-  const companyId = authz.user.companyId;
-
-  const localUserId = await ensureLocalUser(authz.user);
-
   const parsed = updateStatusSchema.safeParse({ status });
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid status" };
   }
 
-  const detail = await getInvoiceDetail(companyId, id);
-  if (!detail) return { ok: false, error: "Invoice not found" };
+  return mutate(
+    "accounts:write",
+    async ({ companyId, localUserId }) => {
+      const detail = await getInvoiceDetail(companyId, id);
+      if (!detail) return { ok: false, error: "Invoice not found" };
 
-  const current = detail.invoice.status as InvoiceStatus;
-  const target = parsed.data.status;
+      const current = detail.invoice.status as InvoiceStatus;
+      const target = parsed.data.status;
 
-  if (!canTransition(current, target)) {
-    return {
-      ok: false,
-      error: `Cannot change status from ${current} to ${target}`,
-    };
-  }
+      if (!canTransition(current, target)) {
+        return {
+          ok: false,
+          error: `Cannot change status from ${current} to ${target}`,
+        };
+      }
 
-  const db = getDb();
-  const [existing] = await db
-    .select()
-    .from(invoices)
-    .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)))
-    .limit(1);
-  if (!existing) return { ok: false, error: "Invoice not found" };
+      const db = getDb();
+      const [existing] = await db
+        .select()
+        .from(invoices)
+        .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)))
+        .limit(1);
+      if (!existing) return { ok: false, error: "Invoice not found" };
 
-  const now = new Date();
-  await db
-    .update(invoices)
-    .set({
-      status: target,
-      sentAt: target === "sent" ? (existing.sentAt ?? now) : existing.sentAt,
-      paidAt: target === "paid" ? now : existing.paidAt,
-    })
-    .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)));
+      const now = new Date();
+      await db
+        .update(invoices)
+        .set({
+          status: target,
+          sentAt: target === "sent" ? (existing.sentAt ?? now) : existing.sentAt,
+          paidAt: target === "paid" ? now : existing.paidAt,
+        })
+        .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)));
 
-  await writeAudit({
-    companyId,
-    actorUserId: localUserId,
-    action: "invoice.status",
-    entityType: "invoice",
-    entityId: id,
-    meta: { from: storedStatus(current), to: target },
-  });
+      await writeAudit({
+        companyId,
+        actorUserId: localUserId,
+        action: "invoice.status",
+        entityType: "invoice",
+        entityId: id,
+        meta: { from: storedStatus(current), to: target },
+      });
 
-  revalidatePath("/invoices");
-  revalidatePath(`/invoices/${id}`);
-  revalidatePath("/dashboard");
-  return { ok: true, id };
+      return { ok: true, id };
+    },
+    { paths: ["/invoices", `/invoices/${id}`, "/dashboard"] },
+  );
 }

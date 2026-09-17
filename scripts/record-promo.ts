@@ -20,8 +20,19 @@ const rawDir = join(root, "promo", "raw");
 const routesPath = join(root, "promo", "routes.json");
 
 const BASE_URL = process.env.PROMO_BASE_URL ?? "http://localhost:3001";
-const CLERK_EMAIL =
-  process.env.PROMO_CLERK_EMAIL ?? process.env.BOOTSTRAP_ADMIN_EMAILS?.split(",")[0]?.trim() ?? "lee@dotanddashconsulting.com";
+const CLERK_EMAIL = process.env.PROMO_CLERK_EMAIL?.trim();
+
+function assertNotPlatformAdmin(email: string) {
+  const blocked = (process.env.PLATFORM_ADMIN_EMAILS ?? "admin@dotanddashconsulting.com")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  if (blocked.includes(email.toLowerCase())) {
+    throw new Error(
+      `Refusing to record as platform admin (${email}). Set PROMO_CLERK_EMAIL to a founder account, or use npm run marketing:capture.`,
+    );
+  }
+}
 
 interface PromoRoutes {
   landing: string;
@@ -74,7 +85,7 @@ async function recordBeat(
 
   try {
     await page.goto(BASE_URL + routes.landing, { waitUntil: "domcontentloaded" });
-    await clerk.signIn({ page, emailAddress: CLERK_EMAIL });
+    await clerk.signIn({ page, emailAddress: CLERK_EMAIL! });
     await fn(page, routes);
   } finally {
     const video = page.video();
@@ -94,6 +105,12 @@ async function main() {
   if (!process.env.CLERK_SECRET_KEY) {
     throw new Error("CLERK_SECRET_KEY is required for promo recording");
   }
+  if (!CLERK_EMAIL) {
+    throw new Error(
+      "PROMO_CLERK_EMAIL is required. Do not use the platform admin — create a founder via npm run marketing:capture, or set PROMO_CLERK_EMAIL to an existing tenant user.",
+    );
+  }
+  assertNotPlatformAdmin(CLERK_EMAIL);
 
   await clerkSetup();
   const routes = loadRoutes();

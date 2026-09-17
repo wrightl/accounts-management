@@ -27,7 +27,7 @@ trader) before they can open the books.
 | Auth & roles | Clerk (identity + Google SSO); roles in Postgres, not Clerk metadata |
 | Database     | Neon Postgres + Drizzle ORM (PGlite for tests)                      |
 | File storage | Vercel Blob (private, streamed via authorised routes)               |
-| Email        | Pluggable provider (Resend); `console` transport in dev             |
+| Email        | Pluggable provider (Resend); `console` in dev (rejected in production) |
 | AI / OCR     | Local Tesseract, or Vercel AI Gateway (optional)                    |
 | Testing      | Vitest (unit + integration), Playwright (e2e)                       |
 | Hosting/CI   | Vercel (merge to `main` + PR previews) + GitHub Actions             |
@@ -130,8 +130,8 @@ first login. Do not run seed on every production deploy.
 | `npm run test:e2e`      | Playwright e2e (own server on port 3100)                             |
 | `npm run db:generate`   | Generate a Drizzle migration from the schema                         |
 | `npm run db:migrate`    | Apply migrations over a direct Postgres connection (`pg`)            |
-| `npm run db:seed`       | Seed platform admins (`PLATFORM_ADMIN_EMAILS` + Clerk invites)       |
-| `npm run db:push`       | Push schema without a migration (dev only)                           |
+| `npm run db:seed`       | Seed platform admins (`PLATFORM_ADMIN_EMAILS` + Clerk invites). Refuses production/remote URLs unless `ALLOW_PROD_SEED=1`. |
+| `npm run db:push`       | **Unsafe** while Drizzle meta snapshots lag behind hand migrations (after `0010`). Prefer `db:generate` + `db:migrate`. Do not point at Neon production. |
 | `npm run db:studio`     | Drizzle Studio                                                       |
 | `npm run tunnel`        | ngrok to port 3001 (inbound webhooks in local dev)                   |
 | `npm run promo:all`     | Seed demo data, record UI, assemble the promo video                  |
