@@ -38,11 +38,10 @@ export function OnboardingForm({
 
   useEffect(() => {
     if (!logoFile) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setLogoPreview(null);
       return;
     }
     const url = URL.createObjectURL(logoFile);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLogoPreview(url);
     return () => URL.revokeObjectURL(url);
   }, [logoFile]);
@@ -109,6 +108,7 @@ export function OnboardingForm({
           onClick={() => {
             setEntityType(null);
             setLogoFile(null);
+            setLogoPreview(null);
           }}
           disabled={pending}
         >
@@ -215,7 +215,11 @@ export function OnboardingForm({
           accept="image/*"
           disabled={pending}
           onChange={(event) => {
-            setLogoFile(event.target.files?.[0] ?? null);
+            const file = event.target.files?.[0] ?? null;
+            setLogoFile(file);
+            if (!file) {
+              setLogoPreview(null);
+            }
           }}
         />
         <p className="text-xs text-muted">
