@@ -122,8 +122,8 @@ export default function LimitedCompaniesGuidePage() {
               records for longer as a precaution.
             </GuideParagraph>
             <GuideParagraph>
-              If you don't keep records for long enough, you may face penalties
-              or difficulties if HMRC investigates your company's tax affairs.
+              If you don&apos;t keep records for long enough, you may face penalties
+              or difficulties if HMRC investigates your company&apos;s tax affairs.
             </GuideParagraph>
           </GuideSubsection>
 
@@ -131,7 +131,7 @@ export default function LimitedCompaniesGuidePage() {
             <GuideParagraph>
               You can keep your records in paper form, digitally, or a
               combination of both. Digital records are increasingly popular as
-              they're easier to store, search, and share with your accountant.
+              they&apos;re easier to store, search, and share with your accountant.
               However, you must ensure digital records are securely backed up
               and protected.
             </GuideParagraph>
@@ -155,8 +155,8 @@ export default function LimitedCompaniesGuidePage() {
 
           <GuideSubsection title="Companies House Annual Accounts">
             <GuideParagraph>
-              You must file your company's annual accounts with Companies House
-              every year. The deadline is 9 months after your company's
+              You must file your company&apos;s annual accounts with Companies House
+              every year. The deadline is 9 months after your company&apos;s
               financial year end. For example, if your year end is 31 March,
               your accounts must be filed by 31 December.
             </GuideParagraph>
@@ -197,7 +197,7 @@ export default function LimitedCompaniesGuidePage() {
               31 March 2026, your CT600 must be filed by 31 March 2027.
             </GuideParagraph>
             <GuideParagraph>
-              The CT600 includes detailed information about your company's
+              The CT600 includes detailed information about your company&apos;s
               profits, losses, and tax calculation. Most accountants file this
               electronically on your behalf.
             </GuideParagraph>
@@ -235,7 +235,7 @@ export default function LimitedCompaniesGuidePage() {
               All limited companies must prepare statutory accounts in
               accordance with UK Generally Accepted Accounting Practice (UK
               GAAP) or International Financial Reporting Standards (IFRS). These
-              accounts must give a "true and fair view" of the company's
+              accounts must give a &quot;true and fair view&quot; of the company&apos;s
               financial position.
             </GuideParagraph>
             <GuideParagraph>
@@ -262,10 +262,10 @@ export default function LimitedCompaniesGuidePage() {
             </GuideParagraph>
           </GuideSubsection>
 
-          <GuideSubsection title="Directors' Responsibilities">
+          <GuideSubsection title="Directors&apos; Responsibilities">
             <GuideParagraph>
               As a company director, you have legal responsibilities for your
-              company's financial affairs:
+              company&apos;s financial affairs:
             </GuideParagraph>
             <GuideBulletList
               items={[
@@ -292,7 +292,7 @@ export default function LimitedCompaniesGuidePage() {
             </GuideParagraph>
             <GuideBulletList
               items={[
-                "Dividends don't attract National Insurance contributions",
+                "Dividends don&apos;t attract National Insurance contributions",
                 "Dividends have a £500 tax-free allowance (2026/27)",
                 "Dividend tax rates are 8.75%, 33.75%, and 39.35% depending on your income tax band",
                 "Salaries are deductible against Corporation Tax; dividends are not",
@@ -306,7 +306,7 @@ export default function LimitedCompaniesGuidePage() {
 
           <GuideSubsection title="VAT Registration">
             <GuideParagraph>
-              You must register for VAT if your company's VAT taxable turnover
+              You must register for VAT if your company&apos;s VAT taxable turnover
               is more than £90,000 (2026/27 threshold). You can also register
               voluntarily if your turnover is below this level.
             </GuideParagraph>
@@ -332,7 +332,7 @@ export default function LimitedCompaniesGuidePage() {
         <GuideSection id="penalties" title="Penalties for Non-Compliance">
           <GuideParagraph>
             Failing to meet your financial obligations can result in significant
-            penalties. It's important to understand the consequences and ensure
+            penalties. It&apos;s important to understand the consequences and ensure
             you meet all deadlines.
           </GuideParagraph>
 
@@ -408,7 +408,7 @@ export default function LimitedCompaniesGuidePage() {
 
         <GuideSection id="getting-help" title="Getting Professional Help">
           <GuideParagraph>
-            While it's possible to manage your company's finances yourself,
+            While it&apos;s possible to manage your company&apos;s finances yourself,
             most directors work with professional accountants. An accountant can:
           </GuideParagraph>
           <GuideBulletList

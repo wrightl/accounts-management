@@ -84,11 +84,11 @@ export default function SoleTradersGuidePage() {
         </GuideSection>
 
         <GuideSection id="record-keeping" title="Record Keeping Requirements">
-          <GuideParagraph>
-            Keeping accurate records is essential for completing your Self
-            Assessment tax return and can help you claim all the expenses you're
-            entitled to. HMRC can check your records at any time to make sure
-            you're paying the right amount of tax.
+            <GuideParagraph>
+              Keeping accurate records is essential for completing your Self
+              Assessment tax return and can help you claim all the expenses you&apos;re
+              entitled to. HMRC can check your records at any time to make sure
+              you&apos;re paying the right amount of tax.
           </GuideParagraph>
 
           <GuideSubsection title="What Records Must Be Kept">
@@ -158,7 +158,7 @@ export default function SoleTradersGuidePage() {
               cannot claim for commuting between home and your usual workplace.
             </GuideParagraph>
             <GuideParagraph>
-              You can either claim simplified expenses using HMRC's mileage
+              You can either claim simplified expenses using HMRC&apos;s mileage
               rates (45p per mile for the first 10,000 miles, then 25p per mile)
               or claim actual vehicle costs based on the proportion of business
               use.
@@ -188,8 +188,8 @@ export default function SoleTradersGuidePage() {
               <HmrcLink href="https://www.gov.uk/set-up-sole-trader">
                 register as a sole trader online
               </HmrcLink>
-              . When you register, you'll be sent a Unique Taxpayer Reference
-              (UTR) which you'll need for your tax returns.
+              . When you register, you&apos;ll be sent a Unique Taxpayer Reference
+              (UTR) which you&apos;ll need for your tax returns.
             </GuideParagraph>
           </GuideSubsection>
 
@@ -218,7 +218,7 @@ export default function SoleTradersGuidePage() {
 
           <GuideSubsection title="Payment on Account">
             <GuideParagraph>
-              If your last Self Assessment tax bill was more than £1,000, you'll
+              If your last Self Assessment tax bill was more than £1,000, you&apos;ll
               usually need to make payments on account. These are advance
               payments towards your next tax bill:
             </GuideParagraph>
@@ -231,7 +231,7 @@ export default function SoleTradersGuidePage() {
             />
             <GuideParagraph>
               If you know your income will be lower, you can apply to reduce
-              your payments on account, but you'll face interest charges if you
+              your payments on account, but you&apos;ll face interest charges if you
               reduce them too much.
             </GuideParagraph>
           </GuideSubsection>
@@ -280,7 +280,7 @@ export default function SoleTradersGuidePage() {
             <GuideParagraph>
               If your trading income is £1,000 or less in a tax year, you can
               use the trading allowance instead of claiming actual expenses. If
-              you use the trading allowance, you don't need to register as
+              you use the trading allowance, you don&apos;t need to register as
               self-employed or file a tax return (unless you have other reasons
               to file).
             </GuideParagraph>
@@ -298,7 +298,7 @@ export default function SoleTradersGuidePage() {
           <GuideSubsection title="Allowable Expenses">
             <GuideParagraph>
               You can deduct business expenses from your income to reduce your
-              tax bill. Expenses must be "wholly and exclusively" for business
+              tax bill. Expenses must be &quot;wholly and exclusively&quot; for business
               purposes. Common allowable expenses include:
             </GuideParagraph>
             <GuideBulletList
@@ -322,13 +322,13 @@ export default function SoleTradersGuidePage() {
 
           <GuideSubsection title="Basis Period Reform">
             <GuideParagraph>
-              From April 2024, basis period reform changed how sole traders'
+              From April 2024, basis period reform changed how sole traders&apos;
               profits are allocated to tax years. Instead of using your
               accounting year end, profits are now taxed based on the tax year
               (6 April to 5 April).
             </GuideParagraph>
             <GuideParagraph>
-              If your accounting year doesn't match the tax year, you'll need to
+              If your accounting year doesn&apos;t match the tax year, you&apos;ll need to
               apportion profits. Most accountants recommend aligning your
               accounting year end with the tax year (31 March or 5 April) to
               simplify calculations.
@@ -372,13 +372,13 @@ export default function SoleTradersGuidePage() {
         <GuideSection id="penalties" title="Penalties for Non-Compliance">
           <GuideParagraph>
             Failing to register, file returns, or pay tax on time results in
-            automatic penalties. It's important to understand the consequences
+            automatic penalties. It&apos;s important to understand the consequences
             and ensure you meet all deadlines.
           </GuideParagraph>
 
           <GuideSubsection title="Late Registration Penalties">
             <GuideParagraph>
-              If you don't register with HMRC as self-employed by the deadline,
+              If you don&apos;t register with HMRC as self-employed by the deadline,
               you may face a penalty of up to £100, and potentially more if you
               delay further. However, HMRC will usually waive the penalty if you
               have a reasonable excuse and register as soon as you realise.
@@ -408,7 +408,7 @@ export default function SoleTradersGuidePage() {
 
           <GuideSubsection title="Late Payment Penalties">
             <GuideParagraph>
-              If you don't pay your tax bill on time, you'll be charged:
+              If you don&apos;t pay your tax bill on time, you&apos;ll be charged:
             </GuideParagraph>
             <GuideBulletList
               items={[
@@ -419,8 +419,8 @@ export default function SoleTradersGuidePage() {
               ]}
             />
             <GuideParagraph>
-              If you're struggling to pay, contact HMRC as soon as possible to
-              discuss a payment plan. They're often willing to help if you're
+              If you&apos;re struggling to pay, contact HMRC as soon as possible to
+              discuss a payment plan. They&apos;re often willing to help if you&apos;re
               proactive.
             </GuideParagraph>
           </GuideSubsection>
