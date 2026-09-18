@@ -6,7 +6,6 @@ import { listClients } from "@/lib/clients/queries";
 import { canEditInvoice, type InvoiceStatus } from "@/lib/invoices/status";
 import { InvoiceForm } from "@/components/invoices/invoice-form";
 import { buttonClasses } from "@/components/ui/button";
-import { isDatabaseConfigured } from "@/env";
 import { penceToPounds } from "@/lib/money";
 
 export default async function EditInvoicePage({
@@ -16,8 +15,6 @@ export default async function EditInvoicePage({
 }) {
   const { companyId } = await guardTenantPage("accounts:write");
   const { id } = await params;
-
-  if (!isDatabaseConfigured()) notFound();
 
   const detail = await getInvoiceDetail(companyId, id);
   if (!detail) notFound();

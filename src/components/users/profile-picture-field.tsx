@@ -196,11 +196,9 @@ function CameraCaptureDialog({
 export function ProfilePictureField({
   avatarUrl,
   userName,
-  clerkConfigured,
 }: {
   avatarUrl: string | null;
   userName: string | null;
-  clerkConfigured: boolean;
 }) {
   const router = useRouter();
   const uploadInputRef = useRef<HTMLInputElement>(null);
@@ -275,23 +273,6 @@ export function ProfilePictureField({
         setError("Could not remove profile picture. Try again.");
       }
     });
-  }
-
-  if (!clerkConfigured) {
-    return (
-      <div className="space-y-2 border-b border-border pb-8">
-        <h2 className="font-display text-lg font-semibold">Profile picture</h2>
-        <ProfileAvatar
-          avatarUrl={avatarUrl}
-          previewUrl={null}
-          userName={userName}
-          className="h-24 w-24"
-        />
-        <p className="text-sm text-muted">
-          Connect Clerk to upload a profile picture.
-        </p>
-      </div>
-    );
   }
 
   return (

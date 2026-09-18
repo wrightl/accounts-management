@@ -32,17 +32,10 @@ test("health endpoint reports ok", async ({ request }) => {
 
 test("sign-in route is reachable", async ({ page }) => {
   await page.goto("/sign-in");
-  // Either the Clerk widget (configured) or the not-configured notice renders.
-  await expect(page.locator("body")).toContainText(/sign in|not configured/i);
+  await expect(page.locator("body")).toContainText(/sign in/i);
 });
 
-test("invoices route redirects to sign-in or shows not-configured notice", async ({
-  page,
-}) => {
+test("invoices route redirects to sign-in", async ({ page }) => {
   await page.goto("/invoices");
-  // Without a Clerk session: the dashboard layout redirects to sign-in, or
-  // (when auth env is absent) shows AuthNotConfigured.
-  await expect(page.locator("body")).toContainText(
-    /sign in|not configured|authentication/i,
-  );
+  await expect(page.locator("body")).toContainText(/sign in/i);
 });

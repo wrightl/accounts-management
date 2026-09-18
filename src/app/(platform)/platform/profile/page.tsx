@@ -4,26 +4,10 @@ import { ensureLocalUser, findLocalUser } from "@/lib/users";
 import { ProfileForm } from "@/components/users/profile-form";
 import { ProfilePictureField } from "@/components/users/profile-picture-field";
 import { SignOutSection } from "@/components/users/sign-out-section";
-import { isAuthConfigured, isDatabaseConfigured } from "@/env";
 import { hasDatabaseClient } from "@/db";
 
 export default async function PlatformProfilePage() {
   const session = await requirePlatformAdmin();
-  const showSignOut = isAuthConfigured();
-
-  if (!isDatabaseConfigured()) {
-    return (
-      <div>
-        <h1 className="font-display text-2xl font-semibold">Profile</h1>
-        <p className="mt-2 text-muted">Connect a database to edit your profile.</p>
-        {showSignOut ? (
-          <div className="mx-auto mt-8 max-w-xl">
-            <SignOutSection />
-          </div>
-        ) : null}
-      </div>
-    );
-  }
 
   if (hasDatabaseClient()) {
     await ensureLocalUser(session);
@@ -35,11 +19,9 @@ export default async function PlatformProfilePage() {
       <div>
         <h1 className="font-display text-2xl font-semibold">Profile</h1>
         <p className="mt-2 text-muted">Your profile could not be loaded.</p>
-        {showSignOut ? (
-          <div className="mx-auto mt-8 max-w-xl">
-            <SignOutSection />
-          </div>
-        ) : null}
+        <div className="mx-auto mt-8 max-w-xl">
+          <SignOutSection />
+        </div>
       </div>
     );
   }
@@ -51,7 +33,6 @@ export default async function PlatformProfilePage() {
         <ProfilePictureField
           avatarUrl={(await safeCurrentUser())?.imageUrl ?? null}
           userName={session.name ?? local.name}
-          clerkConfigured={isAuthConfigured()}
         />
         <ProfileForm
           email={local.email}
@@ -59,7 +40,7 @@ export default async function PlatformProfilePage() {
           role={local.role}
           roleDisplay="Platform operator"
         />
-        {showSignOut ? <SignOutSection /> : null}
+        <SignOutSection />
       </div>
     </div>
   );

@@ -18,7 +18,6 @@ export function PlatformSettingsForm({
 }: {
   initial: {
     maintenanceBanner: string | null;
-    recurringInvoicesEnabled: boolean;
     defaultReceiptOcrProvider: string;
     defaultReceiptOcrModel: string;
   };
@@ -77,19 +76,6 @@ export function PlatformSettingsForm({
           className="mt-1 w-full rounded-lg border border-border px-3 py-2"
         />
       </label>
-
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          name="recurringInvoicesEnabled"
-          value="true"
-          defaultChecked={initial.recurringInvoicesEnabled}
-        />
-        Enable recurring invoice generation (platform default)
-      </label>
-      <p className="text-xs text-muted">
-        Env <code>RECURRING_INVOICES_ENABLED</code> still overrides for local/CI.
-      </p>
 
       <div className="border-t border-border pt-5">
         <h2 className="font-display text-base font-semibold">Receipt OCR</h2>

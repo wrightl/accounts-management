@@ -1,6 +1,5 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { isAuthConfigured, isDatabaseConfigured } from "@/env";
 import { hasDatabaseClient } from "@/db";
 import { requireUser, safeCurrentUser } from "@/lib/auth";
 import { isPlatformAdmin } from "@/lib/platform";
@@ -15,15 +14,12 @@ import {
   filterNavGroups,
 } from "@/components/dashboard/nav";
 import { DashboardShell } from "@/components/dashboard/shell";
-import { AuthNotConfigured } from "@/components/auth-notice";
 
 export default async function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  if (!isAuthConfigured()) return <AuthNotConfigured />;
-
   let user = await requireUser();
   const clerkUser = await safeCurrentUser();
   const avatarUrl = clerkUser?.imageUrl ?? null;
@@ -63,7 +59,6 @@ export default async function AppLayout({
 
   let overdueInvoiceCount = 0;
   if (
-    isDatabaseConfigured() &&
     hasDatabaseClient() &&
     can(user.role, "accounts:read")
   ) {

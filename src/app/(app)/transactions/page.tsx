@@ -13,7 +13,6 @@ import {
 import { BankCardsFeed } from "@/components/bank/bank-cards-feed";
 import { TransactionsSummaryPanel } from "@/components/bank/transactions-summary";
 import { listBankSpendingCategoriesWithUsage } from "@/lib/bank/spending-categories";
-import { isDatabaseConfigured } from "@/env";
 
 export default async function TransactionsPage({
   searchParams,
@@ -23,15 +22,6 @@ export default async function TransactionsPage({
   const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
   const params = parseBankListParams(await searchParams);
-
-  if (!isDatabaseConfigured()) {
-    return (
-      <div>
-        <h1 className="font-display text-2xl font-semibold">Transactions</h1>
-        <p className="mt-2 text-muted">Connect a database to import statements.</p>
-      </div>
-    );
-  }
 
   const settings = await getOrCreateCompanySettings(companyId);
   const dateRange = resolveBankListDateRange(params, settings.financialYearEndMonth);

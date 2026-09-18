@@ -9,7 +9,6 @@ import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/roles";
 import { getDashboardOverview } from "@/lib/dashboard/queries";
 import type { QuoteStatus } from "@/lib/quotes/status";
-import { isDatabaseConfigured } from "@/env";
 import { reportError } from "@/lib/errors/report";
 
 const QUOTE_STATUS_COLORS: Record<QuoteStatus, string> = {
@@ -40,9 +39,7 @@ export default async function DashboardOverview() {
   let overview: Awaited<ReturnType<typeof getDashboardOverview>> | null = null;
   let loadError: string | null = null;
 
-  if (!isDatabaseConfigured()) {
-    loadError = "database_missing";
-  } else if (!can(user.role, "accounts:read")) {
+  if (!can(user.role, "accounts:read")) {
     loadError = "no_permission";
   } else if (!user.companyId) {
     loadError = "no_company";
@@ -89,15 +86,13 @@ export default async function DashboardOverview() {
 
       {!overview ? (
         <p className="mt-6 text-sm text-muted">
-          {loadError === "database_missing"
-            ? "Connect a database to view dashboard metrics."
-            : loadError === "no_permission"
-              ? "Your role cannot view dashboard metrics."
-              : loadError === "no_company"
-                ? "Complete onboarding to view dashboard metrics."
-                : loadError === "query_failed"
-                  ? "Dashboard metrics could not be loaded. Refresh the page, or check /platform logs if this keeps happening."
-                  : "Dashboard metrics are unavailable."}
+          {loadError === "no_permission"
+            ? "Your role cannot view dashboard metrics."
+            : loadError === "no_company"
+              ? "Complete onboarding to view dashboard metrics."
+              : loadError === "query_failed"
+                ? "Dashboard metrics could not be loaded. Refresh the page, or check /platform logs if this keeps happening."
+                : "Dashboard metrics are unavailable."}
         </p>
       ) : (
         <>

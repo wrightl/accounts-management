@@ -10,7 +10,6 @@ import { ReimbursementActions } from "@/components/reimbursements/actions";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { buttonClasses } from "@/components/ui/button";
-import { isDatabaseConfigured } from "@/env";
 import { getDb } from "@/db";
 import { expenses } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -31,15 +30,6 @@ export default async function ReimbursementsPage({
   const canWrite = await hasPermission("accounts:write");
   const sp = await searchParams;
   const runFilter = sp.filter === "paid" ? "paid" : sp.filter === "pending" ? "pending" : "all";
-
-  if (!isDatabaseConfigured()) {
-    return (
-      <div>
-        <h1 className="font-display text-2xl font-semibold">Reimbursements</h1>
-        <p className="mt-2 text-muted">Connect a database to manage reimbursements.</p>
-      </div>
-    );
-  }
 
   const [allRuns, balances, founders] = await Promise.all([
     listReimbursements(companyId),

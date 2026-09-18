@@ -286,6 +286,11 @@ export function HelpGuide({
               standalone invoice against a client from{" "}
               <HelpLink href="/invoices">Invoices</HelpLink>.
             </p>
+            <p className="mt-2 text-sm text-foreground/90">
+              For retainers, set up a monthly schedule under{" "}
+              <HelpLink href="/recurring-invoices">Recurring</HelpLink> — leave
+              as draft or email automatically each month.
+            </p>
           </Card>
           <div className="mt-4 space-y-2">
             <p className="text-sm font-medium text-foreground">
@@ -504,7 +509,6 @@ export function HelpGuide({
               <>Live bank feed (CSV import only).</>,
               <>VAT registration or Making Tax Digital.</>,
               <>Multi-currency books.</>,
-              <>Recurring invoices from the UI.</>,
               <>Filing returns with HMRC.</>,
             ]}
           />

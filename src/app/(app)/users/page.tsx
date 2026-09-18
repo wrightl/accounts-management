@@ -3,7 +3,6 @@ import { guardTenantPage } from "@/lib/auth";
 import { listUsers } from "@/lib/users";
 import { userStatus, userStatusLabel } from "@/lib/users/display";
 import { countPendingReimbursementsByPayee } from "@/lib/reimbursements/queries";
-import { isDatabaseConfigured } from "@/env";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { RevokeInviteButton } from "@/components/users/revoke-invite-button";
 import { DeleteUserButton } from "@/components/users/delete-user-button";
@@ -12,15 +11,6 @@ import { buttonClasses } from "@/components/ui/button";
 
 export default async function UsersPage() {
   const session = await guardTenantPage("users:manage");
-
-  if (!isDatabaseConfigured()) {
-    return (
-      <div>
-        <h1 className="font-display text-2xl font-semibold">Users</h1>
-        <p className="mt-2 text-muted">Connect a database to manage roles.</p>
-      </div>
-    );
-  }
 
   const [rows, pendingByPayee] = await Promise.all([
     listUsers(session.companyId),

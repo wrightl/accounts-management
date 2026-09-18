@@ -10,7 +10,6 @@ import { expenseInboundAddress } from "@/lib/expenses/inbound-mailbox";
 import { buttonClasses } from "@/components/ui/button";
 import { Input, Label, Select } from "@/components/ui/form";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
-import { isDatabaseConfigured } from "@/env";
 import { findLocalUser } from "@/lib/users";
 import { getCompany } from "@/lib/tenant";
 import { ExpenseImportButton } from "@/components/expenses/expense-import-panel";
@@ -25,15 +24,6 @@ export default async function ExpensesPage({
   const canWrite = await hasPermission("accounts:write");
   const user = await requireUser();
   const sp = await searchParams;
-
-  if (!isDatabaseConfigured()) {
-    return (
-      <div>
-        <h1 className="font-display text-2xl font-semibold">Expenses</h1>
-        <p className="mt-2 text-muted">Connect a database to manage expenses.</p>
-      </div>
-    );
-  }
 
   const localUser = await findLocalUser(user.userId);
   const localUserId = localUser?.id ?? null;

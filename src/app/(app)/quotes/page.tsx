@@ -9,7 +9,6 @@ import { clientDisplayName } from "@/lib/clients/display";
 import { buttonClasses } from "@/components/ui/button";
 import { Label, Select } from "@/components/ui/form";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
-import { isDatabaseConfigured } from "@/env";
 
 export default async function QuotesPage({
   searchParams,
@@ -19,15 +18,6 @@ export default async function QuotesPage({
   const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
   const sp = await searchParams;
-
-  if (!isDatabaseConfigured()) {
-    return (
-      <div>
-        <h1 className="font-display text-2xl font-semibold">Quotes</h1>
-        <p className="mt-2 text-muted">Connect a database to manage quotes.</p>
-      </div>
-    );
-  }
 
   const filters = {
     status: sp.status,

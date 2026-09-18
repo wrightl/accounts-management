@@ -34,7 +34,6 @@ const serverSchema = z.object({
 
   // Cron / automation. Routes refuse to run until CRON_SECRET is set.
   CRON_SECRET: z.string().optional(),
-  RECURRING_INVOICES_ENABLED: z.enum(["true", "false"]).optional(),
 
   // Platform ops break-glass emails (comma-separated). Combined with users.role = platform_admin.
   PLATFORM_ADMIN_EMAILS: z.string().optional(),
@@ -74,19 +73,6 @@ export const clientEnv: ClientEnv = clientSchema.parse({
     process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
 });
-
-/** Whether Clerk credentials are present (both public and secret keys). */
-export function isAuthConfigured(): boolean {
-  return Boolean(
-    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY &&
-      process.env.CLERK_SECRET_KEY,
-  );
-}
-
-/** Whether a database connection string is available. */
-export function isDatabaseConfigured(): boolean {
-  return Boolean(process.env.DATABASE_URL);
-}
 
 /** A required server value, throwing a clear error when absent. */
 export function requireEnv(key: keyof ServerEnv): string {

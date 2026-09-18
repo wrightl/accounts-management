@@ -5,7 +5,6 @@ import { getShareholder } from "@/lib/shareholders/queries";
 import { listFounders } from "@/lib/expenses/queries";
 import { ShareholderForm } from "@/components/shareholders/shareholder-form";
 import { buttonClasses } from "@/components/ui/button";
-import { isDatabaseConfigured } from "@/env";
 
 export default async function ShareholderDetailPage({
   params,
@@ -15,10 +14,6 @@ export default async function ShareholderDetailPage({
   const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
   const { id } = await params;
-
-  if (!isDatabaseConfigured()) {
-    return <p className="text-muted">Connect a database to view shareholders.</p>;
-  }
 
   const [shareholder, founders] = await Promise.all([
     getShareholder(companyId, id),

@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
-import { isAuthConfigured } from "@/env";
 import { PublicHeader } from "@/components/marketing/public-header";
 import { PublicFooter } from "@/components/marketing/public-footer";
 import { MarketingHero } from "@/components/marketing/hero";
@@ -18,10 +17,8 @@ import { GuidesTeaser } from "@/components/marketing/guides-teaser";
 import { FinalCta } from "@/components/marketing/final-cta";
 
 export default async function Home() {
-  if (isAuthConfigured()) {
-    const { userId } = await auth();
-    if (userId) redirect("/dashboard");
-  }
+  const { userId } = await auth();
+  if (userId) redirect("/dashboard");
 
   return (
     <main className="flex flex-1 flex-col bg-navy text-foreground">

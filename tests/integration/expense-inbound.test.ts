@@ -37,7 +37,6 @@ vi.mock("@/lib/platform-settings", () => ({
     provider: "local",
     model: "google/gemini-2.5-flash",
   })),
-  isRecurringInvoicesEnabled: vi.fn(async () => false),
   updatePlatformSettings: vi.fn(),
 }));
 

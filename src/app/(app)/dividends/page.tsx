@@ -11,7 +11,6 @@ import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/form";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { formatGBP } from "@/lib/money";
-import { isDatabaseConfigured } from "@/env";
 
 export default async function DividendsPage({
   searchParams,
@@ -24,17 +23,6 @@ export default async function DividendsPage({
   }
   const canWrite = await hasPermission("accounts:write");
   const sp = await searchParams;
-
-  if (!isDatabaseConfigured()) {
-    return (
-      <div>
-        <h1 className="font-display text-2xl font-semibold">Dividends</h1>
-        <p className="mt-2 text-muted">
-          Connect a database to manage dividend records.
-        </p>
-      </div>
-    );
-  }
 
   const defaults = await defaultReportPeriod(companyId);
   const from = sp.from ?? defaults.from;

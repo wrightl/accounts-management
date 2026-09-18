@@ -5,21 +5,11 @@ import { buttonClasses } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
 import { InvoiceDueDate } from "@/components/invoices/invoice-due-date";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
-import { isDatabaseConfigured } from "@/env";
 import type { InvoiceStatus } from "@/lib/invoices/status";
 
 export default async function InvoicesPage() {
   const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
-
-  if (!isDatabaseConfigured()) {
-    return (
-      <div>
-        <h1 className="font-display text-2xl font-semibold">Invoices</h1>
-        <p className="mt-2 text-muted">Connect a database to manage invoices.</p>
-      </div>
-    );
-  }
 
   const rows = await listInvoices(companyId);
 

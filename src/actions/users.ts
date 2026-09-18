@@ -6,7 +6,6 @@ import { z } from "zod";
 import { clerkClient } from "@clerk/nextjs/server";
 import { getDb } from "@/db";
 import { reimbursements, users } from "@/db/schema";
-import { isAuthConfigured } from "@/env";
 import { requireUser } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { mutate } from "@/lib/mutate";
@@ -185,9 +184,6 @@ export async function inviteUser(formData: FormData): Promise<ActionResult> {
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
-  if (!isAuthConfigured()) {
-    return { ok: false, error: "Clerk is not configured — cannot send invitations." };
-  }
 
   const email = normalizeEmail(parsed.data.email);
   const name = parsed.data.name?.trim() || null;
@@ -348,10 +344,8 @@ export async function revokeUserInvite(userId: string): Promise<ActionResult> {
 
       const { remaining } = await removeMembership(userId, companyId);
       if (remaining === 0) {
-        if (isAuthConfigured()) {
-          const clerkResult = await revokeClerkInvitations(target.email);
-          if (!clerkResult.ok) return clerkResult;
-        }
+        const clerkResult = await revokeClerkInvitations(target.email);
+        if (!clerkResult.ok) return clerkResult;
         await db.delete(users).where(eq(users.id, userId));
       }
 
@@ -394,11 +388,9 @@ export async function deleteUser(userId: string): Promise<ActionResult> {
 
       if (isLastMembership) {
         if (!target.clerkUserId) {
-          if (isAuthConfigured()) {
-            const clerkResult = await revokeClerkInvitations(target.email);
-            if (!clerkResult.ok) return clerkResult;
-          }
-        } else if (isAuthConfigured()) {
+          const clerkResult = await revokeClerkInvitations(target.email);
+          if (!clerkResult.ok) return clerkResult;
+        } else {
           try {
             const client = await clerkClient();
             await client.users.deleteUser(target.clerkUserId);
@@ -507,7 +499,6 @@ export async function updateUser(userId: string, formData: FormData): Promise<Ac
       }
 
       if (
-        isAuthConfigured() &&
         target.clerkUserId &&
         name !== target.name
       ) {
@@ -583,7 +574,6 @@ export async function updateOwnProfile(formData: FormData): Promise<ActionResult
   if (!target) return { ok: false, error: "User not found" };
 
   if (
-    isAuthConfigured() &&
     target.clerkUserId &&
     name !== target.name
   ) {
@@ -629,10 +619,6 @@ function validateProfilePicture(file: File): string | null {
 }
 
 export async function uploadProfilePicture(formData: FormData): Promise<ActionResult> {
-  if (!isAuthConfigured()) {
-    return { ok: false, error: "Clerk is not configured — cannot update profile picture." };
-  }
-
   const file = formData.get("photo");
   if (!(file instanceof File)) {
     return { ok: false, error: "Choose an image file" };
@@ -668,10 +654,6 @@ export async function uploadProfilePicture(formData: FormData): Promise<ActionRe
 }
 
 export async function removeProfilePicture(): Promise<ActionResult> {
-  if (!isAuthConfigured()) {
-    return { ok: false, error: "Clerk is not configured — cannot update profile picture." };
-  }
-
   const session = await requireUser();
   const localUserId = await ensureLocalUser(session);
 

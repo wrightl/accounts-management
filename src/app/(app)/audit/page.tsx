@@ -3,19 +3,9 @@ import { guardTenantPage } from "@/lib/auth";
 import { getDb } from "@/db";
 import { auditLog, users } from "@/db/schema";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
-import { isDatabaseConfigured } from "@/env";
 
 export default async function AuditLogPage() {
   const { companyId } = await guardTenantPage("users:manage");
-
-  if (!isDatabaseConfigured()) {
-    return (
-      <div>
-        <h1 className="font-display text-2xl font-semibold">Audit log</h1>
-        <p className="mt-2 text-muted">Connect a database to view the audit trail.</p>
-      </div>
-    );
-  }
 
   const db = getDb();
   const rows = await db

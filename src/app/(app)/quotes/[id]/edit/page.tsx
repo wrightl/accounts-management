@@ -6,7 +6,6 @@ import { listClients } from "@/lib/clients/queries";
 import { canEditQuote } from "@/lib/quotes/status";
 import { QuoteForm } from "@/components/quotes/quote-form";
 import { buttonClasses } from "@/components/ui/button";
-import { isDatabaseConfigured } from "@/env";
 import { penceToPounds } from "@/lib/money";
 
 export default async function EditQuotePage({
@@ -16,8 +15,6 @@ export default async function EditQuotePage({
 }) {
   const { companyId } = await guardTenantPage("accounts:write");
   const { id } = await params;
-
-  if (!isDatabaseConfigured()) notFound();
 
   const detail = await getQuoteDetail(companyId, id);
   if (!detail) notFound();

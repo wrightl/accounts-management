@@ -16,6 +16,7 @@ export type NavIcon =
     | 'shareholders'
     | 'quotes'
     | 'orders'
+    | 'recurring'
     | 'audit'
     | 'inboundEmail'
     | 'settings'
@@ -129,6 +130,12 @@ export const NAV_GROUPS: NavGroup[] = [
                 href: '/invoices',
                 label: 'Invoices',
                 icon: 'invoices',
+                permission: 'accounts:read',
+            },
+            {
+                href: '/recurring-invoices',
+                label: 'Recurring',
+                icon: 'recurring',
                 permission: 'accounts:read',
             },
         ],

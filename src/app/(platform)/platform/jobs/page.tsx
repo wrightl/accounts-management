@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { requirePlatformAdmin } from "@/lib/platform";
-import { isDatabaseConfigured } from "@/env";
 import { hasDatabaseClient } from "@/db";
 import {
   listPlatformInboundJobs,
@@ -17,7 +16,7 @@ export default async function PlatformJobsPage({
   await requirePlatformAdmin();
   const params = await searchParams;
 
-  if (!isDatabaseConfigured() || !hasDatabaseClient()) {
+  if (!hasDatabaseClient()) {
     return (
       <div>
         <h1 className="font-display text-2xl font-semibold">Jobs</h1>

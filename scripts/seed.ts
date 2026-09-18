@@ -23,7 +23,6 @@ import { schema, users } from "../src/db/schema";
 import { seedPlatformAdmins } from "../src/db/seed";
 import type { Database } from "../src/db";
 import { platformAdminEmails } from "../src/lib/bootstrap";
-import { isAuthConfigured } from "../src/env";
 import { sendClerkInvitation } from "../src/lib/clerk-invite";
 
 function assertSeedAllowed(url: string) {
@@ -79,13 +78,6 @@ async function main() {
       result.skipped.length === 0
     ) {
       console.log("No PLATFORM_ADMIN_EMAILS to seed");
-    }
-
-    if (!isAuthConfigured()) {
-      console.warn(
-        "Clerk is not configured — skipped invitations. Set CLERK_SECRET_KEY and NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY, then re-run seed to email invites.",
-      );
-      return;
     }
 
     for (const email of emails) {

@@ -3,14 +3,9 @@ import { guardTenantPage } from "@/lib/auth";
 import { listClients } from "@/lib/clients/queries";
 import { InvoiceForm } from "@/components/invoices/invoice-form";
 import { buttonClasses } from "@/components/ui/button";
-import { isDatabaseConfigured } from "@/env";
 
 export default async function NewInvoicePage() {
   const { companyId } = await guardTenantPage("accounts:write");
-
-  if (!isDatabaseConfigured()) {
-    return <p className="text-muted">Connect a database to create invoices.</p>;
-  }
 
   const clients = await listClients(companyId);
 

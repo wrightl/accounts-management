@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { requirePlatformAdmin } from "@/lib/platform";
-import { isDatabaseConfigured } from "@/env";
 import { hasDatabaseClient } from "@/db";
 import { getPlatformOverviewStats } from "@/lib/platform/queries";
 import { getPlatformSettings } from "@/lib/platform-settings";
@@ -8,7 +7,7 @@ import { getPlatformSettings } from "@/lib/platform-settings";
 export default async function PlatformOverviewPage() {
   await requirePlatformAdmin();
 
-  if (!isDatabaseConfigured() || !hasDatabaseClient()) {
+  if (!hasDatabaseClient()) {
     return (
       <div>
         <h1 className="font-display text-2xl font-semibold">Platform</h1>

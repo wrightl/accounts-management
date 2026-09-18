@@ -239,6 +239,20 @@
       "when": 1787503000000,
       "tag": "0033_platform_admin_invariants",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1787504000000,
+      "tag": "0034_recurring_invoices_parity",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1787505000000,
+      "tag": "0035_drop_recurring_invoices_enabled",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,4 @@
 import { requirePlatformAdmin } from "@/lib/platform";
-import { isDatabaseConfigured } from "@/env";
 import { hasDatabaseClient } from "@/db";
 import { listPlatformUsers } from "@/lib/platform/queries";
 import { isPlatformAdminEmail } from "@/lib/bootstrap";
@@ -14,7 +13,7 @@ export default async function PlatformUsersPage({
   await requirePlatformAdmin();
   const { q } = await searchParams;
 
-  if (!isDatabaseConfigured() || !hasDatabaseClient()) {
+  if (!hasDatabaseClient()) {
     return (
       <div>
         <h1 className="font-display text-2xl font-semibold">Users</h1>

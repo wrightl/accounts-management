@@ -15,7 +15,6 @@ import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { formatGBP, lineNetPence } from "@/lib/money";
 import { clientDisplayName } from "@/lib/clients/display";
-import { isDatabaseConfigured } from "@/env";
 
 export default async function QuoteDetailPage({
   params,
@@ -26,7 +25,6 @@ export default async function QuoteDetailPage({
   const canWrite = await hasPermission("accounts:write");
   const { id } = await params;
 
-  if (!isDatabaseConfigured()) notFound();
   const [detail, company, history, declineCategories] = await Promise.all([
     getQuoteDetail(companyId, id),
     getOrCreateCompanySettings(companyId),

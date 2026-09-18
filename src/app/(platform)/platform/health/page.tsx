@@ -1,9 +1,5 @@
 import { requirePlatformAdmin } from "@/lib/platform";
-import {
-  isAuthConfigured,
-  isDatabaseConfigured,
-  serverEnv,
-} from "@/env";
+import { serverEnv } from "@/env";
 import { hasDatabaseClient } from "@/db";
 import { getPlatformSettings } from "@/lib/platform-settings";
 import { RunDailyCronButton } from "@/components/platform/run-cron-button";
@@ -30,8 +26,7 @@ export default async function PlatformHealthPage() {
 
   const env = serverEnv();
   const checks = [
-    { label: "Clerk auth", ok: isAuthConfigured() },
-    { label: "Database", ok: isDatabaseConfigured() && hasDatabaseClient() },
+    { label: "Database", ok: hasDatabaseClient() },
     { label: "Vercel Blob", ok: Boolean(env.BLOB_READ_WRITE_TOKEN) },
     {
       label: "Resend email",
@@ -43,7 +38,7 @@ export default async function PlatformHealthPage() {
   ];
 
   const settings =
-    isDatabaseConfigured() && hasDatabaseClient()
+    hasDatabaseClient()
       ? await getPlatformSettings()
       : null;
 

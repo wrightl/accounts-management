@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Outfit } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
-import { isAuthConfigured } from "@/env";
 import { brand } from "@/lib/brand";
 import { AppProviders } from "@/components/providers";
 import "./globals.css";
@@ -64,10 +63,6 @@ export default function RootLayout({
       </body>
     </html>
   );
-
-  if (!isAuthConfigured()) {
-    return body;
-  }
 
   return (
     <ClerkProvider

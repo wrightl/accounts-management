@@ -11,7 +11,6 @@ import {
 } from "@/db/schema";
 import { platformMutate } from "@/lib/platform";
 import { isPlatformAdminEmail } from "@/lib/bootstrap";
-import { isAuthConfigured } from "@/env";
 import {
   findUserByEmail,
   getMembership,
@@ -158,9 +157,6 @@ export async function platformInviteCompanyAdmin(
   if (!idOk.success) return { ok: false, error: "Invalid company id" };
   const emailParsed = z.string().email().safeParse(emailRaw.trim());
   if (!emailParsed.success) return { ok: false, error: "Valid email required" };
-  if (!isAuthConfigured()) {
-    return { ok: false, error: "Clerk is not configured — cannot send invitations." };
-  }
 
   const email = normalizeEmail(emailParsed.data);
   const name = nameRaw.trim() || null;
@@ -272,9 +268,6 @@ export async function invitePlatformAdmin(
   const nameRaw = String(formData.get("name") ?? "");
   const emailParsed = z.string().email().safeParse(emailRaw.trim());
   if (!emailParsed.success) return { ok: false, error: "Valid email required" };
-  if (!isAuthConfigured()) {
-    return { ok: false, error: "Clerk is not configured — cannot send invitations." };
-  }
 
   const email = normalizeEmail(emailParsed.data);
   const name = nameRaw.trim() || null;
@@ -325,9 +318,6 @@ export async function updatePlatformSettingsAction(
   formData: FormData,
 ): Promise<ActionResult> {
   const maintenanceBanner = String(formData.get("maintenanceBanner") ?? "").trim();
-  const recurring =
-    formData.get("recurringInvoicesEnabled") === "on" ||
-    formData.get("recurringInvoicesEnabled") === "true";
   const defaultReceiptOcrProvider = String(
     formData.get("defaultReceiptOcrProvider") ?? "local",
   );
@@ -357,7 +347,6 @@ export async function updatePlatformSettingsAction(
     async () => {
       await updatePlatformSettings({
         maintenanceBanner: maintenanceBanner || null,
-        recurringInvoicesEnabled: recurring,
         defaultReceiptOcrProvider,
         defaultReceiptOcrModel: model,
       });
@@ -370,7 +359,6 @@ export async function updatePlatformSettingsAction(
         entityId: "1",
         companyId: null,
         meta: {
-          recurringInvoicesEnabled: recurring,
           defaultReceiptOcrProvider,
           hasBanner: Boolean(maintenanceBanner),
         },
