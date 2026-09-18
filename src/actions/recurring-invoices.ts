@@ -1,6 +1,5 @@
 "use server";
 
-import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { clients, recurringInvoices } from "@/db/schema";
@@ -19,46 +18,15 @@ import { generateRecurringInvoiceForTemplate } from "@/lib/invoices/recurring-ge
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { parseVatRate, resolveLineVatRate } from "@/lib/vat";
 import { revalidatePath } from "next/cache";
-
-const lineSchema = z.object({
-  description: z.string().trim().min(1).max(500),
-  quantity: z.coerce.number().positive().max(1_000_000),
-  unitPricePounds: z.string().trim().min(1),
-  vatRate: z.coerce.number().int().min(0).max(100).optional(),
-});
-
-const templateSchema = z.object({
-  name: z.string().trim().min(1).max(200),
-  clientId: z.string().uuid(),
-  notes: z.string().max(5000).optional().nullable(),
-  dayOfMonth: z.coerce.number().int().min(1).max(28),
-  onGenerate: z.enum(["draft", "send"]),
-  endsOn: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .optional()
-    .or(z.literal("")),
-  maxOccurrences: z
-    .union([z.coerce.number().int().min(1).max(1200), z.literal(""), z.nan()])
-    .optional(),
-  enabled: z.enum(["true", "false"]).optional(),
-  lines: z.array(lineSchema).min(1, "Add at least one line item"),
-});
-
-function parseLinesFromForm(formData: FormData) {
-  const raw = formData.get("linesJson");
-  if (typeof raw !== "string") return [];
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed;
-  } catch {
-    return [];
-  }
-}
+import {
+  parseRecurringInvoiceInput,
+  recurringInvoiceRawFromFormData,
+  type RecurringInvoiceParsed,
+} from "@/lib/recurring-invoices/schema";
+import { FORM_FIELD_ERROR_SUMMARY } from "@/lib/validation/field-errors";
 
 function buildLineTemplate(
-  lines: z.infer<typeof lineSchema>[],
+  lines: RecurringInvoiceParsed["lines"],
   company: { vatRegistered: boolean },
 ): RecurringLineTemplate[] {
   return lines.map((l) => ({
@@ -70,7 +38,7 @@ function buildLineTemplate(
 }
 
 function parseMaxOccurrences(
-  value: z.infer<typeof templateSchema>["maxOccurrences"],
+  value: RecurringInvoiceParsed["maxOccurrences"],
 ): number | null {
   if (value === "" || value === undefined || Number.isNaN(value as number)) {
     return null;
@@ -86,28 +54,25 @@ function parseEndsOn(value: string | undefined | null): string | null {
 export async function createRecurringInvoice(
   formData: FormData,
 ): Promise<ActionResult> {
-  const parsed = templateSchema.safeParse({
-    name: formData.get("name"),
-    clientId: formData.get("clientId"),
-    notes: formData.get("notes") ?? "",
-    dayOfMonth: formData.get("dayOfMonth") ?? "1",
-    onGenerate: formData.get("onGenerate") ?? "draft",
-    endsOn: formData.get("endsOn") ?? "",
-    maxOccurrences: formData.get("maxOccurrences") ?? "",
-    enabled: formData.get("enabled") ?? "true",
-    lines: parseLinesFromForm(formData),
-  });
-  if (!parsed.success) {
+  const parsed = parseRecurringInvoiceInput(
+    recurringInvoiceRawFromFormData(formData),
+  );
+  if (!parsed.ok) {
     return {
       ok: false,
-      error: parsed.error.issues[0]?.message ?? "Invalid input",
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
     };
   }
 
   const today = todayIsoDate();
   const endsOn = parseEndsOn(parsed.data.endsOn);
   if (endsOn && endsOn < today) {
-    return { ok: false, error: "End date must be today or later" };
+    return {
+      ok: false,
+      error: FORM_FIELD_ERROR_SUMMARY,
+      fieldErrors: { endsOn: "End date must be today or later" },
+    };
   }
 
   const maxOccurrences = parseMaxOccurrences(parsed.data.maxOccurrences);
@@ -166,21 +131,14 @@ export async function updateRecurringInvoice(
   id: string,
   formData: FormData,
 ): Promise<ActionResult> {
-  const parsed = templateSchema.safeParse({
-    name: formData.get("name"),
-    clientId: formData.get("clientId"),
-    notes: formData.get("notes") ?? "",
-    dayOfMonth: formData.get("dayOfMonth") ?? "1",
-    onGenerate: formData.get("onGenerate") ?? "draft",
-    endsOn: formData.get("endsOn") ?? "",
-    maxOccurrences: formData.get("maxOccurrences") ?? "",
-    enabled: formData.get("enabled") ?? "true",
-    lines: parseLinesFromForm(formData),
-  });
-  if (!parsed.success) {
+  const parsed = parseRecurringInvoiceInput(
+    recurringInvoiceRawFromFormData(formData),
+  );
+  if (!parsed.ok) {
     return {
       ok: false,
-      error: parsed.error.issues[0]?.message ?? "Invalid input",
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
     };
   }
 

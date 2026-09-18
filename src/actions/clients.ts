@@ -1,47 +1,23 @@
 "use server";
 
 import { and, eq } from "drizzle-orm";
-import { z } from "zod";
 import { getDb } from "@/db";
 import { clients, invoices } from "@/db/schema";
 import { mutate } from "@/lib/mutate";
+import {
+  clientRawFromFormData,
+  parseClientInput,
+} from "@/lib/clients/schema";
 import type { ActionResult } from "@/actions/result";
 
-const optionalText = z
-  .string()
-  .trim()
-  .optional()
-  .or(z.literal(""))
-  .transform((v) => (v === "" ? null : v));
-
-const clientSchema = z.object({
-  name: z.string().trim().min(1, "Name is required").max(200),
-  companyName: optionalText.pipe(z.string().max(200).nullable()),
-  email: z
-    .string()
-    .trim()
-    .email("Invalid email")
-    .optional()
-    .or(z.literal(""))
-    .transform((v) => (v === "" ? null : v)),
-  addressLines: optionalText,
-  notes: optionalText,
-});
-
-function parseClientForm(formData: FormData) {
-  return clientSchema.safeParse({
-    name: formData.get("name"),
-    companyName: formData.get("companyName") ?? "",
-    email: formData.get("email") ?? "",
-    addressLines: formData.get("addressLines") ?? "",
-    notes: formData.get("notes") ?? "",
-  });
-}
-
 export async function createClient(formData: FormData): Promise<ActionResult> {
-  const parsed = parseClientForm(formData);
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const parsed = parseClientInput(clientRawFromFormData(formData));
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
   }
 
   return mutate(
@@ -72,9 +48,13 @@ export async function updateClient(
   id: string,
   formData: FormData,
 ): Promise<ActionResult> {
-  const parsed = parseClientForm(formData);
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const parsed = parseClientInput(clientRawFromFormData(formData));
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
   }
 
   return mutate(

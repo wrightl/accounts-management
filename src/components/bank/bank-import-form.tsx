@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { DialogActions } from "@/components/ui/dialog";
 import { FieldError, Input, Label, Select } from "@/components/ui/form";
+import { FormStickyActions } from "@/components/ui/form-sticky-actions";
+import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
+import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
+import { useFieldErrors } from "@/components/ui/use-field-errors";
+import { toast } from "@/components/ui/toast";
 import {
   getBankImportContext,
   importBankCsv,
@@ -14,6 +18,10 @@ import { parseCsvLine } from "@/lib/bank/csv-client";
 import type { GenericCsvMapping } from "@/lib/bank/types";
 import type { BankProviderId } from "@/lib/bank/providers";
 import { isGenericCsvMapping } from "@/lib/bank/generic-csv-client";
+import {
+  parseBankCsvFile,
+  parseGenericCsvMappingInput,
+} from "@/lib/bank/schema";
 
 const MAP_FIELDS: {
   key: keyof GenericCsvMapping;
@@ -56,8 +64,15 @@ export function BankImportForm({
   onSuggestions?: (suggestions: SuggestedMatch[]) => void;
 }) {
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const {
+    fieldErrors,
+    error,
+    clearAll,
+    clearField,
+    applyFail,
+    setError,
+  } = useFieldErrors();
+  const formRef = useRef<HTMLFormElement>(null);
   const [pending, startTransition] = useTransition();
   const [loadingContext, setLoadingContext] = useState(true);
   const [provider, setProvider] = useState<BankProviderId | null>(null);
@@ -96,7 +111,7 @@ export function BankImportForm({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [setError]);
 
   const isOther = provider === "other";
   const needsMapping = isOther || forceMapper;
@@ -116,7 +131,13 @@ export function BankImportForm({
       .split(/\r?\n/)
       .filter((l) => l.trim().length > 0);
     if (lines.length < 1) {
-      setError("CSV file is empty");
+      applyFail({
+        error: "CSV file is empty",
+        fieldErrors: { csv: "CSV file is empty" },
+      });
+      scheduleFocusFirstFieldError(formRef.current, {
+        csv: "CSV file is empty",
+      });
       return;
     }
     const rawHeaders = parseCsvLine(lines[0]);
@@ -143,8 +164,7 @@ export function BankImportForm({
   };
 
   const onFileChange = async (file: File | null) => {
-    setError(null);
-    setMessage(null);
+    clearAll();
     setHeaders([]);
     setSampleRows([]);
     setMapping(null);
@@ -170,44 +190,61 @@ export function BankImportForm({
 
   return (
     <form
+      ref={formRef}
+      noValidate
       className="space-y-3"
-      action={(formData) => {
-        setError(null);
-        setMessage(null);
+      onSubmit={preventResetSubmit((formData) => {
+        clearAll();
+        const file = formData.get("csv");
+        const fileParsed = parseBankCsvFile(
+          file instanceof File ? file : pendingFile,
+        );
+        if (!fileParsed.ok) {
+          applyFail(fileParsed);
+          scheduleFocusFirstFieldError(formRef.current, fileParsed.fieldErrors);
+          return;
+        }
         if (needsMapping) {
-          if (!mapping?.date) {
-            setError("Map a Date column before importing.");
-            return;
-          }
-          const hasAmount = Boolean(mapping.amount?.trim());
-          const hasSplit = Boolean(
-            mapping.moneyOut?.trim() || mapping.moneyIn?.trim(),
-          );
-          if (!hasAmount && !hasSplit) {
-            setError(
-              "Map either an Amount column, or Money out and Money in columns.",
+          const mappingParsed = parseGenericCsvMappingInput(mapping);
+          if (!mappingParsed.ok) {
+            applyFail(mappingParsed);
+            scheduleFocusFirstFieldError(
+              formRef.current,
+              mappingParsed.fieldErrors,
             );
             return;
           }
-          formData.set("csvMapping", JSON.stringify(mapping));
+          formData.set("csvMapping", JSON.stringify(mappingParsed.data));
           formData.set("forceMapper", "1");
         }
         startTransition(async () => {
           const result = await importBankCsv(formData);
           if (!result.ok) {
             if (result.needsMapping && pendingFile) {
-              setError(result.error);
+              applyFail({
+                error: result.error,
+                fieldErrors: { csv: result.error },
+              });
+              scheduleFocusFirstFieldError(formRef.current, {
+                csv: result.error,
+              });
               await openMapperForFile(pendingFile);
               return;
             }
-            setError(result.error);
+            applyFail({
+              error: result.error,
+              fieldErrors: { csv: result.error },
+            });
+            scheduleFocusFirstFieldError(formRef.current, {
+              csv: result.error,
+            });
             return;
           }
           const nonGbp =
             result.skippedNonGbp && result.skippedNonGbp > 0
               ? ` ${result.skippedNonGbp} non-GBP row${result.skippedNonGbp === 1 ? "" : "s"} skipped.`
               : "";
-          setMessage(
+          toast(
             `Imported ${result.inserted ?? 0} new rows (${result.skipped ?? 0} duplicates skipped).${nonGbp}`,
           );
           if (result.matchedColumns?.length) {
@@ -220,7 +257,7 @@ export function BankImportForm({
             onSuggestions?.(result.suggestions);
           }
         });
-      }}
+      })}
     >
       <p className="text-sm text-muted">
         Importing as <span className="font-medium text-foreground">{bankLabelText}</span>
@@ -253,7 +290,9 @@ export function BankImportForm({
       ) : null}
 
       <div>
-        <Label htmlFor="csv">Statement file</Label>
+        <Label htmlFor="csv" required>
+          Statement file
+        </Label>
         <Input
           key={fileKey}
           id="csv"
@@ -262,10 +301,14 @@ export function BankImportForm({
           accept=".csv,text/csv"
           required
           disabled={pending}
+          aria-invalid={Boolean(fieldErrors.csv)}
+          aria-describedby={fieldErrors.csv ? "csv-error" : undefined}
           onChange={(e) => {
+            clearField("csv");
             void onFileChange(e.target.files?.[0] ?? null);
           }}
         />
+        <FieldError id="csv-error">{fieldErrors.csv}</FieldError>
       </div>
 
       {needsMapping && headers.length > 0 ? (
@@ -274,11 +317,19 @@ export function BankImportForm({
           <div className="grid gap-3 sm:grid-cols-2">
             {MAP_FIELDS.map((field) => (
               <div key={field.key}>
-                <Label htmlFor={`map-${field.key}`}>{field.label}</Label>
+                <Label htmlFor={`map-${field.key}`} required={field.required}>
+                  {field.label}
+                  {!field.required ? " (optional)" : ""}
+                </Label>
                 <Select
                   id={`map-${field.key}`}
                   value={(mapping?.[field.key] as string | null | undefined) ?? ""}
                   onChange={(e) => {
+                    clearField(field.key);
+                    if (field.key === "amount" || field.key === "moneyOut") {
+                      clearField("amount");
+                      clearField("moneyOut");
+                    }
                     setMapping((prev) => ({
                       ...(prev ?? { date: "" }),
                       [field.key]: e.target.value || null,
@@ -291,7 +342,14 @@ export function BankImportForm({
                   }
                   required={field.required}
                   disabled={pending}
+                  aria-invalid={Boolean(fieldErrors[field.key])}
+                  aria-describedby={
+                    fieldErrors[field.key] ? `${field.key}-error` : undefined
+                  }
                 />
+                <FieldError id={`${field.key}-error`}>
+                  {fieldErrors[field.key]}
+                </FieldError>
               </div>
             ))}
           </div>
@@ -333,6 +391,7 @@ export function BankImportForm({
               setMapping(null);
               setForceMapper(false);
               setPendingFile(null);
+              clearAll();
             }}
           >
             Choose a different file
@@ -340,16 +399,20 @@ export function BankImportForm({
         </div>
       ) : null}
 
-      <FieldError>{error}</FieldError>
-      {message && <p className="text-sm text-success">{message}</p>}
-      <DialogActions>
+      <FormStickyActions
+        error={
+          error && !fieldErrors.csv && !fieldErrors.date && !fieldErrors.amount
+            ? error
+            : null
+        }
+      >
         <Button
           type="submit"
           disabled={pending || (needsMapping && headers.length === 0)}
         >
           {pending ? "Importing…" : "Import"}
         </Button>
-      </DialogActions>
+      </FormStickyActions>
     </form>
   );
 }

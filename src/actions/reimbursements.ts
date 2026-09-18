@@ -1,7 +1,6 @@
 "use server";
 
 import { and, eq, inArray, ne, sql } from "drizzle-orm";
-import { z } from "zod";
 import { getDb } from "@/db";
 import {
   expenses,
@@ -18,27 +17,14 @@ import {
 } from "@/lib/bank/queries";
 import { payReimbursementRun, ReimbursementPayError } from "@/lib/reimbursements/pay";
 import { canEditReimbursement } from "@/lib/reimbursements/status";
+import {
+  parseCreateReimbursementInput,
+  parseMarkPaidInput,
+  parseUpdateReimbursementInput,
+  reimbursementCreateRawFromFormData,
+  reimbursementUpdateRawFromFormData,
+} from "@/lib/reimbursements/schema";
 import type { ActionResult } from "@/actions/result";
-
-const createSchema = z.object({
-  payeeUserId: z.string().uuid(),
-  expenseIds: z.array(z.string().uuid()).min(1, "Select at least one expense"),
-  reference: z.string().trim().min(1, "Bank payment reference is required"),
-});
-
-const updateSchema = z.object({
-  expenseIds: z.array(z.string().uuid()).min(1, "Select at least one expense"),
-  reference: z.string().trim().min(1, "Bank payment reference is required"),
-});
-
-const markPaidSchema = z.object({
-  bankTransactionId: z
-    .string()
-    .uuid()
-    .optional()
-    .or(z.literal(""))
-    .transform((v) => (v === "" || !v ? null : v)),
-});
 
 class ReimburseError extends Error {
   constructor(message: string) {
@@ -50,20 +36,22 @@ class ReimburseError extends Error {
 export async function createReimbursementRun(
   formData: FormData,
 ): Promise<ActionResult> {
-  let expenseIds: string[] = [];
-  try {
-    expenseIds = JSON.parse(String(formData.get("expenseIdsJson") ?? "[]"));
-  } catch {
-    return { ok: false, error: "Invalid expense selection" };
+  const raw = reimbursementCreateRawFromFormData(formData);
+  if (!raw.ok) {
+    return {
+      ok: false,
+      error: raw.error,
+      fieldErrors: raw.fieldErrors,
+    };
   }
 
-  const parsed = createSchema.safeParse({
-    payeeUserId: formData.get("payeeUserId"),
-    expenseIds,
-    reference: formData.get("reference") ?? "",
-  });
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const parsed = parseCreateReimbursementInput(raw.data);
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
   }
 
   return mutate(
@@ -149,19 +137,22 @@ export async function updateReimbursementRun(
   id: string,
   formData: FormData,
 ): Promise<ActionResult> {
-  let expenseIds: string[] = [];
-  try {
-    expenseIds = JSON.parse(String(formData.get("expenseIdsJson") ?? "[]"));
-  } catch {
-    return { ok: false, error: "Invalid expense selection" };
+  const raw = reimbursementUpdateRawFromFormData(formData);
+  if (!raw.ok) {
+    return {
+      ok: false,
+      error: raw.error,
+      fieldErrors: raw.fieldErrors,
+    };
   }
 
-  const parsed = updateSchema.safeParse({
-    expenseIds,
-    reference: formData.get("reference") ?? "",
-  });
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const parsed = parseUpdateReimbursementInput(raw.data);
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
   }
 
   return mutate(
@@ -263,11 +254,15 @@ export async function markReimbursementPaid(
   id: string,
   formData?: FormData,
 ): Promise<ActionResult> {
-  const parsed = markPaidSchema.safeParse({
+  const parsed = parseMarkPaidInput({
     bankTransactionId: formData?.get("bankTransactionId") ?? "",
   });
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
   }
 
   return mutate(

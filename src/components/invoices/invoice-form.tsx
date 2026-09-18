@@ -1,11 +1,19 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label, Select, Textarea } from "@/components/ui/form";
+import { FormStickyActions } from "@/components/ui/form-sticky-actions";
+import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
+import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
+import { useFieldErrors } from "@/components/ui/use-field-errors";
 import { formatGBP, invoiceTotals, poundsToPence } from "@/lib/money";
 import { createInvoice, updateInvoice } from "@/actions/invoices";
+import {
+  invoiceRawFromFormData,
+  parseInvoiceInput,
+} from "@/lib/invoices/schema";
 import { clientDisplayName } from "@/lib/clients/display";
 import {
   VatRateField,
@@ -33,10 +41,6 @@ function newLine(defaultVatRate: number): LineDraft {
   };
 }
 
-function isCompleteLine(line: LineDraft): boolean {
-  return line.description.trim().length > 0 && line.unitPricePounds.trim().length > 0;
-}
-
 export function InvoiceForm({
   mode,
   clients,
@@ -59,7 +63,15 @@ export function InvoiceForm({
   defaultVatRate?: number;
 }) {
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
+  const {
+    fieldErrors,
+    error,
+    clearAll,
+    clearField,
+    applyFail,
+    applyActionResult,
+  } = useFieldErrors();
+  const formRef = useRef<HTMLFormElement>(null);
   const [pending, startTransition] = useTransition();
   const lineDefault = vatRegistered ? defaultVatRate : 0;
   const [lines, setLines] = useState<LineDraft[]>(
@@ -88,11 +100,11 @@ export function InvoiceForm({
   }, [lines, vatRegistered]);
 
   function onSubmit(formData: FormData) {
-    setError(null);
+    clearAll();
     formData.set(
       "linesJson",
       JSON.stringify(
-        lines.filter(isCompleteLine).map((l) => ({
+        lines.map((l) => ({
           description: l.description,
           quantity: Number(l.quantity),
           unitPricePounds: l.unitPricePounds,
@@ -100,17 +112,23 @@ export function InvoiceForm({
         })),
       ),
     );
+    const clientParsed = parseInvoiceInput(invoiceRawFromFormData(formData));
+    if (!clientParsed.ok) {
+      applyFail(clientParsed);
+      scheduleFocusFirstFieldError(formRef.current, clientParsed.fieldErrors);
+      return;
+    }
     startTransition(async () => {
       const result =
         mode === "create"
           ? await createInvoice(formData)
           : await updateInvoice(invoice!.id, formData);
-      if (!result.ok) {
-        setError(result.error);
-        return;
+      if (applyActionResult(result) && result.ok) {
+        router.push(`/invoices/${result.id}`);
+        router.refresh();
+      } else if (!result.ok) {
+        scheduleFocusFirstFieldError(formRef.current, result.fieldErrors);
       }
-      router.push(`/invoices/${result.id}`);
-      router.refresh();
     });
   }
 
@@ -122,17 +140,25 @@ export function InvoiceForm({
     );
   }
 
+  function clearLineField(index: number, field: string) {
+    clearField(`lines.${index}.${field}`);
+  }
+
   return (
-    <form action={onSubmit} className="mx-auto max-w-3xl space-y-6">
+    <form ref={formRef} noValidate onSubmit={preventResetSubmit(onSubmit)} className="mx-auto max-w-3xl space-y-6">
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
-          <Label htmlFor="clientId">Client</Label>
+          <Label htmlFor="clientId" required>
+            Client
+          </Label>
           <Select
             id="clientId"
             name="clientId"
-            required
             defaultValue={invoice?.clientId ?? ""}
             disabled={pending}
+            aria-invalid={Boolean(fieldErrors.clientId)}
+            aria-describedby={fieldErrors.clientId ? "clientId-error" : undefined}
+            onChange={() => clearField("clientId")}
           >
             <option value="" disabled>
               Select a client…
@@ -143,17 +169,23 @@ export function InvoiceForm({
               </option>
             ))}
           </Select>
+          <FieldError id="clientId-error">{fieldErrors.clientId}</FieldError>
         </div>
         <div>
-          <Label htmlFor="issueDate">Issue date</Label>
+          <Label htmlFor="issueDate" required>
+            Issue date
+          </Label>
           <Input
             id="issueDate"
             name="issueDate"
             type="date"
-            required
             defaultValue={invoice?.issueDate ?? new Date().toISOString().slice(0, 10)}
             disabled={pending}
+            aria-invalid={Boolean(fieldErrors.issueDate)}
+            aria-describedby={fieldErrors.issueDate ? "issueDate-error" : undefined}
+            onChange={() => clearField("issueDate")}
           />
+          <FieldError id="issueDate-error">{fieldErrors.issueDate}</FieldError>
         </div>
         <div>
           <Label htmlFor="dueDate">Due date</Label>
@@ -163,13 +195,18 @@ export function InvoiceForm({
             type="date"
             defaultValue={invoice?.dueDate ?? ""}
             disabled={pending}
+            aria-invalid={Boolean(fieldErrors.dueDate)}
+            aria-describedby={fieldErrors.dueDate ? "dueDate-error" : undefined}
+            onChange={() => clearField("dueDate")}
           />
+          <FieldError id="dueDate-error">{fieldErrors.dueDate}</FieldError>
           <p className="mt-1 text-xs text-muted">Defaults to issue date + 14 days if blank.</p>
         </div>
       </div>
 
       <div className="space-y-2">
-        <Label>Line items</Label>
+        <Label required>Line items</Label>
+        <FieldError id="lines-error">{fieldErrors.lines}</FieldError>
         <div
           className={`hidden gap-2 text-xs font-medium text-muted sm:grid ${
             vatRegistered
@@ -183,83 +220,118 @@ export function InvoiceForm({
           {vatRegistered ? <span>VAT</span> : null}
           <span className="sr-only">Remove</span>
         </div>
-        {lines.map((line, index) => (
-          <div
-            key={line.key}
-            className={`grid gap-2 ${
-              vatRegistered
-                ? "sm:grid-cols-[1fr_70px_100px_110px_2.5rem]"
-                : "sm:grid-cols-[1fr_80px_120px_2.5rem]"
-            }`}
-          >
-            <Input
-              placeholder="Description"
-              value={line.description}
-              disabled={pending}
-              onChange={(e) =>
-                setLines((prev) =>
-                  prev.map((l, i) =>
-                    i === index ? { ...l, description: e.target.value } : l,
-                  ),
-                )
-              }
-            />
-            <Input
-              type="number"
-              min={1}
-              step={1}
-              placeholder="Qty"
-              value={line.quantity}
-              disabled={pending}
-              onChange={(e) =>
-                setLines((prev) =>
-                  prev.map((l, i) =>
-                    i === index ? { ...l, quantity: e.target.value } : l,
-                  ),
-                )
-              }
-            />
-            <Input
-              placeholder="£ unit"
-              value={line.unitPricePounds}
-              disabled={pending}
-              onChange={(e) =>
-                setLines((prev) =>
-                  prev.map((l, i) =>
-                    i === index ? { ...l, unitPricePounds: e.target.value } : l,
-                  ),
-                )
-              }
-            />
-            {vatRegistered ? (
-              <VatRateField
-                id={`vat-${line.key}`}
-                label=""
-                compact
-                value={choiceFromVatRate(line.vatRate)}
-                onChange={(v) => setLineVat(index, v)}
-                disabled={pending}
-              />
-            ) : null}
-            <Button
-              type="button"
-              variant="ghost"
-              className="size-9 shrink-0 px-0"
-              disabled={pending || lines.length === 1}
-              onClick={() =>
-                setLines((prev) => prev.filter((_, i) => i !== index))
-              }
-              aria-label="Remove line"
-              title={
-                lines.length === 1
-                  ? "At least one line is required"
-                  : "Remove line"
-              }
+        {lines.map((line, index) => {
+          const descKey = `lines.${index}.description`;
+          const qtyKey = `lines.${index}.quantity`;
+          const priceKey = `lines.${index}.unitPricePounds`;
+          return (
+            <div
+              key={line.key}
+              className={`grid gap-2 ${
+                vatRegistered
+                  ? "sm:grid-cols-[1fr_70px_100px_110px_2.5rem]"
+                  : "sm:grid-cols-[1fr_80px_120px_2.5rem]"
+              }`}
             >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
-        ))}
+              <div className="min-w-0">
+                <Input
+                  placeholder="Description"
+                  value={line.description}
+                  disabled={pending}
+                  aria-invalid={Boolean(fieldErrors[descKey])}
+                  aria-describedby={
+                    fieldErrors[descKey] ? `line-${index}-description-error` : undefined
+                  }
+                  onChange={(e) => {
+                    clearLineField(index, "description");
+                    setLines((prev) =>
+                      prev.map((l, i) =>
+                        i === index ? { ...l, description: e.target.value } : l,
+                      ),
+                    );
+                  }}
+                />
+                <FieldError id={`line-${index}-description-error`}>
+                  {fieldErrors[descKey]}
+                </FieldError>
+              </div>
+              <div className="min-w-0">
+                <Input
+                  type="number"
+                  min={1}
+                  step={1}
+                  placeholder="Qty"
+                  value={line.quantity}
+                  disabled={pending}
+                  aria-invalid={Boolean(fieldErrors[qtyKey])}
+                  aria-describedby={
+                    fieldErrors[qtyKey] ? `line-${index}-quantity-error` : undefined
+                  }
+                  onChange={(e) => {
+                    clearLineField(index, "quantity");
+                    setLines((prev) =>
+                      prev.map((l, i) =>
+                        i === index ? { ...l, quantity: e.target.value } : l,
+                      ),
+                    );
+                  }}
+                />
+                <FieldError id={`line-${index}-quantity-error`}>
+                  {fieldErrors[qtyKey]}
+                </FieldError>
+              </div>
+              <div className="min-w-0">
+                <Input
+                  placeholder="£ unit"
+                  value={line.unitPricePounds}
+                  disabled={pending}
+                  aria-invalid={Boolean(fieldErrors[priceKey])}
+                  aria-describedby={
+                    fieldErrors[priceKey] ? `line-${index}-unitPrice-error` : undefined
+                  }
+                  onChange={(e) => {
+                    clearLineField(index, "unitPricePounds");
+                    setLines((prev) =>
+                      prev.map((l, i) =>
+                        i === index ? { ...l, unitPricePounds: e.target.value } : l,
+                      ),
+                    );
+                  }}
+                />
+                <FieldError id={`line-${index}-unitPrice-error`}>
+                  {fieldErrors[priceKey]}
+                </FieldError>
+              </div>
+              {vatRegistered ? (
+                <VatRateField
+                  id={`vat-${line.key}`}
+                  label=""
+                  compact
+                  value={choiceFromVatRate(line.vatRate)}
+                  onChange={(v) => setLineVat(index, v)}
+                  disabled={pending}
+                />
+              ) : null}
+              <Button
+                type="button"
+                variant="ghost"
+                className="size-9 shrink-0 px-0"
+                disabled={pending || lines.length === 1}
+                onClick={() =>
+                  setLines((prev) => prev.filter((_, i) => i !== index))
+                }
+                aria-label="Remove line"
+                title={
+                  lines.length === 1
+                    ? "At least one line is required"
+                    : "Remove line"
+                }
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          );
+        })}
         <Button
           type="button"
           variant="secondary"
@@ -297,10 +369,11 @@ export function InvoiceForm({
         />
       </div>
 
-      <FieldError>{error}</FieldError>
-      <Button type="submit" disabled={pending}>
-        {pending ? "Saving…" : mode === "create" ? "Create invoice" : "Save changes"}
-      </Button>
+      <FormStickyActions error={error}>
+        <Button type="submit" disabled={pending}>
+          {pending ? "Saving…" : mode === "create" ? "Create invoice" : "Save changes"}
+        </Button>
+      </FormStickyActions>
     </form>
   );
 }

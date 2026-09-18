@@ -1,14 +1,25 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { FieldError, Input, Label, Textarea } from "@/components/ui/form";
+import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
+import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
+import { useFieldErrors } from "@/components/ui/use-field-errors";
 import {
   addCompanySupportNote,
   platformInviteCompanyAdmin,
   suspendCompany,
   unsuspendCompany,
 } from "@/actions/platform";
+import { toast } from "@/components/ui/toast";
+import {
+  companyInviteAdminRawFromFormData,
+  parseCompanyInviteAdminInput,
+  parseCompanySupportNoteInput,
+  parseSuspendCompanyInput,
+} from "@/lib/platform/schema";
 
 export function CompanySuspendForm({
   companyId,
@@ -19,11 +30,22 @@ export function CompanySuspendForm({
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const {
+    fieldErrors,
+    error,
+    clearAll,
+    clearField,
+    applyFail,
+    applyActionResult,
+  } = useFieldErrors();
+  const containerRef = useRef<HTMLDivElement>(null);
   const [reason, setReason] = useState("");
 
   return (
-    <div className="rounded-2xl border border-border bg-white p-5">
+    <div
+      ref={containerRef}
+      className="rounded-2xl border border-border bg-white p-5"
+    >
       <h2 className="font-display text-lg font-semibold">
         {suspended ? "Unsuspend company" : "Suspend company"}
       </h2>
@@ -31,29 +53,58 @@ export function CompanySuspendForm({
         Suspended companies cannot write data or send outbound email via cron.
       </p>
       {!suspended ? (
-        <label className="mt-3 block text-sm">
-          Reason (optional)
-          <input
+        <div className="mt-3">
+          <Label htmlFor="suspendReason">Reason (optional)</Label>
+          <Input
+            id="suspendReason"
             value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-border px-3 py-2"
+            onChange={(e) => {
+              setReason(e.target.value);
+              clearField("reason");
+            }}
+            disabled={pending}
+            aria-invalid={Boolean(fieldErrors.reason)}
+            aria-describedby={
+              fieldErrors.reason ? "suspendReason-error" : undefined
+            }
           />
-        </label>
+          <FieldError id="suspendReason-error">{fieldErrors.reason}</FieldError>
+        </div>
       ) : null}
-      {error ? <p className="mt-2 text-sm text-red-700">{error}</p> : null}
+      <FieldError>{error}</FieldError>
       <Button
         type="button"
         variant={suspended ? "primary" : "destructive"}
         className="mt-4"
         disabled={pending}
         onClick={() => {
-          setError(null);
+          clearAll();
+          if (!suspended) {
+            const clientParsed = parseSuspendCompanyInput({
+              companyId,
+              reason,
+            });
+            if (!clientParsed.ok) {
+              applyFail(clientParsed);
+              scheduleFocusFirstFieldError(
+                containerRef.current,
+                clientParsed.fieldErrors,
+              );
+              return;
+            }
+          }
           start(async () => {
             const result = suspended
               ? await unsuspendCompany(companyId)
               : await suspendCompany(companyId, reason);
-            if (!result.ok) setError(result.error);
-            else router.refresh();
+            if (applyActionResult(result)) {
+              router.refresh();
+            } else if (!result.ok) {
+              scheduleFocusFirstFieldError(
+                containerRef.current,
+                result.fieldErrors,
+              );
+            }
           });
         }}
       >
@@ -66,34 +117,64 @@ export function CompanySuspendForm({
 export function CompanySupportNoteForm({ companyId }: { companyId: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const {
+    fieldErrors,
+    error,
+    clearAll,
+    clearField,
+    applyFail,
+    applyActionResult,
+  } = useFieldErrors();
+  const formRef = useRef<HTMLFormElement>(null);
   const [body, setBody] = useState("");
 
   return (
     <form
-      className="mt-3"
-      onSubmit={(e) => {
-        e.preventDefault();
-        setError(null);
+      ref={formRef}
+      noValidate
+      className="mt-3 space-y-2"
+      onSubmit={preventResetSubmit((formData: FormData) => {
+        clearAll();
+        const clientParsed = parseCompanySupportNoteInput({ companyId, body });
+        if (!clientParsed.ok) {
+          applyFail(clientParsed);
+          scheduleFocusFirstFieldError(
+            formRef.current,
+            clientParsed.fieldErrors,
+          );
+          return;
+        }
         start(async () => {
           const result = await addCompanySupportNote(companyId, body);
-          if (!result.ok) setError(result.error);
-          else {
+          if (applyActionResult(result)) {
             setBody("");
             router.refresh();
+          } else if (!result.ok) {
+            scheduleFocusFirstFieldError(formRef.current, result.fieldErrors);
           }
         });
-      }}
+      })}
     >
-      <textarea
+      <Label htmlFor="supportNoteBody" required>
+        Support note
+      </Label>
+      <Textarea
+        id="supportNoteBody"
         value={body}
-        onChange={(e) => setBody(e.target.value)}
+        onChange={(e) => {
+          setBody(e.target.value);
+          clearField("body");
+        }}
         rows={3}
+        required
         placeholder="Add a support note…"
-        className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+        disabled={pending}
+        aria-invalid={Boolean(fieldErrors.body)}
+        aria-describedby={fieldErrors.body ? "supportNoteBody-error" : undefined}
       />
-      {error ? <p className="mt-1 text-sm text-red-700">{error}</p> : null}
-      <Button type="submit" className="mt-2" disabled={pending || !body.trim()}>
+      <FieldError id="supportNoteBody-error">{fieldErrors.body}</FieldError>
+      <FieldError>{error}</FieldError>
+      <Button type="submit" className="mt-2" disabled={pending}>
         Add note
       </Button>
     </form>
@@ -103,49 +184,84 @@ export function CompanySupportNoteForm({ companyId }: { companyId: string }) {
 export function CompanyInviteAdminForm({ companyId }: { companyId: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const [ok, setOk] = useState(false);
+  const {
+    fieldErrors,
+    error,
+    clearAll,
+    clearField,
+    applyFail,
+    applyActionResult,
+  } = useFieldErrors();
+  const formRef = useRef<HTMLFormElement>(null);
 
   return (
     <form
+      ref={formRef}
+      noValidate
       className="mt-3 space-y-3"
-      onSubmit={(e) => {
-        e.preventDefault();
-        setError(null);
-        setOk(false);
-        const formData = new FormData(e.currentTarget);
+      onSubmit={preventResetSubmit((formData, form) => {
+        clearAll();
         formData.set("companyId", companyId);
+        const clientParsed = parseCompanyInviteAdminInput(
+          companyInviteAdminRawFromFormData(formData),
+        );
+        if (!clientParsed.ok) {
+          applyFail(clientParsed);
+          scheduleFocusFirstFieldError(
+            formRef.current,
+            clientParsed.fieldErrors,
+          );
+          return;
+        }
         start(async () => {
           const result = await platformInviteCompanyAdmin(formData);
-          if (!result.ok) setError(result.error);
-          else {
-            setOk(true);
-            e.currentTarget.reset();
+          if (applyActionResult(result)) {
+            toast("Invitation sent.");
+            form.reset();
             router.refresh();
+          } else if (!result.ok) {
+            scheduleFocusFirstFieldError(formRef.current, result.fieldErrors);
           }
         });
-      }}
+      })}
     >
       <input type="hidden" name="companyId" value={companyId} />
-      <label className="block text-sm">
-        Email
-        <input
+      <div>
+        <Label htmlFor="companyInviteEmail" required>
+          Email
+        </Label>
+        <Input
+          id="companyInviteEmail"
           name="email"
           type="email"
           required
-          className="mt-1 w-full rounded-lg border border-border px-3 py-2"
+          disabled={pending}
+          aria-invalid={Boolean(fieldErrors.email)}
+          aria-describedby={
+            fieldErrors.email ? "companyInviteEmail-error" : undefined
+          }
+          onChange={() => clearField("email")}
         />
-      </label>
-      <label className="block text-sm">
-        Name (optional)
-        <input
+        <FieldError id="companyInviteEmail-error">
+          {fieldErrors.email}
+        </FieldError>
+      </div>
+      <div>
+        <Label htmlFor="companyInviteName">Name (optional)</Label>
+        <Input
+          id="companyInviteName"
           name="name"
           type="text"
-          className="mt-1 w-full rounded-lg border border-border px-3 py-2"
+          disabled={pending}
+          aria-invalid={Boolean(fieldErrors.name)}
+          aria-describedby={
+            fieldErrors.name ? "companyInviteName-error" : undefined
+          }
+          onChange={() => clearField("name")}
         />
-      </label>
-      {error ? <p className="text-sm text-red-700">{error}</p> : null}
-      {ok ? <p className="text-sm text-green-700">Invitation sent.</p> : null}
+        <FieldError id="companyInviteName-error">{fieldErrors.name}</FieldError>
+      </div>
+      <FieldError>{error}</FieldError>
       <Button type="submit" disabled={pending}>
         Invite admin
       </Button>

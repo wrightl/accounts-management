@@ -1,12 +1,18 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createInvoiceFromOrder } from "@/actions/orders";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { Dialog, DialogActions } from "@/components/ui/dialog";
 import { FieldError, Input, Label } from "@/components/ui/form";
+import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
+import { useFieldErrors } from "@/components/ui/use-field-errors";
 import { formatGBP } from "@/lib/money";
+import {
+  createInvoiceFromOrderRawFromFormData,
+  parseCreateInvoiceFromOrderInput,
+} from "@/lib/orders/schema";
 
 type MilestoneOption = {
   id: string;
@@ -36,7 +42,14 @@ export function OrderActions({
   defaultDueDate: string;
 }) {
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
+  const {
+    fieldErrors,
+    error,
+    clearAll,
+    clearField,
+    applyFail,
+    applyActionResult,
+  } = useFieldErrors();
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<InvoiceMode>(
@@ -47,6 +60,7 @@ export function OrderActions({
   const [amountPounds, setAmountPounds] = useState("");
   const [percent, setPercent] = useState("");
   const [dueDate, setDueDate] = useState(defaultDueDate);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const canCreate = canWrite && remainingPence > 0;
 
@@ -65,7 +79,7 @@ export function OrderActions({
   if (!canWrite) return null;
 
   function openDialog() {
-    setError(null);
+    clearAll();
     setMode(availableMilestones.length > 0 ? "milestone" : "remaining");
     setMilestoneId(availableMilestones[0]?.id ?? "");
     setPartMode("amount");
@@ -76,7 +90,7 @@ export function OrderActions({
   }
 
   function submit() {
-    setError(null);
+    clearAll();
     const formData = new FormData();
     formData.set("mode", mode);
     if (mode === "milestone") formData.set("milestoneId", milestoneId);
@@ -87,15 +101,27 @@ export function OrderActions({
     }
     if (dueDate) formData.set("dueDate", dueDate);
 
+    const clientParsed = parseCreateInvoiceFromOrderInput(
+      createInvoiceFromOrderRawFromFormData(formData),
+    );
+    if (!clientParsed.ok) {
+      applyFail(clientParsed);
+      scheduleFocusFirstFieldError(
+        containerRef.current,
+        clientParsed.fieldErrors,
+      );
+      return;
+    }
+
     startTransition(async () => {
       const result = await createInvoiceFromOrder(orderId, formData);
-      if (!result.ok) {
-        setError(result.error);
-        return;
+      if (applyActionResult(result) && result.ok) {
+        setOpen(false);
+        router.push(`/invoices/${result.id}`);
+        router.refresh();
+      } else if (!result.ok) {
+        scheduleFocusFirstFieldError(containerRef.current, result.fieldErrors);
       }
-      setOpen(false);
-      router.push(`/invoices/${result.id}`);
-      router.refresh();
     });
   }
 
@@ -106,7 +132,7 @@ export function OrderActions({
       </Button>
 
       <Dialog open={open} onClose={() => setOpen(false)} title="Create invoice">
-        <div className="space-y-4">
+        <div ref={containerRef} className="space-y-4">
           <p className="text-sm text-muted">
             Remaining on this order: <strong>{formatGBP(remainingPence)}</strong>
           </p>
@@ -126,6 +152,7 @@ export function OrderActions({
                   checked={mode === "milestone" && milestoneId === m.id}
                   disabled={pending || m.disabled}
                   onChange={() => {
+                    clearField("milestoneId");
                     setMode("milestone");
                     setMilestoneId(m.id);
                   }}
@@ -193,25 +220,49 @@ export function OrderActions({
                       </label>
                     </div>
                     {partMode === "amount" ? (
-                      <Input
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="0.00"
-                        value={amountPounds}
-                        disabled={pending}
-                        onChange={(e) => setAmountPounds(e.target.value)}
-                      />
+                      <div>
+                        <Input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0.00"
+                          value={amountPounds}
+                          disabled={pending}
+                          aria-invalid={Boolean(fieldErrors.amountPounds)}
+                          aria-describedby={
+                            fieldErrors.amountPounds
+                              ? "amountPounds-error"
+                              : undefined
+                          }
+                          onChange={(e) => {
+                            clearField("amountPounds");
+                            setAmountPounds(e.target.value);
+                          }}
+                        />
+                        <FieldError id="amountPounds-error">
+                          {fieldErrors.amountPounds}
+                        </FieldError>
+                      </div>
                     ) : (
-                      <Input
-                        type="number"
-                        min={0}
-                        max={100}
-                        step="0.01"
-                        placeholder="e.g. 40"
-                        value={percent}
-                        disabled={pending}
-                        onChange={(e) => setPercent(e.target.value)}
-                      />
+                      <div>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step="0.01"
+                          placeholder="e.g. 40"
+                          value={percent}
+                          disabled={pending}
+                          aria-invalid={Boolean(fieldErrors.percent)}
+                          aria-describedby={
+                            fieldErrors.percent ? "percent-error" : undefined
+                          }
+                          onChange={(e) => {
+                            clearField("percent");
+                            setPercent(e.target.value);
+                          }}
+                        />
+                        <FieldError id="percent-error">{fieldErrors.percent}</FieldError>
+                      </div>
                     )}
                     {partPreviewPence != null ? (
                       <p className="text-xs text-muted">
@@ -222,6 +273,8 @@ export function OrderActions({
                 ) : null}
               </span>
             </label>
+            <FieldError id="milestoneId-error">{fieldErrors.milestoneId}</FieldError>
+            <FieldError id="mode-error">{fieldErrors.mode}</FieldError>
           </fieldset>
 
           <div>
@@ -231,8 +284,14 @@ export function OrderActions({
               type="date"
               value={dueDate}
               disabled={pending}
-              onChange={(e) => setDueDate(e.target.value)}
+              aria-invalid={Boolean(fieldErrors.dueDate)}
+              aria-describedby={fieldErrors.dueDate ? "dueDate-error" : undefined}
+              onChange={(e) => {
+                clearField("dueDate");
+                setDueDate(e.target.value);
+              }}
             />
+            <FieldError id="dueDate-error">{fieldErrors.dueDate}</FieldError>
           </div>
 
           <FieldError>{error}</FieldError>

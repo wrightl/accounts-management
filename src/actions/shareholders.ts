@@ -1,26 +1,18 @@
 "use server";
 
 import { and, eq, isNull, ne, sql } from "drizzle-orm";
-import { z } from "zod";
 import { getDb } from "@/db";
 import { companySettings, shareholders } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
 import { mutate } from "@/lib/mutate";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
+import {
+  parseShareholderInput,
+  parseTotalSharesInput,
+  shareholderRawFromFormData,
+  totalSharesRawFromFormData,
+} from "@/lib/shareholders/schema";
 import type { ActionResult } from "@/actions/result";
-
-const optionalUserId = z
-  .string()
-  .uuid()
-  .optional()
-  .or(z.literal(""))
-  .transform((v) => (v === "" || !v ? null : v));
-
-const shareholderSchema = z.object({
-  name: z.string().trim().min(1, "Name is required").max(200),
-  shareCount: z.coerce.number().int().positive("Share count must be a positive integer"),
-  userId: optionalUserId,
-});
 
 const SHAREHOLDER_PATHS = ["/shareholders", "/dividends", "/dividends/new"];
 
@@ -59,9 +51,16 @@ async function validateAgainstTotal(
 }
 
 export async function updateTotalShares(formData: FormData): Promise<ActionResult> {
-  const raw = String(formData.get("totalShares") ?? "").trim();
+  const parsed = parseTotalSharesInput(totalSharesRawFromFormData(formData));
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
+  }
 
-  if (raw === "") {
+  if (parsed.data.totalShares === null) {
     return mutate(
       "accounts:write",
       async ({ companyId, localUserId, entityType }) => {
@@ -90,10 +89,7 @@ export async function updateTotalShares(formData: FormData): Promise<ActionResul
     );
   }
 
-  const parsed = z.coerce.number().int().positive().safeParse(raw);
-  if (!parsed.success) {
-    return { ok: false, error: "Total shares must be a positive integer" };
-  }
+  const totalShares = parsed.data.totalShares;
 
   return mutate(
     "accounts:write",
@@ -106,10 +102,13 @@ export async function updateTotalShares(formData: FormData): Promise<ActionResul
       }
 
       const otherSum = await activeShareSumExcluding(companyId, null);
-      if (otherSum !== parsed.data) {
+      if (otherSum !== totalShares) {
         return {
           ok: false,
-          error: `Total shares (${parsed.data}) must equal the sum of active shareholder shares (${otherSum}).`,
+          error: `Total shares (${totalShares}) must equal the sum of active shareholder shares (${otherSum}).`,
+          fieldErrors: {
+            totalShares: `Total shares (${totalShares}) must equal the sum of active shareholder shares (${otherSum}).`,
+          },
         };
       }
 
@@ -117,7 +116,7 @@ export async function updateTotalShares(formData: FormData): Promise<ActionResul
       const settings = await getOrCreateCompanySettings(companyId);
       await db
         .update(companySettings)
-        .set({ totalShares: parsed.data, updatedAt: new Date() })
+        .set({ totalShares, updatedAt: new Date() })
         .where(eq(companySettings.id, settings.id));
 
       await writeAudit({
@@ -126,7 +125,7 @@ export async function updateTotalShares(formData: FormData): Promise<ActionResul
         action: "shareholder.total_shares.update",
         entityType: "company_settings",
         entityId: settings.id,
-        meta: { totalShares: parsed.data },
+        meta: { totalShares },
       });
 
       return { ok: true, id: settings.id };
@@ -136,13 +135,13 @@ export async function updateTotalShares(formData: FormData): Promise<ActionResul
 }
 
 export async function createShareholder(formData: FormData): Promise<ActionResult> {
-  const parsed = shareholderSchema.safeParse({
-    name: formData.get("name"),
-    shareCount: formData.get("shareCount"),
-    userId: formData.get("userId") ?? "",
-  });
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const parsed = parseShareholderInput(shareholderRawFromFormData(formData));
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
   }
 
   return mutate(
@@ -158,7 +157,13 @@ export async function createShareholder(formData: FormData): Promise<ActionResul
       const nextSum =
         (await activeShareSumExcluding(companyId, null)) + parsed.data.shareCount;
       const check = await validateAgainstTotal(companyId, nextSum);
-      if (!check.ok) return check;
+      if (!check.ok) {
+        return {
+          ok: false,
+          error: check.error,
+          fieldErrors: { shareCount: check.error },
+        };
+      }
 
       const db = getDb();
       const [row] = await db
@@ -184,13 +189,13 @@ export async function updateShareholder(
   id: string,
   formData: FormData,
 ): Promise<ActionResult> {
-  const parsed = shareholderSchema.safeParse({
-    name: formData.get("name"),
-    shareCount: formData.get("shareCount"),
-    userId: formData.get("userId") ?? "",
-  });
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const parsed = parseShareholderInput(shareholderRawFromFormData(formData));
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
   }
 
   return mutate(
@@ -217,7 +222,13 @@ export async function updateShareholder(
       const nextSum =
         (await activeShareSumExcluding(companyId, id)) + parsed.data.shareCount;
       const check = await validateAgainstTotal(companyId, nextSum);
-      if (!check.ok) return check;
+      if (!check.ok) {
+        return {
+          ok: false,
+          error: check.error,
+          fieldErrors: { shareCount: check.error },
+        };
+      }
 
       await db
         .update(shareholders)

@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
-import { z } from "zod";
 import { getDb } from "@/db";
 import {
   invoiceLineItems,
@@ -36,51 +35,22 @@ import {
   validateInvoiceAmount,
   type InvoiceFromOrderMode,
 } from "@/lib/orders/invoice-from-order";
-
-const lineSchema = z.object({
-  description: z.string().trim().min(1, "Description is required"),
-  quantity: z.coerce.number().int().positive(),
-  unitPricePounds: z.string().trim().min(1, "Unit price is required"),
-  vatRate: z.coerce.number().int().min(0).max(100).optional(),
-});
-
-const orderSchema = z.object({
-  clientId: z.string().uuid(),
-  issueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  notes: z
-    .string()
-    .optional()
-    .or(z.literal(""))
-    .transform((v) => (v === "" || !v ? null : v)),
-  lines: z.array(lineSchema).min(1, "Add at least one line item"),
-});
-
-function parseLines(formData: FormData) {
-  try {
-    const raw = JSON.parse(String(formData.get("linesJson") ?? "[]"));
-    if (!Array.isArray(raw)) return [];
-    return raw.filter((line) => {
-      if (!line || typeof line !== "object") return false;
-      const row = line as Record<string, unknown>;
-      return (
-        String(row.description ?? "").trim().length > 0 &&
-        String(row.unitPricePounds ?? "").trim().length > 0
-      );
-    });
-  } catch {
-    return [];
-  }
-}
+import {
+  createInvoiceFromOrderRawFromFormData,
+  orderRawFromFormData,
+  parseCreateInvoiceFromOrderInput,
+  parseOrderInput,
+} from "@/lib/orders/schema";
+import { FORM_FIELD_ERROR_SUMMARY } from "@/lib/validation/field-errors";
 
 export async function createOrder(formData: FormData): Promise<ActionResult> {
-  const parsed = orderSchema.safeParse({
-    clientId: formData.get("clientId"),
-    issueDate: formData.get("issueDate") || todayIsoDate(),
-    notes: formData.get("notes") ?? "",
-    lines: parseLines(formData),
-  });
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const parsed = parseOrderInput(orderRawFromFormData(formData));
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
   }
 
   return mutate(
@@ -139,33 +109,19 @@ export async function createOrder(formData: FormData): Promise<ActionResult> {
   );
 }
 
-const createInvoiceSchema = z.object({
-  mode: z.enum(["milestone", "remaining", "part"]),
-  milestoneId: z.string().uuid().optional().or(z.literal("")),
-  partMode: z.enum(["amount", "percent"]).optional(),
-  amountPounds: z.string().optional(),
-  percent: z.string().optional(),
-  dueDate: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .optional()
-    .or(z.literal("")),
-});
-
 export async function createInvoiceFromOrder(
   orderId: string,
   formData: FormData,
 ): Promise<ActionResult> {
-  const parsed = createInvoiceSchema.safeParse({
-    mode: formData.get("mode"),
-    milestoneId: formData.get("milestoneId") ?? "",
-    partMode: formData.get("partMode") ?? undefined,
-    amountPounds: formData.get("amountPounds") ?? undefined,
-    percent: formData.get("percent") ?? undefined,
-    dueDate: formData.get("dueDate") ?? "",
-  });
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const parsed = parseCreateInvoiceFromOrderInput(
+    createInvoiceFromOrderRawFromFormData(formData),
+  );
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
   }
 
   return mutate(
@@ -192,7 +148,13 @@ export async function createInvoiceFromOrder(
 
       if (mode === "milestone") {
         const id = parsed.data.milestoneId?.trim();
-        if (!id) return { ok: false, error: "Select a payment milestone" };
+        if (!id) {
+          return {
+            ok: false,
+            error: FORM_FIELD_ERROR_SUMMARY,
+            fieldErrors: { milestoneId: "Select a payment milestone" },
+          };
+        }
 
         const used = await getUsedMilestoneIds(db, orderId);
         if (used.has(id)) {
@@ -230,7 +192,12 @@ export async function createInvoiceFromOrder(
           orderGrossPence: detail.order.grossPence,
         });
         if (typeof resolved === "object" && "error" in resolved) {
-          return { ok: false, error: resolved.error };
+          const field = partMode === "percent" ? "percent" : "amountPounds";
+          return {
+            ok: false,
+            error: FORM_FIELD_ERROR_SUMMARY,
+            fieldErrors: { [field]: resolved.error },
+          };
         }
         amountPence = resolved;
       }

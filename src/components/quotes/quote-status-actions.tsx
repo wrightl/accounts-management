@@ -1,17 +1,21 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { updateQuoteStatus } from "@/actions/quotes";
 import { allowedQuoteTransitions } from "@/lib/quotes/transitions";
 import {
   quoteStatusLabel,
   type QuoteStatus,
 } from "@/lib/quotes/status";
+import { parseDeclineQuoteInput } from "@/lib/quotes/schema";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { useAlert } from "@/components/ui/alert-dialog";
 import { Dialog, DialogActions } from "@/components/ui/dialog";
 import { FieldError, Input, Label, Select, Textarea } from "@/components/ui/form";
+import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
+import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
+import { useFieldErrors } from "@/components/ui/use-field-errors";
 import { SplitButton } from "@/components/ui/split-button";
 
 function transitionLabel(target: QuoteStatus, from: QuoteStatus): string {
@@ -41,12 +45,21 @@ export function QuoteStatusActions({
 }) {
   const router = useRouter();
   const { confirm } = useAlert();
-  const [error, setError] = useState<string | null>(null);
+  const {
+    fieldErrors,
+    error,
+    clearAll,
+    clearField,
+    applyFail,
+    applyActionResult,
+    setError,
+  } = useFieldErrors();
   const [pending, startTransition] = useTransition();
   const [declineOpen, setDeclineOpen] = useState(false);
   const [category, setCategory] = useState("");
   const [customCategory, setCustomCategory] = useState("");
   const [narrative, setNarrative] = useState("");
+  const formRef = useRef<HTMLFormElement>(null);
 
   if (!canWrite) return null;
 
@@ -61,7 +74,7 @@ export function QuoteStatusActions({
   }
 
   async function runTransition(target: QuoteStatus) {
-    setError(null);
+    clearAll();
     if (target === "declined") {
       setCategory(declineCategories[0] ?? "Other");
       setCustomCategory("");
@@ -119,37 +132,62 @@ export function QuoteStatusActions({
         disabled={pending}
         menuAriaLabel="Other status transitions"
       />
-      <FieldError>{error}</FieldError>
+      <FieldError>{error && !declineOpen ? error : null}</FieldError>
 
       <Dialog open={declineOpen} onClose={() => setDeclineOpen(false)} title="Decline quote">
         <form
+          ref={formRef}
+          noValidate
           className="space-y-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            setError(null);
+          onSubmit={preventResetSubmit((_formData) => {
+            clearAll();
             const resolvedCategory =
               category === "__custom__" ? customCategory.trim() : category;
+            const clientParsed = parseDeclineQuoteInput({
+              category: resolvedCategory,
+              narrative,
+            });
+            if (!clientParsed.ok) {
+              applyFail(clientParsed);
+              scheduleFocusFirstFieldError(
+                formRef.current,
+                clientParsed.fieldErrors,
+              );
+              return;
+            }
             startTransition(async () => {
               const result = await updateQuoteStatus(quoteId, "declined", {
                 category: resolvedCategory,
                 narrative,
               });
-              if (!result.ok) {
-                setError(result.error);
-                return;
+              if (applyActionResult(result)) {
+                setDeclineOpen(false);
+                router.refresh();
+              } else if (!result.ok) {
+                scheduleFocusFirstFieldError(
+                  formRef.current,
+                  result.fieldErrors,
+                );
               }
-              setDeclineOpen(false);
-              router.refresh();
             });
-          }}
+          })}
         >
           <div>
-            <Label htmlFor="decline-category">Reason category</Label>
+            <Label htmlFor="decline-category" required>
+              Reason category
+            </Label>
             <Select
               id="decline-category"
               value={category}
               disabled={pending}
-              onChange={(e) => setCategory(e.target.value)}
+              aria-invalid={Boolean(fieldErrors.category)}
+              aria-describedby={
+                fieldErrors.category ? "decline-category-error" : undefined
+              }
+              onChange={(e) => {
+                clearField("category");
+                setCategory(e.target.value);
+              }}
             >
               <option value="">Select…</option>
               {declineCategories.map((c) => (
@@ -159,29 +197,44 @@ export function QuoteStatusActions({
               ))}
               <option value="__custom__">Custom…</option>
             </Select>
+            <FieldError id="decline-category-error">{fieldErrors.category}</FieldError>
           </div>
           {category === "__custom__" ? (
             <div>
-              <Label htmlFor="decline-custom-category">Custom category</Label>
+              <Label htmlFor="decline-custom-category" required>
+                Custom category
+              </Label>
               <Input
                 id="decline-custom-category"
-                required
                 value={customCategory}
                 disabled={pending}
-                onChange={(e) => setCustomCategory(e.target.value)}
+                aria-invalid={Boolean(fieldErrors.category)}
+                onChange={(e) => {
+                  clearField("category");
+                  setCustomCategory(e.target.value);
+                }}
               />
             </div>
           ) : null}
           <div>
-            <Label htmlFor="decline-narrative">Explanation</Label>
+            <Label htmlFor="decline-narrative" required>
+              Explanation
+            </Label>
             <Textarea
               id="decline-narrative"
               rows={4}
-              required
               value={narrative}
               disabled={pending}
-              onChange={(e) => setNarrative(e.target.value)}
+              aria-invalid={Boolean(fieldErrors.narrative)}
+              aria-describedby={
+                fieldErrors.narrative ? "decline-narrative-error" : undefined
+              }
+              onChange={(e) => {
+                clearField("narrative");
+                setNarrative(e.target.value);
+              }}
             />
+            <FieldError id="decline-narrative-error">{fieldErrors.narrative}</FieldError>
           </div>
           <FieldError>{error}</FieldError>
           <DialogActions>

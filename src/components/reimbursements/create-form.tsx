@@ -1,11 +1,19 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label, Select } from "@/components/ui/form";
+import { FormStickyActions } from "@/components/ui/form-sticky-actions";
+import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
+import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
+import { useFieldErrors } from "@/components/ui/use-field-errors";
 import { formatGBP } from "@/lib/money";
 import { createReimbursementRun } from "@/actions/reimbursements";
+import {
+  parseCreateReimbursementInput,
+  reimbursementCreateRawFromFormData,
+} from "@/lib/reimbursements/schema";
 
 export function CreateReimbursementForm({
   founders,
@@ -30,7 +38,14 @@ export function CreateReimbursementForm({
   const [payeeUserId, setPayeeUserId] = useState(defaultPayee);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [reference, setReference] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const {
+    fieldErrors,
+    error,
+    clearAll,
+    clearField,
+    applyFail,
+  } = useFieldErrors();
+  const formRef = useRef<HTMLFormElement>(null);
   const [pending, startTransition] = useTransition();
 
   const forPayee = useMemo(
@@ -48,22 +63,46 @@ export function CreateReimbursementForm({
 
   return (
     <form
+      ref={formRef}
+      noValidate
       className="space-y-4"
-      action={(formData) => {
+      onSubmit={preventResetSubmit((formData) => {
         formData.set("expenseIdsJson", JSON.stringify([...selected]));
-        setError(null);
+        formData.set("payeeUserId", payeeUserId);
+        formData.set("reference", reference);
+        clearAll();
+        const raw = reimbursementCreateRawFromFormData(formData);
+        if (!raw.ok) {
+          applyFail(raw);
+          scheduleFocusFirstFieldError(formRef.current, raw.fieldErrors);
+          return;
+        }
+        const clientParsed = parseCreateReimbursementInput(raw.data);
+        if (!clientParsed.ok) {
+          applyFail(clientParsed);
+          scheduleFocusFirstFieldError(
+            formRef.current,
+            clientParsed.fieldErrors,
+          );
+          return;
+        }
         startTransition(async () => {
           const result = await createReimbursementRun(formData);
-          if (!result.ok) setError(result.error);
-          else {
-            router.push(`/reimbursements/${result.id}`);
-            router.refresh();
+          if (!result.ok) {
+            applyFail(result);
+            scheduleFocusFirstFieldError(formRef.current, result.fieldErrors);
+            return;
           }
+          clearAll();
+          router.push(`/reimbursements/${result.id}`);
+          router.refresh();
         });
-      }}
+      })}
     >
       <div>
-        <Label htmlFor="payeeUserId">Payee (founder)</Label>
+        <Label htmlFor="payeeUserId" required>
+          Payee (founder)
+        </Label>
         <Select
           id="payeeUserId"
           name="payeeUserId"
@@ -71,8 +110,13 @@ export function CreateReimbursementForm({
           onChange={(e) => {
             setPayeeUserId(e.target.value);
             setSelected(new Set());
+            clearField("payeeUserId");
           }}
           disabled={pending}
+          aria-invalid={Boolean(fieldErrors.payeeUserId)}
+          aria-describedby={
+            fieldErrors.payeeUserId ? "payeeUserId-error" : undefined
+          }
         >
           {founders.map((f) => (
             <option key={f.id} value={f.id}>
@@ -80,10 +124,11 @@ export function CreateReimbursementForm({
             </option>
           ))}
         </Select>
+        <FieldError id="payeeUserId-error">{fieldErrors.payeeUserId}</FieldError>
       </div>
 
       <div>
-        <Label>Reimbursable expenses</Label>
+        <Label required>Reimbursable expenses</Label>
         {forPayee.length === 0 ? (
           <p className="mt-2 text-sm text-muted">
             No reimbursable expenses for this founder.
@@ -102,6 +147,7 @@ export function CreateReimbursementForm({
                       else next.delete(e.id);
                       return next;
                     });
+                    clearField("expenseIds");
                   }}
                   disabled={pending}
                 />
@@ -113,29 +159,38 @@ export function CreateReimbursementForm({
             ))}
           </ul>
         )}
+        <FieldError id="expenseIds-error">{fieldErrors.expenseIds}</FieldError>
       </div>
 
       <div>
-        <Label htmlFor="reference">Bank payment reference</Label>
+        <Label htmlFor="reference" required>
+          Bank payment reference
+        </Label>
         <Input
           id="reference"
           name="reference"
           value={reference}
-          onChange={(e) => setReference(e.target.value)}
+          onChange={(e) => {
+            setReference(e.target.value);
+            clearField("reference");
+          }}
           placeholder="Use this reference when transferring from the business account"
           required
           disabled={pending}
+          aria-invalid={Boolean(fieldErrors.reference)}
+          aria-describedby={
+            fieldErrors.reference ? "reference-error" : undefined
+          }
         />
+        <FieldError id="reference-error">{fieldErrors.reference}</FieldError>
       </div>
 
       <p className="text-sm text-muted">Total: {formatGBP(total)}</p>
-      <FieldError>{error}</FieldError>
-      <Button
-        type="submit"
-        disabled={pending || selected.size === 0 || !reference.trim()}
-      >
-        {pending ? "Creating…" : "Create reimbursement run"}
-      </Button>
+      <FormStickyActions error={error}>
+        <Button type="submit" disabled={pending}>
+          {pending ? "Creating…" : "Create reimbursement run"}
+        </Button>
+      </FormStickyActions>
     </form>
   );
 }

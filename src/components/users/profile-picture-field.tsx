@@ -6,6 +6,8 @@ import { Camera, ImagePlus, Trash2, X } from "lucide-react";
 import { removeProfilePicture, uploadProfilePicture } from "@/actions/users";
 import { Button } from "@/components/ui/button";
 import { FieldError } from "@/components/ui/form";
+import { useFieldErrors } from "@/components/ui/use-field-errors";
+import { toast } from "@/components/ui/toast";
 import { prepareProfilePhoto } from "@/lib/profile-photo-client";
 import { cn } from "@/lib/utils";
 
@@ -204,8 +206,13 @@ export function ProfilePictureField({
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const {
+    fieldErrors,
+    error,
+    clearAll,
+    applyFail,
+    applyActionResult,
+  } = useFieldErrors();
   const [cameraOpen, setCameraOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -223,8 +230,7 @@ export function ProfilePictureField({
   }
 
   function uploadFile(file: File) {
-    setError(null);
-    setMessage(null);
+    clearAll();
 
     startTransition(async () => {
       try {
@@ -234,16 +240,20 @@ export function ProfilePictureField({
         const formData = new FormData();
         formData.set("photo", prepared);
         const result = await uploadProfilePicture(formData);
-        if (!result.ok) {
-          setError(result.error);
+        if (!applyActionResult(result)) {
           setPreview(null);
           return;
         }
-        setMessage("Profile picture updated.");
+        toast("Profile picture updated.");
         setPreview(null);
         router.refresh();
       } catch {
-        setError("Upload failed. Check your connection and try again.");
+        applyFail({
+          error: "Upload failed. Check your connection and try again.",
+          fieldErrors: {
+            photo: "Upload failed. Check your connection and try again.",
+          },
+        });
         setPreview(null);
       }
     });
@@ -257,20 +267,18 @@ export function ProfilePictureField({
   }
 
   function handleRemove() {
-    setError(null);
-    setMessage(null);
+    clearAll();
     setPreview(null);
     startTransition(async () => {
       try {
         const result = await removeProfilePicture();
-        if (!result.ok) {
-          setError(result.error);
-          return;
-        }
-        setMessage("Profile picture removed.");
+        if (!applyActionResult(result)) return;
+        toast("Profile picture removed.");
         router.refresh();
       } catch {
-        setError("Could not remove profile picture. Try again.");
+        applyFail({
+          error: "Could not remove profile picture. Try again.",
+        });
       }
     });
   }
@@ -291,6 +299,8 @@ export function ProfilePictureField({
           accept="image/jpeg,image/png,image/webp,image/gif"
           className="hidden"
           disabled={pending}
+          aria-invalid={Boolean(fieldErrors.photo)}
+          aria-describedby={fieldErrors.photo ? "photo-error" : undefined}
           onChange={(event) => handleFileSelected(event.target.files?.[0] ?? null)}
         />
         <input
@@ -340,8 +350,8 @@ export function ProfilePictureField({
         <p className="text-xs text-muted">
           JPEG, PNG, WebP, or GIF up to 2 MB. On mobile, Take photo opens your camera.
         </p>
-        <FieldError>{error}</FieldError>
-        {message ? <p className="text-sm text-success">{message}</p> : null}
+        <FieldError id="photo-error">{fieldErrors.photo}</FieldError>
+        <FieldError>{error && !fieldErrors.photo ? error : null}</FieldError>
       </div>
 
       {cameraOpen ? (

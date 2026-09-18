@@ -2,19 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
-import { z } from "zod";
 import { getDb } from "@/db";
 import { expenseReceipts, expenses, reimbursementItems } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
 import { mutate, mutateWide } from "@/lib/mutate";
-import { poundsToPence } from "@/lib/money";
 import { getStorage } from "@/lib/storage";
 import { safeFilename } from "@/lib/files";
-import { EXPENSE_CATEGORIES } from "@/lib/expenses/categories";
 import {
   appendMileageDescription,
   DEFAULT_MILEAGE_RATE_PENCE,
-  mileageAmountPence,
 } from "@/lib/expenses/mileage";
 import {
   expenseImportHasErrors,
@@ -32,6 +28,12 @@ import { isReceiptOcrProvider } from "@/lib/expenses/receipt-parse";
 import { listFounders } from "@/lib/expenses/queries";
 import { getReceiptOcrSettings } from "@/lib/platform-settings";
 import {
+  expenseRawFromFormData,
+  normalizeExpensePaymentFields,
+  parseExpenseImportCsvFile,
+  parseExpenseInput,
+} from "@/lib/expenses/schema";
+import {
   parseVatRate,
   resolveLineVatRate,
   vatFromInclusiveGross,
@@ -40,145 +42,27 @@ import type { ActionResult } from "@/actions/result";
 
 export type ExpenseImportPreviewResult =
   | { ok: true; rows: ParsedExpenseImportRow[] }
-  | { ok: false; error: string };
+  | { ok: false; error: string; fieldErrors?: Record<string, string> };
 
 export type ReceiptExtractionResult =
   | { ok: true; extraction: ReceiptExtraction }
-  | { ok: false; error: string };
-
-const expenseSchema = z.object({
-  description: z.string().trim().min(1).max(500),
-  category: z
-    .enum(EXPENSE_CATEGORIES)
-    .optional()
-    .or(z.literal(""))
-    .transform((v) => (v === "" || !v ? "" : v)),
-  spentAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal("")),
-  amountPounds: z.string().trim().optional().or(z.literal("")).default(""),
-  status: z
-    .string()
-    .refine(
-      (v): v is "recorded" | "reimbursable" | "company_paid" =>
-        v === "recorded" || v === "reimbursable" || v === "company_paid",
-      { message: "Select a status" },
-    ),
-  billable: z
-    .string()
-    .optional()
-    .transform((v) => v === "on" || v === "true"),
-  billableClientId: z
-    .string()
-    .uuid()
-    .optional()
-    .or(z.literal(""))
-    .transform((v) => (v === "" || !v ? null : v)),
-  paidByUserId: z
-    .string()
-    .uuid()
-    .optional()
-    .or(z.literal(""))
-    .transform((v) => (v === "" || !v ? null : v)),
-  useMileage: z
-    .string()
-    .optional()
-    .transform((v) => v === "on" || v === "true"),
-  mileageMiles: z
-    .string()
-    .optional()
-    .or(z.literal(""))
-    .transform((v) => (v === "" || !v ? null : Number(v))),
-  mileageRatePence: z
-    .string()
-    .optional()
-    .or(z.literal(""))
-    .transform((v) => (v === "" || !v ? null : Number(v))),
-  vatRate: z.coerce.number().int().min(0).max(100).optional(),
-});
-
-function resolveExpenseAmount(data: {
-  amountPounds: string;
-  useMileage: boolean;
-  mileageMiles: number | null;
-  mileageRatePence: number | null;
-  allowZero?: boolean;
-}):
-  | { ok: true; amountPence: number; mileageMiles: number | null; mileageRatePence: number | null }
-  | { ok: false; error: string } {
-  if (data.useMileage) {
-    if (data.mileageMiles == null || !Number.isFinite(data.mileageMiles) || data.mileageMiles <= 0) {
-      return { ok: false, error: "Enter a positive number of miles" };
-    }
-    const rate = data.mileageRatePence ?? DEFAULT_MILEAGE_RATE_PENCE;
-    if (!Number.isFinite(rate) || rate <= 0) {
-      return { ok: false, error: "Enter a positive mileage rate" };
-    }
-    try {
-      return {
-        ok: true,
-        amountPence: mileageAmountPence(data.mileageMiles, rate),
-        mileageMiles: Math.round(data.mileageMiles),
-        mileageRatePence: Math.round(rate),
-      };
-    } catch (e) {
-      return { ok: false, error: e instanceof Error ? e.message : "Invalid mileage" };
-    }
-  }
-
-  try {
-    const amountPence = poundsToPence(data.amountPounds);
-    if (amountPence <= 0 && !data.allowZero) {
-      return { ok: false, error: "Amount must be positive" };
-    }
-    return { ok: true, amountPence, mileageMiles: null, mileageRatePence: null };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Invalid amount" };
-  }
-}
-
-function parseExpense(formData: FormData) {
-  return expenseSchema.safeParse({
-    description: formData.get("description"),
-    category: formData.get("category") ?? "",
-    spentAt: formData.get("spentAt") ?? "",
-    amountPounds: formData.get("amountPounds"),
-    status: formData.get("status") ?? "",
-    billable: formData.get("billable") ?? "",
-    billableClientId: formData.get("billableClientId") ?? "",
-    paidByUserId: formData.get("paidByUserId") ?? "",
-    useMileage: formData.get("useMileage") ?? "",
-    mileageMiles: formData.get("mileageMiles") ?? "",
-    mileageRatePence: formData.get("mileageRatePence") ?? "",
-    vatRate: formData.get("vatRate") ?? "0",
-  });
-}
-
-function normalizeExpensePaymentFields(data: {
-  status: "recorded" | "reimbursable" | "company_paid";
-  paidByUserId: string | null;
-}): { ok: true; status: typeof data.status; paidByUserId: string | null } | { ok: false; error: string } {
-  if (data.status === "company_paid") {
-    return { ok: true, status: data.status, paidByUserId: null };
-  }
-  if (data.status === "reimbursable" && !data.paidByUserId) {
-    return { ok: false, error: "Select who paid for reimbursable expenses" };
-  }
-  return { ok: true, status: data.status, paidByUserId: data.paidByUserId };
-}
+  | { ok: false; error: string; fieldErrors?: Record<string, string> };
 
 export async function createExpense(formData: FormData): Promise<ActionResult> {
-  const parsed = parseExpense(formData);
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const parsed = parseExpenseInput(expenseRawFromFormData(formData));
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
   }
 
-  const amountResult = resolveExpenseAmount({
-    amountPounds: parsed.data.amountPounds,
-    useMileage: parsed.data.useMileage,
-    mileageMiles: parsed.data.mileageMiles,
-    mileageRatePence: parsed.data.mileageRatePence,
-  });
-  if (!amountResult.ok) return { ok: false, error: amountResult.error };
-  const { amountPence, mileageMiles, mileageRatePence } = amountResult;
+  const {
+    amountPence,
+    resolvedMileageMiles: mileageMiles,
+    resolvedMileageRatePence: mileageRatePence,
+  } = parsed.data;
 
   let description = parsed.data.description;
   if (mileageMiles != null && mileageRatePence != null) {
@@ -197,7 +81,13 @@ export async function createExpense(formData: FormData): Promise<ActionResult> {
         status: parsed.data.status,
         paidByUserId: paidByDefault,
       });
-      if (!normalized.ok) return { ok: false, error: normalized.error };
+      if (!normalized.ok) {
+        return {
+          ok: false,
+          error: normalized.error,
+          fieldErrors: normalized.fieldErrors,
+        };
+      }
 
       // Mileage is always 0% VAT; otherwise use posted rate when registered.
       const vatRate = parsed.data.useMileage
@@ -239,9 +129,16 @@ export async function updateExpense(
   id: string,
   formData: FormData,
 ): Promise<ActionResult> {
-  const parsed = parseExpense(formData);
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  // Allow zero until we know whether this is a pending draft (checked inside mutate).
+  const parsed = parseExpenseInput(expenseRawFromFormData(formData), {
+    allowZeroAmount: true,
+  });
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
   }
 
   return mutate(
@@ -258,18 +155,23 @@ export async function updateExpense(
         return { ok: false, error: "Cannot edit a reimbursed expense" };
       }
 
-      const amountResult = resolveExpenseAmount({
-        amountPounds: parsed.data.amountPounds,
-        useMileage: parsed.data.useMileage,
-        mileageMiles: parsed.data.mileageMiles,
-        mileageRatePence: parsed.data.mileageRatePence,
-        allowZero: existing.status === "pending",
-      });
-      if (!amountResult.ok) return { ok: false, error: amountResult.error };
-      const amountPence = amountResult.amountPence;
-      const mileageMiles = parsed.data.useMileage ? amountResult.mileageMiles : null;
+      if (
+        existing.status !== "pending" &&
+        parsed.data.amountPence <= 0
+      ) {
+        return {
+          ok: false,
+          error: "Amount must be positive",
+          fieldErrors: { amountPounds: "Amount must be positive" },
+        };
+      }
+
+      const amountPence = parsed.data.amountPence;
+      const mileageMiles = parsed.data.useMileage
+        ? parsed.data.resolvedMileageMiles
+        : null;
       const mileageRatePence = parsed.data.useMileage
-        ? amountResult.mileageRatePence
+        ? parsed.data.resolvedMileageRatePence
         : null;
 
       let description = parsed.data.description;
@@ -292,7 +194,11 @@ export async function updateExpense(
         paidByUserId: parsed.data.paidByUserId,
       });
       if (existing.status !== "pending" && !normalized.ok) {
-        return { ok: false, error: normalized.error };
+        return {
+          ok: false,
+          error: normalized.error,
+          fieldErrors: normalized.fieldErrors,
+        };
       }
 
       const company = await getOrCreateCompanySettings(companyId);
@@ -337,13 +243,20 @@ export async function approveExpense(
   id: string,
   formData: FormData,
 ): Promise<ActionResult> {
-  const parsed = parseExpense(formData);
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const parsed = parseExpenseInput(expenseRawFromFormData(formData));
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
   }
 
   if (parsed.data.useMileage) {
-    return { ok: false, error: "Mileage expenses cannot be approved from email submissions" };
+    return {
+      ok: false,
+      error: "Mileage expenses cannot be approved from email submissions",
+    };
   }
 
   const targetStatus = parsed.data.status;
@@ -352,18 +265,19 @@ export async function approveExpense(
     targetStatus !== "reimbursable" &&
     targetStatus !== "company_paid"
   ) {
-    return { ok: false, error: "Select a status to approve into" };
+    return {
+      ok: false,
+      error: "Select a status to approve into",
+      fieldErrors: { status: "Select a status to approve into" },
+    };
   }
 
-  const amountResult = resolveExpenseAmount({
-    amountPounds: parsed.data.amountPounds,
-    useMileage: false,
-    mileageMiles: null,
-    mileageRatePence: null,
-  });
-  if (!amountResult.ok) return { ok: false, error: amountResult.error };
-  if (amountResult.amountPence <= 0) {
-    return { ok: false, error: "Enter a positive amount before approving" };
+  if (parsed.data.amountPence <= 0) {
+    return {
+      ok: false,
+      error: "Enter a positive amount before approving",
+      fieldErrors: { amountPounds: "Enter a positive amount before approving" },
+    };
   }
 
   return mutate(
@@ -389,17 +303,20 @@ export async function approveExpense(
         status: targetStatus,
         paidByUserId: paidByDefault,
       });
-      if (!normalized.ok) return { ok: false, error: normalized.error };
+      if (!normalized.ok) {
+        return {
+          ok: false,
+          error: normalized.error,
+          fieldErrors: normalized.fieldErrors,
+        };
+      }
 
       const company = await getOrCreateCompanySettings(companyId);
       const vatRate = resolveLineVatRate(
         company,
         parseVatRate(parsed.data.vatRate),
       );
-      const vatPence = vatFromInclusiveGross(
-        amountResult.amountPence,
-        vatRate,
-      );
+      const vatPence = vatFromInclusiveGross(parsed.data.amountPence, vatRate);
 
       await db
         .update(expenses)
@@ -407,7 +324,7 @@ export async function approveExpense(
           description: parsed.data.description,
           category: parsed.data.category || null,
           spentAt: parsed.data.spentAt || null,
-          amountPence: amountResult.amountPence,
+          amountPence: parsed.data.amountPence,
           vatRate,
           vatPence,
           status: normalized.status,
@@ -638,12 +555,13 @@ export async function deleteReceipt(receiptId: string): Promise<ActionResult> {
 export async function previewExpenseImport(
   formData: FormData,
 ): Promise<ExpenseImportPreviewResult> {
-  const file = formData.get("csv");
-  if (!(file instanceof File) || file.size === 0) {
-    return { ok: false, error: "Choose a CSV file" };
-  }
-  if (file.size > 2 * 1024 * 1024) {
-    return { ok: false, error: "CSV must be under 2 MB" };
+  const fileParsed = parseExpenseImportCsvFile(formData);
+  if (!fileParsed.ok) {
+    return {
+      ok: false,
+      error: fileParsed.error,
+      fieldErrors: fileParsed.fieldErrors,
+    };
   }
 
   return mutateWide("accounts:write", async ({ companyId }) => {
@@ -651,14 +569,18 @@ export async function previewExpenseImport(
       listFounders(companyId),
       getOrCreateCompanySettings(companyId),
     ]);
-    const text = await file.text();
+    const text = await fileParsed.data.file.text();
     const rows = parseExpenseImportCsv(
       text,
       founders,
       settings.defaultMileageRatePence ?? DEFAULT_MILEAGE_RATE_PENCE,
     );
     if (rows.length === 0) {
-      return { ok: false, error: "No data rows found in CSV" };
+      return {
+        ok: false,
+        error: "No data rows found in CSV",
+        fieldErrors: { csv: "No data rows found in CSV" },
+      };
     }
     return { ok: true, rows };
   });
@@ -671,13 +593,25 @@ export async function commitExpenseImport(
   try {
     rows = JSON.parse(rowsJson) as ParsedExpenseImportRow[];
   } catch {
-    return { ok: false, error: "Invalid import payload" };
+    return {
+      ok: false,
+      error: "Invalid import payload",
+      fieldErrors: { commit: "Invalid import payload" },
+    };
   }
   if (!Array.isArray(rows) || rows.length === 0) {
-    return { ok: false, error: "No rows to import" };
+    return {
+      ok: false,
+      error: "No rows to import",
+      fieldErrors: { commit: "No rows to import" },
+    };
   }
   if (expenseImportHasErrors(rows)) {
-    return { ok: false, error: "Fix validation errors before importing" };
+    return {
+      ok: false,
+      error: "Fix validation errors before importing",
+      fieldErrors: { commit: "Fix validation errors before importing" },
+    };
   }
 
   return mutateWide(

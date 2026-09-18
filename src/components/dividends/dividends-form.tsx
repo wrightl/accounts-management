@@ -2,15 +2,23 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { useAlert } from "@/components/ui/alert-dialog";
 import { FieldError, Input, Label, Textarea } from "@/components/ui/form";
+import { FormStickyActions } from "@/components/ui/form-sticky-actions";
+import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
+import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
+import { useFieldErrors } from "@/components/ui/use-field-errors";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import {
   declareDividend,
   deleteDividendDeclaration,
 } from "@/actions/dividends";
+import {
+  dividendRawFromFormData,
+  parseDeclareDividendInput,
+} from "@/lib/dividends/schema";
 import { splitDividendPence } from "@/lib/dividends/split";
 import { formatGBP, poundsToPence } from "@/lib/money";
 
@@ -30,7 +38,15 @@ export function DividendDeclareForm({
   registerError?: string | null;
 }) {
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
+  const {
+    fieldErrors,
+    error,
+    clearAll,
+    clearField,
+    applyFail,
+    applyActionResult,
+  } = useFieldErrors();
+  const formRef = useRef<HTMLFormElement>(null);
   const [pending, startTransition] = useTransition();
   const [amountPounds, setAmountPounds] = useState("");
 
@@ -69,19 +85,38 @@ export function DividendDeclareForm({
 
   return (
     <form
+      ref={formRef}
+      noValidate
       className="max-w-lg space-y-4"
-      action={(formData) => {
-        setError(null);
+      onSubmit={preventResetSubmit((formData) => {
+        formData.set("amountPounds", amountPounds);
+        clearAll();
+        const clientParsed = parseDeclareDividendInput(
+          dividendRawFromFormData(formData),
+        );
+        if (!clientParsed.ok) {
+          applyFail(clientParsed);
+          scheduleFocusFirstFieldError(
+            formRef.current,
+            clientParsed.fieldErrors,
+          );
+          return;
+        }
         startTransition(async () => {
           const result = await declareDividend(formData);
-          if (!result.ok) setError(result.error);
-          else router.push("/dividends");
+          if (applyActionResult(result)) {
+            router.push("/dividends");
+          } else if (!result.ok) {
+            scheduleFocusFirstFieldError(formRef.current, result.fieldErrors);
+          }
         });
-      }}
+      })}
     >
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <Label htmlFor="declaredAt">Date</Label>
+          <Label htmlFor="declaredAt" required>
+            Date
+          </Label>
           <Input
             id="declaredAt"
             name="declaredAt"
@@ -89,22 +124,40 @@ export function DividendDeclareForm({
             required
             defaultValue={new Date().toISOString().slice(0, 10)}
             disabled={pending}
+            aria-invalid={Boolean(fieldErrors.declaredAt)}
+            aria-describedby={
+              fieldErrors.declaredAt ? "declaredAt-error" : undefined
+            }
+            onChange={() => clearField("declaredAt")}
           />
+          <FieldError id="declaredAt-error">{fieldErrors.declaredAt}</FieldError>
         </div>
         <div>
-          <Label htmlFor="amountPounds">Total amount (£)</Label>
+          <Label htmlFor="amountPounds" required>
+            Total amount (£)
+          </Label>
           <Input
             id="amountPounds"
             name="amountPounds"
             required
             value={amountPounds}
-            onChange={(e) => setAmountPounds(e.target.value)}
+            onChange={(e) => {
+              setAmountPounds(e.target.value);
+              clearField("amountPounds");
+            }}
             disabled={pending}
+            aria-invalid={Boolean(fieldErrors.amountPounds)}
+            aria-describedby={
+              fieldErrors.amountPounds ? "amountPounds-error" : undefined
+            }
           />
+          <FieldError id="amountPounds-error">
+            {fieldErrors.amountPounds}
+          </FieldError>
         </div>
       </div>
       <div>
-        <Label htmlFor="notes">Notes</Label>
+        <Label htmlFor="notes">Notes (optional)</Label>
         <Textarea id="notes" name="notes" rows={2} disabled={pending} />
       </div>
 
@@ -132,10 +185,11 @@ export function DividendDeclareForm({
         </div>
       )}
 
-      <FieldError>{error}</FieldError>
-      <Button type="submit" disabled={pending || !amountPounds.trim()}>
-        Declare dividend
-      </Button>
+      <FormStickyActions error={error}>
+        <Button type="submit" disabled={pending}>
+          Declare dividend
+        </Button>
+      </FormStickyActions>
     </form>
   );
 }

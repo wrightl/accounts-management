@@ -5,7 +5,7 @@ const FAQS = [
   },
   {
     q: "Do you support VAT or Making Tax Digital?",
-    a: "Not in the app today. Invoices default to 0% VAT. We do not claim MTD or HMRC filing.",
+    a: "If you are VAT-registered you can set rates and export a period VAT CSV for your accountant. We do not submit to HMRC or claim Making Tax Digital filing.",
   },
   {
     q: "Is there a live bank feed?",

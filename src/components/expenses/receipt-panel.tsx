@@ -1,9 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useRef, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label } from "@/components/ui/form";
+import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
+import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
+import { useFieldErrors } from "@/components/ui/use-field-errors";
 import { deleteReceipt, uploadReceipt } from "@/actions/expenses";
 
 export function ReceiptPanel({
@@ -21,7 +24,15 @@ export function ReceiptPanel({
   canWrite: boolean;
 }) {
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
+  const {
+    fieldErrors,
+    error,
+    clearAll,
+    clearField,
+    applyFail,
+    applyActionResult,
+  } = useFieldErrors();
+  const formRef = useRef<HTMLFormElement>(null);
   const [pending, startTransition] = useTransition();
 
   return (
@@ -48,10 +59,17 @@ export function ReceiptPanel({
                   variant="ghost"
                   disabled={pending}
                   onClick={() => {
+                    clearAll();
                     startTransition(async () => {
                       const result = await deleteReceipt(r.id);
-                      if (!result.ok) setError(result.error);
-                      else router.refresh();
+                      if (applyActionResult(result)) {
+                        router.refresh();
+                      } else if (!result.ok) {
+                        scheduleFocusFirstFieldError(
+                          formRef.current,
+                          result.fieldErrors,
+                        );
+                      }
                     });
                   }}
                 >
@@ -65,18 +83,38 @@ export function ReceiptPanel({
 
       {canWrite && (
         <form
+          ref={formRef}
+          noValidate
           className="flex flex-wrap items-end gap-3"
-          action={(formData) => {
-            setError(null);
+          onSubmit={preventResetSubmit((formData) => {
+            clearAll();
+            const file = formData.get("receipt");
+            if (!(file instanceof File) || file.size === 0) {
+              const fail = {
+                error: "Choose a receipt file",
+                fieldErrors: { receipt: "Choose a receipt file" },
+              };
+              applyFail(fail);
+              scheduleFocusFirstFieldError(formRef.current, fail.fieldErrors);
+              return;
+            }
             startTransition(async () => {
               const result = await uploadReceipt(expenseId, formData);
-              if (!result.ok) setError(result.error);
-              else router.refresh();
+              if (applyActionResult(result)) {
+                router.refresh();
+              } else if (!result.ok) {
+                scheduleFocusFirstFieldError(
+                  formRef.current,
+                  result.fieldErrors,
+                );
+              }
             });
-          }}
+          })}
         >
           <div className="flex-1">
-            <Label htmlFor="receipt">Upload receipt</Label>
+            <Label htmlFor="receipt" required>
+              Upload receipt
+            </Label>
             <Input
               id="receipt"
               name="receipt"
@@ -84,7 +122,13 @@ export function ReceiptPanel({
               accept="image/*,application/pdf"
               required
               disabled={pending}
+              aria-invalid={Boolean(fieldErrors.receipt)}
+              aria-describedby={
+                fieldErrors.receipt ? "receipt-error" : undefined
+              }
+              onChange={() => clearField("receipt")}
             />
+            <FieldError id="receipt-error">{fieldErrors.receipt}</FieldError>
           </div>
           <Button type="submit" variant="secondary" disabled={pending}>
             {pending ? "Uploading…" : "Upload"}

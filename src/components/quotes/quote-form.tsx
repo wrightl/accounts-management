@@ -1,12 +1,17 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label, Select, Textarea } from "@/components/ui/form";
+import { FormStickyActions } from "@/components/ui/form-sticky-actions";
+import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
+import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
+import { useFieldErrors } from "@/components/ui/use-field-errors";
 import { formatGBP, invoiceTotals, lineNetPence, poundsToPence } from "@/lib/money";
 import { PaymentScheduleEditor } from "@/components/quotes/payment-schedule-editor";
 import { createQuote, updateQuote } from "@/actions/quotes";
+import { parseQuoteInput, quoteRawFromFormData } from "@/lib/quotes/schema";
 import { clientDisplayName } from "@/lib/clients/display";
 import {
   VatRateField,
@@ -80,7 +85,15 @@ export function QuoteForm({
   defaultVatRate?: number;
 }) {
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
+  const {
+    fieldErrors,
+    error,
+    clearAll,
+    clearField,
+    applyFail,
+    applyActionResult,
+  } = useFieldErrors();
+  const formRef = useRef<HTMLFormElement>(null);
   const [pending, startTransition] = useTransition();
   const lineDefault = vatRegistered ? defaultVatRate : 0;
   const [lines, setLines] = useState<QuoteLineDraft[]>(
@@ -116,23 +129,16 @@ export function QuoteForm({
     );
   }
 
+  function clearLineField(index: number, field: string) {
+    clearField(`lines.${index}.${field}`);
+  }
+
   function onSubmit(formData: FormData) {
-    const clientId = String(formData.get("clientId") ?? "").trim();
-    if (!clientId) {
-      setError("Choose a client");
-      return;
-    }
-
-    const completeLines = lines.filter(isCompleteLine);
-    if (completeLines.length === 0) {
-      setError("Add at least one line item");
-      return;
-    }
-
+    clearAll();
     formData.set(
       "linesJson",
       JSON.stringify(
-        completeLines.map((l) => ({
+        lines.map((l) => ({
           description: l.description,
           quantity: Number(l.quantity),
           unitPricePounds: l.unitPricePounds,
@@ -140,16 +146,22 @@ export function QuoteForm({
         })),
       ),
     );
-    setError(null);
+    const clientParsed = parseQuoteInput(quoteRawFromFormData(formData));
+    if (!clientParsed.ok) {
+      applyFail(clientParsed);
+      scheduleFocusFirstFieldError(formRef.current, clientParsed.fieldErrors);
+      return;
+    }
     startTransition(async () => {
       const result =
         mode === "create"
           ? await createQuote(formData)
           : await updateQuote(quote!.id, formData);
-      if (!result.ok) setError(result.error);
-      else {
+      if (applyActionResult(result) && result.ok) {
         router.push(`/quotes/${result.id}`);
         router.refresh();
+      } else if (!result.ok) {
+        scheduleFocusFirstFieldError(formRef.current, result.fieldErrors);
       }
     });
   }
@@ -159,15 +171,19 @@ export function QuoteForm({
     : "sm:grid-cols-[1fr_70px_100px_90px_2.5rem]";
 
   return (
-    <form className="space-y-4" action={onSubmit}>
+    <form ref={formRef} noValidate className="space-y-4" onSubmit={preventResetSubmit(onSubmit)}>
       <div>
-        <Label htmlFor="clientId">Client</Label>
+        <Label htmlFor="clientId" required>
+          Client
+        </Label>
         <Select
           id="clientId"
           name="clientId"
-          required
           defaultValue={quote?.clientId ?? ""}
           disabled={pending}
+          aria-invalid={Boolean(fieldErrors.clientId)}
+          aria-describedby={fieldErrors.clientId ? "clientId-error" : undefined}
+          onChange={() => clearField("clientId")}
         >
           <option value="">Select…</option>
           {clients.map((c) => (
@@ -176,20 +192,26 @@ export function QuoteForm({
             </option>
           ))}
         </Select>
+        <FieldError id="clientId-error">{fieldErrors.clientId}</FieldError>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <Label htmlFor="issueDate">Issue date</Label>
+          <Label htmlFor="issueDate" required>
+            Issue date
+          </Label>
           <Input
             id="issueDate"
             name="issueDate"
             type="date"
-            required
             defaultValue={
               quote?.issueDate ?? new Date().toISOString().slice(0, 10)
             }
             disabled={pending}
+            aria-invalid={Boolean(fieldErrors.issueDate)}
+            aria-describedby={fieldErrors.issueDate ? "issueDate-error" : undefined}
+            onChange={() => clearField("issueDate")}
           />
+          <FieldError id="issueDate-error">{fieldErrors.issueDate}</FieldError>
         </div>
         <div>
           <Label htmlFor="validUntil">Valid until</Label>
@@ -203,6 +225,8 @@ export function QuoteForm({
         </div>
       </div>
       <div className="space-y-2">
+        <Label required>Line items</Label>
+        <FieldError id="lines-error">{fieldErrors.lines}</FieldError>
         <div
           className={`hidden gap-2 text-xs font-medium text-muted sm:grid ${lineGrid}`}
         >
@@ -215,45 +239,78 @@ export function QuoteForm({
         </div>
         {lines.map((line, index) => {
           const totalPence = lineTotalPence(line);
+          const descKey = `lines.${index}.description`;
+          const qtyKey = `lines.${index}.quantity`;
+          const priceKey = `lines.${index}.unitPricePounds`;
           return (
             <div key={line.key} className={`grid gap-2 ${lineGrid}`}>
-              <Input
-                placeholder="Description"
-                value={line.description}
-                disabled={pending}
-                onChange={(e) =>
-                  setLines((prev) =>
-                    prev.map((l, i) =>
-                      i === index ? { ...l, description: e.target.value } : l,
-                    ),
-                  )
-                }
-              />
-              <Input
-                type="number"
-                min={1}
-                value={line.quantity}
-                disabled={pending}
-                onChange={(e) =>
-                  setLines((prev) =>
-                    prev.map((l, i) =>
-                      i === index ? { ...l, quantity: e.target.value } : l,
-                    ),
-                  )
-                }
-              />
-              <Input
-                placeholder="£"
-                value={line.unitPricePounds}
-                disabled={pending}
-                onChange={(e) =>
-                  setLines((prev) =>
-                    prev.map((l, i) =>
-                      i === index ? { ...l, unitPricePounds: e.target.value } : l,
-                    ),
-                  )
-                }
-              />
+              <div className="min-w-0">
+                <Input
+                  placeholder="Description"
+                  value={line.description}
+                  disabled={pending}
+                  aria-invalid={Boolean(fieldErrors[descKey])}
+                  aria-describedby={
+                    fieldErrors[descKey] ? `line-${index}-description-error` : undefined
+                  }
+                  onChange={(e) => {
+                    clearLineField(index, "description");
+                    setLines((prev) =>
+                      prev.map((l, i) =>
+                        i === index ? { ...l, description: e.target.value } : l,
+                      ),
+                    );
+                  }}
+                />
+                <FieldError id={`line-${index}-description-error`}>
+                  {fieldErrors[descKey]}
+                </FieldError>
+              </div>
+              <div className="min-w-0">
+                <Input
+                  type="number"
+                  min={1}
+                  value={line.quantity}
+                  disabled={pending}
+                  aria-invalid={Boolean(fieldErrors[qtyKey])}
+                  aria-describedby={
+                    fieldErrors[qtyKey] ? `line-${index}-quantity-error` : undefined
+                  }
+                  onChange={(e) => {
+                    clearLineField(index, "quantity");
+                    setLines((prev) =>
+                      prev.map((l, i) =>
+                        i === index ? { ...l, quantity: e.target.value } : l,
+                      ),
+                    );
+                  }}
+                />
+                <FieldError id={`line-${index}-quantity-error`}>
+                  {fieldErrors[qtyKey]}
+                </FieldError>
+              </div>
+              <div className="min-w-0">
+                <Input
+                  placeholder="£"
+                  value={line.unitPricePounds}
+                  disabled={pending}
+                  aria-invalid={Boolean(fieldErrors[priceKey])}
+                  aria-describedby={
+                    fieldErrors[priceKey] ? `line-${index}-unitPrice-error` : undefined
+                  }
+                  onChange={(e) => {
+                    clearLineField(index, "unitPricePounds");
+                    setLines((prev) =>
+                      prev.map((l, i) =>
+                        i === index ? { ...l, unitPricePounds: e.target.value } : l,
+                      ),
+                    );
+                  }}
+                />
+                <FieldError id={`line-${index}-unitPrice-error`}>
+                  {fieldErrors[priceKey]}
+                </FieldError>
+              </div>
               {vatRegistered ? (
                 <VatRateField
                   id={`vat-${line.key}`}
@@ -316,10 +373,11 @@ export function QuoteForm({
           disabled={pending}
         />
       </div>
-      <FieldError>{error}</FieldError>
-      <Button type="submit" disabled={pending}>
-        {pending ? "Saving…" : mode === "create" ? "Create quote" : "Save changes"}
-      </Button>
+      <FormStickyActions error={error}>
+        <Button type="submit" disabled={pending}>
+          {pending ? "Saving…" : mode === "create" ? "Create quote" : "Save changes"}
+        </Button>
+      </FormStickyActions>
     </form>
   );
 }

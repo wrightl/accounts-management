@@ -1,11 +1,19 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label } from "@/components/ui/form";
+import { FormStickyActions } from "@/components/ui/form-sticky-actions";
+import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
+import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
+import { useFieldErrors } from "@/components/ui/use-field-errors";
 import { formatGBP } from "@/lib/money";
 import { updateReimbursementRun } from "@/actions/reimbursements";
+import {
+  parseUpdateReimbursementInput,
+  reimbursementUpdateRawFromFormData,
+} from "@/lib/reimbursements/schema";
 
 export function EditReimbursementForm({
   id,
@@ -28,7 +36,14 @@ export function EditReimbursementForm({
   const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set(initialExpenseIds));
   const [reference, setReference] = useState(initialReference);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    fieldErrors,
+    error,
+    clearAll,
+    clearField,
+    applyFail,
+  } = useFieldErrors();
+  const formRef = useRef<HTMLFormElement>(null);
   const [pending, startTransition] = useTransition();
 
   const total = useMemo(
@@ -41,19 +56,40 @@ export function EditReimbursementForm({
 
   return (
     <form
+      ref={formRef}
+      noValidate
       className="max-w-xl space-y-4"
-      action={(formData) => {
+      onSubmit={preventResetSubmit((formData) => {
         formData.set("expenseIdsJson", JSON.stringify([...selected]));
-        setError(null);
+        formData.set("reference", reference);
+        clearAll();
+        const raw = reimbursementUpdateRawFromFormData(formData);
+        if (!raw.ok) {
+          applyFail(raw);
+          scheduleFocusFirstFieldError(formRef.current, raw.fieldErrors);
+          return;
+        }
+        const clientParsed = parseUpdateReimbursementInput(raw.data);
+        if (!clientParsed.ok) {
+          applyFail(clientParsed);
+          scheduleFocusFirstFieldError(
+            formRef.current,
+            clientParsed.fieldErrors,
+          );
+          return;
+        }
         startTransition(async () => {
           const result = await updateReimbursementRun(id, formData);
-          if (!result.ok) setError(result.error);
-          else {
-            router.push(`/reimbursements/${id}`);
-            router.refresh();
+          if (!result.ok) {
+            applyFail(result);
+            scheduleFocusFirstFieldError(formRef.current, result.fieldErrors);
+            return;
           }
+          clearAll();
+          router.push(`/reimbursements/${id}`);
+          router.refresh();
         });
-      }}
+      })}
     >
       <div>
         <Label>Payee (founder)</Label>
@@ -61,7 +97,7 @@ export function EditReimbursementForm({
       </div>
 
       <div>
-        <Label>Reimbursable expenses</Label>
+        <Label required>Reimbursable expenses</Label>
         {expenses.length === 0 ? (
           <p className="mt-2 text-sm text-muted">
             No reimbursable expenses available for this founder.
@@ -80,6 +116,7 @@ export function EditReimbursementForm({
                       else next.delete(e.id);
                       return next;
                     });
+                    clearField("expenseIds");
                   }}
                   disabled={pending}
                 />
@@ -91,28 +128,35 @@ export function EditReimbursementForm({
             ))}
           </ul>
         )}
+        <FieldError id="expenseIds-error">{fieldErrors.expenseIds}</FieldError>
       </div>
 
       <div>
-        <Label htmlFor="reference">Bank payment reference</Label>
+        <Label htmlFor="reference" required>
+          Bank payment reference
+        </Label>
         <Input
           id="reference"
           name="reference"
           value={reference}
-          onChange={(e) => setReference(e.target.value)}
+          onChange={(e) => {
+            setReference(e.target.value);
+            clearField("reference");
+          }}
           placeholder="Use this reference when transferring from the business account"
           required
           disabled={pending}
+          aria-invalid={Boolean(fieldErrors.reference)}
+          aria-describedby={
+            fieldErrors.reference ? "reference-error" : undefined
+          }
         />
+        <FieldError id="reference-error">{fieldErrors.reference}</FieldError>
       </div>
 
       <p className="text-sm text-muted">Total: {formatGBP(total)}</p>
-      <FieldError>{error}</FieldError>
-      <div className="flex flex-wrap gap-2">
-        <Button
-          type="submit"
-          disabled={pending || selected.size === 0 || !reference.trim()}
-        >
+      <FormStickyActions error={error}>
+        <Button type="submit" disabled={pending}>
           {pending ? "Saving…" : "Save changes"}
         </Button>
         <Button
@@ -123,7 +167,7 @@ export function EditReimbursementForm({
         >
           Cancel
         </Button>
-      </div>
+      </FormStickyActions>
     </form>
   );
 }

@@ -74,3 +74,60 @@ export function netFromInclusiveGross(grossPence: number, rate: number): number 
 export function netPenceFromGrossAtRate(grossPence: number, rate: number): number {
   return netFromInclusiveGross(grossPence, rate);
 }
+
+const UK_VAT_MESSAGE =
+  "Enter a valid UK VAT number (e.g. GB434031494)";
+
+const WEIGHTS = [8, 7, 6, 5, 4, 3, 2, 10, 1] as const;
+
+/** Trim, uppercase, strip spaces/hyphens; prefix GB for bare 9/12 digits. */
+export function normalizeUkVatNumber(input: string): string {
+  let s = input.trim().toUpperCase().replace(/[\s-]/g, "");
+  if (/^\d{9}$/.test(s) || /^\d{12}$/.test(s)) {
+    s = `GB${s}`;
+  }
+  return s;
+}
+
+function ukVatChecksumOk(nineDigits: string): boolean {
+  if (!/^\d{9}$/.test(nineDigits)) return false;
+  let total = 0;
+  for (let i = 0; i < 9; i++) {
+    total += Number(nineDigits[i]) * WEIGHTS[i];
+  }
+  // HMRC: classic modulus-97, or (total − 55) for numbers issued from Nov 2009.
+  return total % 97 === 0 || (total - 55) % 97 === 0;
+}
+
+/** Whether `normalized` is a valid UK VAT registration number. */
+export function isValidUkVatNumber(normalized: string): boolean {
+  if (/^GBGD\d{3}$/.test(normalized)) {
+    const n = Number(normalized.slice(4));
+    return n >= 0 && n <= 499;
+  }
+  if (/^GBHA\d{3}$/.test(normalized)) {
+    const n = Number(normalized.slice(4));
+    return n >= 500 && n <= 999;
+  }
+  if (/^GB\d{9}$/.test(normalized)) {
+    return ukVatChecksumOk(normalized.slice(2));
+  }
+  if (/^GB\d{12}$/.test(normalized)) {
+    return ukVatChecksumOk(normalized.slice(2, 11));
+  }
+  return false;
+}
+
+export function parseUkVatNumber(
+  input: string,
+): { ok: true; value: string } | { ok: false; message: string } {
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return { ok: false, message: "Enter your VAT number when VAT registered" };
+  }
+  const normalized = normalizeUkVatNumber(trimmed);
+  if (!isValidUkVatNumber(normalized)) {
+    return { ok: false, message: UK_VAT_MESSAGE };
+  }
+  return { ok: true, value: normalized };
+}

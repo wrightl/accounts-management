@@ -4,7 +4,7 @@ const DIFFERENT = [
   "Quote → order → invoice with milestones — built for project work, not just one-off invoices",
   "Founder receipt email + reimbursement runs — the consultancy expense pain, solved",
   "Accountant as a first-class role — multi-company read-only and a one-click pack",
-  "Honest scope: GBP, bank CSV matching, no pretend VAT/MTD or live bank feeds",
+  "Honest scope: GBP, bank CSV matching, VAT export (not HMRC filing), no live bank feeds",
 ] as const;
 
 export function DifferentiatorSection() {
@@ -16,7 +16,7 @@ export function DifferentiatorSection() {
         </h2>
         <p className="mx-auto mt-4 max-w-2xl text-center text-white/70">
           Spreadsheet replacement for small UK service firms — not a claim to
-          replace your accountant or a full Xero-class suite.
+          replace your accountant or full year-end filing software.
         </p>
         <ul className="mx-auto mt-10 max-w-3xl space-y-4">
           {DIFFERENT.map((item) => (
@@ -43,7 +43,7 @@ const FOR = [
 const NOT_FOR = [
   "Businesses that need live Open Banking feeds",
   "Teams filing VAT / MTD inside the app today",
-  "Anyone looking for a full Xero, FreeAgent, or QuickBooks replacement",
+  "Anyone looking for full year-end filing and tax submission software",
 ] as const;
 
 export function WhoItsFor() {

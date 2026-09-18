@@ -1,48 +1,32 @@
 "use server";
 
 import { and, eq } from "drizzle-orm";
-import { z } from "zod";
 import { getDb } from "@/db";
 import { dividendDeclarations, dividendPayouts } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
 import { mutate } from "@/lib/mutate";
-import { poundsToPence } from "@/lib/money";
 import { splitDividendPence } from "@/lib/dividends/split";
+import {
+  dividendRawFromFormData,
+  parseDeclareDividendInput,
+} from "@/lib/dividends/schema";
 import {
   assertRegisterBalanced,
   getActiveShareholdersForSplit,
 } from "@/lib/shareholders/queries";
 import type { ActionResult } from "@/actions/result";
 
-const declareSchema = z.object({
-  declaredAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  amountPounds: z.string().trim().min(1),
-  notes: z
-    .string()
-    .optional()
-    .or(z.literal(""))
-    .transform((v) => (v === "" || !v ? null : v)),
-});
-
 export async function declareDividend(formData: FormData): Promise<ActionResult> {
-  const parsed = declareSchema.safeParse({
-    declaredAt: formData.get("declaredAt"),
-    amountPounds: formData.get("amountPounds"),
-    notes: formData.get("notes") ?? "",
-  });
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const parsed = parseDeclareDividendInput(dividendRawFromFormData(formData));
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
   }
 
-  let totalPence: number;
-  try {
-    totalPence = poundsToPence(parsed.data.amountPounds);
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Invalid amount" };
-  }
-  if (totalPence <= 0) {
-    return { ok: false, error: "Amount must be greater than zero" };
-  }
+  const { totalPence } = parsed.data;
 
   return mutate(
     "accounts:write",

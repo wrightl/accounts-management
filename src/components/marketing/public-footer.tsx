@@ -28,6 +28,11 @@ export function PublicFooter() {
                 </Link>
               </li>
               <li>
+                <Link href="/pricing" className="hover:text-white">
+                  Pricing
+                </Link>
+              </li>
+              <li>
                 <Link href="/sign-up" className="hover:text-white">
                   Sign up
                 </Link>

@@ -201,8 +201,8 @@ flowchart LR
 
 ### Pricing page
 
-- [ ] `/pricing` page + header/footer links
-- [ ] FAQ + plan comparison matching entitlement table
+- [x] `/pricing` page + header/footer links
+- [x] FAQ + plan comparison matching entitlement table
 - [ ] Analytics events on CTA clicks (if already instrumented elsewhere)
 
 ### Billing

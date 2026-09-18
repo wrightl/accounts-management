@@ -1,14 +1,12 @@
 "use server";
 
 import { and, eq } from "drizzle-orm";
-import { z } from "zod";
 import { getDb } from "@/db";
 import { quoteLineItems, quotes } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
 import { mutate } from "@/lib/mutate";
 import { invoiceTotals, poundsToPence } from "@/lib/money";
 import { allocateQuoteNumber } from "@/lib/invoices/allocate";
-import { todayIsoDate } from "@/lib/invoices/status";
 import { getQuoteDetail, getQuoteVersionSnapshot } from "@/lib/quotes/queries";
 import { loadOrRenderQuotePdf } from "@/lib/quotes/pdf-cache";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
@@ -35,59 +33,14 @@ import {
   generatePublicQuoteToken,
   publicQuoteUrl,
 } from "@/lib/quotes/public-token";
+import {
+  parseDeclineQuoteInput,
+  parseQuoteInput,
+  parseSendQuoteInput,
+  quoteRawFromFormData,
+  sendQuoteRawFromFormData,
+} from "@/lib/quotes/schema";
 import type { ActionResult } from "@/actions/result";
-
-const lineSchema = z.object({
-  description: z.string().trim().min(1, "Description is required"),
-  quantity: z.coerce
-    .number({ error: "Enter a valid quantity" })
-    .int("Quantity must be a whole number")
-    .min(1, "Quantity must be at least 1"),
-  unitPricePounds: z.string().trim().min(1, "Unit price is required"),
-  vatRate: z.coerce.number().int().min(0).max(100).optional(),
-});
-
-const quoteSchema = z.object({
-  clientId: z
-    .string()
-    .trim()
-    .min(1, "Choose a client")
-    .uuid("Choose a client from the list"),
-  issueDate: z
-    .string()
-    .trim()
-    .min(1, "Issue date is required")
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid issue date"),
-  validUntil: z
-    .string()
-    .optional()
-    .or(z.literal(""))
-    .transform((v) => (v === "" || !v ? null : v)),
-  notes: z
-    .string()
-    .optional()
-    .or(z.literal(""))
-    .transform((v) => (v === "" || !v ? null : v)),
-  lines: z.array(lineSchema).min(1, "Add at least one line item"),
-});
-
-function isCompleteLine(line: unknown): boolean {
-  if (!line || typeof line !== "object") return false;
-  const row = line as Record<string, unknown>;
-  const description = String(row.description ?? "").trim();
-  const unitPricePounds = String(row.unitPricePounds ?? "").trim();
-  return description.length > 0 && unitPricePounds.length > 0;
-}
-
-function parseLines(formData: FormData) {
-  try {
-    const raw = JSON.parse(String(formData.get("linesJson") ?? "[]"));
-    if (!Array.isArray(raw)) return [];
-    return raw.filter(isCompleteLine);
-  } catch {
-    return [];
-  }
-}
 
 function parseAndValidateMilestones(formData: FormData, grossPence: number) {
   const milestones = parseMilestonesJson(String(formData.get("milestonesJson") ?? "[]"));
@@ -97,15 +50,13 @@ function parseAndValidateMilestones(formData: FormData, grossPence: number) {
 }
 
 export async function createQuote(formData: FormData): Promise<ActionResult> {
-  const parsed = quoteSchema.safeParse({
-    clientId: formData.get("clientId"),
-    issueDate: formData.get("issueDate") || todayIsoDate(),
-    validUntil: formData.get("validUntil") ?? "",
-    notes: formData.get("notes") ?? "",
-    lines: parseLines(formData),
-  });
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const parsed = parseQuoteInput(quoteRawFromFormData(formData));
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
   }
 
   return mutate(
@@ -181,15 +132,13 @@ export async function createQuote(formData: FormData): Promise<ActionResult> {
 }
 
 export async function updateQuote(id: string, formData: FormData): Promise<ActionResult> {
-  const parsed = quoteSchema.safeParse({
-    clientId: formData.get("clientId"),
-    issueDate: formData.get("issueDate") || todayIsoDate(),
-    validUntil: formData.get("validUntil") ?? "",
-    notes: formData.get("notes") ?? "",
-    lines: parseLines(formData),
-  });
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const parsed = parseQuoteInput(quoteRawFromFormData(formData));
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
   }
 
   return mutate(
@@ -356,11 +305,6 @@ export async function rollbackQuote(
   );
 }
 
-const declinePayloadSchema = z.object({
-  category: z.string().trim().min(1, "Choose a reason category"),
-  narrative: z.string().trim().min(1, "Enter a brief explanation"),
-});
-
 export async function updateQuoteStatus(
   quoteId: string,
   targetStatus: string,
@@ -387,9 +331,13 @@ export async function updateQuoteStatus(
       }
 
       if (targetStatus === "declined") {
-        const parsed = declinePayloadSchema.safeParse(payload ?? {});
-        if (!parsed.success) {
-          return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+        const parsed = parseDeclineQuoteInput(payload ?? {});
+        if (!parsed.ok) {
+          return {
+            ok: false,
+            error: parsed.error,
+            fieldErrors: parsed.fieldErrors,
+          };
         }
         const category = await upsertDeclineReasonCategory(companyId, parsed.data.category);
         if (!category) return { ok: false, error: "Choose a reason category" };
@@ -506,18 +454,14 @@ export async function updateQuoteStatus(
   );
 }
 
-const sendQuoteSchema = z.object({
-  to: z.string().trim().email("Enter a valid email address"),
-  message: z.string().trim().min(1, "Message is required"),
-});
-
 export async function sendQuote(quoteId: string, formData: FormData): Promise<ActionResult> {
-  const parsed = sendQuoteSchema.safeParse({
-    to: formData.get("to"),
-    message: formData.get("message"),
-  });
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const parsed = parseSendQuoteInput(sendQuoteRawFromFormData(formData));
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
   }
 
   return mutate(

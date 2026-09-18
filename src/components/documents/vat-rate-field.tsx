@@ -29,6 +29,9 @@ export function VatRateField({
   onChange,
   disabled,
   compact,
+  required,
+  invalid,
+  describedBy,
 }: {
   id: string;
   label?: string;
@@ -36,10 +39,17 @@ export function VatRateField({
   onChange: (next: VatRateFieldValue) => void;
   disabled?: boolean;
   compact?: boolean;
+  required?: boolean;
+  invalid?: boolean;
+  describedBy?: string;
 }) {
   return (
     <div className={compact ? "min-w-[7rem]" : undefined}>
-      {label ? <Label htmlFor={id}>{label}</Label> : null}
+      {label ? (
+        <Label htmlFor={id} required={required}>
+          {label}
+        </Label>
+      ) : null}
       <Select
         id={id}
         value={value.choice}
@@ -51,6 +61,8 @@ export function VatRateField({
         }
         disabled={disabled}
         aria-label={label || "VAT rate"}
+        aria-invalid={invalid || undefined}
+        aria-describedby={describedBy}
       >
         <option value="20">20%</option>
         <option value="0">0%</option>
@@ -67,6 +79,8 @@ export function VatRateField({
           disabled={disabled}
           placeholder="%"
           aria-label="Custom VAT percent"
+          aria-invalid={invalid || undefined}
+          aria-describedby={describedBy}
         />
       ) : null}
     </div>

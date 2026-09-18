@@ -1,13 +1,19 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import {
   acceptPublicQuote,
   declinePublicQuote,
 } from "@/actions/public-quotes";
 import { Button } from "@/components/ui/button";
 import { FieldError, Label, Textarea } from "@/components/ui/form";
+import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
+import { useFieldErrors } from "@/components/ui/use-field-errors";
+import {
+  parsePublicDeclineQuoteInput,
+  publicDeclineQuoteRawFromFormData,
+} from "@/lib/quotes/schema";
 
 export function PublicQuoteActions({
   token,
@@ -20,10 +26,19 @@ export function PublicQuoteActions({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const {
+    fieldErrors,
+    error,
+    clearAll,
+    clearField,
+    applyFail,
+    applyActionResult,
+    setError,
+  } = useFieldErrors();
   const [declineOpen, setDeclineOpen] = useState(false);
   const [narrative, setNarrative] = useState("");
   const [done, setDone] = useState<"accepted" | "declined" | null>(null);
+  const declineRef = useRef<HTMLDivElement>(null);
 
   if (!canRespond || expired) {
     return (
@@ -57,7 +72,7 @@ export function PublicQuoteActions({
           type="button"
           disabled={pending}
           onClick={() => {
-            setError(null);
+            clearAll();
             startTransition(async () => {
               const result = await acceptPublicQuote(token);
               if (!result.ok) {
@@ -75,24 +90,38 @@ export function PublicQuoteActions({
           type="button"
           variant="secondary"
           disabled={pending}
-          onClick={() => setDeclineOpen(true)}
+          onClick={() => {
+            clearAll();
+            setDeclineOpen(true);
+          }}
         >
           Decline
         </Button>
       </div>
 
       {declineOpen ? (
-        <div className="space-y-3 rounded-xl border border-border bg-wash/40 p-4">
+        <div
+          ref={declineRef}
+          className="space-y-3 rounded-xl border border-border bg-wash/40 p-4"
+        >
           <div>
             <Label htmlFor="decline-narrative">Optional message</Label>
             <Textarea
               id="decline-narrative"
               rows={3}
               value={narrative}
-              onChange={(e) => setNarrative(e.target.value)}
+              onChange={(e) => {
+                clearField("narrative");
+                setNarrative(e.target.value);
+              }}
               disabled={pending}
               placeholder="Let them know why (optional)"
+              aria-invalid={Boolean(fieldErrors.narrative)}
+              aria-describedby={
+                fieldErrors.narrative ? "decline-narrative-error" : undefined
+              }
             />
+            <FieldError id="decline-narrative-error">{fieldErrors.narrative}</FieldError>
           </div>
           <div className="flex gap-2">
             <Button
@@ -100,17 +129,31 @@ export function PublicQuoteActions({
               variant="secondary"
               disabled={pending}
               onClick={() => {
-                setError(null);
+                clearAll();
                 const fd = new FormData();
                 fd.set("narrative", narrative);
+                const clientParsed = parsePublicDeclineQuoteInput(
+                  publicDeclineQuoteRawFromFormData(fd),
+                );
+                if (!clientParsed.ok) {
+                  applyFail(clientParsed);
+                  scheduleFocusFirstFieldError(
+                    declineRef.current,
+                    clientParsed.fieldErrors,
+                  );
+                  return;
+                }
                 startTransition(async () => {
                   const result = await declinePublicQuote(token, fd);
-                  if (!result.ok) {
-                    setError(result.error);
-                    return;
+                  if (applyActionResult(result)) {
+                    setDone("declined");
+                    router.refresh();
+                  } else if (!result.ok) {
+                    scheduleFocusFirstFieldError(
+                      declineRef.current,
+                      result.fieldErrors,
+                    );
                   }
-                  setDone("declined");
-                  router.refresh();
                 });
               }}
             >

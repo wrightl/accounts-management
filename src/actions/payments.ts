@@ -1,7 +1,6 @@
 "use server";
 
 import { and, eq, sql, sum } from "drizzle-orm";
-import { z } from "zod";
 import { getDb } from "@/db";
 import { invoices, payments, reconciliationMatches } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
@@ -19,33 +18,11 @@ import {
   type InvoiceStatus,
 } from "@/lib/invoices/status";
 import type { ActionResult } from "@/actions/result";
-
-const paymentSchema = z.object({
-  amountPounds: z.string().trim().min(1),
-  method: z
-    .string()
-    .trim()
-    .optional()
-    .or(z.literal(""))
-    .transform((v) => (v === "" ? null : v ?? null)),
-  reference: z
-    .string()
-    .trim()
-    .optional()
-    .or(z.literal(""))
-    .transform((v) => (v === "" ? null : v ?? null)),
-  receivedAt: z
-    .string()
-    .optional()
-    .or(z.literal(""))
-    .transform((v) => (v === "" ? null : v ?? null)),
-  bankTransactionId: z
-    .string()
-    .trim()
-    .optional()
-    .or(z.literal(""))
-    .transform((v) => (v === "" ? null : v ?? null)),
-});
+import {
+  parsePaymentInput,
+  paymentRawFromFormData,
+} from "@/lib/payments/schema";
+import { FORM_FIELD_ERROR_SUMMARY } from "@/lib/validation/field-errors";
 
 class PaymentError extends Error {
   constructor(message: string) {
@@ -58,25 +35,33 @@ export async function recordPayment(
   invoiceId: string,
   formData: FormData,
 ): Promise<ActionResult> {
-  const parsed = paymentSchema.safeParse({
-    amountPounds: formData.get("amountPounds"),
-    method: formData.get("method") ?? "",
-    reference: formData.get("reference") ?? "",
-    receivedAt: formData.get("receivedAt") ?? "",
-    bankTransactionId: formData.get("bankTransactionId") ?? "",
-  });
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const parsed = parsePaymentInput(paymentRawFromFormData(formData));
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
   }
 
   let amountPence: number;
   try {
     amountPence = poundsToPence(parsed.data.amountPounds);
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Invalid amount" };
+    return {
+      ok: false,
+      error: FORM_FIELD_ERROR_SUMMARY,
+      fieldErrors: {
+        amountPounds: e instanceof Error ? e.message : "Invalid amount",
+      },
+    };
   }
   if (amountPence <= 0) {
-    return { ok: false, error: "Payment amount must be positive" };
+    return {
+      ok: false,
+      error: FORM_FIELD_ERROR_SUMMARY,
+      fieldErrors: { amountPounds: "Payment amount must be positive" },
+    };
   }
 
   return mutate(

@@ -1,10 +1,18 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { completeOnboarding } from "@/actions/onboarding";
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label, Textarea } from "@/components/ui/form";
+import { FormStickyActions } from "@/components/ui/form-sticky-actions";
+import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
+import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
+import { useFieldErrors } from "@/components/ui/use-field-errors";
 import { BankFields } from "@/components/settings/bank-fields";
+import {
+  onboardingRawFromFormData,
+  parseOnboardingInput,
+} from "@/lib/onboarding/schema";
 
 const MONTHS = [
   "January",
@@ -31,9 +39,17 @@ export function OnboardingForm({
   defaultName: string | null;
 }) {
   const [entityType, setEntityType] = useState<EntityChoice>(null);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    fieldErrors,
+    error,
+    clearAll,
+    clearField,
+    applyFail,
+    applyActionResult,
+  } = useFieldErrors();
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -92,14 +108,34 @@ export function OnboardingForm({
 
   return (
     <form
+      ref={formRef}
+      noValidate
       className="mx-auto max-w-xl space-y-6"
-      action={(formData) => {
-        setError(null);
+      onSubmit={preventResetSubmit((formData) => {
+        clearAll();
+        const clientParsed = parseOnboardingInput(
+          onboardingRawFromFormData(formData),
+        );
+        if (!clientParsed.ok) {
+          applyFail(clientParsed);
+          scheduleFocusFirstFieldError(
+            formRef.current,
+            clientParsed.fieldErrors,
+          );
+          return;
+        }
         startTransition(async () => {
           const result = await completeOnboarding(formData);
-          if (result && !result.ok) setError(result.error);
+          if (result) {
+            if (!applyActionResult(result) && !result.ok) {
+              scheduleFocusFirstFieldError(
+                formRef.current,
+                result.fieldErrors,
+              );
+            }
+          }
         });
-      }}
+      })}
     >
       <input type="hidden" name="entityType" value={entityType} />
       <div>
@@ -110,6 +146,7 @@ export function OnboardingForm({
             setEntityType(null);
             setLogoFile(null);
             setLogoPreview(null);
+            clearAll();
           }}
           disabled={pending}
         >
@@ -126,7 +163,9 @@ export function OnboardingForm({
       </div>
 
       <div>
-        <Label htmlFor="userName">Your name</Label>
+        <Label htmlFor="userName" required>
+          Your name
+        </Label>
         <Input
           id="userName"
           name="userName"
@@ -134,62 +173,126 @@ export function OnboardingForm({
           defaultValue={defaultName ?? ""}
           disabled={pending}
           autoComplete="name"
+          aria-invalid={Boolean(fieldErrors.userName)}
+          aria-describedby={fieldErrors.userName ? "userName-error" : undefined}
+          onChange={() => clearField("userName")}
         />
+        <FieldError id="userName-error">{fieldErrors.userName}</FieldError>
       </div>
 
       <div>
-        <Label htmlFor="name">Trading name</Label>
-        <Input id="name" name="name" required disabled={pending} />
+        <Label htmlFor="name" required>
+          Trading name
+        </Label>
+        <Input
+          id="name"
+          name="name"
+          required
+          disabled={pending}
+          aria-invalid={Boolean(fieldErrors.name)}
+          aria-describedby={fieldErrors.name ? "name-error" : undefined}
+          onChange={() => clearField("name")}
+        />
+        <FieldError id="name-error">{fieldErrors.name}</FieldError>
       </div>
 
       <div>
-        <Label htmlFor="legalName">
+        <Label htmlFor="legalName" required>
           {isLtd ? "Legal name" : "Your full legal name"}
         </Label>
-        <Input id="legalName" name="legalName" required disabled={pending} />
+        <Input
+          id="legalName"
+          name="legalName"
+          required
+          disabled={pending}
+          aria-invalid={Boolean(fieldErrors.legalName)}
+          aria-describedby={
+            fieldErrors.legalName ? "legalName-error" : undefined
+          }
+          onChange={() => clearField("legalName")}
+        />
+        <FieldError id="legalName-error">{fieldErrors.legalName}</FieldError>
       </div>
 
       {isLtd ? (
         <div>
-          <Label htmlFor="companyNumber">Company number</Label>
+          <Label htmlFor="companyNumber" required>
+            Company number
+          </Label>
           <Input
             id="companyNumber"
             name="companyNumber"
             required
             disabled={pending}
+            aria-invalid={Boolean(fieldErrors.companyNumber)}
+            aria-describedby={
+              fieldErrors.companyNumber ? "companyNumber-error" : undefined
+            }
+            onChange={() => clearField("companyNumber")}
           />
+          <FieldError id="companyNumber-error">
+            {fieldErrors.companyNumber}
+          </FieldError>
         </div>
       ) : (
         <div>
           <Label htmlFor="utr">UTR (optional)</Label>
-          <Input id="utr" name="utr" disabled={pending} />
+          <Input
+            id="utr"
+            name="utr"
+            disabled={pending}
+            aria-invalid={Boolean(fieldErrors.utr)}
+            aria-describedby={fieldErrors.utr ? "utr-error" : undefined}
+            onChange={() => clearField("utr")}
+          />
+          <FieldError id="utr-error">{fieldErrors.utr}</FieldError>
         </div>
       )}
 
       <div>
-        <Label htmlFor="addressLines">Address</Label>
-        <Textarea id="addressLines" name="addressLines" disabled={pending} />
+        <Label htmlFor="addressLines">Address (optional)</Label>
+        <Textarea
+          id="addressLines"
+          name="addressLines"
+          disabled={pending}
+          aria-invalid={Boolean(fieldErrors.addressLines)}
+          aria-describedby={
+            fieldErrors.addressLines ? "addressLines-error" : undefined
+          }
+          onChange={() => clearField("addressLines")}
+        />
+        <FieldError id="addressLines-error">
+          {fieldErrors.addressLines}
+        </FieldError>
       </div>
 
       <div>
-        <Label htmlFor="email">Contact email</Label>
+        <Label htmlFor="email">Contact email (optional)</Label>
         <Input
           id="email"
           name="email"
           type="email"
           defaultValue={defaultEmail ?? ""}
           disabled={pending}
+          aria-invalid={Boolean(fieldErrors.email)}
+          aria-describedby={fieldErrors.email ? "email-error" : undefined}
+          onChange={() => clearField("email")}
         />
+        <FieldError id="email-error">{fieldErrors.email}</FieldError>
       </div>
 
       <div>
-        <Label htmlFor="financialYearEndMonth">Financial year end</Label>
+        <Label htmlFor="financialYearEndMonth" required>
+          Financial year end
+        </Label>
         <select
           id="financialYearEndMonth"
           name="financialYearEndMonth"
           defaultValue="3"
           disabled={pending}
           className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm"
+          aria-invalid={Boolean(fieldErrors.financialYearEndMonth)}
+          onChange={() => clearField("financialYearEndMonth")}
         >
           {MONTHS.map((label, i) => (
             <option key={label} value={i + 1}>
@@ -197,6 +300,9 @@ export function OnboardingForm({
             </option>
           ))}
         </select>
+        <FieldError id="financialYearEndMonth-error">
+          {fieldErrors.financialYearEndMonth}
+        </FieldError>
       </div>
 
       <div className="space-y-3 rounded-xl border border-border bg-surface/50 p-4">
@@ -215,9 +321,12 @@ export function OnboardingForm({
           type="file"
           accept="image/*"
           disabled={pending}
+          aria-invalid={Boolean(fieldErrors.logo)}
+          aria-describedby={fieldErrors.logo ? "logo-error" : undefined}
           onChange={(event) => {
             const file = event.target.files?.[0] ?? null;
             setLogoFile(file);
+            clearField("logo");
             if (!file) {
               setLogoPreview(null);
             }
@@ -226,6 +335,7 @@ export function OnboardingForm({
         <p className="text-xs text-muted">
           Shown in the app and on invoices. PNG or JPG, under 2 MB.
         </p>
+        <FieldError id="logo-error">{fieldErrors.logo}</FieldError>
       </div>
 
       <div className="space-y-3 rounded-xl border border-border bg-surface/50 p-4">
@@ -235,14 +345,16 @@ export function OnboardingForm({
           required={false}
           showAccountDetails
           optionalHint="Optional — needed for invoice payment details and CSV import."
+          errors={fieldErrors}
+          onClearError={clearField}
         />
       </div>
 
-      <FieldError>{error}</FieldError>
-
-      <Button type="submit" disabled={pending}>
-        {pending ? "Creating…" : "Create account"}
-      </Button>
+      <FormStickyActions error={error}>
+        <Button type="submit" disabled={pending}>
+          {pending ? "Creating…" : "Create account"}
+        </Button>
+      </FormStickyActions>
     </form>
   );
 }

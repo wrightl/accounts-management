@@ -13,64 +13,21 @@ import {
   canTransition,
   defaultDueDate,
   storedStatus,
-  todayIsoDate,
   type InvoiceStatus,
 } from "@/lib/invoices/status";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
+import {
+  invoiceRawFromFormData,
+  parseInvoiceInput,
+  type InvoiceParsed,
+} from "@/lib/invoices/schema";
 import { enqueueSendJob, processSendJob } from "@/lib/outbox";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { parseVatRate, resolveLineVatRate } from "@/lib/vat";
 import type { ActionResult } from "@/actions/result";
 
-const lineSchema = z.object({
-  description: z.string().trim().min(1),
-  quantity: z.coerce.number().int().positive(),
-  unitPricePounds: z.string().trim().min(1),
-  vatRate: z.coerce.number().int().min(0).max(100).optional(),
-});
-
-const invoiceSchema = z.object({
-  clientId: z
-    .string()
-    .trim()
-    .min(1, "Choose a client")
-    .uuid("Choose a client"),
-  issueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  dueDate: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .optional()
-    .or(z.literal("")),
-  notes: z
-    .string()
-    .optional()
-    .or(z.literal(""))
-    .transform((v) => (v === "" ? null : v ?? null)),
-  lines: z.array(lineSchema).min(1, "Add at least one line item"),
-});
-
-function isCompleteLine(line: unknown): boolean {
-  if (!line || typeof line !== "object") return false;
-  const row = line as Record<string, unknown>;
-  const description = String(row.description ?? "").trim();
-  const unitPricePounds = String(row.unitPricePounds ?? "").trim();
-  return description.length > 0 && unitPricePounds.length > 0;
-}
-
-function parseLinesFromForm(formData: FormData) {
-  const raw = formData.get("linesJson");
-  if (typeof raw !== "string") return [];
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isCompleteLine);
-  } catch {
-    return [];
-  }
-}
-
 function buildLineValues(
-  lines: z.infer<typeof lineSchema>[],
+  lines: InvoiceParsed["lines"],
   company: { vatRegistered: boolean },
 ) {
   return lines.map((l, i) => {
@@ -86,15 +43,13 @@ function buildLineValues(
 }
 
 export async function createInvoice(formData: FormData): Promise<ActionResult> {
-  const parsed = invoiceSchema.safeParse({
-    clientId: formData.get("clientId"),
-    issueDate: formData.get("issueDate") || todayIsoDate(),
-    dueDate: formData.get("dueDate") ?? "",
-    notes: formData.get("notes") ?? "",
-    lines: parseLinesFromForm(formData),
-  });
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const parsed = parseInvoiceInput(invoiceRawFromFormData(formData));
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
   }
 
   const issueDate = parsed.data.issueDate;
@@ -154,15 +109,13 @@ export async function updateInvoice(
   id: string,
   formData: FormData,
 ): Promise<ActionResult> {
-  const parsed = invoiceSchema.safeParse({
-    clientId: formData.get("clientId"),
-    issueDate: formData.get("issueDate") || todayIsoDate(),
-    dueDate: formData.get("dueDate") ?? "",
-    notes: formData.get("notes") ?? "",
-    lines: parseLinesFromForm(formData),
-  });
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const parsed = parseInvoiceInput(invoiceRawFromFormData(formData));
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
   }
 
   const issueDate = parsed.data.issueDate;

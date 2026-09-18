@@ -139,6 +139,7 @@ first login. Do not run seed on every production deploy.
 | `npm run db:generate`   | Generate a Drizzle migration from the schema                         |
 | `npm run db:migrate`    | Apply migrations over a direct Postgres connection (`pg`)            |
 | `npm run db:seed`       | Seed platform admins (`PLATFORM_ADMIN_EMAILS` + Clerk invites). Refuses production/remote URLs unless `ALLOW_PROD_SEED=1`. |
+| `npm run auth:agent`    | Mint a one-time Clerk sign-in URL for a local tenant founder (Cursor agent browser). Development keys only. |
 | `npm run db:push`       | **Unsafe** while Drizzle meta snapshots lag behind hand migrations (after `0010`). Prefer `db:generate` + `db:migrate`. Do not point at Neon production. |
 | `npm run db:studio`     | Drizzle Studio                                                       |
 | `npm run tunnel`        | ngrok to port 3001 (inbound webhooks in local dev)                   |
@@ -237,7 +238,8 @@ GitHub Actions (`.github/workflows/ci.yml`) runs lint, typecheck, Vitest,
 | Live bank feed          | CSV import for major UK banks; Open Banking / live feed later         |
 | VAT / Making Tax Digital| Rates + period summary/export when registered; no HMRC submission     |
 | Multi-currency books    | GBP only; foreign receipt currency is informational                   |
-| Subscriptions / pricing | Planned — see [`docs/plans/gaps-subscriptions-pricing.md`](./docs/plans/gaps-subscriptions-pricing.md) |
+| Public `/pricing`       | Live — Trial / Essentials (£19) / Premium (£29); Stripe conversion still planned                      |
+| Subscriptions / billing | Planned — see [`docs/plans/gaps-subscriptions-pricing.md`](./docs/plans/gaps-subscriptions-pricing.md) |
 
 The original phased plan (invoicing → expenses → reimbursements → bank →
 reports → quotes/cron) is in [`docs/plan.md`](./docs/plan.md). Treat unfinished

@@ -1,7 +1,6 @@
 "use server";
 
 import { and, eq, isNull } from "drizzle-orm";
-import { z } from "zod";
 import { getDb } from "@/db";
 import { companies, quotes } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
@@ -12,6 +11,10 @@ import { canTransitionQuote } from "@/lib/quotes/transitions";
 import { todayIsoDate } from "@/lib/invoices/status";
 import type { QuoteStatus } from "@/lib/quotes/status";
 import type { ActionResult } from "@/actions/result";
+import {
+  parsePublicDeclineQuoteInput,
+  publicDeclineQuoteRawFromFormData,
+} from "@/lib/quotes/schema";
 
 async function loadPublicQuote(rawToken: string) {
   const db = getDb();
@@ -55,10 +58,6 @@ export async function markPublicQuoteViewed(
     );
   return { ok: true };
 }
-
-const declineSchema = z.object({
-  narrative: z.string().trim().max(2000).optional().or(z.literal("")),
-});
 
 export async function acceptPublicQuote(
   rawToken: string,
@@ -155,11 +154,15 @@ export async function declinePublicQuote(
     return { ok: false, error: "This quote cannot be declined" };
   }
 
-  const parsed = declineSchema.safeParse({
-    narrative: formData.get("narrative") ?? "",
-  });
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const parsed = parsePublicDeclineQuoteInput(
+    publicDeclineQuoteRawFromFormData(formData),
+  );
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
   }
 
   const narrative =
