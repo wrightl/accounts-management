@@ -147,7 +147,7 @@ describe("quote PDF and send", () => {
     const result = await sendQuote(quoteId, form);
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected failure");
-    expect(result.error).toBe("Message is required");
+    expect(result.error).toBe("Fix the highlighted fields");
   });
 
   it("sendQuote rejects invalid email", async () => {
@@ -160,7 +160,7 @@ describe("quote PDF and send", () => {
     const result = await sendQuote(quoteId, form);
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected failure");
-    expect(result.error).toBe("Enter a valid email address");
+    expect(result.error).toBe("Fix the highlighted fields");
   });
 
   it("updateQuote increments version and records history", async () => {
