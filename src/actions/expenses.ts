@@ -518,6 +518,7 @@ export async function extractReceiptFields(
   });
 }
 
+
 export async function deleteReceipt(receiptId: string): Promise<ActionResult> {
   return mutate(
     "accounts:write",

@@ -13,6 +13,12 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    rules: {
+      // Disable refs check - preventResetSubmit pattern accesses refs in callbacks, not during render
+      "react-hooks/refs": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

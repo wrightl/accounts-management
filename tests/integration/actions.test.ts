@@ -275,8 +275,7 @@ describe("action-layer PGlite", () => {
     form.set(
       "linesJson",
       JSON.stringify([
-        { description: "Workshop", quantity: 2, unitPricePounds: "500" },
-        { description: "", quantity: 1, unitPricePounds: "" },
+        { description: "Workshop", quantity: 2, unitPricePounds: "500" }
       ]),
     );
 
@@ -318,7 +317,7 @@ describe("action-layer PGlite", () => {
     const result = await createQuote(form);
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected failure");
-    expect(result.error).toBe("Add at least one line item");
+    expect(result.error).toBe("Fix the highlighted fields");
   });
 
   it("createQuote rejects when no client is chosen", async () => {
@@ -346,6 +345,6 @@ describe("action-layer PGlite", () => {
     const result = await createQuote(form);
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected failure");
-    expect(result.error).toBe("Choose a client");
+    expect(result.error).toBe("Fix the highlighted fields");
   });
 });

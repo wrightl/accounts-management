@@ -57,7 +57,6 @@ export function OnboardingForm({
       return;
     }
     const url = URL.createObjectURL(logoFile);
-    // This is a legitimate use of setState in an effect for object URL management
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLogoPreview(url);
     return () => URL.revokeObjectURL(url);

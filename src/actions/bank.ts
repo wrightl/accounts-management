@@ -200,7 +200,7 @@ export async function importBankCsv(formData: FormData): Promise<
       const mappingFromForm = parseGenericCsvMapping(formData.get("csvMapping"));
 
       let importProvider: BankProviderId = resolved.provider;
-      let mapping = mappingFromForm;
+      const mapping = mappingFromForm;
       let detected: PresetBankProviderId | null = null;
 
       if (forceMapper || resolved.provider === "other") {
