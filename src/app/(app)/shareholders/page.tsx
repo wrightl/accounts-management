@@ -5,7 +5,6 @@ import { listShareholders } from "@/lib/shareholders/queries";
 import { TotalSharesForm } from "@/components/shareholders/total-shares-form";
 import { buttonClasses } from "@/components/ui/button";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
-import { isDatabaseConfigured } from "@/env";
 
 export default async function ShareholdersPage() {
   const { companyId, entityType } = await guardTenantPage("accounts:read");
@@ -13,17 +12,6 @@ export default async function ShareholdersPage() {
     redirect("/dashboard");
   }
   const canWrite = await hasPermission("accounts:write");
-
-  if (!isDatabaseConfigured()) {
-    return (
-      <div>
-        <h1 className="font-display text-2xl font-semibold">Shareholders</h1>
-        <p className="mt-2 text-muted">
-          Connect a database to manage the share register.
-        </p>
-      </div>
-    );
-  }
 
   const { shareholders, totalShares, activeShareSum, registerBalanced } =
     await listShareholders(companyId, { includeArchived: true });

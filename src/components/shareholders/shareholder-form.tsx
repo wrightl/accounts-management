@@ -1,15 +1,23 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition, type ChangeEvent } from "react";
+import { useRef, useState, useTransition, type ChangeEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { useAlert } from "@/components/ui/alert-dialog";
 import { FieldError, Input, Label, Select } from "@/components/ui/form";
+import { FormStickyActions } from "@/components/ui/form-sticky-actions";
+import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
+import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
+import { useFieldErrors } from "@/components/ui/use-field-errors";
 import {
   archiveShareholder,
   createShareholder,
   updateShareholder,
 } from "@/actions/shareholders";
+import {
+  parseShareholderInput,
+  shareholderRawFromFormData,
+} from "@/lib/shareholders/schema";
 
 type UserOption = { id: string; name: string | null; email: string };
 
@@ -31,16 +39,26 @@ export function ShareholderForm({
 }) {
   const router = useRouter();
   const { confirm } = useAlert();
-  const [error, setError] = useState<string | null>(null);
+  const {
+    fieldErrors,
+    error,
+    clearAll,
+    clearField,
+    applyFail,
+    applyActionResult,
+  } = useFieldErrors();
+  const formRef = useRef<HTMLFormElement>(null);
   const [pending, startTransition] = useTransition();
   const [name, setName] = useState(shareholder?.name ?? "");
 
   function onLinkedUserChange(event: ChangeEvent<HTMLSelectElement>) {
+    clearField("userId");
     const userId = event.target.value;
     if (!userId) return;
     const user = users.find((u) => u.id === userId);
     if (!user) return;
     setName(user.name?.trim() || user.email);
+    clearField("name");
   }
 
   if (!canWrite && mode === "create") {
@@ -52,14 +70,23 @@ export function ShareholderForm({
   }
 
   function onSubmit(formData: FormData) {
-    setError(null);
+    formData.set("name", name);
+    clearAll();
+    const clientParsed = parseShareholderInput(shareholderRawFromFormData(formData));
+    if (!clientParsed.ok) {
+      applyFail(clientParsed);
+      scheduleFocusFirstFieldError(formRef.current, clientParsed.fieldErrors);
+      return;
+    }
     startTransition(async () => {
       const result =
         mode === "create"
           ? await createShareholder(formData)
           : await updateShareholder(shareholder!.id, formData);
-      if (!result.ok) {
-        setError(result.error);
+      if (!applyActionResult(result)) {
+        if (!result.ok) {
+          scheduleFocusFirstFieldError(formRef.current, result.fieldErrors);
+        }
         return;
       }
       router.push(
@@ -81,11 +108,13 @@ export function ShareholderForm({
       variant: "destructive",
     });
     if (!ok) return;
-    setError(null);
+    clearAll();
     startTransition(async () => {
       const result = await archiveShareholder(shareholder.id);
-      if (!result.ok) {
-        setError(result.error);
+      if (!applyActionResult(result)) {
+        if (!result.ok) {
+          scheduleFocusFirstFieldError(formRef.current, result.fieldErrors);
+        }
         return;
       }
       router.push("/shareholders");
@@ -94,20 +123,30 @@ export function ShareholderForm({
   }
 
   return (
-    <form action={onSubmit} className="mx-auto max-w-xl space-y-4">
+    <form ref={formRef} noValidate onSubmit={preventResetSubmit(onSubmit)} className="mx-auto max-w-xl space-y-4">
       <div>
-        <Label htmlFor="name">Name</Label>
+        <Label htmlFor="name" required>
+          Name
+        </Label>
         <Input
           id="name"
           name="name"
           required
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => {
+            setName(e.target.value);
+            clearField("name");
+          }}
           disabled={!canWrite || pending}
+          aria-invalid={Boolean(fieldErrors.name)}
+          aria-describedby={fieldErrors.name ? "name-error" : undefined}
         />
+        <FieldError id="name-error">{fieldErrors.name}</FieldError>
       </div>
       <div>
-        <Label htmlFor="shareCount">Number of shares</Label>
+        <Label htmlFor="shareCount" required>
+          Number of shares
+        </Label>
         <Input
           id="shareCount"
           name="shareCount"
@@ -117,7 +156,13 @@ export function ShareholderForm({
           required
           defaultValue={shareholder?.shareCount ?? ""}
           disabled={!canWrite || pending}
+          aria-invalid={Boolean(fieldErrors.shareCount)}
+          aria-describedby={
+            fieldErrors.shareCount ? "shareCount-error" : undefined
+          }
+          onChange={() => clearField("shareCount")}
         />
+        <FieldError id="shareCount-error">{fieldErrors.shareCount}</FieldError>
       </div>
       <div>
         <Label htmlFor="userId">Linked user (optional)</Label>
@@ -127,6 +172,8 @@ export function ShareholderForm({
           defaultValue={shareholder?.userId ?? ""}
           onChange={onLinkedUserChange}
           disabled={!canWrite || pending}
+          aria-invalid={Boolean(fieldErrors.userId)}
+          aria-describedby={fieldErrors.userId ? "userId-error" : undefined}
         >
           <option value="">None</option>
           {users.map((u) => (
@@ -135,9 +182,9 @@ export function ShareholderForm({
             </option>
           ))}
         </Select>
+        <FieldError id="userId-error">{fieldErrors.userId}</FieldError>
       </div>
-      <FieldError>{error}</FieldError>
-      <div className="flex flex-wrap gap-2">
+      <FormStickyActions error={error}>
         <Button type="submit" disabled={!canWrite || pending}>
           {mode === "create" ? "Add shareholder" : "Save"}
         </Button>
@@ -151,7 +198,7 @@ export function ShareholderForm({
             Archive
           </Button>
         )}
-      </div>
+      </FormStickyActions>
     </form>
   );
 }

@@ -11,7 +11,6 @@ import {
 } from "@/db/schema";
 import { platformMutate } from "@/lib/platform";
 import { isPlatformAdminEmail } from "@/lib/bootstrap";
-import { isAuthConfigured } from "@/env";
 import {
   findUserByEmail,
   getMembership,
@@ -37,13 +36,34 @@ import { purgeOldPlatformLogs, logPlatformEvent } from "@/lib/platform-log";
 import { sendClerkInvitation } from "@/lib/clerk-invite";
 import type { ActionResult } from "@/actions/result";
 import { isPlatformAdminRole, isTenantRole, PLATFORM_ADMIN_ROLE, type TenantRole } from "@/lib/roles";
+import {
+  companyInviteAdminRawFromFormData,
+  parseCompanyInviteAdminInput,
+  parseCompanySupportNoteInput,
+  parsePlatformInviteAdminInput,
+  parsePlatformSettingsInput,
+  parseSuspendCompanyInput,
+  platformInviteAdminRawFromFormData,
+  platformSettingsRawFromFormData,
+} from "@/lib/platform/schema";
 
 export async function suspendCompany(
   companyId: string,
   reason?: string,
 ): Promise<ActionResult> {
-  const parsed = z.string().uuid().safeParse(companyId);
-  if (!parsed.success) return { ok: false, error: "Invalid company id" };
+  const parsed = parseSuspendCompanyInput({
+    companyId,
+    reason: reason ?? "",
+  });
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
+  }
+
+  const { companyId: id, reason: suspendedReason } = parsed.data;
 
   return platformMutate(
     async () => {
@@ -52,10 +72,10 @@ export async function suspendCompany(
         .update(companies)
         .set({
           suspendedAt: new Date(),
-          suspendedReason: reason?.trim() || null,
+          suspendedReason,
           updatedAt: new Date(),
         })
-        .where(eq(companies.id, parsed.data))
+        .where(eq(companies.id, id))
         .returning({ id: companies.id });
       if (!updated) return { ok: false, error: "Company not found" };
       return { ok: true, id: updated.id };
@@ -64,14 +84,14 @@ export async function suspendCompany(
       audit: {
         action: "platform.company.suspend",
         entityType: "company",
-        entityId: companyId,
-        companyId,
-        meta: reason?.trim() ? { reason: reason.trim() } : undefined,
+        entityId: id,
+        companyId: id,
+        meta: suspendedReason ? { reason: suspendedReason } : undefined,
       },
       paths: [
         "/platform",
         "/platform/companies",
-        `/platform/companies/${companyId}`,
+        `/platform/companies/${id}`,
       ],
     },
   );
@@ -116,11 +136,16 @@ export async function addCompanySupportNote(
   companyId: string,
   body: string,
 ): Promise<ActionResult> {
-  const idOk = z.string().uuid().safeParse(companyId);
-  if (!idOk.success) return { ok: false, error: "Invalid company id" };
-  const text = body.trim();
-  if (!text) return { ok: false, error: "Note cannot be empty" };
-  if (text.length > 4000) return { ok: false, error: "Note is too long" };
+  const parsed = parseCompanySupportNoteInput({ companyId, body });
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
+  }
+
+  const { companyId: id, body: text } = parsed.data;
 
   return platformMutate(
     async ({ localUserId }) => {
@@ -128,7 +153,7 @@ export async function addCompanySupportNote(
       const [note] = await db
         .insert(companySupportNotes)
         .values({
-          companyId: idOk.data,
+          companyId: id,
           authorUserId: localUserId,
           body: text,
         })
@@ -139,10 +164,10 @@ export async function addCompanySupportNote(
       audit: {
         action: "platform.company.note",
         entityType: "company",
-        entityId: companyId,
-        companyId,
+        entityId: id,
+        companyId: id,
       },
-      paths: [`/platform/companies/${companyId}`],
+      paths: [`/platform/companies/${id}`],
     },
   );
 }
@@ -151,24 +176,24 @@ export async function addCompanySupportNote(
 export async function platformInviteCompanyAdmin(
   formData: FormData,
 ): Promise<ActionResult> {
-  const companyId = String(formData.get("companyId") ?? "");
-  const emailRaw = String(formData.get("email") ?? "");
-  const nameRaw = String(formData.get("name") ?? "");
-  const idOk = z.string().uuid().safeParse(companyId);
-  if (!idOk.success) return { ok: false, error: "Invalid company id" };
-  const emailParsed = z.string().email().safeParse(emailRaw.trim());
-  if (!emailParsed.success) return { ok: false, error: "Valid email required" };
-  if (!isAuthConfigured()) {
-    return { ok: false, error: "Clerk is not configured — cannot send invitations." };
+  const parsed = parseCompanyInviteAdminInput(
+    companyInviteAdminRawFromFormData(formData),
+  );
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
   }
 
-  const email = normalizeEmail(emailParsed.data);
-  const name = nameRaw.trim() || null;
+  const email = normalizeEmail(parsed.data.email);
+  const name = parsed.data.name;
+  const companyId = parsed.data.companyId;
   const role: TenantRole = "admin";
 
   return platformMutate(
     async () => {
-      const companyId = idOk.data;
       if (isPlatformAdminEmail(email)) {
         return {
           ok: false,
@@ -253,10 +278,10 @@ export async function platformInviteCompanyAdmin(
       audit: {
         action: "platform.company.invite_admin",
         entityType: "user",
-        companyId: idOk.data,
+        companyId,
         meta: { email },
       },
-      paths: [`/platform/companies/${idOk.data}`],
+      paths: [`/platform/companies/${companyId}`],
     },
   );
 }
@@ -268,16 +293,19 @@ export async function platformInviteCompanyAdmin(
 export async function invitePlatformAdmin(
   formData: FormData,
 ): Promise<ActionResult> {
-  const emailRaw = String(formData.get("email") ?? "");
-  const nameRaw = String(formData.get("name") ?? "");
-  const emailParsed = z.string().email().safeParse(emailRaw.trim());
-  if (!emailParsed.success) return { ok: false, error: "Valid email required" };
-  if (!isAuthConfigured()) {
-    return { ok: false, error: "Clerk is not configured — cannot send invitations." };
+  const parsed = parsePlatformInviteAdminInput(
+    platformInviteAdminRawFromFormData(formData),
+  );
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
   }
 
-  const email = normalizeEmail(emailParsed.data);
-  const name = nameRaw.trim() || null;
+  const email = normalizeEmail(parsed.data.email);
+  const name = parsed.data.name;
 
   return platformMutate(
     async () => {
@@ -324,42 +352,29 @@ export async function invitePlatformAdmin(
 export async function updatePlatformSettingsAction(
   formData: FormData,
 ): Promise<ActionResult> {
-  const maintenanceBanner = String(formData.get("maintenanceBanner") ?? "").trim();
-  const recurring =
-    formData.get("recurringInvoicesEnabled") === "on" ||
-    formData.get("recurringInvoicesEnabled") === "true";
-  const defaultReceiptOcrProvider = String(
-    formData.get("defaultReceiptOcrProvider") ?? "local",
+  const parsed = parsePlatformSettingsInput(
+    platformSettingsRawFromFormData(formData),
   );
-  const defaultReceiptOcrModel = String(
-    formData.get("defaultReceiptOcrModel") ?? "google/gemini-2.5-flash",
-  );
-
-  if (
-    defaultReceiptOcrProvider !== "local" &&
-    defaultReceiptOcrProvider !== "ai_gateway"
-  ) {
-    return { ok: false, error: "Invalid OCR provider" };
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
   }
 
-  const model = defaultReceiptOcrModel.trim() || "google/gemini-2.5-flash";
-  if (defaultReceiptOcrProvider === "ai_gateway") {
-    const { isGatewayModelId } = await import("@/lib/expenses/receipt-ocr-models");
-    if (!isGatewayModelId(model)) {
-      return {
-        ok: false,
-        error: "Enter a model as provider/model, e.g. google/gemini-2.5-flash",
-      };
-    }
-  }
+  const {
+    maintenanceBanner,
+    defaultReceiptOcrProvider,
+    defaultReceiptOcrModel,
+  } = parsed.data;
 
   return platformMutate(
     async () => {
       await updatePlatformSettings({
-        maintenanceBanner: maintenanceBanner || null,
-        recurringInvoicesEnabled: recurring,
+        maintenanceBanner,
         defaultReceiptOcrProvider,
-        defaultReceiptOcrModel: model,
+        defaultReceiptOcrModel,
       });
       return { ok: true, id: "1" };
     },
@@ -370,7 +385,6 @@ export async function updatePlatformSettingsAction(
         entityId: "1",
         companyId: null,
         meta: {
-          recurringInvoicesEnabled: recurring,
           defaultReceiptOcrProvider,
           hasBanner: Boolean(maintenanceBanner),
         },

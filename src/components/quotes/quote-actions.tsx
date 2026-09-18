@@ -1,11 +1,18 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { sendQuote } from "@/actions/quotes";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { Dialog, DialogActions } from "@/components/ui/dialog";
 import { FieldError, Input, Label, Textarea } from "@/components/ui/form";
+import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
+import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
+import { useFieldErrors } from "@/components/ui/use-field-errors";
+import {
+  parseSendQuoteInput,
+  sendQuoteRawFromFormData,
+} from "@/lib/quotes/schema";
 
 export function QuoteActions({
   quoteId,
@@ -21,11 +28,19 @@ export function QuoteActions({
   defaultMessage: string;
 }) {
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
+  const {
+    fieldErrors,
+    error,
+    clearAll,
+    clearField,
+    applyFail,
+    applyActionResult,
+  } = useFieldErrors();
   const [pending, startTransition] = useTransition();
   const [sendOpen, setSendOpen] = useState(false);
   const [to, setTo] = useState(clientEmail);
   const [message, setMessage] = useState(defaultMessage);
+  const formRef = useRef<HTMLFormElement>(null);
 
   if (!canWrite) return null;
 
@@ -36,7 +51,7 @@ export function QuoteActions({
   }
 
   function openSendDialog() {
-    setError(null);
+    clearAll();
     setTo(clientEmail);
     setMessage(defaultMessage);
     setSendOpen(true);
@@ -59,43 +74,75 @@ export function QuoteActions({
 
       <Dialog open={sendOpen} onClose={() => setSendOpen(false)} title="Send quote PDF">
         <form
+          ref={formRef}
+          noValidate
           className="space-y-3"
-          action={(formData) => {
-            setError(null);
+          onSubmit={preventResetSubmit((formData) => {
+            clearAll();
             formData.set("to", to);
             formData.set("message", message);
+            const clientParsed = parseSendQuoteInput(
+              sendQuoteRawFromFormData(formData),
+            );
+            if (!clientParsed.ok) {
+              applyFail(clientParsed);
+              scheduleFocusFirstFieldError(
+                formRef.current,
+                clientParsed.fieldErrors,
+              );
+              return;
+            }
             startTransition(async () => {
               const result = await sendQuote(quoteId, formData);
-              if (!result.ok) {
-                setError(result.error);
-                return;
+              if (applyActionResult(result)) {
+                setSendOpen(false);
+                refresh();
+              } else if (!result.ok) {
+                scheduleFocusFirstFieldError(
+                  formRef.current,
+                  result.fieldErrors,
+                );
               }
-              setSendOpen(false);
-              refresh();
             });
-          }}
+          })}
         >
           <div>
-            <Label htmlFor="send-to">To</Label>
+            <Label htmlFor="send-to" required>
+              To
+            </Label>
             <Input
               id="send-to"
               type="email"
-              required
               value={to}
               disabled={pending}
-              onChange={(e) => setTo(e.target.value)}
+              aria-invalid={Boolean(fieldErrors.to)}
+              aria-describedby={fieldErrors.to ? "send-to-error" : undefined}
+              onChange={(e) => {
+                clearField("to");
+                setTo(e.target.value);
+              }}
             />
+            <FieldError id="send-to-error">{fieldErrors.to}</FieldError>
           </div>
           <div>
-            <Label htmlFor="send-message">Message</Label>
+            <Label htmlFor="send-message" required>
+              Message
+            </Label>
             <Textarea
               id="send-message"
               rows={8}
-              required
               value={message}
               disabled={pending}
-              onChange={(e) => setMessage(e.target.value)}
+              aria-invalid={Boolean(fieldErrors.message)}
+              aria-describedby={
+                fieldErrors.message ? "send-message-error" : undefined
+              }
+              onChange={(e) => {
+                clearField("message");
+                setMessage(e.target.value);
+              }}
             />
+            <FieldError id="send-message-error">{fieldErrors.message}</FieldError>
           </div>
           <FieldError>{error}</FieldError>
           <DialogActions>

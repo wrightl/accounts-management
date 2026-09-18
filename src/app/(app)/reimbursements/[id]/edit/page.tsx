@@ -5,7 +5,6 @@ import { getReimbursementEditData } from "@/lib/reimbursements/queries";
 import { canEditReimbursement } from "@/lib/reimbursements/status";
 import { EditReimbursementForm } from "@/components/reimbursements/edit-form";
 import { buttonClasses } from "@/components/ui/button";
-import { isDatabaseConfigured } from "@/env";
 
 export default async function EditReimbursementPage({
   params,
@@ -14,8 +13,6 @@ export default async function EditReimbursementPage({
 }) {
   const { companyId } = await guardTenantPage("accounts:write");
   const { id } = await params;
-
-  if (!isDatabaseConfigured()) notFound();
 
   const data = await getReimbursementEditData(companyId, id);
   if (!data) notFound();

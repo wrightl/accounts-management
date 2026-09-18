@@ -1,16 +1,12 @@
 import { redirect } from "next/navigation";
-import { isAuthConfigured } from "@/env";
 import { requireUser } from "@/lib/auth";
 import { isPlatformAdmin } from "@/lib/platform";
 import { ensureLocalUser, findLocalUser } from "@/lib/users";
 import { hasDatabaseClient } from "@/db";
 import { OnboardingForm } from "@/components/onboarding/onboarding-form";
-import { AuthNotConfigured } from "@/components/auth-notice";
 import { Logo } from "@/components/brand/logo";
 
 export default async function OnboardingPage() {
-  if (!isAuthConfigured()) return <AuthNotConfigured />;
-
   let user = await requireUser();
   if (hasDatabaseClient()) {
     await ensureLocalUser(user);

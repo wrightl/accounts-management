@@ -6,12 +6,11 @@ import { z } from "zod";
 import { clerkClient } from "@clerk/nextjs/server";
 import { getDb } from "@/db";
 import { reimbursements, users } from "@/db/schema";
-import { isAuthConfigured } from "@/env";
 import { requireUser } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { mutate } from "@/lib/mutate";
 import { cancelPendingReimbursementRunsForPayee } from "@/lib/reimbursements/cancel";
-import { isPlatformAdminRole, isTenantRole, TENANT_ROLES, type TenantRole } from "@/lib/roles";
+import { isPlatformAdminRole, isTenantRole, type TenantRole } from "@/lib/roles";
 import {
   countAdminUsers,
   countUserMemberships,
@@ -32,32 +31,18 @@ import {
   clerkErrorMessage,
   sendClerkInvitation,
 } from "@/lib/clerk-invite";
+import {
+  inviteUserRawFromFormData,
+  parseInviteUserInput,
+  parseProfileUpdateInput,
+  parseRoleUpdateInput,
+  parseUpdateUserInput,
+  profileUpdateRawFromFormData,
+  roleUpdateRawFromFormData,
+  updateUserRawFromFormData,
+} from "@/lib/users/schema";
 import type { ActionResult } from "@/actions/result";
 import { redirect } from "next/navigation";
-
-const roleSchema = z.enum(TENANT_ROLES);
-
-const roleUpdateSchema = z.object({
-  userId: z.string().uuid(),
-  role: roleSchema,
-});
-
-const inviteSchema = z.object({
-  email: z.string().email(),
-  name: z.string().optional(),
-  role: roleSchema,
-});
-
-const updateSchema = z.object({
-  userId: z.string().uuid(),
-  name: z.string().optional(),
-  email: z.string().email().optional(),
-  role: roleSchema,
-});
-
-const profileUpdateSchema = z.object({
-  name: z.string().optional(),
-});
 
 function splitName(name: string | null | undefined): { firstName?: string; lastName?: string } {
   const trimmed = name?.trim();
@@ -98,12 +83,15 @@ export async function updateUserRole(
   userId: string,
   formData: FormData,
 ): Promise<ActionResult> {
-  const parsed = roleUpdateSchema.safeParse({
-    userId,
-    role: formData.get("role"),
-  });
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const parsed = parseRoleUpdateInput(
+    roleUpdateRawFromFormData(userId, formData),
+  );
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
   }
 
   return mutate(
@@ -177,16 +165,13 @@ export async function updateUserRole(
 }
 
 export async function inviteUser(formData: FormData): Promise<ActionResult> {
-  const parsed = inviteSchema.safeParse({
-    email: formData.get("email"),
-    name: formData.get("name") || undefined,
-    role: formData.get("role") ?? "pending",
-  });
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
-  }
-  if (!isAuthConfigured()) {
-    return { ok: false, error: "Clerk is not configured — cannot send invitations." };
+  const parsed = parseInviteUserInput(inviteUserRawFromFormData(formData));
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
   }
 
   const email = normalizeEmail(parsed.data.email);
@@ -348,10 +333,8 @@ export async function revokeUserInvite(userId: string): Promise<ActionResult> {
 
       const { remaining } = await removeMembership(userId, companyId);
       if (remaining === 0) {
-        if (isAuthConfigured()) {
-          const clerkResult = await revokeClerkInvitations(target.email);
-          if (!clerkResult.ok) return clerkResult;
-        }
+        const clerkResult = await revokeClerkInvitations(target.email);
+        if (!clerkResult.ok) return clerkResult;
         await db.delete(users).where(eq(users.id, userId));
       }
 
@@ -394,11 +377,9 @@ export async function deleteUser(userId: string): Promise<ActionResult> {
 
       if (isLastMembership) {
         if (!target.clerkUserId) {
-          if (isAuthConfigured()) {
-            const clerkResult = await revokeClerkInvitations(target.email);
-            if (!clerkResult.ok) return clerkResult;
-          }
-        } else if (isAuthConfigured()) {
+          const clerkResult = await revokeClerkInvitations(target.email);
+          if (!clerkResult.ok) return clerkResult;
+        } else {
           try {
             const client = await clerkClient();
             await client.users.deleteUser(target.clerkUserId);
@@ -455,14 +436,15 @@ export async function deleteUser(userId: string): Promise<ActionResult> {
 }
 
 export async function updateUser(userId: string, formData: FormData): Promise<ActionResult> {
-  const parsed = updateSchema.safeParse({
-    userId,
-    name: formData.get("name") || undefined,
-    email: formData.get("email") || undefined,
-    role: formData.get("role"),
-  });
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const parsed = parseUpdateUserInput(
+    updateUserRawFromFormData(userId, formData),
+  );
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
   }
 
   const name = parsed.data.name?.trim() || null;
@@ -507,7 +489,6 @@ export async function updateUser(userId: string, formData: FormData): Promise<Ac
       }
 
       if (
-        isAuthConfigured() &&
         target.clerkUserId &&
         name !== target.name
       ) {
@@ -563,11 +544,15 @@ export async function updateUser(userId: string, formData: FormData): Promise<Ac
 }
 
 export async function updateOwnProfile(formData: FormData): Promise<ActionResult> {
-  const parsed = profileUpdateSchema.safeParse({
-    name: formData.get("name") || undefined,
-  });
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const parsed = parseProfileUpdateInput(
+    profileUpdateRawFromFormData(formData),
+  );
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
   }
 
   const session = await requireUser();
@@ -583,7 +568,6 @@ export async function updateOwnProfile(formData: FormData): Promise<ActionResult
   if (!target) return { ok: false, error: "User not found" };
 
   if (
-    isAuthConfigured() &&
     target.clerkUserId &&
     name !== target.name
   ) {
@@ -629,17 +613,23 @@ function validateProfilePicture(file: File): string | null {
 }
 
 export async function uploadProfilePicture(formData: FormData): Promise<ActionResult> {
-  if (!isAuthConfigured()) {
-    return { ok: false, error: "Clerk is not configured — cannot update profile picture." };
-  }
-
   const file = formData.get("photo");
   if (!(file instanceof File)) {
-    return { ok: false, error: "Choose an image file" };
+    return {
+      ok: false,
+      error: "Choose an image file",
+      fieldErrors: { photo: "Choose an image file" },
+    };
   }
 
   const validationError = validateProfilePicture(file);
-  if (validationError) return { ok: false, error: validationError };
+  if (validationError) {
+    return {
+      ok: false,
+      error: validationError,
+      fieldErrors: { photo: validationError },
+    };
+  }
 
   const session = await requireUser();
   const localUserId = await ensureLocalUser(session);
@@ -649,7 +639,8 @@ export async function uploadProfilePicture(formData: FormData): Promise<ActionRe
     const clerkFile = await clerkProfileImageFile(file);
     await client.users.updateUserProfileImage(session.userId, { file: clerkFile });
   } catch (err) {
-    return { ok: false, error: clerkErrorMessage(err) };
+    const message = clerkErrorMessage(err);
+    return { ok: false, error: message, fieldErrors: { photo: message } };
   }
 
   await writeAudit({
@@ -668,10 +659,6 @@ export async function uploadProfilePicture(formData: FormData): Promise<ActionRe
 }
 
 export async function removeProfilePicture(): Promise<ActionResult> {
-  if (!isAuthConfigured()) {
-    return { ok: false, error: "Clerk is not configured — cannot update profile picture." };
-  }
-
   const session = await requireUser();
   const localUserId = await ensureLocalUser(session);
 

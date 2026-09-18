@@ -92,24 +92,51 @@ export function buildInvoiceLineValues(params: {
     }));
   }
 
-  let description: string;
-  if (mode === "milestone" && milestoneLabel) {
-    description = `${milestoneLabel} — ${orderNumber}`;
-  } else if (mode === "part") {
-    description = `Part invoice — ${orderNumber}`;
-  } else {
-    description = `Remaining balance — ${orderNumber}`;
+  // amountPence is gross. Back out net so VAT is not double-counted.
+  const rates = [...new Set(orderLines.map((l) => l.vatRate))];
+  const singleRate = rates.length === 1 ? rates[0]! : null;
+
+  if (singleRate != null || orderLines.length === 0) {
+    const rate = singleRate ?? 0;
+    const net = Math.round((amountPence * 100) / (100 + rate));
+    let description: string;
+    if (mode === "milestone" && milestoneLabel) {
+      description = `${milestoneLabel} — ${orderNumber}`;
+    } else if (mode === "part") {
+      description = `Part invoice — ${orderNumber}`;
+    } else {
+      description = `Remaining balance — ${orderNumber}`;
+    }
+    return [
+      {
+        description,
+        quantity: 1,
+        unitPricePence: net,
+        vatRate: rate,
+        position: 0,
+      },
+    ];
   }
 
-  return [
-    {
-      description,
+  // Mixed rates: split gross by each line's gross weight, preserve rates.
+  const lineGrosses = orderLines.map((l) => {
+    const net = Math.round(l.quantity * l.unitPricePence);
+    const vat = Math.round((net * l.vatRate) / 100);
+    return { line: l, gross: net + vat };
+  });
+  const totalGross = lineGrosses.reduce((s, x) => s + x.gross, 0) || 1;
+
+  return lineGrosses.map(({ line, gross }, i) => {
+    const shareGross = Math.round((amountPence * gross) / totalGross);
+    const net = Math.round((shareGross * 100) / (100 + line.vatRate));
+    return {
+      description: `${line.description} (${mode === "part" ? "part" : "balance"}) — ${orderNumber}`,
       quantity: 1,
-      unitPricePence: amountPence,
-      vatRate: 0,
-      position: 0,
-    },
-  ];
+      unitPricePence: net,
+      vatRate: line.vatRate,
+      position: i,
+    };
+  });
 }
 
 export function resolveInvoiceDueDate(params: {

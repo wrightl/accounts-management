@@ -5,32 +5,33 @@ Accounting software for **UK limited companies and sole traders**, built by
 spreadsheets and shared folders with one app for quotes, orders, invoicing,
 expenses, reimbursements, bank reconciliation, and reporting.
 
-Production: [accounts.dotanddashconsulting.com](https://accounts.dotanddashconsulting.com)
+Production: [accounts-manager.dotanddashconsulting.com](https://accounts-manager.dotanddashconsulting.com)
 
 Each organisation is a **tenant** (one legal entity). Founders belong to one
 company; accountants can be invited to many and switch between them. New users
 sign up with Google, then complete **onboarding** (limited company or sole
 trader) before they can open the books.
 
-> **Status:** Day-to-day accounting is in the app — including quote PDF/email,
-> orders with payment milestones, inbound expense email, and receipt OCR.
-> Recurring invoices have a cron job behind a flag but **no UI**. Bank import
-> is Starling CSV (no live feed). Books are **GBP only**; VAT/MTD is not
-> enabled. See [What’s next](#whats-next).
+> **Status:** Day-to-day accounting is in the app — including quote PDF/email
+> with client accept links, orders with payment milestones, recurring invoices,
+> inbound expense email, and receipt OCR. Bank import supports major UK banks
+> via CSV (no live feed). Books are **GBP only**. VAT rates and accountant
+> export are available when registered; there is no HMRC/MTD submit. See
+> [What’s next](#whats-next).
 
 ## Stack
 
-| Concern      | Choice                                                              |
-| ------------ | ------------------------------------------------------------------- |
-| Framework    | Next.js 16 (App Router, RSC, Server Actions), React 19, TypeScript  |
-| Styling      | Tailwind CSS v4, brand-themed design tokens                         |
-| Auth & roles | Clerk (identity + Google SSO); roles in Postgres, not Clerk metadata |
-| Database     | Neon Postgres + Drizzle ORM (PGlite for tests)                      |
-| File storage | Vercel Blob (private, streamed via authorised routes)               |
-| Email        | Pluggable provider (Resend); `console` transport in dev             |
-| AI / OCR     | Local Tesseract, or Vercel AI Gateway (optional)                    |
-| Testing      | Vitest (unit + integration), Playwright (e2e)                       |
-| Hosting/CI   | Vercel (merge to `main` + PR previews) + GitHub Actions             |
+| Concern      | Choice                                                                 |
+| ------------ | ---------------------------------------------------------------------- |
+| Framework    | Next.js 16 (App Router, RSC, Server Actions), React 19, TypeScript     |
+| Styling      | Tailwind CSS v4, brand-themed design tokens                            |
+| Auth & roles | Clerk (identity + Google SSO); roles in Postgres, not Clerk metadata   |
+| Database     | Neon Postgres + Drizzle ORM (PGlite for tests)                         |
+| File storage | Vercel Blob (private, streamed via authorised routes)                  |
+| Email        | Pluggable provider (Resend); `console` in dev (rejected in production) |
+| AI / OCR     | Local Tesseract, or Vercel AI Gateway (optional)                       |
+| Testing      | Vitest (unit + integration), Playwright (e2e)                          |
+| Hosting/CI   | Vercel (merge to `main` + PR previews) + GitHub Actions                |
 
 ## What it does
 
@@ -38,13 +39,18 @@ trader) before they can open the books.
 
 - **Clients** — contact details, notes, quote/invoice history.
 - **Quotes** — numbered drafts, version history and rollback, branded PDF,
-  email send, accept/decline (with decline reasons), optional payment
-  schedule. Accepting a quote creates an **order**.
+  email send with a public accept/decline link, staff accept/decline (with
+  decline reasons), optional payment schedule. Accepting a quote creates an
+  **order**.
 - **Orders** — copied from a quote (line items + milestones). Raise invoices
   against milestones as work is billed.
 - **Invoices** — draft → sent → paid/void; overdue is computed from the due
   date. Branded PDF, email with PDF attached, manual payments. Numbering is
   `{prefix}-{year}-{seq}` (configurable per company).
+- **Recurring invoices** — monthly schedules (day 1–28) with line templates,
+  optional end date / max count, and per-template **draft** or **auto-send**.
+  Daily cron creates invoices when the platform flag is on; founders can also
+  generate once per month from the UI.
 
 **Expenses**
 
@@ -59,8 +65,9 @@ trader) before they can open the books.
 
 **Banking & money out**
 
-- **Transactions** — import a Starling business CSV; de-dupe; suggest and
-  confirm matches to invoice payments or expenses.
+- **Transactions** — import a bank CSV (Starling, Monzo, Tide, Revolut
+  Business, Wise, high-street banks, or a guided mapper for other formats);
+  de-dupe; suggest and confirm matches to invoice payments or expenses.
 - **Spending** — category snapshot from imported bank rows.
 - **Reimbursements** — batch reimbursable expenses per founder; mark paid;
   export a run summary.
@@ -70,8 +77,9 @@ trader) before they can open the books.
 **Reporting & admin**
 
 - Dashboard KPIs, aged receivables, income vs expense.
-- **Reports** — accrual P&L, VAT summary (0% until registered), accountant
-  pack (zip of CSVs, invoice PDFs, receipts, bank, dividends).
+- **Reports** — accrual P&L (ex-VAT), VAT summary and CSV download when
+  registered, accountant pack (zip of CSVs, invoice PDFs, receipts, bank,
+  dividends, optional VAT PDF).
 - **Audit log** (admins), **inbound email** job queue, **settings** (company
   profile, bank details, numbering, logo, OCR), **users** (invite, role).
 - Command palette (`⌘K` / `Ctrl+K`) for navigation.
@@ -82,12 +90,12 @@ Clerk is identity only. Role and company come from Postgres
 (`users` + `company_memberships`). First sign-in creates a local user as
 **pending** unless the email is in the bootstrap lists.
 
-| Role          | Access                                                                 |
-| ------------- | ---------------------------------------------------------------------- |
-| **admin**     | Full access, including users and settings.                             |
-| **user**      | Co-founder: day-to-day accounting, reports, and export.                |
-| **accountant**| Read-only + export. May belong to **multiple** companies.              |
-| **pending**   | Signed in, no books access. Assigned from Dashboard → Users.           |
+| Role           | Access                                                       |
+| -------------- | ------------------------------------------------------------ |
+| **admin**      | Full access, including users and settings.                   |
+| **user**       | Co-founder: day-to-day accounting, reports, and export.      |
+| **accountant** | Read-only + export. May belong to **multiple** companies.    |
+| **pending**    | Signed in, no books access. Assigned from Dashboard → Users. |
 
 Self-serve onboarding creates a company and makes that user **admin**. Invited
 users skip onboarding and attach to the inviting company. Platform operators
@@ -118,23 +126,24 @@ first login. Do not run seed on every production deploy.
 
 ## Scripts
 
-| Command                 | Description                                                          |
-| ----------------------- | -------------------------------------------------------------------- |
-| `npm run dev`           | Next.js dev server on port **3001**                                  |
-| `npm run build`         | Migrate (if a database URL is set) then production build             |
-| `npm run start`         | Next.js production server                                            |
-| `npm run lint`          | ESLint                                                               |
-| `npm run typecheck`     | TypeScript, no emit                                                  |
-| `npm test`              | Vitest unit + integration (PGlite)                                   |
-| `npm run test:watch`    | Vitest watch mode                                                    |
-| `npm run test:e2e`      | Playwright e2e (own server on port 3100)                             |
-| `npm run db:generate`   | Generate a Drizzle migration from the schema                         |
-| `npm run db:migrate`    | Apply migrations over a direct Postgres connection (`pg`)            |
-| `npm run db:seed`       | Seed platform admins (`PLATFORM_ADMIN_EMAILS` + Clerk invites)       |
-| `npm run db:push`       | Push schema without a migration (dev only)                           |
-| `npm run db:studio`     | Drizzle Studio                                                       |
-| `npm run tunnel`        | ngrok to port 3001 (inbound webhooks in local dev)                   |
-| `npm run promo:all`     | Seed demo data, record UI, assemble the promo video                  |
+| Command               | Description                                                                                                                                              |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`         | Next.js dev server on port **3001**                                                                                                                      |
+| `npm run build`       | Migrate (if a database URL is set) then production build                                                                                                 |
+| `npm run start`       | Next.js production server                                                                                                                                |
+| `npm run lint`        | ESLint                                                                                                                                                   |
+| `npm run typecheck`   | TypeScript, no emit                                                                                                                                      |
+| `npm test`            | Vitest unit + integration (PGlite)                                                                                                                       |
+| `npm run test:watch`  | Vitest watch mode                                                                                                                                        |
+| `npm run test:e2e`    | Playwright e2e (own server on port 3100)                                                                                                                 |
+| `npm run db:generate` | Generate a Drizzle migration from the schema                                                                                                             |
+| `npm run db:migrate`  | Apply migrations over a direct Postgres connection (`pg`)                                                                                                |
+| `npm run db:seed`     | Seed platform admins (`PLATFORM_ADMIN_EMAILS` + Clerk invites). Refuses production/remote URLs unless `ALLOW_PROD_SEED=1`.                               |
+| `npm run auth:agent`  | Mint a one-time Clerk sign-in URL for a local tenant founder (Cursor agent browser). Development keys only.                                              |
+| `npm run db:push`     | **Unsafe** while Drizzle meta snapshots lag behind hand migrations (after `0010`). Prefer `db:generate` + `db:migrate`. Do not point at Neon production. |
+| `npm run db:studio`   | Drizzle Studio                                                                                                                                           |
+| `npm run tunnel`      | ngrok to port 3001 (inbound webhooks in local dev)                                                                                                       |
+| `npm run promo:all`   | Seed demo data, record UI, assemble the promo video                                                                                                      |
 
 Promo video notes: [`docs/promo-video.md`](./docs/promo-video.md).
 
@@ -146,17 +155,12 @@ run before every secret is set.
 
 Feature flags derive from presence:
 
-- `isAuthConfigured()` — both Clerk keys present → Clerk mounts and routes
-  are protected.
-- `isDatabaseConfigured()` — `DATABASE_URL` present → live data.
 - `BLOB_READ_WRITE_TOKEN` — Vercel Blob in production (required). Dev/test
   fall back to in-memory storage.
 - `EMAIL_PROVIDER` — `console` (default) or `resend`.
 - `AI_GATEWAY_API_KEY` — required only when Settings uses the `ai_gateway`
   receipt OCR provider.
 - `CRON_SECRET` — required; `/api/cron/*` returns 503 until it matches.
-- `RECURRING_INVOICES_ENABLED` — `true` to let the recurring cron generate
-  invoices (default off; no UI).
 
 Clerk paths in `.env.example`: sign-in `/sign-in`, sign-up `/sign-up`, after
 sign-in `/dashboard`, after sign-up `/onboarding`.
@@ -171,18 +175,18 @@ Vercel Hobby only allows cron jobs **once per day**, so scheduling is split:
 
 **Vercel Cron** (`vercel.json`) — daily at 07:00 UTC, `Authorization: Bearer $CRON_SECRET`:
 
-| Path                | Schedule    | Purpose                                                      |
-| ------------------- | ----------- | ------------------------------------------------------------ |
-| `/api/cron/daily`   | 07:00 daily | Recurring invoice generation (flagged) + overdue reminders   |
+| Path              | Schedule    | Purpose                                          |
+| ----------------- | ----------- | ------------------------------------------------ |
+| `/api/cron/daily` | 07:00 daily | Recurring invoice generation + overdue reminders |
 
 Manual triggers (same auth) still available: `/api/cron/reminders`,
 `/api/cron/recurring`, `/api/cron/inbound-email`.
 
 **GitHub Actions** (`.github/workflows/cron-inbound-email.yml`) — every 15 minutes:
 
-| Path                         | Purpose                                 |
-| ---------------------------- | --------------------------------------- |
-| `/api/cron/inbound-email`    | Retry stuck/failed inbound expense jobs |
+| Path                      | Purpose                                 |
+| ------------------------- | --------------------------------------- |
+| `/api/cron/inbound-email` | Retry stuck/failed inbound expense jobs |
 
 Requires GitHub Actions secrets `CRON_SECRET` and `APP_URL` (production base URL,
 no trailing slash).
@@ -196,8 +200,9 @@ the scheduled Action is the drain/retry when no new mail arrives.
 - **Money** is integer pence (`src/lib/money.ts`). Books are **GBP**.
 - **Dates** use `Europe/London` (`src/lib/dates.ts`), not UTC, so overdue and
   financial-year windows do not flip a day early.
-- **VAT** fields exist on line items; the UI stays at 0% until the company is
-  VAT registered (MTD is out of scope).
+- **VAT** — when the company is VAT registered in Settings, document lines and
+  expenses use selectable rates (default 20%). Unregistered companies stay at
+  0%. Export is for your accountant; MTD submit is out of scope.
 - Every mutation is a Server Action or route handler that re-checks
   permissions (`requirePermission` in `src/lib/auth.ts`). The client is never
   trusted. Queries take `companyId` from the session tenant.
@@ -228,13 +233,17 @@ GitHub Actions (`.github/workflows/ci.yml`) runs lint, typecheck, Vitest,
 
 ## What’s next
 
-| Area                    | State                                                                 |
-| ----------------------- | --------------------------------------------------------------------- |
-| Recurring invoices      | Schema + cron exist; **no UI**; `RECURRING_INVOICES_ENABLED` defaults off |
-| Live bank feed          | CSV import only (Starling adapter seam for a future API)              |
-| VAT / Making Tax Digital| Fields reserved; not registered, no HMRC submission                   |
-| Multi-currency books    | GBP only; foreign receipt currency is informational                   |
+| Area                     | State                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------ |
+| Live bank feed           | CSV import for major UK banks; Open Banking / live feed later                                          |
+| VAT / Making Tax Digital | Rates + period summary/export when registered; no HMRC submission                                      |
+| Multi-currency books     | GBP only; foreign receipt currency is informational                                                    |
+| Public `/pricing`        | Live — Trial / Essentials (£19) / Premium (£29); Stripe conversion still planned                       |
+| Subscriptions / billing  | Planned — see [`docs/plans/gaps-subscriptions-pricing.md`](./docs/plans/gaps-subscriptions-pricing.md) |
 
 The original phased plan (invoicing → expenses → reimbursements → bank →
 reports → quotes/cron) is in [`docs/plan.md`](./docs/plan.md). Treat unfinished
 items there as follow-ups, not unstarted work.
+
+Competitor landscape (Sep 2026): [`docs/competitor-research.md`](./docs/competitor-research.md).  
+Roadmap for gaps, billing, and public pricing: [`docs/plans/gaps-subscriptions-pricing.md`](./plans/gaps-subscriptions-pricing.md).

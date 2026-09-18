@@ -3,20 +3,10 @@ import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { listFounders } from "@/lib/expenses/queries";
 import { ShareholderForm } from "@/components/shareholders/shareholder-form";
 import { buttonClasses } from "@/components/ui/button";
-import { isDatabaseConfigured } from "@/env";
 
 export default async function NewShareholderPage() {
   const { companyId } = await guardTenantPage("accounts:write");
   const canWrite = await hasPermission("accounts:write");
-
-  if (!isDatabaseConfigured()) {
-    return (
-      <div>
-        <h1 className="font-display text-2xl font-semibold">New shareholder</h1>
-        <p className="mt-2 text-muted">Connect a database to add shareholders.</p>
-      </div>
-    );
-  }
 
   const founders = await listFounders(companyId);
 

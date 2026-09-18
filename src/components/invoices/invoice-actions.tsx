@@ -4,9 +4,16 @@ import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label } from "@/components/ui/form";
+import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
+import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
+import { useFieldErrors } from "@/components/ui/use-field-errors";
 import { sendInvoice } from "@/actions/invoices";
 import { findInvoiceBankMatches, type InvoiceBankMatch } from "@/actions/bank";
 import { recordPayment } from "@/actions/payments";
+import {
+  parsePaymentInput,
+  paymentRawFromFormData,
+} from "@/lib/payments/schema";
 import type { MatchScoreBreakdown } from "@/lib/bank/match";
 import { penceToPounds } from "@/lib/money";
 
@@ -36,7 +43,15 @@ export function InvoiceActions({
   companyName: string | null;
 }) {
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
+  const {
+    fieldErrors,
+    error,
+    clearAll,
+    clearField,
+    applyFail,
+    applyActionResult,
+    setError,
+  } = useFieldErrors();
   const [pending, startTransition] = useTransition();
   const [showPayment, setShowPayment] = useState(false);
   const [loadingMatches, setLoadingMatches] = useState(false);
@@ -44,6 +59,7 @@ export function InvoiceActions({
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
   const [manualEntry, setManualEntry] = useState(false);
   const matchRequestId = useRef(0);
+  const formRef = useRef<HTMLFormElement>(null);
 
   const selectedMatch = matches.find((m) => m.bankTransactionId === selectedMatchId) ?? null;
 
@@ -56,7 +72,7 @@ export function InvoiceActions({
 
     setShowPayment(true);
     setLoadingMatches(true);
-    setError(null);
+    clearAll();
     const requestId = ++matchRequestId.current;
     void findInvoiceBankMatches(invoiceId).then((result) => {
       if (requestId !== matchRequestId.current) return;
@@ -105,7 +121,7 @@ export function InvoiceActions({
             type="button"
             disabled={pending}
             onClick={() => {
-              setError(null);
+              clearAll();
               startTransition(async () => {
                 const result = await sendInvoice(invoiceId);
                 if (!result.ok) setError(result.error);
@@ -130,18 +146,33 @@ export function InvoiceActions({
 
       {showPayment && (
         <form
+          ref={formRef}
+          noValidate
           className="max-w-lg space-y-3 rounded-xl border border-border p-4"
-          action={(formData) => {
-            setError(null);
+          onSubmit={preventResetSubmit((formData) => {
+            clearAll();
+            const clientParsed = parsePaymentInput(paymentRawFromFormData(formData));
+            if (!clientParsed.ok) {
+              applyFail(clientParsed);
+              scheduleFocusFirstFieldError(
+                formRef.current,
+                clientParsed.fieldErrors,
+              );
+              return;
+            }
             startTransition(async () => {
               const result = await recordPayment(invoiceId, formData);
-              if (!result.ok) setError(result.error);
-              else {
+              if (applyActionResult(result)) {
                 setShowPayment(false);
                 refresh();
+              } else if (!result.ok) {
+                scheduleFocusFirstFieldError(
+                  formRef.current,
+                  result.fieldErrors,
+                );
               }
             });
-          }}
+          })}
         >
           <p className="text-sm text-muted">
             Balance due: {balanceFormatted} · {invoiceNumber} ·{" "}
@@ -202,15 +233,22 @@ export function InvoiceActions({
           )}
 
           <div>
-            <Label htmlFor="amountPounds">Amount (£)</Label>
+            <Label htmlFor="amountPounds" required>
+              Amount (£)
+            </Label>
             <Input
               id="amountPounds"
               name="amountPounds"
               key={`amount-${selectedMatchId ?? "manual"}-${manualEntry}`}
               defaultValue={defaultAmount || (manualEntry ? "" : undefined)}
-              required
               disabled={pending || (!manualEntry && Boolean(selectedMatch))}
+              aria-invalid={Boolean(fieldErrors.amountPounds)}
+              aria-describedby={
+                fieldErrors.amountPounds ? "amountPounds-error" : undefined
+              }
+              onChange={() => clearField("amountPounds")}
             />
+            <FieldError id="amountPounds-error">{fieldErrors.amountPounds}</FieldError>
           </div>
           <div>
             <Label htmlFor="method">Method</Label>

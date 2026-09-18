@@ -5,12 +5,12 @@ import {
     getExpenseByCategory,
     getIncomeByMonth,
     getProfitAndLoss,
+    getVatSummary,
 } from '@/lib/reports/queries';
 import { buttonClasses } from '@/components/ui/button';
 import { Card, CardTitle, CardValue } from '@/components/ui/card';
 import { Input, Label } from '@/components/ui/form';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
-import { isDatabaseConfigured } from '@/env';
 
 export default async function ReportsPage({
     searchParams,
@@ -21,26 +21,16 @@ export default async function ReportsPage({
     const canExport = await hasPermission('reports:export');
     const sp = await searchParams;
 
-    if (!isDatabaseConfigured()) {
-        return (
-            <div>
-                <h1 className="font-display text-2xl font-semibold">Reports</h1>
-                <p className="mt-2 text-muted">
-                    Connect a database to view reports.
-                </p>
-            </div>
-        );
-    }
-
     const defaults = await defaultReportPeriod(companyId);
     const from = sp.from ?? defaults.from;
     const to = sp.to ?? defaults.to;
 
-    const [pnl, aged, byMonth, byCategory] = await Promise.all([
+    const [pnl, aged, byMonth, byCategory, vat] = await Promise.all([
         getProfitAndLoss(companyId, from, to),
         getAgedReceivables(companyId),
         getIncomeByMonth(companyId, from, to),
         getExpenseByCategory(companyId, from, to),
+        getVatSummary(companyId, from, to),
     ]);
 
     return (
@@ -51,18 +41,26 @@ export default async function ReportsPage({
                         Reports
                     </h1>
                     <p className="mt-1 text-muted">
-                        Accrual P&amp;L (invoiced income, not cash collected),
+                        Accrual P&amp;L (invoiced income net of VAT), VAT summary,
                         receivables, and accountant export (CSVs, invoice PDFs,
                         receipt files, bank, and dividends from the Dividends page).
                     </p>
                 </div>
                 {canExport && (
-                    <a
-                        href={`/api/reports/accountant-pack?from=${from}&to=${to}`}
-                        className={buttonClasses('primary')}
-                    >
-                        Download accountant pack
-                    </a>
+                    <div className="flex flex-wrap gap-2">
+                        <a
+                            href={`/api/reports/vat?from=${from}&to=${to}`}
+                            className={buttonClasses('secondary')}
+                        >
+                            Download VAT CSV
+                        </a>
+                        <a
+                            href={`/api/reports/accountant-pack?from=${from}&to=${to}`}
+                            className={buttonClasses('primary')}
+                        >
+                            Download accountant pack
+                        </a>
+                    </div>
                 )}
             </div>
 
@@ -87,11 +85,11 @@ export default async function ReportsPage({
 
             <div className="mt-6 grid gap-4 sm:grid-cols-3">
                 <Card>
-                    <CardTitle>Income (invoiced)</CardTitle>
+                    <CardTitle>Income (invoiced, ex VAT)</CardTitle>
                     <CardValue>{pnl.incomeFormatted}</CardValue>
                 </Card>
                 <Card>
-                    <CardTitle>Expenses</CardTitle>
+                    <CardTitle>Expenses (ex VAT)</CardTitle>
                     <CardValue>{pnl.expenseFormatted}</CardValue>
                 </Card>
                 <Card>
@@ -100,6 +98,38 @@ export default async function ReportsPage({
                 </Card>
             </div>
             <p className="mt-3 text-sm text-muted">{pnl.basisNote}</p>
+
+            <section className="mt-10">
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                    <h2 className="font-display text-lg font-semibold">
+                        VAT summary
+                    </h2>
+                    {vat.vatNumber ? (
+                        <p className="text-sm text-muted">VAT {vat.vatNumber}</p>
+                    ) : null}
+                </div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                    <Card>
+                        <CardTitle>VAT on sales</CardTitle>
+                        <CardValue className="text-xl">
+                            {vat.vatOnSalesFormatted}
+                        </CardValue>
+                    </Card>
+                    <Card>
+                        <CardTitle>VAT on purchases</CardTitle>
+                        <CardValue className="text-xl">
+                            {vat.vatOnPurchasesFormatted}
+                        </CardValue>
+                    </Card>
+                    <Card>
+                        <CardTitle>Net VAT</CardTitle>
+                        <CardValue className="text-xl">
+                            {vat.netVatFormatted}
+                        </CardValue>
+                    </Card>
+                </div>
+                <p className="mt-3 text-sm text-muted">{vat.note}</p>
+            </section>
 
             <section className="mt-10">
                 <h2 className="font-display text-lg font-semibold">
@@ -130,7 +160,7 @@ export default async function ReportsPage({
             <section className="mt-10 grid gap-8 lg:grid-cols-2">
                 <div>
                     <h2 className="mb-3 font-display text-lg font-semibold">
-                        Income by month
+                        Income by month (ex VAT)
                     </h2>
                     <Table>
                         <THead>

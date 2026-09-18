@@ -1,18 +1,18 @@
 import Link from "next/link";
 import { guardTenantPage } from "@/lib/auth";
 import { listClients } from "@/lib/clients/queries";
+import { getOrCreateCompanySettings } from "@/lib/settings/queries";
+import { defaultLineVatRate } from "@/lib/vat";
 import { InvoiceForm } from "@/components/invoices/invoice-form";
 import { buttonClasses } from "@/components/ui/button";
-import { isDatabaseConfigured } from "@/env";
 
 export default async function NewInvoicePage() {
   const { companyId } = await guardTenantPage("accounts:write");
 
-  if (!isDatabaseConfigured()) {
-    return <p className="text-muted">Connect a database to create invoices.</p>;
-  }
-
-  const clients = await listClients(companyId);
+  const [clients, company] = await Promise.all([
+    listClients(companyId),
+    getOrCreateCompanySettings(companyId),
+  ]);
 
   return (
     <div>
@@ -31,7 +31,12 @@ export default async function NewInvoicePage() {
           before creating an invoice.
         </p>
       ) : (
-        <InvoiceForm mode="create" clients={clients} />
+        <InvoiceForm
+          mode="create"
+          clients={clients}
+          vatRegistered={company.vatRegistered}
+          defaultVatRate={defaultLineVatRate(company)}
+        />
       )}
     </div>
   );

@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
 
 export { Select } from "@/components/ui/select";
 export type { SelectOption } from "@/components/ui/select";
@@ -20,16 +20,41 @@ export function Textarea({ className, ...props }: ComponentProps<"textarea">) {
   );
 }
 
-export function Label({ className, ...props }: ComponentProps<"label">) {
+export function Label({
+  className,
+  required,
+  children,
+  ...props
+}: ComponentProps<"label"> & { required?: boolean }) {
   return (
     <label
       className={cn("mb-1.5 block text-sm font-medium text-foreground", className)}
       {...props}
-    />
+    >
+      {children}
+      {required ? (
+        <>
+          <span className="ml-0.5 text-destructive" aria-hidden="true">
+            *
+          </span>
+          <span className="sr-only"> (required)</span>
+        </>
+      ) : null}
+    </label>
   );
 }
 
-export function FieldError({ children }: { children?: string | null }) {
+export function FieldError({
+  id,
+  children,
+}: {
+  id?: string;
+  children?: ReactNode;
+}) {
   if (!children) return null;
-  return <p className="mt-1 text-sm text-destructive">{children}</p>;
+  return (
+    <p id={id} className="mt-1 text-sm text-destructive" role="alert">
+      {children}
+    </p>
+  );
 }

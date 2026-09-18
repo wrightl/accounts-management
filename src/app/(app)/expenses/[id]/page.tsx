@@ -10,7 +10,6 @@ import { ReceiptPanel } from "@/components/expenses/receipt-panel";
 import { buttonClasses } from "@/components/ui/button";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
-import { isDatabaseConfigured } from "@/env";
 import { isForeignCurrency } from "@/lib/expenses/receipt-parse";
 
 export default async function ExpenseDetailPage({
@@ -24,8 +23,6 @@ export default async function ExpenseDetailPage({
   const canWrite = await hasPermission("accounts:write");
   const { id } = await params;
   const { receiptUploadFailed } = await searchParams;
-
-  if (!isDatabaseConfigured()) notFound();
 
   const detail = await getExpenseDetail(companyId, id);
   if (!detail) notFound();
@@ -129,6 +126,8 @@ export default async function ExpenseDetailPage({
           clients={clients}
           canWrite={canWrite}
           defaultMileageRatePence={settings.defaultMileageRatePence}
+          vatRegistered={settings.vatRegistered}
+          defaultVatRate={settings.vatRegistered ? settings.defaultVatRate : 0}
         />
         <ReceiptPanel
           expenseId={detail.expense.id}

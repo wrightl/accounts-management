@@ -17,7 +17,6 @@ import {
 } from "@/components/inbound-email/job-actions";
 import { buttonClasses } from "@/components/ui/button";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
-import { isDatabaseConfigured } from "@/env";
 
 const FILTERS: { value: InboundEmailJobListFilter; label: string }[] = [
   { value: "attention", label: "Needs attention" },
@@ -40,15 +39,6 @@ export default async function InboundEmailPage({
   const { companyId } = await guardTenantPage("users:manage");
   const sp = await searchParams;
   const filter = (sp.filter as InboundEmailJobListFilter | undefined) ?? "attention";
-
-  if (!isDatabaseConfigured()) {
-    return (
-      <div>
-        <h1 className="font-display text-2xl font-semibold">Inbound email</h1>
-        <p className="mt-2 text-muted">Connect a database to view inbound email jobs.</p>
-      </div>
-    );
-  }
 
   const [rows, issueCount] = await Promise.all([
     listInboundEmailJobs({ companyId,  filter, limit: 100 }),

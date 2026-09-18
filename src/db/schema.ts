@@ -78,7 +78,11 @@ export const companies = pgTable("companies", {
   companyNumber: text("company_number"),
   /** Sole trader unique taxpayer reference (optional). */
   utr: text("utr"),
-  vatNumber: text("vat_number"), // null: not VAT registered
+  vatNumber: text("vat_number"), // null when not VAT registered
+  /** When true, document lines use selectable VAT rates (default below). */
+  vatRegistered: boolean("vat_registered").notNull().default(false),
+  /** Default VAT rate percentage for new lines when registered (e.g. 20). */
+  defaultVatRate: integer("default_vat_rate").notNull().default(20),
   addressLines: text("address_lines"),
   email: text("email"),
   /**
@@ -238,11 +242,20 @@ export const invoices = pgTable(
     ),
     /** Blob pathname for the generated PDF (served via authorised route). */
     pdfBlobPath: text("pdf_blob_path"),
+    recurringInvoiceId: uuid("recurring_invoice_id").references(
+      () => recurringInvoices.id,
+      { onDelete: "set null" },
+    ),
   },
   (t) => [
     uniqueIndex("uniq_invoices_company_number").on(t.companyId, t.number),
+    /** One non-void invoice per payment milestone (matches drizzle/0012). */
+    uniqueIndex("uniq_invoice_milestone_active")
+      .on(t.paymentMilestoneId)
+      .where(sql`${t.status} <> 'void' AND ${t.paymentMilestoneId} IS NOT NULL`),
     index("idx_invoices_company").on(t.companyId),
     index("idx_invoices_client").on(t.clientId),
+    index("idx_invoices_recurring").on(t.recurringInvoiceId),
     index("idx_invoices_status").on(t.status),
     index("idx_invoices_order").on(t.orderId),
     index("idx_invoices_payment_milestone").on(t.paymentMilestoneId),
@@ -291,6 +304,8 @@ export const expenses = pgTable(
     category: text("category"),
     spentAt: date("spent_at"),
     amountPence: integer("amount_pence").notNull().default(0),
+    /** VAT rate percentage used to derive vatPence from inclusive amountPence. */
+    vatRate: integer("vat_rate").notNull().default(0),
     vatPence: integer("vat_pence").notNull().default(0),
     status: expenseStatusEnum("status").notNull().default("recorded"),
     source: expenseSourceEnum("source").notNull().default("manual"),
@@ -686,6 +701,10 @@ export const quotes = pgTable(
     declinedReasonNarrative: text("declined_reason_narrative"),
     acceptedAt: timestamp("accepted_at", { withTimezone: true }),
     declinedAt: timestamp("declined_at", { withTimezone: true }),
+    /** Unguessable public accept token (raw; only in URL/email and this column). */
+    publicToken: text("public_token"),
+    /** First time the client opened the public quote page. */
+    viewedAt: timestamp("viewed_at", { withTimezone: true }),
     createdByUserId: uuid("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -697,6 +716,7 @@ export const quotes = pgTable(
   (t) => [
     uniqueIndex("uniq_quotes_company_number").on(t.companyId, t.number),
     index("idx_quotes_company").on(t.companyId),
+    uniqueIndex("uniq_quotes_public_token").on(t.publicToken),
   ],
 );
 
@@ -827,11 +847,22 @@ export const recurringInvoices = pgTable(
     clientId: uuid("client_id")
       .notNull()
       .references(() => clients.id, { onDelete: "restrict" }),
+    /** Display name for the schedule (e.g. "Acme retainer"). */
+    name: text("name").notNull(),
     /** JSON line template: [{description, quantity, unitPricePence}] */
     lineTemplate: jsonb("line_template").notNull(),
     notes: text("notes"),
     /** Day of month to generate (1–28). */
     dayOfMonth: integer("day_of_month").notNull().default(1),
+    /** After create: leave as draft, or email via outbox. */
+    onGenerate: text("on_generate").notNull().default("draft"),
+    /** Stop generating after this calendar date (inclusive last day). */
+    endsOn: date("ends_on"),
+    /** Stop after this many successful generations. */
+    maxOccurrences: integer("max_occurrences"),
+    occurrenceCount: integer("occurrence_count").notNull().default(0),
+    /** Cached next run date for UI (YYYY-MM-DD). */
+    nextRunOn: date("next_run_on"),
     enabled: boolean("enabled").notNull().default(false),
     lastGeneratedAt: timestamp("last_generated_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -843,9 +874,6 @@ export const recurringInvoices = pgTable(
 export const platformSettings = pgTable("platform_settings", {
   id: integer("id").primaryKey(),
   maintenanceBanner: text("maintenance_banner"),
-  recurringInvoicesEnabled: boolean("recurring_invoices_enabled")
-    .notNull()
-    .default(false),
   /** Platform-wide receipt OCR provider: "local" (Tesseract) or "ai_gateway". */
   defaultReceiptOcrProvider: text("default_receipt_ocr_provider")
     .notNull()

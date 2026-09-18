@@ -8,7 +8,6 @@ import { ReimbursementActions } from "@/components/reimbursements/actions";
 import { buttonClasses } from "@/components/ui/button";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
-import { isDatabaseConfigured } from "@/env";
 
 export default async function ReimbursementDetailPage({
   params,
@@ -18,8 +17,6 @@ export default async function ReimbursementDetailPage({
   const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
   const { id } = await params;
-
-  if (!isDatabaseConfigured()) notFound();
 
   const detail = await getReimbursementDetail(companyId, id);
   if (!detail) notFound();

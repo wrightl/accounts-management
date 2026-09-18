@@ -1,6 +1,8 @@
+import { timingSafeEqual } from "node:crypto";
+
 /**
  * Fail-closed cron authorisation. A missing secret is a misconfiguration,
- * not an open endpoint.
+ * not an open endpoint. Uses timing-safe comparison for the bearer token.
  */
 export function cronAuthError(
   authorizationHeader: string | null,
@@ -9,7 +11,16 @@ export function cronAuthError(
   if (!secret) {
     return { status: 503, error: "Cron is not configured" };
   }
-  if (authorizationHeader !== `Bearer ${secret}`) {
+  if (!authorizationHeader?.startsWith("Bearer ")) {
+    return { status: 401, error: "Unauthorized" };
+  }
+  const token = authorizationHeader.slice("Bearer ".length);
+  const expected = Buffer.from(secret);
+  const actual = Buffer.from(token);
+  if (
+    expected.length !== actual.length ||
+    !timingSafeEqual(expected, actual)
+  ) {
     return { status: 401, error: "Unauthorized" };
   }
   return null;

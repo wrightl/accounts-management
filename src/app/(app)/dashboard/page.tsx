@@ -9,7 +9,7 @@ import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/roles";
 import { getDashboardOverview } from "@/lib/dashboard/queries";
 import type { QuoteStatus } from "@/lib/quotes/status";
-import { isDatabaseConfigured } from "@/env";
+import { reportError } from "@/lib/errors/report";
 
 const QUOTE_STATUS_COLORS: Record<QuoteStatus, string> = {
   draft: "var(--muted)",
@@ -37,20 +37,34 @@ export default async function DashboardOverview() {
   }
 
   let overview: Awaited<ReturnType<typeof getDashboardOverview>> | null = null;
+  let loadError: string | null = null;
 
-  if (isDatabaseConfigured() && can(user.role, "accounts:read")) {
+  if (!can(user.role, "accounts:read")) {
+    loadError = "no_permission";
+  } else if (!user.companyId) {
+    loadError = "no_company";
+  } else {
     try {
-      if (user.companyId) {
-        overview = await getDashboardOverview(user.companyId, user);
-      }
+      overview = await getDashboardOverview(user.companyId, user);
     } catch (err) {
+      loadError = "query_failed";
       console.warn(
         JSON.stringify({
           level: "warn",
           msg: "dashboard_overview_failed",
           error: err instanceof Error ? err.message : String(err),
+          cause:
+            err instanceof Error && "cause" in err
+              ? String((err as { cause?: unknown }).cause)
+              : undefined,
         }),
       );
+      void reportError({
+        source: "dashboard.overview",
+        error: err,
+        companyId: user.companyId,
+        actorUserId: user.localUserId,
+      });
     }
   }
 
@@ -72,7 +86,13 @@ export default async function DashboardOverview() {
 
       {!overview ? (
         <p className="mt-6 text-sm text-muted">
-          Connect a database to view dashboard metrics.
+          {loadError === "no_permission"
+            ? "Your role cannot view dashboard metrics."
+            : loadError === "no_company"
+              ? "Complete onboarding to view dashboard metrics."
+              : loadError === "query_failed"
+                ? "Dashboard metrics could not be loaded. Refresh the page, or check /platform logs if this keeps happening."
+                : "Dashboard metrics are unavailable."}
         </p>
       ) : (
         <>

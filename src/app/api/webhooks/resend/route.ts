@@ -68,11 +68,10 @@ export async function POST(request: Request) {
         error: result.error,
       }),
     );
-    const { logPlatformEvent } = await import("@/lib/platform-log");
-    await logPlatformEvent({
-      level: "error",
+    const { reportError } = await import("@/lib/errors/report");
+    await reportError({
       source: "webhook.resend.inbound",
-      message: result.error ?? "Inbound processing failed",
+      error: result.error ?? "Inbound processing failed",
       meta: { jobId, resendEmailId: email_id },
     });
   }

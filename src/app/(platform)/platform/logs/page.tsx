@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { requirePlatformAdmin } from "@/lib/platform";
-import { isDatabaseConfigured } from "@/env";
 import { hasDatabaseClient } from "@/db";
 import { listPlatformLogs } from "@/lib/platform/queries";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
@@ -19,7 +18,7 @@ export default async function PlatformLogsPage({
   const params = await searchParams;
   const hours = Math.min(168, Math.max(1, Number(params.hours ?? 24) || 24));
 
-  if (!isDatabaseConfigured() || !hasDatabaseClient()) {
+  if (!hasDatabaseClient()) {
     return (
       <div>
         <h1 className="font-display text-2xl font-semibold">Logs</h1>

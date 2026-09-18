@@ -1,19 +1,30 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { requireActionPermission } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
-import { ensureLocalUser } from "@/lib/users";
+import { mutate, mutateWide } from "@/lib/mutate";
 import { getDb } from "@/db";
 import { companies } from "@/db/schema";
 import { getBankFeedAdapter } from "@/lib/bank/adapters";
+import { parseCsvTable } from "@/lib/bank/csv";
 import { parseGenericCsvMapping, isGenericCsvMapping } from "@/lib/bank/generic-csv";
+import {
+  detectBankProvider,
+  getMatchedColumnLabels,
+  matchesPresetFingerprint,
+} from "@/lib/bank/presets";
+import {
+  getImportHelp,
+  getPresetExpectedColumns,
+} from "@/lib/bank/import-help";
 import {
   bankLabel,
   isBankProviderId,
+  isPresetBankProviderId,
   parseProviderFromLegacyName,
   type BankProviderId,
+  type PresetBankProviderId,
 } from "@/lib/bank/providers";
 import {
   BANK_PAGE_SIZE,
@@ -41,10 +52,6 @@ import {
 } from "@/lib/bank/queries";
 import { deleteUnusedBankSpendingCategory } from "@/lib/bank/spending-categories";
 import type { ActionResult } from "@/actions/result";
-
-function revalidateTransactions() {
-  revalidatePath("/transactions");
-}
 
 async function resolveCompanyBankProvider(
   companyId: string,
@@ -102,7 +109,6 @@ export async function loadBankTransactionsPage(input: {
   }
   const companyId = authz.user.companyId;
 
-
   const page = Math.max(1, Math.trunc(input.page));
   const pageSize = input.pageSize ?? BANK_PAGE_SIZE;
 
@@ -126,35 +132,42 @@ export async function getBankImportContext(): Promise<
       provider: BankProviderId;
       bankLabel: string;
       savedMapping: import("@/lib/bank/types").GenericCsvMapping | null;
+      importHelp: string | null;
+      expectedColumns: string[];
     }
   | { ok: false; error: string }
 > {
-  const authz = await requireActionPermission("accounts:write");
-  if (!authz.ok) return authz;
-  if (!authz.user.companyId) {
-    return { ok: false, error: "Complete onboarding before using the dashboard." };
-  }
-  const companyId = authz.user.companyId;
+  return mutateWide("accounts:write", async ({ companyId }) => {
+    const resolved = await resolveCompanyBankProvider(companyId);
+    if (!resolved.ok) return resolved;
 
-  const resolved = await resolveCompanyBankProvider(companyId);
-  if (!resolved.ok) return resolved;
+    const account = await getOrCreateBankAccount(
+      companyId,
+      resolved.provider,
+      resolved.bankName,
+    );
+    const mapping = account.csvMapping ?? null;
 
-  const account = await getOrCreateBankAccount(
-    companyId,
-    resolved.provider,
-    resolved.bankName,
-  );
-  const mapping = account.csvMapping ?? null;
+    if (isPresetBankProviderId(resolved.provider)) {
+      return {
+        ok: true,
+        provider: resolved.provider,
+        bankLabel: bankLabel(resolved.provider),
+        savedMapping: mapping,
+        importHelp: getImportHelp(resolved.provider),
+        expectedColumns: getPresetExpectedColumns(resolved.provider),
+      };
+    }
 
-  return {
-    ok: true,
-    provider: resolved.provider,
-    bankLabel:
-      resolved.provider === "other"
-        ? resolved.bankName?.trim() || "Other bank"
-        : bankLabel(resolved.provider),
-    savedMapping: mapping,
-  };
+    return {
+      ok: true,
+      provider: resolved.provider,
+      bankLabel: resolved.bankName?.trim() || "Other bank",
+      savedMapping: mapping,
+      importHelp: null,
+      expectedColumns: [],
+    };
+  });
 }
 
 export async function importBankCsv(formData: FormData): Promise<
@@ -163,86 +176,144 @@ export async function importBankCsv(formData: FormData): Promise<
     skipped?: number;
     skippedNonGbp?: number;
     suggestions?: SuggestedMatch[];
+    /** Client should open the generic column mapper for this file. */
+    needsMapping?: boolean;
+    detectedProvider?: PresetBankProviderId | null;
+    matchedColumns?: { role: string; header: string }[];
+    usedProvider?: BankProviderId;
   }
 > {
-  const authz = await requireActionPermission("accounts:write");
-  if (!authz.ok) return authz;
-  if (!authz.user.companyId) {
-    return { ok: false, error: "Complete onboarding before using the dashboard." };
-  }
-  const companyId = authz.user.companyId;
+  return mutateWide(
+    "accounts:write",
+    async ({ companyId, localUserId }) => {
+      const resolved = await resolveCompanyBankProvider(companyId);
+      if (!resolved.ok) return resolved;
 
-  const session = authz.user;
-  const localUserId = await ensureLocalUser(session);
+      const file = formData.get("csv");
+      if (!(file instanceof File) || file.size === 0) {
+        return { ok: false, error: "Choose a CSV statement file" };
+      }
 
-  const resolved = await resolveCompanyBankProvider(companyId);
-  if (!resolved.ok) return resolved;
+      const text = await file.text();
+      const { headers, rawHeaders } = parseCsvTable(text);
+      const forceMapper = formData.get("forceMapper") === "1";
+      const mappingFromForm = parseGenericCsvMapping(formData.get("csvMapping"));
 
-  const file = formData.get("csv");
-  if (!(file instanceof File) || file.size === 0) {
-    return { ok: false, error: "Choose a CSV statement file" };
-  }
+      let importProvider: BankProviderId = resolved.provider;
+      let mapping = mappingFromForm;
+      let detected: PresetBankProviderId | null = null;
 
-  const mapping =
-    resolved.provider === "other"
-      ? parseGenericCsvMapping(formData.get("csvMapping"))
-      : null;
-  if (resolved.provider === "other" && !mapping) {
-    return {
-      ok: false,
-      error: "Map the CSV columns for your bank before importing.",
-    };
-  }
+      if (forceMapper || resolved.provider === "other") {
+        importProvider = "other";
+        if (!mapping) {
+          return {
+            ok: false,
+            error: "Map the CSV columns for your bank before importing.",
+            needsMapping: true,
+            detectedProvider: detectBankProvider(headers),
+          };
+        }
+      } else if (isPresetBankProviderId(resolved.provider)) {
+        if (matchesPresetFingerprint(resolved.provider, headers)) {
+          importProvider = resolved.provider;
+        } else {
+          detected = detectBankProvider(headers);
+          if (detected && detected !== resolved.provider) {
+            // Unique other preset — import with that adapter for this file only.
+            importProvider = detected;
+          } else if (mapping) {
+            importProvider = "other";
+          } else {
+            return {
+              ok: false,
+              error:
+                "This file does not match your bank in Settings. Map the columns below, or change the bank in Settings.",
+              needsMapping: true,
+              detectedProvider: detected,
+            };
+          }
+        }
+      }
 
-  const text = await file.text();
-  let rows;
-  try {
-    rows = getBankFeedAdapter(resolved.provider, mapping).parse(text);
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Parse failed" };
-  }
+      let rows;
+      try {
+        rows = getBankFeedAdapter(
+          importProvider,
+          importProvider === "other" ? mapping : null,
+        ).parse(text);
+      } catch (e) {
+        // Fingerprint rejection → guided mapper instead of hard error.
+        if (importProvider !== "other" && !mapping) {
+          return {
+            ok: false,
+            error:
+              e instanceof Error
+                ? e.message
+                : "Could not parse this CSV. Map the columns below.",
+            needsMapping: true,
+            detectedProvider: detectBankProvider(headers),
+          };
+        }
+        return { ok: false, error: e instanceof Error ? e.message : "Parse failed" };
+      }
 
-  const account = await getOrCreateBankAccount(
-    companyId,
-    resolved.provider,
-    resolved.bankName,
-  );
-  const { inserted, skipped, skippedNonGbp } = await importBankRows(
-    companyId,
-    account.id,
-    rows,
-  );
+      // Prefer the adapter we actually used; do not rewrite companies.bank_provider.
+      const accountProvider = importProvider;
+      const account = await getOrCreateBankAccount(
+        companyId,
+        accountProvider,
+        accountProvider === resolved.provider ? resolved.bankName : null,
+      );
+      const { inserted, skipped, skippedNonGbp } = await importBankRows(
+        companyId,
+        account.id,
+        rows,
+      );
 
-  if (resolved.provider === "other" && mapping && isGenericCsvMapping(mapping)) {
-    await saveBankAccountCsvMapping(companyId, account.id, mapping);
-  }
+      if (
+        importProvider === "other" &&
+        mapping &&
+        isGenericCsvMapping(mapping)
+      ) {
+        await saveBankAccountCsvMapping(companyId, account.id, mapping);
+      }
 
-  const suggestions = await suggestMatches(companyId);
+      const suggestions = await suggestMatches(companyId);
+      const matchedColumns =
+        isPresetBankProviderId(importProvider)
+          ? getMatchedColumnLabels(importProvider, rawHeaders)
+          : [];
 
-  await writeAudit({
-    companyId,
-    actorUserId: localUserId,
-    action: "bank.import",
-    entityType: "bank_account",
-    entityId: account.id,
-    meta: {
-      provider: resolved.provider,
-      inserted,
-      skipped,
-      skippedNonGbp,
-      suggested: suggestions.length,
+      await writeAudit({
+        companyId,
+        actorUserId: localUserId,
+        action: "bank.import",
+        entityType: "bank_account",
+        entityId: account.id,
+        meta: {
+          provider: accountProvider,
+          usedProvider: importProvider,
+          inserted,
+          skipped,
+          skippedNonGbp,
+          suggested: suggestions.length,
+        },
+      });
+
+      return {
+        ok: true,
+        id: account.id,
+        inserted,
+        skipped,
+        skippedNonGbp,
+        suggestions,
+        usedProvider: importProvider,
+        matchedColumns,
+        detectedProvider: detected,
+      };
     },
-  });
-
-  revalidateTransactions();
-  return {
-    ok: true,
-    id: account.id,
-    inserted,
-    skipped,
-    skippedNonGbp,
-    suggestions,
-  };
+    { paths: ["/transactions"] },
+  );
 }
 
 /** @deprecated Use importBankCsv. */
@@ -253,54 +324,43 @@ export async function importStarlingCsv(formData: FormData) {
 export async function runSuggestMatches(): Promise<
   ActionResult & { suggestions?: SuggestedMatch[] }
 > {
-  const authz = await requireActionPermission("accounts:write");
-  if (!authz.ok) return authz;
-  if (!authz.user.companyId) {
-    return { ok: false, error: "Complete onboarding before using the dashboard." };
-  }
-  const companyId = authz.user.companyId;
-
-  const session = authz.user;
-  const localUserId = await ensureLocalUser(session);
-  const suggestions = await suggestMatches(companyId);
-  await writeAudit({
-    companyId,
-    actorUserId: localUserId,
-    action: "bank.suggest",
-    meta: { count: suggestions.length },
-  });
-  revalidateTransactions();
-  return { ok: true, suggestions };
+  return mutateWide(
+    "accounts:write",
+    async ({ companyId, localUserId }) => {
+      const suggestions = await suggestMatches(companyId);
+      await writeAudit({
+        companyId,
+        actorUserId: localUserId,
+        action: "bank.suggest",
+        meta: { count: suggestions.length },
+      });
+      return { ok: true, suggestions };
+    },
+    { paths: ["/transactions"] },
+  );
 }
 
 export async function confirmBankMatch(matchId: string): Promise<ActionResult> {
-  const authz = await requireActionPermission("accounts:write");
-  if (!authz.ok) return authz;
-  if (!authz.user.companyId) {
-    return { ok: false, error: "Complete onboarding before using the dashboard." };
-  }
-  const companyId = authz.user.companyId;
-
-  const session = authz.user;
-  const localUserId = await ensureLocalUser(session);
-  try {
-    await confirmMatch(matchId);
-  } catch (e) {
-    if (e instanceof ReconciliationError) return { ok: false, error: e.message };
-    throw e;
-  }
-  await writeAudit({
-    companyId,
-    actorUserId: localUserId,
-    action: "bank.confirm_match",
-    entityType: "reconciliation_match",
-    entityId: matchId,
-  });
-  revalidateTransactions();
-  revalidatePath("/invoices");
-  revalidatePath("/reimbursements");
-  revalidatePath("/expenses");
-  return { ok: true, id: matchId };
+  return mutate(
+    "accounts:write",
+    async () => {
+      try {
+        await confirmMatch(matchId);
+      } catch (e) {
+        if (e instanceof ReconciliationError) return { ok: false, error: e.message };
+        throw e;
+      }
+      return { ok: true, id: matchId };
+    },
+    {
+      audit: {
+        action: "bank.confirm_match",
+        entityType: "reconciliation_match",
+        entityId: matchId,
+      },
+      paths: ["/transactions", "/invoices", "/reimbursements", "/expenses"],
+    },
+  );
 }
 
 export async function findReimbursementBankMatchesAction(
@@ -321,75 +381,60 @@ export async function findReimbursementBankMatchesAction(
 }
 
 export async function confirmBankMatchesBatch(matchIds: string[]): Promise<ActionResult> {
-  const authz = await requireActionPermission("accounts:write");
-  if (!authz.ok) return authz;
-  if (!authz.user.companyId) {
-    return { ok: false, error: "Complete onboarding before using the dashboard." };
-  }
-  const companyId = authz.user.companyId;
-
-  const session = authz.user;
-  const localUserId = await ensureLocalUser(session);
-  try {
-    await confirmMatchesBatch(matchIds);
-  } catch (e) {
-    if (e instanceof ReconciliationError) return { ok: false, error: e.message };
-    throw e;
-  }
-  await writeAudit({
-    companyId,
-    actorUserId: localUserId,
-    action: "bank.confirm_match_batch",
-    meta: { count: matchIds.length },
-  });
-  revalidateTransactions();
-  revalidatePath("/invoices");
-  revalidatePath("/reimbursements");
-  revalidatePath("/expenses");
-  return { ok: true };
+  return mutate(
+    "accounts:write",
+    async ({ companyId, localUserId }) => {
+      try {
+        await confirmMatchesBatch(matchIds);
+      } catch (e) {
+        if (e instanceof ReconciliationError) return { ok: false, error: e.message };
+        throw e;
+      }
+      await writeAudit({
+        companyId,
+        actorUserId: localUserId,
+        action: "bank.confirm_match_batch",
+        meta: { count: matchIds.length },
+      });
+      return { ok: true };
+    },
+    { paths: ["/transactions", "/invoices", "/reimbursements", "/expenses"] },
+  );
 }
 
 export async function dismissBankMatch(matchId: string): Promise<ActionResult> {
-  const authz = await requireActionPermission("accounts:write");
-  if (!authz.ok) return authz;
-  if (!authz.user.companyId) {
-    return { ok: false, error: "Complete onboarding before using the dashboard." };
-  }
-  const companyId = authz.user.companyId;
-
-  const session = authz.user;
-  const localUserId = await ensureLocalUser(session);
-  await dismissMatch(matchId);
-  await writeAudit({
-    companyId,
-    actorUserId: localUserId,
-    action: "bank.dismiss_match",
-    entityType: "reconciliation_match",
-    entityId: matchId,
-  });
-  revalidateTransactions();
-  return { ok: true, id: matchId };
+  return mutate(
+    "accounts:write",
+    async () => {
+      await dismissMatch(matchId);
+      return { ok: true, id: matchId };
+    },
+    {
+      audit: {
+        action: "bank.dismiss_match",
+        entityType: "reconciliation_match",
+        entityId: matchId,
+      },
+      paths: ["/transactions"],
+    },
+  );
 }
 
 export async function dismissBankMatchesBatch(matchIds: string[]): Promise<ActionResult> {
-  const authz = await requireActionPermission("accounts:write");
-  if (!authz.ok) return authz;
-  if (!authz.user.companyId) {
-    return { ok: false, error: "Complete onboarding before using the dashboard." };
-  }
-  const companyId = authz.user.companyId;
-
-  const session = authz.user;
-  const localUserId = await ensureLocalUser(session);
-  await dismissMatchesBatch(matchIds);
-  await writeAudit({
-    companyId,
-    actorUserId: localUserId,
-    action: "bank.dismiss_match_batch",
-    meta: { count: matchIds.length },
-  });
-  revalidateTransactions();
-  return { ok: true };
+  return mutate(
+    "accounts:write",
+    async ({ companyId, localUserId }) => {
+      await dismissMatchesBatch(matchIds);
+      await writeAudit({
+        companyId,
+        actorUserId: localUserId,
+        action: "bank.dismiss_match_batch",
+        meta: { count: matchIds.length },
+      });
+      return { ok: true };
+    },
+    { paths: ["/transactions"] },
+  );
 }
 
 export async function findInvoiceBankMatches(
@@ -410,55 +455,44 @@ export async function updateBankCategory(
   transactionId: string,
   spendingCategory: string | null,
 ): Promise<ActionResult> {
-  const authz = await requireActionPermission("accounts:write");
-  if (!authz.ok) return authz;
-  if (!authz.user.companyId) {
-    return { ok: false, error: "Complete onboarding before using the dashboard." };
-  }
-  const companyId = authz.user.companyId;
-
-  const session = authz.user;
-  const localUserId = await ensureLocalUser(session);
-
   const trimmed = spendingCategory?.trim() ?? "";
   const value = trimmed.length > 0 ? trimmed.slice(0, 120) : null;
 
-  await updateTransactionCategory(companyId, transactionId, value);
-  await writeAudit({
-    companyId,
-    actorUserId: localUserId,
-    action: "bank.update_category",
-    entityType: "bank_transaction",
-    entityId: transactionId,
-    meta: { spendingCategory: value },
-  });
-  revalidateTransactions();
-  return { ok: true, id: transactionId };
+  return mutate(
+    "accounts:write",
+    async ({ companyId, localUserId }) => {
+      await updateTransactionCategory(companyId, transactionId, value);
+      await writeAudit({
+        companyId,
+        actorUserId: localUserId,
+        action: "bank.update_category",
+        entityType: "bank_transaction",
+        entityId: transactionId,
+        meta: { spendingCategory: value },
+      });
+      return { ok: true, id: transactionId };
+    },
+    { paths: ["/transactions"] },
+  );
 }
 
 export async function deleteBankSpendingCategory(categoryId: string): Promise<ActionResult> {
-  const authz = await requireActionPermission("accounts:write");
-  if (!authz.ok) return authz;
-  if (!authz.user.companyId) {
-    return { ok: false, error: "Complete onboarding before using the dashboard." };
-  }
-  const companyId = authz.user.companyId;
-
-  const session = authz.user;
-  const localUserId = await ensureLocalUser(session);
-
-  const result = await deleteUnusedBankSpendingCategory(companyId, categoryId);
-  if (!result.ok) return { ok: false, error: result.error };
-
-  await writeAudit({
-    companyId,
-    actorUserId: localUserId,
-    action: "bank.delete_category",
-    entityType: "bank_spending_category",
-    entityId: categoryId,
-  });
-  revalidateTransactions();
-  return { ok: true, id: categoryId };
+  return mutate(
+    "accounts:write",
+    async ({ companyId }) => {
+      const result = await deleteUnusedBankSpendingCategory(companyId, categoryId);
+      if (!result.ok) return { ok: false, error: result.error };
+      return { ok: true, id: categoryId };
+    },
+    {
+      audit: {
+        action: "bank.delete_category",
+        entityType: "bank_spending_category",
+        entityId: categoryId,
+      },
+      paths: ["/transactions"],
+    },
+  );
 }
 
 export type { SuggestedMatch, InvoiceBankMatch };

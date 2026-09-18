@@ -9,7 +9,6 @@ import { InvoiceDueDate } from "@/components/invoices/invoice-due-date";
 import { StatusBadge } from "@/components/ui/badge";
 import { buttonClasses } from "@/components/ui/button";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
-import { isDatabaseConfigured } from "@/env";
 import type { InvoiceStatus } from "@/lib/invoices/status";
 
 export default async function ClientDetailPage({
@@ -20,8 +19,6 @@ export default async function ClientDetailPage({
   const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
   const { id } = await params;
-
-  if (!isDatabaseConfigured()) notFound();
 
   const overview = await getClientOverview(companyId, id);
   if (!overview) notFound();

@@ -1,11 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogActions } from "@/components/ui/dialog";
 import { FieldError, Input, Label } from "@/components/ui/form";
+import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
+import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
+import { useFieldErrors } from "@/components/ui/use-field-errors";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
+import { toast } from "@/components/ui/toast";
 import { formatGBP } from "@/lib/money";
 import {
   commitExpenseImport,
@@ -13,22 +17,29 @@ import {
   type ExpenseImportPreviewResult,
 } from "@/actions/expenses";
 import type { ParsedExpenseImportRow } from "@/lib/expenses/import-csv";
+import { parseExpenseImportCsvFile } from "@/lib/expenses/schema";
 import { expenseStatusLabel, type ExpenseStatus } from "@/lib/expenses/categories";
 
 export function ExpenseImportButton({ canWrite }: { canWrite: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<ParsedExpenseImportRow[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const {
+    fieldErrors,
+    error,
+    clearAll,
+    clearField,
+    applyFail,
+    applyActionResult,
+  } = useFieldErrors();
+  const formRef = useRef<HTMLFormElement>(null);
   const [pending, startTransition] = useTransition();
 
   if (!canWrite) return null;
 
   function resetState() {
     setRows(null);
-    setError(null);
-    setMessage(null);
+    clearAll();
   }
 
   function handleClose() {
@@ -38,13 +49,19 @@ export function ExpenseImportButton({ canWrite }: { canWrite: boolean }) {
   }
 
   function handlePreview(formData: FormData) {
-    setError(null);
-    setMessage(null);
+    clearAll();
     setRows(null);
+    const clientParsed = parseExpenseImportCsvFile(formData);
+    if (!clientParsed.ok) {
+      applyFail(clientParsed);
+      scheduleFocusFirstFieldError(formRef.current, clientParsed.fieldErrors);
+      return;
+    }
     startTransition(async () => {
       const result: ExpenseImportPreviewResult = await previewExpenseImport(formData);
       if (!result.ok) {
-        setError(result.error);
+        applyFail(result);
+        scheduleFocusFirstFieldError(formRef.current, result.fieldErrors);
         return;
       }
       setRows(result.rows);
@@ -53,14 +70,20 @@ export function ExpenseImportButton({ canWrite }: { canWrite: boolean }) {
 
   function handleCommit() {
     if (!rows) return;
-    setError(null);
-    setMessage(null);
+    clearAll();
     startTransition(async () => {
       const result = await commitExpenseImport(JSON.stringify(rows));
-      if (!result.ok) {
-        setError(result.error);
+      if (!applyActionResult(result)) {
+        if (!result.ok) {
+          scheduleFocusFirstFieldError(formRef.current, result.fieldErrors);
+        }
         return;
       }
+      toast(
+        `Imported ${result.count ?? rows.length} expense${
+          (result.count ?? rows.length) === 1 ? "" : "s"
+        }.`,
+      );
       setOpen(false);
       resetState();
       router.refresh();
@@ -86,16 +109,27 @@ export function ExpenseImportButton({ canWrite }: { canWrite: boolean }) {
           status (optional).
         </p>
 
-        <form action={handlePreview} className="mt-4 flex flex-wrap items-end gap-3">
+        <form
+          ref={formRef}
+          noValidate
+          onSubmit={preventResetSubmit(handlePreview)}
+          className="mt-4 flex flex-wrap items-end gap-3"
+        >
           <div className="min-w-[200px] flex-1">
-            <Label htmlFor="expenseCsv">CSV file</Label>
+            <Label htmlFor="expenseCsv" required>
+              CSV file
+            </Label>
             <Input
               id="expenseCsv"
               name="csv"
               type="file"
               accept=".csv,text/csv"
               disabled={pending}
+              aria-invalid={Boolean(fieldErrors.csv)}
+              aria-describedby={fieldErrors.csv ? "csv-error" : undefined}
+              onChange={() => clearField("csv")}
             />
+            <FieldError id="csv-error">{fieldErrors.csv}</FieldError>
           </div>
           <Button type="submit" variant="secondary" disabled={pending}>
             {pending && !rows ? "Parsing…" : "Preview import"}
@@ -135,8 +169,8 @@ export function ExpenseImportButton({ canWrite }: { canWrite: boolean }) {
           </div>
         )}
 
-        <FieldError>{error}</FieldError>
-        {message && <p className="mt-2 text-sm text-success">{message}</p>}
+        <FieldError id="commit-error">{fieldErrors.commit}</FieldError>
+        <FieldError>{error && !fieldErrors.csv && !fieldErrors.commit ? error : null}</FieldError>
 
         {rows && rows.length > 0 && (
           <DialogActions>

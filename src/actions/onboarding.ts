@@ -1,7 +1,6 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { z } from "zod";
 import { getDb } from "@/db";
 import { companies } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
@@ -10,50 +9,11 @@ import { storeCompanyLogo } from "@/lib/company-logo";
 import { uniquifyCompanySlug } from "@/lib/expenses/inbound-mailbox";
 import { isPlatformAdmin } from "@/lib/platform";
 import { ensureLocalUser, assignUserCompany, findLocalUser } from "@/lib/users";
-import { resolveBankFieldsFromForm } from "@/lib/bank/resolve-bank-fields";
+import {
+  onboardingRawFromFormData,
+  parseOnboardingInput,
+} from "@/lib/onboarding/schema";
 import type { ActionResult } from "@/actions/result";
-
-const onboardingSchema = z.discriminatedUnion("entityType", [
-  z.object({
-    entityType: z.literal("limited_company"),
-    userName: z.string().trim().min(1, "Your name is required").max(200),
-    name: z.string().trim().min(1).max(200),
-    legalName: z.string().trim().min(1).max(200),
-    companyNumber: z.string().trim().min(1).max(20),
-    addressLines: z
-      .string()
-      .trim()
-      .optional()
-      .or(z.literal(""))
-      .transform((v) => (v === "" ? null : (v ?? null))),
-    email: z
-      .union([z.literal(""), z.string().trim().email()])
-      .transform((v) => (v === "" ? null : v)),
-    financialYearEndMonth: z.coerce.number().int().min(1).max(12),
-  }),
-  z.object({
-    entityType: z.literal("sole_trader"),
-    userName: z.string().trim().min(1, "Your name is required").max(200),
-    name: z.string().trim().min(1).max(200),
-    legalName: z.string().trim().min(1).max(200),
-    utr: z
-      .string()
-      .trim()
-      .optional()
-      .or(z.literal(""))
-      .transform((v) => (v === "" ? null : (v ?? null))),
-    addressLines: z
-      .string()
-      .trim()
-      .optional()
-      .or(z.literal(""))
-      .transform((v) => (v === "" ? null : (v ?? null))),
-    email: z
-      .union([z.literal(""), z.string().trim().email()])
-      .transform((v) => (v === "" ? null : v)),
-    financialYearEndMonth: z.coerce.number().int().min(1).max(12),
-  }),
-]);
 
 /**
  * Create the user's company and attach them as admin.
@@ -68,10 +28,10 @@ export async function completeOnboarding(
   if (local) {
     session = {
       ...session,
-        role: local.role,
-        companyId: local.companyId,
-        localUserId: local.id,
-      };
+      role: local.role,
+      companyId: local.companyId,
+      localUserId: local.id,
+    };
   }
 
   if (isPlatformAdmin(session)) {
@@ -84,44 +44,14 @@ export async function completeOnboarding(
     redirect("/dashboard");
   }
 
-  const entityType = formData.get("entityType");
-  const raw =
-    entityType === "sole_trader"
-      ? {
-          entityType: "sole_trader" as const,
-          userName: formData.get("userName"),
-          name: formData.get("name"),
-          legalName: formData.get("legalName"),
-          utr: formData.get("utr") ?? "",
-          addressLines: formData.get("addressLines") ?? "",
-          email: formData.get("email") ?? "",
-          financialYearEndMonth: formData.get("financialYearEndMonth") ?? "3",
-        }
-      : {
-          entityType: "limited_company" as const,
-          userName: formData.get("userName"),
-          name: formData.get("name"),
-          legalName: formData.get("legalName"),
-          companyNumber: formData.get("companyNumber"),
-          addressLines: formData.get("addressLines") ?? "",
-          email: formData.get("email") ?? "",
-          financialYearEndMonth: formData.get("financialYearEndMonth") ?? "3",
-        };
-
-  const parsed = onboardingSchema.safeParse(raw);
-  if (!parsed.success) {
+  const parsed = parseOnboardingInput(onboardingRawFromFormData(formData));
+  if (!parsed.ok) {
     return {
       ok: false,
-      error: parsed.error.issues[0]?.message ?? "Invalid input",
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
     };
   }
-
-  const bank = resolveBankFieldsFromForm({
-    bankProvider: formData.get("bankProvider"),
-    bankName: formData.get("bankName"),
-    required: false,
-  });
-  if (!bank.ok) return { ok: false, error: bank.error };
 
   const db = getDb();
   const data = parsed.data;
@@ -146,8 +76,8 @@ export async function completeOnboarding(
       utr: data.entityType === "sole_trader" ? data.utr : null,
       addressLines: data.addressLines,
       email: data.email ?? session.email,
-      bankProvider: bank.value.bankProvider,
-      bankName: bank.value.bankName,
+      bankProvider: data.bankProvider,
+      bankName: data.bankName,
       bankAccountName: (() => {
         const v = formData.get("bankAccountName");
         return typeof v === "string" && v.trim() ? v.trim() : null;
@@ -169,7 +99,11 @@ export async function completeOnboarding(
   if (logo instanceof File && logo.size > 0) {
     const uploaded = await storeCompanyLogo(company.id, logo);
     if (!uploaded.ok) {
-      return uploaded;
+      return {
+        ok: false,
+        error: uploaded.error,
+        fieldErrors: { logo: uploaded.error },
+      };
     }
   }
 

@@ -2,13 +2,12 @@
  * Idempotent fictional demo dataset for the promo video.
  * All entities use fixed document numbers (900x suffix) and fictional UK clients.
  */
-import { asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import type { Database } from "@/db";
 import {
   bankAccounts,
   bankTransactions,
   clients,
-  companies,
   expenses,
   inboundEmailJobs,
   invoiceLineItems,
@@ -23,6 +22,7 @@ import {
   reimbursements,
   users,
 } from "@/db/schema";
+import { PLATFORM_ADMIN_ROLE } from "@/lib/roles";
 
 /** Fixed promo document numbers — safe to upsert by. */
 export const PROMO_NUMBERS = {
@@ -72,24 +72,63 @@ function assertPromoSeedAllowed() {
   }
 }
 
-async function findDemoActor(db: Database) {
+async function findDemoActor(
+  db: Database,
+  opts?: { companyId?: string; actorEmail?: string },
+) {
+  if (opts?.companyId) {
+    const [byCompany] = await db
+      .select()
+      .from(users)
+      .where(
+        and(
+          eq(users.companyId, opts.companyId),
+          ne(users.role, PLATFORM_ADMIN_ROLE),
+        ),
+      )
+      .orderBy(asc(users.createdAt))
+      .limit(1);
+    if (byCompany) return byCompany;
+    throw new Error(
+      `No tenant user found for companyId=${opts.companyId}. Complete onboarding first.`,
+    );
+  }
+
+  if (opts?.actorEmail) {
+    const email = opts.actorEmail.trim().toLowerCase();
+    const [byEmail] = await db
+      .select()
+      .from(users)
+      .where(sql`lower(${users.email}) = ${email}`)
+      .limit(1);
+    if (!byEmail) {
+      throw new Error(`No user found for email=${opts.actorEmail}`);
+    }
+    if (byEmail.role === PLATFORM_ADMIN_ROLE) {
+      throw new Error(
+        "Refusing to seed promo data for a platform_admin user. Use a founder account.",
+      );
+    }
+    if (!byEmail.companyId) {
+      throw new Error(
+        `User ${opts.actorEmail} has no company. Complete onboarding first.`,
+      );
+    }
+    return byEmail;
+  }
+
   const [withCompany] = await db
     .select()
     .from(users)
-    .where(isNotNull(users.companyId))
+    .where(
+      and(isNotNull(users.companyId), ne(users.role, PLATFORM_ADMIN_ROLE)),
+    )
     .orderBy(asc(users.createdAt))
     .limit(1);
   if (withCompany) return withCompany;
 
-  const [anyUser] = await db
-    .select()
-    .from(users)
-    .orderBy(asc(users.createdAt))
-    .limit(1);
-  if (anyUser) return anyUser;
-
   throw new Error(
-    "No user in database. Complete onboarding (create a company) before running promo seed.",
+    "No tenant user with a company found. Sign up, complete onboarding, then re-run promo seed.",
   );
 }
 
@@ -166,7 +205,7 @@ async function clearPromoEntities(db: Database) {
 
 export async function seedPromoDemo(
   db: Database,
-  opts?: { force?: boolean },
+  opts?: { force?: boolean; companyId?: string; actorEmail?: string },
 ): Promise<PromoSeedResult> {
   assertPromoSeedAllowed();
 
@@ -176,16 +215,16 @@ export async function seedPromoDemo(
     cleared = true;
   }
 
-  const admin = await findDemoActor(db);
+  const admin = await findDemoActor(db, {
+    companyId: opts?.companyId,
+    actorEmail: opts?.actorEmail,
+  });
 
-  const [primary] = await db
-    .select({ id: companies.id })
-    .from(companies)
-    .orderBy(asc(companies.createdAt))
-    .limit(1);
-  const companyId = admin.companyId ?? primary?.id;
+  const companyId = admin.companyId;
   if (!companyId) {
-    throw new Error("No company in database. Run migrations / seed a company first.");
+    throw new Error(
+      "Demo actor has no company. Complete onboarding before seeding promo data.",
+    );
   }
 
   const [harbor, northbridge, meridian] = await db

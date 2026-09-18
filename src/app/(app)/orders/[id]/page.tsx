@@ -12,7 +12,6 @@ import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { formatGBP, lineNetPence } from "@/lib/money";
 import { clientDisplayName } from "@/lib/clients/display";
 import { defaultDueDate, todayIsoDate } from "@/lib/invoices/status";
-import { isDatabaseConfigured } from "@/env";
 import type { InvoiceStatus } from "@/lib/invoices/status";
 
 export default async function OrderDetailPage({
@@ -24,7 +23,6 @@ export default async function OrderDetailPage({
   const canWrite = await hasPermission("accounts:write");
   const { id } = await params;
 
-  if (!isDatabaseConfigured()) notFound();
   const [detail, company] = await Promise.all([
     getOrderDetail(companyId, id),
     getOrCreateCompanySettings(companyId),

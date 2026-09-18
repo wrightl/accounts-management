@@ -8,7 +8,6 @@ export const runtime = "nodejs";
 /**
  * Manual / debug trigger: generate invoices from enabled recurring templates.
  * Scheduled via `/api/cron/daily` on Vercel (Hobby once-per-day limit).
- * Behind RECURRING_INVOICES_ENABLED=true feature flag.
  */
 export async function GET(request: Request) {
   const denied = cronAuthError(
@@ -26,8 +25,8 @@ export async function GET(request: Request) {
   }
 
   console.info(
-    JSON.stringify({ level: "info", msg: "cron.recurring", generated: result.generated }),
+    JSON.stringify({ level: "info", msg: "cron.recurring", ...result }),
   );
 
-  return NextResponse.json({ ok: true, generated: result.generated });
+  return NextResponse.json({ ok: true, ...result });
 }

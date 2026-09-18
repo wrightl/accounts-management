@@ -4,7 +4,6 @@ import { listClients } from "@/lib/clients/queries";
 import { listFounders } from "@/lib/expenses/queries";
 import { ExpenseForm } from "@/components/expenses/expense-form";
 import { buttonClasses } from "@/components/ui/button";
-import { isDatabaseConfigured } from "@/env";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { getReceiptOcrSettings } from "@/lib/platform-settings";
 import { findLocalUserId } from "@/lib/users";
@@ -13,10 +12,6 @@ export default async function NewExpensePage() {
   const { companyId } = await guardTenantPage("accounts:write");
   const canWrite = await hasPermission("accounts:write");
   const user = await requireUser();
-
-  if (!isDatabaseConfigured()) {
-    return <p className="text-muted">Connect a database to create expenses.</p>;
-  }
 
   const [founders, clients, localUserId, settings, ocr] = await Promise.all([
     listFounders(companyId),
@@ -43,6 +38,8 @@ export default async function NewExpensePage() {
         defaultMileageRatePence={settings.defaultMileageRatePence}
         receiptOcrProvider={ocr.provider ?? "local"}
         receiptOcrModel={ocr.model}
+        vatRegistered={settings.vatRegistered}
+        defaultVatRate={settings.vatRegistered ? settings.defaultVatRate : 0}
       />
     </div>
   );

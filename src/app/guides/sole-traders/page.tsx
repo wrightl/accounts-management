@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
-import { Logo } from "@/components/brand/logo";
-import { buttonClasses } from "@/components/ui/button";
 import { GuideLayout } from "@/components/guides/guide-layout";
 import {
   GuideSection,
@@ -36,20 +34,6 @@ const sections = [
 export default function SoleTradersGuidePage() {
   return (
     <main className="flex flex-1 flex-col bg-background">
-      <header className="border-b border-border bg-white px-6 py-4">
-        <div className="mx-auto flex max-w-7xl items-center justify-between">
-          <Link href="/">
-            <Logo showConsulting size={44} />
-          </Link>
-          <Link
-            href="/sign-in"
-            className={buttonClasses("secondary", "text-sm")}
-          >
-            Sign in
-          </Link>
-        </div>
-      </header>
-
       <Link
         href="/guides"
         className="mx-auto flex w-full max-w-7xl items-center gap-1 px-6 pt-8 text-sm text-navy hover:underline"

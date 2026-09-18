@@ -1,0 +1,17 @@
+---
+description: Sign in before testing authenticated UI in the Cursor browser
+alwaysApply: true
+---
+
+# Agent UI auth (local)
+
+The Cursor browser does not share cookies with your normal browser. Authenticated routes (`/settings`, `/invoices`, `/dashboard`, etc.) redirect to Clerk sign-in.
+
+Before exercising signed-in UI:
+
+1. Ensure `npm run dev` is running on port **3001**.
+2. Run `npm run auth:agent` (optional: `-- --email you@company.com --redirect /settings`).
+3. Open the **URL printed on stdout** in the Cursor browser.
+4. Confirm you land on the redirect target signed in, then continue the UI flow.
+
+Do not attempt Google SSO or fill the Clerk sign-in form in the agent browser. Do not use this against production / `sk_live_` keys — the script refuses those.

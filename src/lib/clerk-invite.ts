@@ -4,7 +4,6 @@
  * Next.js request context (e.g. `npm run db:seed`).
  */
 import { createClerkClient } from "@clerk/backend";
-import { isAuthConfigured } from "@/env";
 
 export function inviteRedirectUrl(): string {
   const base =
@@ -50,9 +49,6 @@ function getClerkClient() {
 export async function sendClerkInvitation(
   email: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (!isAuthConfigured()) {
-    return { ok: false, error: "Clerk is not configured" };
-  }
   try {
     const client = getClerkClient();
     await client.invitations.createInvitation({

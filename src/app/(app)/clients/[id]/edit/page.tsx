@@ -5,7 +5,6 @@ import { getClient } from "@/lib/clients/queries";
 import { clientDisplayName } from "@/lib/clients/display";
 import { ClientForm } from "@/components/clients/client-form";
 import { buttonClasses } from "@/components/ui/button";
-import { isDatabaseConfigured } from "@/env";
 
 export default async function EditClientPage({
   params,
@@ -15,8 +14,6 @@ export default async function EditClientPage({
   const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
   const { id } = await params;
-
-  if (!isDatabaseConfigured()) notFound();
 
   const client = await getClient(companyId, id);
   if (!client) notFound();

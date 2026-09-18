@@ -3,22 +3,10 @@ import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { getActiveShareholdersForSplit } from "@/lib/shareholders/queries";
 import { DividendDeclareForm } from "@/components/dividends/dividends-form";
 import { buttonClasses } from "@/components/ui/button";
-import { isDatabaseConfigured } from "@/env";
 
 export default async function NewDividendPage() {
   const { companyId } = await guardTenantPage("accounts:write");
   const canWrite = await hasPermission("accounts:write");
-
-  if (!isDatabaseConfigured()) {
-    return (
-      <div>
-        <h1 className="font-display text-2xl font-semibold">New dividend</h1>
-        <p className="mt-2 text-muted">
-          Connect a database to declare dividends.
-        </p>
-      </div>
-    );
-  }
 
   const split = await getActiveShareholdersForSplit(companyId);
 

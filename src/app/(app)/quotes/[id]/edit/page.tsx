@@ -6,8 +6,9 @@ import { listClients } from "@/lib/clients/queries";
 import { canEditQuote } from "@/lib/quotes/status";
 import { QuoteForm } from "@/components/quotes/quote-form";
 import { buttonClasses } from "@/components/ui/button";
-import { isDatabaseConfigured } from "@/env";
 import { penceToPounds } from "@/lib/money";
+import { getOrCreateCompanySettings } from "@/lib/settings/queries";
+import { defaultLineVatRate } from "@/lib/vat";
 
 export default async function EditQuotePage({
   params,
@@ -17,18 +18,20 @@ export default async function EditQuotePage({
   const { companyId } = await guardTenantPage("accounts:write");
   const { id } = await params;
 
-  if (!isDatabaseConfigured()) notFound();
-
   const detail = await getQuoteDetail(companyId, id);
   if (!detail) notFound();
   if (!canEditQuote(detail.quote.status)) notFound();
 
-  const clients = await listClients(companyId);
+  const [clients, company] = await Promise.all([
+    listClients(companyId),
+    getOrCreateCompanySettings(companyId),
+  ]);
   const initialLines = detail.lines.map((l) => ({
     key: l.id,
     description: l.description,
     quantity: String(l.quantity),
     unitPricePounds: String(penceToPounds(l.unitPricePence)),
+    vatRate: l.vatRate,
   }));
 
   return (
@@ -54,6 +57,8 @@ export default async function EditQuotePage({
           }}
           initialLines={initialLines}
           initialMilestones={detail.milestones}
+          vatRegistered={company.vatRegistered}
+          defaultVatRate={defaultLineVatRate(company)}
         />
       </div>
     </div>

@@ -11,7 +11,6 @@ const PLATFORM_SETTINGS_ID = 1;
 const DEFAULTS: Omit<PlatformSettings, "updatedAt"> & { updatedAt?: Date } = {
   id: PLATFORM_SETTINGS_ID,
   maintenanceBanner: null,
-  recurringInvoicesEnabled: false,
   defaultReceiptOcrProvider: "local",
   defaultReceiptOcrModel: "google/gemini-2.5-flash",
   lastCronDailyAt: null,
@@ -51,7 +50,6 @@ export async function updatePlatformSettings(
     Pick<
       PlatformSettings,
       | "maintenanceBanner"
-      | "recurringInvoicesEnabled"
       | "defaultReceiptOcrProvider"
       | "defaultReceiptOcrModel"
       | "lastCronDailyAt"
@@ -70,17 +68,6 @@ export async function updatePlatformSettings(
     throw new Error("platform_settings row missing");
   }
   return updated;
-}
-
-/**
- * Recurring invoices: env `RECURRING_INVOICES_ENABLED=true` overrides on for
- * local/CI; otherwise use the platform_settings flag.
- */
-export async function isRecurringInvoicesEnabled(): Promise<boolean> {
-  if (process.env.RECURRING_INVOICES_ENABLED === "true") return true;
-  if (process.env.RECURRING_INVOICES_ENABLED === "false") return false;
-  const settings = await getPlatformSettings();
-  return settings.recurringInvoicesEnabled;
 }
 
 /** Platform-wide receipt OCR provider + model (not per-company). */

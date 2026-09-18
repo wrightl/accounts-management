@@ -143,10 +143,14 @@ export function HelpGuide({
               <>
                 Books are <strong>GBP only</strong>.
               </>,
-              <>VAT is not turned on in the app today.</>,
+              <>
+                If you are VAT registered, turn it on in Settings — invoices,
+                quotes, and expenses then use VAT rates, and Reports can export
+                a period summary for your accountant.
+              </>,
               <>
                 This is not a tax filing tool. Your accountant still files your
-                returns.
+                returns (no HMRC/MTD submit from the app).
               </>,
             ]}
           />
@@ -254,13 +258,15 @@ export function HelpGuide({
               </>,
               <>
                 Create a <HelpLink href="/quotes">quote</HelpLink>. Download or
-                email the PDF. Each save creates a new version; you can restore
-                an older one if needed.
+                email the PDF. The email includes Accept / Decline links so the
+                client can respond without signing in. Each save creates a new
+                version; you can restore an older one if needed.
               </>,
               <>
-                When they say yes: <strong>Accept &amp; create order</strong>.
-                If they say no: decline with a reason — that is for your
-                pipeline reporting, not for the client.
+                When they accept (via the link or you click{" "}
+                <strong>Accept &amp; create order</strong>), an order is
+                created. If they decline, a reason is stored for your pipeline
+                reporting. The quote page shows Sent / Viewed / Accepted times.
               </>,
               <>
                 On the <HelpLink href="/orders">order</HelpLink>, raise a{" "}
@@ -285,6 +291,11 @@ export function HelpGuide({
               Skip the quote and order when the work was never quoted. Create a
               standalone invoice against a client from{" "}
               <HelpLink href="/invoices">Invoices</HelpLink>.
+            </p>
+            <p className="mt-2 text-sm text-foreground/90">
+              For retainers, set up a monthly schedule under{" "}
+              <HelpLink href="/recurring-invoices">Recurring</HelpLink> — leave
+              as draft or email automatically each month.
             </p>
           </Card>
           <div className="mt-4 space-y-2">
@@ -378,15 +389,18 @@ export function HelpGuide({
           </p>
           <StepList
             items={[
-              <>Export a CSV statement from your bank.</>,
+              <>
+                Export a CSV from your bank (Settings shows how for the bank you
+                picked).
+              </>,
               <>
                 Open <HelpLink href="/transactions">Transactions</HelpLink> and
                 import the file.
               </>,
               <>
-                The bank chosen in Settings must match the file (Starling,
-                Monzo, Revolut, Wise, Tide, Barclays, HSBC, Lloyds, NatWest, or
-                Other with column mapping).
+                If the file matches another supported bank, import still works
+                for that file without changing Settings. Unknown formats open a
+                guided column mapper (saved for next time when you use Other).
               </>,
               <>
                 Duplicates from a re-import are skipped automatically.
@@ -428,12 +442,14 @@ export function HelpGuide({
             items={[
               <>
                 <HelpLink href="/reports">Reports</HelpLink> show{" "}
-                <strong>invoiced</strong> income for the period — not cash
-                collected in the bank.
+                <strong>invoiced</strong> income for the period (ex-VAT) — not
+                cash collected in the bank. If you are VAT registered, download
+                the VAT CSV from the same page for your accountant.
               </>,
               <>
                 Download the <strong>accountant pack</strong> for a date range:
-                CSVs, invoice PDFs, receipts, bank rows, and dividends.
+                CSVs, invoice PDFs, receipts, bank rows, dividends, and VAT
+                summary when registered.
               </>,
               <>
                 Invite them as an <strong>Accountant</strong> so they can read
@@ -501,11 +517,13 @@ export function HelpGuide({
           </p>
           <BulletList
             items={[
-              <>Live bank feed (CSV import only).</>,
-              <>VAT registration or Making Tax Digital.</>,
+              <>Live bank feed (CSV import only — no Open Banking yet).</>,
+              <>
+                Making Tax Digital or submitting VAT returns to HMRC (export for
+                your accountant only).
+              </>,
               <>Multi-currency books.</>,
-              <>Recurring invoices from the UI.</>,
-              <>Filing returns with HMRC.</>,
+              <>Filing company or personal tax returns with HMRC.</>,
             ]}
           />
           <p className="mt-4 text-sm text-muted">

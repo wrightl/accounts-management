@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { requirePlatformAdmin } from "@/lib/platform";
-import { isDatabaseConfigured } from "@/env";
 import { hasDatabaseClient } from "@/db";
 import { listPlatformCompanies } from "@/lib/platform/queries";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
@@ -13,7 +12,7 @@ export default async function PlatformCompaniesPage({
   await requirePlatformAdmin();
   const { q } = await searchParams;
 
-  if (!isDatabaseConfigured() || !hasDatabaseClient()) {
+  if (!hasDatabaseClient()) {
     return (
       <div>
         <h1 className="font-display text-2xl font-semibold">Companies</h1>

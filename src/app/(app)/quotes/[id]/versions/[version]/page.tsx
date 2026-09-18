@@ -7,7 +7,6 @@ import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { formatGBP, lineNetPence } from "@/lib/money";
 import { clientDisplayName } from "@/lib/clients/display";
-import { isDatabaseConfigured } from "@/env";
 
 export default async function QuoteVersionPage({
   params,
@@ -19,7 +18,6 @@ export default async function QuoteVersionPage({
   const version = Number.parseInt(versionParam, 10);
   if (!Number.isFinite(version) || version < 1) notFound();
 
-  if (!isDatabaseConfigured()) notFound();
   const detail = await getQuoteVersionDetail(companyId, id, version);
   if (!detail) notFound();
   if (detail.isCurrent) {

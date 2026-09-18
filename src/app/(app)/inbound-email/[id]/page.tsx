@@ -13,7 +13,6 @@ import {
 } from "@/components/inbound-email/job-actions";
 import { buttonClasses } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
-import { isDatabaseConfigured } from "@/env";
 
 function formatWhen(date: Date | null): string {
   if (!date) return "—";
@@ -27,15 +26,6 @@ export default async function InboundEmailJobPage({
 }) {
   const { companyId } = await guardTenantPage("users:manage");
   const { id } = await params;
-
-  if (!isDatabaseConfigured()) {
-    return (
-      <div>
-        <h1 className="font-display text-2xl font-semibold">Inbound email job</h1>
-        <p className="mt-2 text-muted">Connect a database to view job details.</p>
-      </div>
-    );
-  }
 
   const job = await getInboundEmailJob(companyId, id);
   if (!job) notFound();

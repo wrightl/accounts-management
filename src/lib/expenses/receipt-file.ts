@@ -55,25 +55,39 @@ export type ParsedReceiptFile = {
   filename: string;
 };
 
+export type ParseReceiptFail = {
+  ok: false;
+  error: string;
+  fieldErrors: Record<string, string>;
+};
+
+function receiptFail(fieldName: string, message: string): ParseReceiptFail {
+  return {
+    ok: false,
+    error: message,
+    fieldErrors: { [fieldName]: message },
+  };
+}
+
 export function parseReceiptFile(
   formData: FormData,
   fieldName = "receipt",
 ):
   | { ok: true; data: ParsedReceiptFile }
-  | { ok: false; error: string } {
+  | ParseReceiptFail {
   const file = formData.get(fieldName);
   if (!(file instanceof File) || file.size === 0) {
-    return { ok: false, error: "Choose a receipt file" };
+    return receiptFail(fieldName, "Choose a receipt file");
   }
   if (file.size > MAX_RECEIPT_BYTES) {
-    return { ok: false, error: "Receipt must be under 8 MB" };
+    return receiptFail(fieldName, "Receipt must be under 8 MB");
   }
   const contentType = file.type || "application/octet-stream";
   const allowed =
     ALLOWED_RECEIPT_TYPES.has(contentType) ||
     contentType === "application/octet-stream";
   if (!allowed) {
-    return { ok: false, error: "Receipt must be an image or PDF" };
+    return receiptFail(fieldName, "Receipt must be an image or PDF");
   }
 
   return { ok: true, data: { file, bytes: Buffer.alloc(0), contentType, filename: safeFilename(file.name) } };
@@ -83,14 +97,17 @@ export async function parseReceiptFileAsync(
   formData: FormData,
   fieldName = "receipt",
 ):
-  Promise<{ ok: true; data: ParsedReceiptFile } | { ok: false; error: string }> {
+  Promise<{ ok: true; data: ParsedReceiptFile } | ParseReceiptFail> {
   const parsed = parseReceiptFile(formData, fieldName);
   if (!parsed.ok) return parsed;
 
   const bytes = Buffer.from(await parsed.data.file.arrayBuffer());
   const contentType = resolveReceiptContentType(bytes);
   if (!contentType) {
-    return { ok: false, error: "Receipt file contents do not match the declared type" };
+    return receiptFail(
+      fieldName,
+      "Receipt file contents do not match the declared type",
+    );
   }
 
   return {

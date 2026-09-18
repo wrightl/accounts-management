@@ -16,7 +16,6 @@ import {
 } from "@/components/spending/spending-ui";
 import { buttonClasses } from "@/components/ui/button";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
-import { isDatabaseConfigured } from "@/env";
 
 export default async function SpendingPage({
   searchParams,
@@ -25,15 +24,6 @@ export default async function SpendingPage({
 }) {
   const { companyId } = await guardTenantPage("accounts:read");
   const sp = await searchParams;
-
-  if (!isDatabaseConfigured()) {
-    return (
-      <div>
-        <h1 className="font-display text-2xl font-semibold">Spending</h1>
-        <p className="mt-2 text-muted">Connect a database to view spending.</p>
-      </div>
-    );
-  }
 
   const settings = await getOrCreateCompanySettings(companyId);
   const periodParam = sp.period ?? "current-month";

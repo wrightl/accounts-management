@@ -1,9 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { currentUser } from "@clerk/nextjs/server";
-import { isAuthConfigured, isDatabaseConfigured } from "@/env";
 import { hasDatabaseClient } from "@/db";
-import { requireUser } from "@/lib/auth";
+import { requireUser, safeCurrentUser } from "@/lib/auth";
 import { isPlatformAdmin } from "@/lib/platform";
 import { ensureLocalUser, findLocalUser, listUserMemberships } from "@/lib/users";
 import { can } from "@/lib/roles";
@@ -16,17 +14,14 @@ import {
   filterNavGroups,
 } from "@/components/dashboard/nav";
 import { DashboardShell } from "@/components/dashboard/shell";
-import { AuthNotConfigured } from "@/components/auth-notice";
 
 export default async function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  if (!isAuthConfigured()) return <AuthNotConfigured />;
-
   let user = await requireUser();
-  const clerkUser = await currentUser();
+  const clerkUser = await safeCurrentUser();
   const avatarUrl = clerkUser?.imageUrl ?? null;
   let localUserId: string | null = user.localUserId;
   if (hasDatabaseClient()) {
@@ -64,7 +59,6 @@ export default async function AppLayout({
 
   let overdueInvoiceCount = 0;
   if (
-    isDatabaseConfigured() &&
     hasDatabaseClient() &&
     can(user.role, "accounts:read")
   ) {

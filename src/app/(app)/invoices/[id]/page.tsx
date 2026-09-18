@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Pencil } from "lucide-react";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
+import { getRecurringTemplateForInvoice } from "@/lib/invoices/recurring-queries";
 import { canEditInvoice, type InvoiceStatus } from "@/lib/invoices/status";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
@@ -12,7 +13,6 @@ import { InvoiceDueDate } from "@/components/invoices/invoice-due-date";
 import { InvoiceStatusSelect } from "@/components/invoices/invoice-status-select";
 import { formatGBP, lineNetPence } from "@/lib/money";
 import { clientDisplayName } from "@/lib/clients/display";
-import { isDatabaseConfigured } from "@/env";
 
 export default async function InvoiceDetailPage({
   params,
@@ -23,8 +23,6 @@ export default async function InvoiceDetailPage({
   const canWrite = await hasPermission("accounts:write");
   const { id } = await params;
 
-  if (!isDatabaseConfigured()) notFound();
-
   const detail = await getInvoiceDetail(companyId, id);
   if (!detail) notFound();
 
@@ -32,6 +30,10 @@ export default async function InvoiceDetailPage({
     detail;
 
   const status = invoice.status as InvoiceStatus;
+  const recurring = await getRecurringTemplateForInvoice(
+    companyId,
+    invoice.recurringInvoiceId,
+  );
 
   return (
     <div>
@@ -72,6 +74,17 @@ export default async function InvoiceDetailPage({
                   prefix="Due "
                   className="inline-flex"
                 />
+              </>
+            ) : null}
+            {recurring ? (
+              <>
+                {" · From recurring: "}
+                <Link
+                  href={`/recurring-invoices/${recurring.id}`}
+                  className="text-foreground hover:underline"
+                >
+                  {recurring.name}
+                </Link>
               </>
             ) : null}
           </p>

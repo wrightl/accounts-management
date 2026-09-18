@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { StarlingCsvAdapter } from "@/lib/bank/starling-csv";
-import { createPresetAdapter } from "@/lib/bank/presets";
+import {
+  createPresetAdapter,
+  detectBankProvider,
+  matchesPresetFingerprint,
+} from "@/lib/bank/presets";
 import { GenericCsvAdapter } from "@/lib/bank/generic-csv";
 import { getBankFeedAdapter } from "@/lib/bank/adapters";
 import {
@@ -9,15 +15,18 @@ import {
   resolveBankDisplayName,
 } from "@/lib/bank/providers";
 import { resolveBankFieldsFromForm } from "@/lib/bank/resolve-bank-fields";
-import { parseBankDate, debitCreditToPence } from "@/lib/bank/csv";
+import { parseBankDate, debitCreditToPence, parseCsvTable } from "@/lib/bank/csv";
+
+function fixture(name: string): string {
+  return readFileSync(
+    join(process.cwd(), "tests/fixtures/bank", name),
+    "utf8",
+  );
+}
 
 describe("StarlingCsvAdapter", () => {
   it("parses a typical Starling CSV and dedupes via externalId", () => {
-    const csv = [
-      "Date,Counter Party,Reference,Type,Amount,Balance",
-      "15/03/2026,Acme Ltd,DD-2026-0001,FASTER PAYMENT,250.00,1250.00",
-      "16/03/2026,Trainline,,CARD PAYMENT,-42.50,1207.50",
-    ].join("\n");
+    const csv = fixture("starling.csv");
 
     const adapter = new StarlingCsvAdapter();
     const rows = adapter.parse(csv);
@@ -71,11 +80,7 @@ describe("StarlingCsvAdapter", () => {
 
 describe("preset bank adapters", () => {
   it("parses Monzo CSV and prefers Transaction ID for externalId", () => {
-    const csv = [
-      "Transaction ID,Date,Amount,Currency,Name,Category",
-      "tx_abc123,2026-03-15,-12.50,GBP,Coffee Shop,Eating out",
-      "tx_def456,2026-03-16,100.00,GBP,Client Ltd,Income",
-    ].join("\n");
+    const csv = fixture("monzo.csv");
     const rows = createPresetAdapter("monzo").parse(csv);
     expect(rows).toHaveLength(2);
     expect(rows[0].externalId).toBe("tx_abc123");
@@ -84,18 +89,21 @@ describe("preset bank adapters", () => {
     expect(rows[1].amountPence).toBe(10000);
   });
 
-  it("skips non-GBP Revolut rows", () => {
-    const csv = [
-      "Date completed (UTC),ID,Description,Amount,Payment currency",
-      "2026-03-15,rev1,Hotel,-80.00,EUR",
-      "2026-03-16,rev2,Client,200.00,GBP",
-    ].join("\n");
+  it("skips non-GBP Revolut Business rows", () => {
+    const csv = fixture("revolut-business.csv");
     const rows = createPresetAdapter("revolut").parse(csv);
     expect(rows).toHaveLength(2);
     expect(rows[0].skipReason).toBe("non_gbp");
     expect(rows[1].skipReason).toBeUndefined();
     expect(rows[1].amountPence).toBe(20000);
     expect(rows[1].externalId).toBe("rev2");
+  });
+
+  it("rejects plain Date/Amount files against Revolut Business fingerprint", () => {
+    const csv = fixture("tide.csv");
+    expect(() => createPresetAdapter("revolut").parse(csv)).toThrow(
+      /does not look like a Revolut Business/,
+    );
   });
 
   it("parses Wise with TransferWise ID", () => {
@@ -110,10 +118,7 @@ describe("preset bank adapters", () => {
   });
 
   it("parses Tide signed amount", () => {
-    const csv = [
-      "Date,Description,Amount",
-      "15/03/2026,Office rent,-900.00",
-    ].join("\n");
+    const csv = fixture("tide.csv");
     const rows = createPresetAdapter("tide").parse(csv);
     expect(rows[0].amountPence).toBe(-90000);
   });
@@ -172,13 +177,32 @@ describe("preset bank adapters", () => {
   });
 });
 
+describe("detectBankProvider", () => {
+  it("detects Starling uniquely", () => {
+    const { headers } = parseCsvTable(fixture("starling.csv"));
+    expect(detectBankProvider(headers)).toBe("starling");
+    expect(matchesPresetFingerprint("starling", headers)).toBe(true);
+  });
+
+  it("detects Monzo uniquely", () => {
+    const { headers } = parseCsvTable(fixture("monzo.csv"));
+    expect(detectBankProvider(headers)).toBe("monzo");
+  });
+
+  it("detects Revolut Business uniquely", () => {
+    const { headers } = parseCsvTable(fixture("revolut-business.csv"));
+    expect(detectBankProvider(headers)).toBe("revolut");
+  });
+
+  it("returns null for unknown generic format", () => {
+    const { headers } = parseCsvTable(fixture("generic.csv"));
+    expect(detectBankProvider(headers)).toBeNull();
+  });
+});
+
 describe("GenericCsvAdapter", () => {
   it("parses mapped debit/credit columns", () => {
-    const csv = [
-      "Txn Date,Narration,Out,In",
-      "15/03/2026,Shop,12.00,",
-      "16/03/2026,Client,,99.50",
-    ].join("\n");
+    const csv = fixture("generic.csv");
     const rows = new GenericCsvAdapter({
       date: "Txn Date",
       moneyOut: "Out",
@@ -208,6 +232,7 @@ describe("bank catalog helpers", () => {
 
   it("resolves display names", () => {
     expect(bankLabel("lloyds")).toBe("Lloyds");
+    expect(bankLabel("revolut")).toBe("Revolut Business");
     expect(resolveBankDisplayName("other", "Metro")).toBe("Metro");
   });
 

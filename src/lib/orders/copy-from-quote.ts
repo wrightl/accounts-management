@@ -41,7 +41,7 @@ export async function createOrderFromQuote(
   companyId: string,
   source: QuoteOrderSource,
   milestones: PaymentMilestoneInput[],
-  createdByUserId: string,
+  createdByUserId: string | null,
 ): Promise<string> {
   if (source.quote.orderId) throw new Error("Quote already has an order");
 

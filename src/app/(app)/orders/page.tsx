@@ -3,20 +3,10 @@ import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { listOrders } from "@/lib/orders/queries";
 import { buttonClasses } from "@/components/ui/button";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
-import { isDatabaseConfigured } from "@/env";
 
 export default async function OrdersPage() {
   const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
-
-  if (!isDatabaseConfigured()) {
-    return (
-      <div>
-        <h1 className="font-display text-2xl font-semibold">Orders</h1>
-        <p className="mt-2 text-muted">Connect a database to manage orders.</p>
-      </div>
-    );
-  }
 
   const rows = await listOrders(companyId);
 

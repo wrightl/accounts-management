@@ -5,6 +5,7 @@ import { useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { useAlert } from "@/components/ui/alert-dialog";
 import { FieldError, Label, Select } from "@/components/ui/form";
+import { useFieldErrors } from "@/components/ui/use-field-errors";
 import { findReimbursementBankMatchesAction } from "@/actions/bank";
 import { markReimbursementPaid } from "@/actions/reimbursements";
 import type { ReimbursementBankMatch } from "@/lib/bank/queries";
@@ -23,7 +24,8 @@ export function ReimbursementActions({
 }) {
   const router = useRouter();
   const { confirm } = useAlert();
-  const [error, setError] = useState<string | null>(null);
+  const { fieldErrors, error, clearAll, clearField, applyActionResult } =
+    useFieldErrors();
   const [pending, startTransition] = useTransition();
   const [matches, setMatches] = useState<ReimbursementBankMatch[] | null>(null);
   const [selectedMatchId, setSelectedMatchId] = useState<string>("");
@@ -50,13 +52,12 @@ export function ReimbursementActions({
   }, [compact, id, status, canWrite]);
 
   function markPaid(bankTransactionId?: string) {
-    setError(null);
+    clearAll();
     startTransition(async () => {
       const formData = new FormData();
       if (bankTransactionId) formData.set("bankTransactionId", bankTransactionId);
       const result = await markReimbursementPaid(id, formData);
-      if (!result.ok) setError(result.error);
-      else router.refresh();
+      if (applyActionResult(result)) router.refresh();
     });
   }
 
@@ -77,7 +78,9 @@ export function ReimbursementActions({
       type="button"
       variant={compact ? "secondary" : "primary"}
       className={compact ? "text-sm" : undefined}
-      disabled={pending || (!compact && Boolean(matches?.length) && !selectedMatchId)}
+      disabled={
+        pending || (!compact && Boolean(matches?.length) && !selectedMatchId)
+      }
       onClick={onMarkPaid}
     >
       {pending ? "Saving…" : "Mark as paid"}
@@ -106,12 +109,23 @@ export function ReimbursementActions({
           <>
             {matches && matches.length > 0 && (
               <div className="flex min-w-[240px] flex-col gap-1">
-                <Label htmlFor="bankMatch">Link bank transaction</Label>
+                <Label htmlFor="bankMatch">
+                  Link bank transaction (optional)
+                </Label>
                 <Select
                   id="bankMatch"
                   value={selectedMatchId}
-                  onChange={(e) => setSelectedMatchId(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedMatchId(e.target.value);
+                    clearField("bankTransactionId");
+                  }}
                   disabled={pending || loadingMatches}
+                  aria-invalid={Boolean(fieldErrors.bankTransactionId)}
+                  aria-describedby={
+                    fieldErrors.bankTransactionId
+                      ? "bankTransactionId-error"
+                      : undefined
+                  }
                 >
                   {matches.map((m) => (
                     <option key={m.bankTransactionId} value={m.bankTransactionId}>
@@ -120,6 +134,9 @@ export function ReimbursementActions({
                     </option>
                   ))}
                 </Select>
+                <FieldError id="bankTransactionId-error">
+                  {fieldErrors.bankTransactionId}
+                </FieldError>
               </div>
             )}
             {markPaidButton}
@@ -127,7 +144,9 @@ export function ReimbursementActions({
         )}
       </div>
       {loadingMatches && status === "pending" && (
-        <p className="text-xs text-muted">Looking for matching bank transactions…</p>
+        <p className="text-xs text-muted">
+          Looking for matching bank transactions…
+        </p>
       )}
       <FieldError>{error}</FieldError>
     </div>

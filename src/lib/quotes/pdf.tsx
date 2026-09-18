@@ -24,6 +24,8 @@ export interface PdfQuote {
   issueDate: string | null;
   validUntil: string | null;
   notes: string | null;
+  netPence?: number;
+  vatPence?: number;
   grossPence: number;
 }
 
@@ -176,6 +178,9 @@ function QuoteDocument({
             {company.companyNumber ? (
               <Text style={styles.muted}>Company no: {company.companyNumber}</Text>
             ) : null}
+            {company.vatNumber ? (
+              <Text style={styles.muted}>VAT: {company.vatNumber}</Text>
+            ) : null}
             <Text style={styles.muted}>{contactEmail}</Text>
           </View>
         </View>
@@ -205,6 +210,18 @@ function QuoteDocument({
         </View>
 
         <View style={styles.totals}>
+          {quote.netPence != null ? (
+            <View style={styles.totalRow}>
+              <Text>Subtotal</Text>
+              <Text>{formatGBP(quote.netPence)}</Text>
+            </View>
+          ) : null}
+          {(quote.vatPence ?? 0) > 0 || company.vatNumber ? (
+            <View style={styles.totalRow}>
+              <Text>VAT</Text>
+              <Text>{formatGBP(quote.vatPence ?? 0)}</Text>
+            </View>
+          ) : null}
           <View style={[styles.totalRow, styles.totalBold]}>
             <Text>Total due</Text>
             <Text>{formatGBP(quote.grossPence)}</Text>

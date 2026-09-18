@@ -6,7 +6,7 @@
 export const BANK_PROVIDERS = [
   { id: "starling", label: "Starling Bank" },
   { id: "monzo", label: "Monzo" },
-  { id: "revolut", label: "Revolut" },
+  { id: "revolut", label: "Revolut Business" },
   { id: "wise", label: "Wise" },
   { id: "tide", label: "Tide" },
   { id: "barclays", label: "Barclays" },

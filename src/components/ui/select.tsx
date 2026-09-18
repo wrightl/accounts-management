@@ -76,6 +76,9 @@ export function Select({
   disabled,
   required,
   className,
+  "aria-invalid": ariaInvalid,
+  "aria-describedby": ariaDescribedBy,
+  "aria-label": ariaLabel,
 }: {
   id?: string;
   name?: string;
@@ -88,6 +91,9 @@ export function Select({
   disabled?: boolean;
   required?: boolean;
   className?: string;
+  "aria-invalid"?: boolean | "true" | "false";
+  "aria-describedby"?: string;
+  "aria-label"?: string;
 }) {
   const uid = useId();
   const id = idProp ?? uid;
@@ -298,6 +304,9 @@ export function Select({
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-controls={listboxId}
+        aria-invalid={ariaInvalid}
+        aria-describedby={ariaDescribedBy}
+        aria-label={ariaLabel}
         disabled={disabled}
         onClick={() => {
           if (disabled) return;

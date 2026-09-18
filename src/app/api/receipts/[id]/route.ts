@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { expenseReceipts } from "@/db/schema";
+import { expenseReceipts, expenses } from "@/db/schema";
 import { requirePermission, ForbiddenError } from "@/lib/auth";
 import { getStorage } from "@/lib/storage";
 import { contentDispositionAttachment } from "@/lib/files";
@@ -11,32 +11,40 @@ export const runtime = "nodejs";
 
 /**
  * Stream a private receipt file. Never expose the Blob URL to the client.
+ * Scoped to the caller's company via join to expenses.
  */
 export async function GET(
   _request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
+  let user;
   try {
-    await requirePermission("accounts:read");
+    user = await requirePermission("accounts:read");
   } catch (e) {
     if (e instanceof ForbiddenError) {
       return NextResponse.json({ error: e.message }, { status: 403 });
     }
     throw e;
   }
+  if (!user.companyId) {
+    return NextResponse.json({ error: "Complete onboarding first" }, { status: 403 });
+  }
+  const companyId = user.companyId;
 
   const { id } = await context.params;
   const db = getDb();
-  const [receipt] = await db
-    .select()
+  const [row] = await db
+    .select({ receipt: expenseReceipts })
     .from(expenseReceipts)
-    .where(eq(expenseReceipts.id, id))
+    .innerJoin(expenses, eq(expenseReceipts.expenseId, expenses.id))
+    .where(and(eq(expenseReceipts.id, id), eq(expenses.companyId, companyId)))
     .limit(1);
 
-  if (!receipt) {
+  if (!row) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  const { receipt } = row;
   try {
     const obj = await getStorage().get(receipt.blobPath);
     return new NextResponse(Buffer.from(obj.body), {

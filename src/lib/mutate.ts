@@ -23,16 +23,11 @@ export type MutateContext = {
   entityType: EntityType;
 };
 
-/**
- * Authz + local user + tenant + audit + cache revalidation for server actions.
- * Fails closed when the user has not completed onboarding (no companyId).
- * Refuses writes when the company is suspended by platform ops.
- */
-export async function mutate(
-  permission: Permission,
-  run: (ctx: MutateContext) => Promise<ActionResult>,
-  after?: { audit?: MutateAudit; paths?: string[] },
-): Promise<ActionResult> {
+type MutatePrep =
+  | { ok: true; ctx: MutateContext }
+  | { ok: false; error: string };
+
+async function prepareMutate(permission: Permission): Promise<MutatePrep> {
   const authz = await requireActionPermission(permission);
   if (!authz.ok) return authz;
   if (!authz.user.companyId || !authz.user.entityType) {
@@ -58,17 +53,26 @@ export async function mutate(
   }
 
   const localUserId = await ensureLocalUser(authz.user);
-  const result = await run({
-    session: authz.user,
-    localUserId,
-    companyId: authz.user.companyId,
-    entityType: authz.user.entityType,
-  });
-  if (!result.ok) return result;
+  return {
+    ok: true,
+    ctx: {
+      session: authz.user,
+      localUserId,
+      companyId: authz.user.companyId,
+      entityType: authz.user.entityType,
+    },
+  };
+}
+
+async function applyAfter(
+  ctx: MutateContext,
+  result: { ok: true; id?: string },
+  after?: { audit?: MutateAudit; paths?: string[] },
+): Promise<void> {
   if (after?.audit) {
     await writeAudit({
-      companyId: authz.user.companyId,
-      actorUserId: localUserId,
+      companyId: ctx.companyId,
+      actorUserId: ctx.localUserId,
       action: after.audit.action,
       entityType: after.audit.entityType,
       entityId: after.audit.entityId ?? result.id ?? "",
@@ -78,5 +82,39 @@ export async function mutate(
   for (const path of after?.paths ?? []) {
     revalidatePath(path);
   }
+}
+
+/**
+ * Authz + local user + tenant + audit + cache revalidation for server actions.
+ * Fails closed when the user has not completed onboarding (no companyId).
+ * Refuses writes when the company is suspended by platform ops.
+ */
+export async function mutate(
+  permission: Permission,
+  run: (ctx: MutateContext) => Promise<ActionResult>,
+  after?: { audit?: MutateAudit; paths?: string[] },
+): Promise<ActionResult> {
+  const prep = await prepareMutate(permission);
+  if (!prep.ok) return prep;
+  const result = await run(prep.ctx);
+  if (!result.ok) return result;
+  await applyAfter(prep.ctx, result, after);
+  return result;
+}
+
+/**
+ * Like `mutate`, but allows a wider success payload than `ActionResult`
+ * (e.g. OCR extraction, import previews with extra fields).
+ */
+export async function mutateWide<T extends { ok: boolean; error?: string; id?: string }>(
+  permission: Permission,
+  run: (ctx: MutateContext) => Promise<T>,
+  after?: { audit?: MutateAudit; paths?: string[] },
+): Promise<T | { ok: false; error: string }> {
+  const prep = await prepareMutate(permission);
+  if (!prep.ok) return prep;
+  const result = await run(prep.ctx);
+  if (!result.ok) return result;
+  await applyAfter(prep.ctx, result as { ok: true; id?: string }, after);
   return result;
 }

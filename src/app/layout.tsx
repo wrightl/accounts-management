@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Outfit } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
-import { isAuthConfigured } from "@/env";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { brand } from "@/lib/brand";
 import { AppProviders } from "@/components/providers";
 import "./globals.css";
@@ -13,11 +14,11 @@ const outfit = Outfit({
 
 export const metadata: Metadata = {
   title: {
-    default: "Dot + Dash Consulting — Accounts",
+    default: "Dot + Dash Accounts — books for UK consultancies",
     template: "%s — Dot + Dash Accounts",
   },
   description:
-    "Invoicing, expenses, reimbursements and reporting for Dot + Dash Consulting.",
+    "Quotes, invoices, expenses, reimbursements and reporting for UK consultancies, studios, and small agencies. Limited companies and sole traders — your books in one place.",
   applicationName: "Dot + Dash Accounts",
 };
 
@@ -61,13 +62,11 @@ export default function RootLayout({
     <html lang="en" className={`${outfit.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col bg-background font-sans text-foreground">
         <AppProviders>{children}</AppProviders>
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
-
-  if (!isAuthConfigured()) {
-    return body;
-  }
 
   return (
     <ClerkProvider

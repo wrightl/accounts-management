@@ -5,7 +5,6 @@ import { getMembership, getUser } from "@/lib/users";
 import { countPendingReimbursementsByPayee } from "@/lib/reimbursements/queries";
 import { UserForm } from "@/components/users/user-form";
 import { buttonClasses } from "@/components/ui/button";
-import { isDatabaseConfigured } from "@/env";
 
 export default async function EditUserPage({
   params,
@@ -14,8 +13,6 @@ export default async function EditUserPage({
 }) {
   const session = await guardTenantPage("users:manage");
   const { id } = await params;
-
-  if (!isDatabaseConfigured()) notFound();
 
   const membership = await getMembership(id, session.companyId);
   if (!membership) notFound();

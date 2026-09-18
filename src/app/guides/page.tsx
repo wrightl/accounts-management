@@ -1,8 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Building2, User } from "lucide-react";
-import { Logo } from "@/components/brand/logo";
-import { buttonClasses } from "@/components/ui/button";
 import { GuideCard } from "@/components/guides/guide-card";
 import { ComparisonTable } from "@/components/guides/comparison-table";
 
@@ -20,20 +17,6 @@ export const metadata: Metadata = {
 export default function GuidesPage() {
   return (
     <main className="flex flex-1 flex-col bg-background">
-      <header className="border-b border-border bg-white px-6 py-4">
-        <div className="mx-auto flex max-w-7xl items-center justify-between">
-          <Link href="/">
-            <Logo showConsulting size={44} />
-          </Link>
-          <Link
-            href="/sign-in"
-            className={buttonClasses("secondary", "text-sm")}
-          >
-            Sign in
-          </Link>
-        </div>
-      </header>
-
       <div className="mx-auto w-full max-w-7xl px-6 py-16">
         <div className="text-center">
           <h1 className="font-display text-5xl font-semibold tracking-tight text-foreground md:text-6xl">
