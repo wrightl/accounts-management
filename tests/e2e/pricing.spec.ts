@@ -65,11 +65,49 @@ test.describe("Pricing - Public Access", () => {
     ).toBeVisible();
   });
 
-  test("start free trial CTA goes to sign-up", async ({ page }) => {
+  test("start free trial CTA goes to sign-up with pricing source", async ({
+    page,
+  }) => {
     await page.goto("/pricing");
 
     await page.getByRole("link", { name: "Start free trial" }).first().click();
-    await expect(page).toHaveURL(/\/sign-up/);
+    await expect(page).toHaveURL(/\/sign-up\?from=pricing$/);
+  });
+
+  test("plan cards tag the intended plan on sign-up", async ({ page }) => {
+    await page.goto("/pricing");
+
+    const essentials = page
+      .locator("article")
+      .filter({ has: page.getByRole("heading", { name: "Essentials", exact: true }) })
+      .getByRole("link", { name: "Start free trial" });
+    await expect(essentials).toHaveAttribute(
+      "href",
+      "/sign-up?from=pricing&plan=essentials",
+    );
+
+    const premium = page
+      .locator("article")
+      .filter({ has: page.getByRole("heading", { name: "Premium", exact: true }) })
+      .getByRole("link", { name: "Start free trial" });
+    await expect(premium).toHaveAttribute(
+      "href",
+      "/sign-up?from=pricing&plan=premium",
+    );
+  });
+
+  test("header sign-up on pricing is tagged, other marketing pages are not", async ({
+    page,
+  }) => {
+    await page.goto("/pricing");
+    await expect(
+      page.getByRole("banner").getByRole("link", { name: "Sign up" }),
+    ).toHaveAttribute("href", "/sign-up?from=pricing");
+
+    await page.goto("/guides");
+    await expect(
+      page.getByRole("banner").getByRole("link", { name: "Sign up" }),
+    ).toHaveAttribute("href", "/sign-up");
   });
 
   test("pricing is linked from landing page header", async ({ page }) => {

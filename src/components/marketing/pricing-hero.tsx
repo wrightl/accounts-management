@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { buttonClasses } from "@/components/ui/button";
+import { TrackedSignUpLink } from "@/components/marketing/tracked-sign-up-link";
 
 export function PricingHero() {
   return (
@@ -14,9 +15,12 @@ export function PricingHero() {
           £19 / month ex VAT. Replace the spreadsheets; keep your accountant.
         </p>
         <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-          <Link href="/sign-up" className={buttonClasses("primary", "px-6 py-2.5")}>
+          <TrackedSignUpLink
+            location="hero"
+            className={buttonClasses("primary", "px-6 py-2.5")}
+          >
             Start free trial
-          </Link>
+          </TrackedSignUpLink>
           <Link
             href="/sign-in"
             className={buttonClasses(

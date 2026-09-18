@@ -32,6 +32,8 @@ export default function PricingPage() {
         heading="Start with a free trial."
         body="Thirty days to run quotes, invoices, expenses, and bank CSV matching. Choose Essentials or Premium when you are ready."
         primaryLabel="Start free trial"
+        ctaLocation="final_cta"
+        from="pricing"
       />
       <PublicFooter />
     </main>

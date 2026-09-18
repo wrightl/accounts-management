@@ -1,9 +1,11 @@
-import Link from "next/link";
 import { Check, Minus } from "lucide-react";
 import { buttonClasses } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { PricingPlan } from "@/lib/marketing-analytics";
+import { TrackedSignUpLink } from "@/components/marketing/tracked-sign-up-link";
 
 type Plan = {
+  id: PricingPlan;
   name: string;
   price: string;
   priceNote: string;
@@ -14,6 +16,7 @@ type Plan = {
 
 const PLANS: Plan[] = [
   {
+    id: "trial",
     name: "Trial",
     price: "£0",
     priceNote: "30 days",
@@ -27,6 +30,7 @@ const PLANS: Plan[] = [
     ],
   },
   {
+    id: "essentials",
     name: "Essentials",
     price: "£19",
     priceNote: "/ org / mo · or £190 / year (2 months free)",
@@ -41,6 +45,7 @@ const PLANS: Plan[] = [
     ],
   },
   {
+    id: "premium",
     name: "Premium",
     price: "£29",
     priceNote: "/ org / mo · or £290 / year (2 months free)",
@@ -158,7 +163,7 @@ export function PricingPlans() {
         <div className="mt-12 grid gap-6 md:grid-cols-3 md:items-stretch">
           {PLANS.map((plan) => (
             <article
-              key={plan.name}
+              key={plan.id}
               className={cn(
                 "flex flex-col rounded-2xl border bg-white p-6 md:p-8",
                 plan.featured
@@ -204,15 +209,16 @@ export function PricingPlans() {
                   </li>
                 ))}
               </ul>
-              <Link
-                href="/sign-up"
+              <TrackedSignUpLink
+                location="plan_card"
+                plan={plan.id}
                 className={buttonClasses(
                   plan.featured ? "primary" : "secondary",
                   "mt-8 w-full px-6 py-2.5",
                 )}
               >
                 Start free trial
-              </Link>
+              </TrackedSignUpLink>
             </article>
           ))}
         </div>

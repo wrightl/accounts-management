@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
 import { buttonClasses } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { PricingAwareSignUpLink } from "@/components/marketing/pricing-aware-sign-up-link";
 
 const NAV_LINKS = [
   { href: "/#product", label: "Product" },
@@ -59,12 +60,12 @@ export function PublicHeader({
           >
             Sign in
           </Link>
-          <Link
-            href="/sign-up"
+          <PricingAwareSignUpLink
+            location="header"
             className={buttonClasses("primary", "px-5 py-2")}
           >
             Sign up
-          </Link>
+          </PricingAwareSignUpLink>
         </div>
       </div>
     </header>

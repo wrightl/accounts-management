@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
+import { PricingAwareSignUpLink } from "@/components/marketing/pricing-aware-sign-up-link";
 
 export function PublicFooter() {
   const year = new Date().getFullYear();
@@ -33,9 +34,9 @@ export function PublicFooter() {
                 </Link>
               </li>
               <li>
-                <Link href="/sign-up" className="hover:text-white">
+                <PricingAwareSignUpLink location="footer" className="hover:text-white">
                   Sign up
-                </Link>
+                </PricingAwareSignUpLink>
               </li>
               <li>
                 <Link href="/sign-in" className="hover:text-white">
