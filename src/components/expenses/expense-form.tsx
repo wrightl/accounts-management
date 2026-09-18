@@ -12,6 +12,12 @@ import { formatGBP, penceToPounds } from "@/lib/money";
 import { clientDisplayName } from "@/lib/clients/display";
 import { ReceiptUploadField } from "@/components/expenses/receipt-upload-field";
 import type { ReceiptExtraction } from "@/lib/expenses/receipt-parse";
+import {
+  VatRateField,
+  choiceFromVatRate,
+  vatRateFromChoice,
+} from "@/components/documents/vat-rate-field";
+import { vatFromInclusiveGross } from "@/lib/vat";
 
 type ExpenseStatusOption = "" | "recorded" | "reimbursable" | "company_paid";
 
@@ -25,6 +31,8 @@ export function ExpenseForm({
   defaultMileageRatePence,
   receiptOcrProvider = "local",
   receiptOcrModel,
+  vatRegistered = false,
+  defaultVatRate = 0,
 }: {
   mode: "create" | "edit";
   expense?: {
@@ -33,6 +41,8 @@ export function ExpenseForm({
     category: string | null;
     spentAt: string | null;
     amountPence: number;
+    vatRate?: number;
+    vatPence?: number;
     status: string;
     source?: string;
     billable: boolean;
@@ -49,6 +59,8 @@ export function ExpenseForm({
   defaultMileageRatePence: number;
   receiptOcrProvider?: string;
   receiptOcrModel?: string;
+  vatRegistered?: boolean;
+  defaultVatRate?: number;
 }) {
   const router = useRouter();
   const { confirm } = useAlert();
@@ -69,6 +81,9 @@ export function ExpenseForm({
   );
   const [amountPounds, setAmountPounds] = useState(
     expense ? String(penceToPounds(expense.amountPence)) : "",
+  );
+  const [vatRate, setVatRate] = useState(
+    expense?.vatRate ?? (vatRegistered ? defaultVatRate : 0),
   );
   const initialPaidBy =
     expense?.paidByUserId ??
@@ -155,6 +170,10 @@ export function ExpenseForm({
     } else {
       formData.set("amountPounds", amountPounds);
     }
+    formData.set(
+      "vatRate",
+      String(useMileage || !vatRegistered ? 0 : vatRate),
+    );
     return formData;
   }
 
@@ -175,6 +194,10 @@ export function ExpenseForm({
       formData.delete("useMileage");
       formData.set("amountPounds", amountPounds);
     }
+    formData.set(
+      "vatRate",
+      String(useMileage || !vatRegistered ? 0 : vatRate),
+    );
     setError(null);
     startTransition(async () => {
       const result =
@@ -362,7 +385,9 @@ export function ExpenseForm({
       <div className="grid gap-4 sm:grid-cols-2">
         {!useMileage && (
           <div>
-            <Label htmlFor="amountPounds">Amount (£)</Label>
+            <Label htmlFor="amountPounds">
+              Amount (£){vatRegistered ? " (inc. VAT)" : ""}
+            </Label>
             <Input
               id="amountPounds"
               name="amountPounds"
@@ -373,6 +398,27 @@ export function ExpenseForm({
             />
           </div>
         )}
+        {vatRegistered && !useMileage ? (
+          <VatRateField
+            id="expense-vat"
+            label="VAT rate"
+            value={choiceFromVatRate(vatRate)}
+            onChange={(v) => setVatRate(vatRateFromChoice(v))}
+            disabled={!canWrite || pending}
+          />
+        ) : null}
+        {vatRegistered && !useMileage && amountPounds.trim() ? (
+          <p className="text-sm text-muted sm:col-span-2">
+            Of which VAT:{" "}
+            {formatGBP(
+              vatFromInclusiveGross(
+                Math.round(Number(amountPounds.replace(/[£,\s]/g, "")) * 100) ||
+                  0,
+                vatRate,
+              ),
+            )}
+          </p>
+        ) : null}
         <div className={useMileage ? "sm:col-span-2" : ""}>
           {isPending ? (
             <>

@@ -78,7 +78,11 @@ export const companies = pgTable("companies", {
   companyNumber: text("company_number"),
   /** Sole trader unique taxpayer reference (optional). */
   utr: text("utr"),
-  vatNumber: text("vat_number"), // null: not VAT registered
+  vatNumber: text("vat_number"), // null when not VAT registered
+  /** When true, document lines use selectable VAT rates (default below). */
+  vatRegistered: boolean("vat_registered").notNull().default(false),
+  /** Default VAT rate percentage for new lines when registered (e.g. 20). */
+  defaultVatRate: integer("default_vat_rate").notNull().default(20),
   addressLines: text("address_lines"),
   email: text("email"),
   /**
@@ -300,6 +304,8 @@ export const expenses = pgTable(
     category: text("category"),
     spentAt: date("spent_at"),
     amountPence: integer("amount_pence").notNull().default(0),
+    /** VAT rate percentage used to derive vatPence from inclusive amountPence. */
+    vatRate: integer("vat_rate").notNull().default(0),
     vatPence: integer("vat_pence").notNull().default(0),
     status: expenseStatusEnum("status").notNull().default("recorded"),
     source: expenseSourceEnum("source").notNull().default("manual"),
@@ -695,6 +701,10 @@ export const quotes = pgTable(
     declinedReasonNarrative: text("declined_reason_narrative"),
     acceptedAt: timestamp("accepted_at", { withTimezone: true }),
     declinedAt: timestamp("declined_at", { withTimezone: true }),
+    /** Unguessable public accept token (raw; only in URL/email and this column). */
+    publicToken: text("public_token"),
+    /** First time the client opened the public quote page. */
+    viewedAt: timestamp("viewed_at", { withTimezone: true }),
     createdByUserId: uuid("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -706,6 +716,7 @@ export const quotes = pgTable(
   (t) => [
     uniqueIndex("uniq_quotes_company_number").on(t.companyId, t.number),
     index("idx_quotes_company").on(t.companyId),
+    uniqueIndex("uniq_quotes_public_token").on(t.publicToken),
   ],
 );
 

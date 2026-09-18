@@ -115,13 +115,14 @@ Yes = native / solid · Partial = limited, add-on, or via accountant workflow ·
 | Mileage (HMRC-style) | Yes | Yes | Yes | No | Partial | No | No | Partial |
 | Reimbursement batches | Yes | Partial | Partial | No | No | No | No | Partial |
 | Bank: live feed | No | Yes | Yes | Yes | Yes | Partial | No | No |
-| Bank: CSV match | Yes | Yes | Yes | N/A | Partial | No | No | Partial |
+| Bank: CSV match | Yes* | Yes | Yes | N/A | Partial | No | No | Partial |
 | Dividends (Ltd) | Yes | Yes | Yes | Partial | Yes | No | No | Partial |
+| VAT rates + export | Yes | Yes | Yes | Partial | Yes | No | No | Partial |
 | VAT / MTD filing | No | Yes | Yes | Partial | Yes | No | No | No |
 | Accountant invite | Yes | Yes | Yes | Partial | N/A | No | No | Partial |
 | One-click accountant pack | Yes | Partial | Partial | No | N/A | No | No | No |
 
-\*At research date: cron existed, no UI. **UI has since shipped** (see [gaps plan](./plans/gaps-subscriptions-pricing.md)).
+\*At research date: cron existed, no UI. **UI has since shipped** (see [gaps plan](./plans/gaps-subscriptions-pricing.md)). Multi-bank CSV (Starling, Monzo, Tide, Revolut Business, Wise, high-street + mapper), VAT rates/export, and public quote accept have also shipped.
 
 ## Pricing strip
 
@@ -185,7 +186,7 @@ Xero/FreeAgent win via accountant recommendation. Crunch sells the accountant. S
 - Per-founder inbound receipt email + OCR.
 - Reimbursement runs for co-founders.
 - Multi-company read-only accountant + one-click pack (CSVs, PDFs, receipts).
-- Honest scope: GBP, CSV matching, no pretend VAT/MTD — builds trust with the same ICP that distrusts feature bloat.
+- Honest scope: GBP, multi-bank CSV matching, VAT rates + accountant export when registered — no pretend MTD filing.
 
 ### Market still picks them when…
 
@@ -199,10 +200,10 @@ Xero/FreeAgent win via accountant recommendation. Crunch sells the accountant. S
 
 1. **Ignore feature parity with Xero** — Do not chase payroll, 1,000 apps, or multi-currency. Stay the weekly ops layer; let the accountant file returns.
 2. **Own the sentence: quote → order → milestone invoice** — Put it on the homepage. Bonsai owns proposals/contracts; you own UK books + milestones without needing a second ledger.
-3. **Three gaps that matter for this ICP (in order)** — (a) Recurring invoice UI — *shipped after this research*. (b) Live bank feed or at least multi-bank CSV beyond Starling. (c) VAT summary → export/bridging path before full MTD filing.
+3. **Three gaps that matter for this ICP (in order)** — (a) Recurring invoice UI — *shipped*. (b) Multi-bank CSV beyond Starling — *shipped* (live Open Banking still later). (c) VAT summary → export/bridging path before full MTD filing — *shipped* (rates + period CSV/PDF; no HMRC submit).
 4. **Price under FreeAgent Ltd** — Hypothesis £15–£29/org/mo. Market as “books for the week, not tax filing.”
 5. **Attack spreadsheets in copy, not Xero** — Primary buyer has a messy Drive folder. Answer “my accountant uses Xero” with invite + pack.
-6. **Steal polish cues from Bonsai, not features** — Proposal/PDF presentation, accept UX. Skip contracts/e-sign unless demand is proven.
+6. **Steal polish cues from Bonsai, not features** — Proposal/PDF presentation, public accept UX — *shipped* (tokenised `/q/{token}` accept/decline + viewed). Skip contracts/e-sign unless demand is proven.
 7. **Treat bank-tied free as a filter, not a rival** — Win Starling CSV users who want milestones + reimbursements without changing banks.
 8. **GTM wedge: founders of UK service firms** — Content around consultancy cash collection, founder expenses, year-end pack hygiene.
 

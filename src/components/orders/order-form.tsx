@@ -7,6 +7,12 @@ import { createOrder } from "@/actions/orders";
 import { PaymentScheduleEditor } from "@/components/quotes/payment-schedule-editor";
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label, Select, Textarea } from "@/components/ui/form";
+import {
+  VatRateField,
+  choiceFromVatRate,
+  vatRateFromChoice,
+  type VatRateFieldValue,
+} from "@/components/documents/vat-rate-field";
 import { formatGBP, invoiceTotals, poundsToPence } from "@/lib/money";
 import { clientDisplayName } from "@/lib/clients/display";
 
@@ -15,10 +21,17 @@ type LineDraft = {
   description: string;
   quantity: string;
   unitPricePounds: string;
+  vatRate: number;
 };
 
-function newLine(): LineDraft {
-  return { key: crypto.randomUUID(), description: "", quantity: "1", unitPricePounds: "" };
+function newLine(defaultVatRate: number): LineDraft {
+  return {
+    key: crypto.randomUUID(),
+    description: "",
+    quantity: "1",
+    unitPricePounds: "",
+    vatRate: defaultVatRate,
+  };
 }
 
 function isCompleteLine(line: LineDraft): boolean {
@@ -27,13 +40,18 @@ function isCompleteLine(line: LineDraft): boolean {
 
 export function OrderForm({
   clients,
+  vatRegistered = false,
+  defaultVatRate = 0,
 }: {
   clients: { id: string; name: string; companyName?: string | null }[];
+  vatRegistered?: boolean;
+  defaultVatRate?: number;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const [lines, setLines] = useState<LineDraft[]>([newLine()]);
+  const lineDefault = vatRegistered ? defaultVatRate : 0;
+  const [lines, setLines] = useState<LineDraft[]>([newLine(lineDefault)]);
 
   const totals = useMemo(() => {
     try {
@@ -43,12 +61,21 @@ export function OrderForm({
           .map((l) => ({
             quantity: Number(l.quantity) || 0,
             unitPricePence: poundsToPence(l.unitPricePounds),
+            vatRate: vatRegistered ? l.vatRate : 0,
           })),
       );
     } catch {
       return { netPence: 0, vatPence: 0, grossPence: 0 };
     }
-  }, [lines]);
+  }, [lines, vatRegistered]);
+
+  function setLineVat(index: number, value: VatRateFieldValue) {
+    setLines((prev) =>
+      prev.map((l, i) =>
+        i === index ? { ...l, vatRate: vatRateFromChoice(value) } : l,
+      ),
+    );
+  }
 
   function onSubmit(formData: FormData) {
     const completeLines = lines.filter(isCompleteLine);
@@ -64,6 +91,7 @@ export function OrderForm({
           description: l.description,
           quantity: Number(l.quantity),
           unitPricePounds: l.unitPricePounds,
+          vatRate: vatRegistered ? l.vatRate : 0,
         })),
       ),
     );
@@ -103,8 +131,28 @@ export function OrderForm({
         />
       </div>
       <div className="space-y-2">
+        <div
+          className={`hidden gap-2 text-xs font-medium text-muted sm:grid ${
+            vatRegistered
+              ? "sm:grid-cols-[1fr_70px_100px_110px_2.5rem]"
+              : "sm:grid-cols-[1fr_70px_100px_2.5rem]"
+          }`}
+        >
+          <span>Description</span>
+          <span>Qty</span>
+          <span>Unit £ (ex VAT)</span>
+          {vatRegistered ? <span>VAT</span> : null}
+          <span className="sr-only">Remove</span>
+        </div>
         {lines.map((line, index) => (
-          <div key={line.key} className="grid gap-2 sm:grid-cols-[1fr_70px_100px_2.5rem]">
+          <div
+            key={line.key}
+            className={`grid gap-2 ${
+              vatRegistered
+                ? "sm:grid-cols-[1fr_70px_100px_110px_2.5rem]"
+                : "sm:grid-cols-[1fr_70px_100px_2.5rem]"
+            }`}
+          >
             <Input
               placeholder="Description"
               value={line.description}
@@ -142,6 +190,16 @@ export function OrderForm({
                 )
               }
             />
+            {vatRegistered ? (
+              <VatRateField
+                id={`vat-${line.key}`}
+                label=""
+                compact
+                value={choiceFromVatRate(line.vatRate)}
+                onChange={(v) => setLineVat(index, v)}
+                disabled={pending}
+              />
+            ) : null}
             <Button
               type="button"
               variant="ghost"
@@ -154,10 +212,26 @@ export function OrderForm({
             </Button>
           </div>
         ))}
-        <Button type="button" variant="secondary" onClick={() => setLines((p) => [...p, newLine()])}>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => setLines((p) => [...p, newLine(lineDefault)])}
+        >
           <Plus className="h-4 w-4" /> Add line
         </Button>
-        <p className="text-right font-medium">Total {formatGBP(totals.grossPence)}</p>
+        <div className="space-y-1 text-right">
+          {vatRegistered && totals.vatPence > 0 ? (
+            <>
+              <p className="text-sm text-muted">
+                Net {formatGBP(totals.netPence)}
+              </p>
+              <p className="text-sm text-muted">
+                VAT {formatGBP(totals.vatPence)}
+              </p>
+            </>
+          ) : null}
+          <p className="font-medium">Total {formatGBP(totals.grossPence)}</p>
+        </div>
       </div>
       <PaymentScheduleEditor grossPence={totals.grossPence} disabled={pending} />
       <div>

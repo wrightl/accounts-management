@@ -126,6 +126,8 @@ export default async function ExpenseDetailPage({
           clients={clients}
           canWrite={canWrite}
           defaultMileageRatePence={settings.defaultMileageRatePence}
+          vatRegistered={settings.vatRegistered}
+          defaultVatRate={settings.vatRegistered ? settings.defaultVatRate : 0}
         />
         <ReceiptPanel
           expenseId={detail.expense.id}

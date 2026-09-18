@@ -23,6 +23,7 @@ import {
   validateMilestones,
 } from "@/lib/quotes/payment-schedule";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
+import { parseVatRate, resolveLineVatRate } from "@/lib/vat";
 import {
   buildInvoiceLineValues,
   computePartAmountPence,
@@ -40,6 +41,7 @@ const lineSchema = z.object({
   description: z.string().trim().min(1, "Description is required"),
   quantity: z.coerce.number().int().positive(),
   unitPricePounds: z.string().trim().min(1, "Unit price is required"),
+  vatRate: z.coerce.number().int().min(0).max(100).optional(),
 });
 
 const orderSchema = z.object({
@@ -81,27 +83,28 @@ export async function createOrder(formData: FormData): Promise<ActionResult> {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
 
-  let lineValues;
-  try {
-    lineValues = parsed.data.lines.map((l, i) => ({
-      description: l.description,
-      quantity: l.quantity,
-      unitPricePence: poundsToPence(l.unitPricePounds),
-      vatRate: 0,
-      position: i,
-    }));
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Invalid amount" };
-  }
-
-  const totals = invoiceTotals(lineValues);
-  const milestones = parseMilestonesJson(String(formData.get("milestonesJson") ?? "[]"));
-  const milestoneError = validateMilestones(milestones, totals.grossPence);
-  if (milestoneError) return { ok: false, error: milestoneError };
-
   return mutate(
     "accounts:write",
     async ({ companyId, localUserId }) => {
+      const company = await getOrCreateCompanySettings(companyId);
+      let lineValues;
+      try {
+        lineValues = parsed.data.lines.map((l, i) => ({
+          description: l.description,
+          quantity: l.quantity,
+          unitPricePence: poundsToPence(l.unitPricePounds),
+          vatRate: resolveLineVatRate(company, parseVatRate(l.vatRate)),
+          position: i,
+        }));
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : "Invalid amount" };
+      }
+
+      const totals = invoiceTotals(lineValues);
+      const milestones = parseMilestonesJson(String(formData.get("milestonesJson") ?? "[]"));
+      const milestoneError = validateMilestones(milestones, totals.grossPence);
+      if (milestoneError) return { ok: false, error: milestoneError };
+
       const db = getDb();
       const orderId = await db.transaction(async (tx) => {
         const number = await allocateOrderNumber(tx, companyId, parsed.data.issueDate);

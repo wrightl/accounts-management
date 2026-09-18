@@ -38,6 +38,8 @@ export default async function NewExpensePage() {
         defaultMileageRatePence={settings.defaultMileageRatePence}
         receiptOcrProvider={ocr.provider ?? "local"}
         receiptOcrModel={ocr.model}
+        vatRegistered={settings.vatRegistered}
+        defaultVatRate={settings.vatRegistered ? settings.defaultVatRate : 0}
       />
     </div>
   );

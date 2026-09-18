@@ -111,6 +111,28 @@ describe("renderInvoicePdfV2", () => {
     expect(text).toContain("INV-2026-0001");
   });
 
+  it("renders a VAT row when vatPence is positive", async () => {
+    getMock.mockResolvedValue({
+      body: TINY_PNG,
+      contentType: "image/png",
+    });
+
+    const bytes = await renderInvoicePdfV2({
+      invoice: {
+        ...invoice,
+        netPence: 100000,
+        vatPence: 20000,
+        grossPence: 120000,
+      },
+      client,
+      lines,
+      company: { ...company, vatNumber: "GB123456789" },
+    });
+    const text = await extractPdfText(Buffer.from(bytes));
+    expect(text).toMatch(/\bVAT\b/);
+    expect(text).toContain("GB123456789");
+  });
+
   it("produces a valid multi-page PDF for long line lists", async () => {
     getMock.mockResolvedValue({
       body: TINY_PNG,

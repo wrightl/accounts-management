@@ -18,12 +18,15 @@ import {
 } from "@/lib/invoices/status";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
 import { enqueueSendJob, processSendJob } from "@/lib/outbox";
+import { getOrCreateCompanySettings } from "@/lib/settings/queries";
+import { parseVatRate, resolveLineVatRate } from "@/lib/vat";
 import type { ActionResult } from "@/actions/result";
 
 const lineSchema = z.object({
   description: z.string().trim().min(1),
   quantity: z.coerce.number().int().positive(),
   unitPricePounds: z.string().trim().min(1),
+  vatRate: z.coerce.number().int().min(0).max(100).optional(),
 });
 
 const invoiceSchema = z.object({
@@ -66,14 +69,17 @@ function parseLinesFromForm(formData: FormData) {
   }
 }
 
-function buildLineValues(lines: z.infer<typeof lineSchema>[]) {
+function buildLineValues(
+  lines: z.infer<typeof lineSchema>[],
+  company: { vatRegistered: boolean },
+) {
   return lines.map((l, i) => {
     const unitPricePence = poundsToPence(l.unitPricePounds);
     return {
       description: l.description,
       quantity: l.quantity,
       unitPricePence,
-      vatRate: 0,
+      vatRate: resolveLineVatRate(company, parseVatRate(l.vatRate)),
       position: i,
     };
   });
@@ -97,17 +103,18 @@ export async function createInvoice(formData: FormData): Promise<ActionResult> {
       ? parsed.data.dueDate
       : defaultDueDate(issueDate);
 
-  let lineValues;
-  try {
-    lineValues = buildLineValues(parsed.data.lines);
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Invalid amount" };
-  }
-  const totals = invoiceTotals(lineValues);
-
   return mutate(
     "accounts:write",
     async ({ companyId, localUserId }) => {
+      const company = await getOrCreateCompanySettings(companyId);
+      let lineValues;
+      try {
+        lineValues = buildLineValues(parsed.data.lines, company);
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : "Invalid amount" };
+      }
+      const totals = invoiceTotals(lineValues);
+
       const db = getDb();
       const invoiceId = await db.transaction(async (tx) => {
         const number = await allocateInvoiceNumber(tx, companyId, issueDate);
@@ -164,17 +171,18 @@ export async function updateInvoice(
       ? parsed.data.dueDate
       : defaultDueDate(issueDate);
 
-  let lineValues;
-  try {
-    lineValues = buildLineValues(parsed.data.lines);
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Invalid amount" };
-  }
-  const totals = invoiceTotals(lineValues);
-
   return mutate(
     "accounts:write",
     async ({ companyId }) => {
+      const company = await getOrCreateCompanySettings(companyId);
+      let lineValues;
+      try {
+        lineValues = buildLineValues(parsed.data.lines, company);
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : "Invalid amount" };
+      }
+      const totals = invoiceTotals(lineValues);
+
       const db = getDb();
       const [existing] = await db
         .select()

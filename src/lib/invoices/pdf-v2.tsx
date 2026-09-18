@@ -225,9 +225,13 @@ function InvoiceDocumentV2({
   const footerParts = [
     company.legalName,
     company.companyNumber ? `Company no. ${company.companyNumber}` : null,
+    company.vatNumber ? `VAT ${company.vatNumber}` : null,
     company.addressLines?.replace(/\n/g, ", ") ?? null,
     contactEmail,
   ].filter(Boolean);
+
+  const vatPence = invoice.vatPence ?? 0;
+  const showVat = vatPence > 0 || Boolean(company.vatNumber);
 
   return (
     <Document>
@@ -294,6 +298,12 @@ function InvoiceDocumentV2({
             <Text style={styles.subtotalLabel}>Subtotal</Text>
             <Text style={styles.subtotalLabel}>{formatGBP(invoice.netPence)}</Text>
           </View>
+          {showVat ? (
+            <View style={styles.subtotalRow}>
+              <Text style={styles.subtotalLabel}>VAT</Text>
+              <Text style={styles.subtotalLabel}>{formatGBP(vatPence)}</Text>
+            </View>
+          ) : null}
           <View style={styles.totalCard}>
             <Text style={styles.totalCardLabel}>Total due</Text>
             <Text style={styles.totalCardValue}>{formatGBP(invoice.grossPence)}</Text>

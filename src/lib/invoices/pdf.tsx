@@ -19,6 +19,7 @@ export interface PdfCompany {
   name: string;
   legalName: string;
   companyNumber: string | null;
+  vatNumber?: string | null;
   addressLines: string | null;
   email?: string | null;
   bankName: string | null;
@@ -41,6 +42,7 @@ export interface PdfInvoice {
   dueDate: string | null;
   notes: string | null;
   netPence: number;
+  vatPence?: number;
   grossPence: number;
   currency: string;
 }

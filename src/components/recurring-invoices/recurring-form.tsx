@@ -10,6 +10,12 @@ import {
   updateRecurringInvoice,
 } from "@/actions/recurring-invoices";
 import { clientDisplayName } from "@/lib/clients/display";
+import {
+  VatRateField,
+  choiceFromVatRate,
+  vatRateFromChoice,
+  type VatRateFieldValue,
+} from "@/components/documents/vat-rate-field";
 import { Plus, Trash2 } from "lucide-react";
 
 export interface RecurringLineDraft {
@@ -17,14 +23,16 @@ export interface RecurringLineDraft {
   description: string;
   quantity: string;
   unitPricePounds: string;
+  vatRate: number;
 }
 
-function newLine(): RecurringLineDraft {
+function newLine(defaultVatRate: number): RecurringLineDraft {
   return {
     key: crypto.randomUUID(),
     description: "",
     quantity: "1",
     unitPricePounds: "",
+    vatRate: defaultVatRate,
   };
 }
 
@@ -39,6 +47,8 @@ export function RecurringInvoiceForm({
   clients,
   template,
   initialLines,
+  vatRegistered = false,
+  defaultVatRate = 0,
 }: {
   mode: "create" | "edit";
   clients: { id: string; name: string; companyName?: string | null }[];
@@ -54,12 +64,20 @@ export function RecurringInvoiceForm({
     enabled: boolean;
   };
   initialLines?: RecurringLineDraft[];
+  vatRegistered?: boolean;
+  defaultVatRate?: number;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const lineDefault = vatRegistered ? defaultVatRate : 0;
   const [lines, setLines] = useState<RecurringLineDraft[]>(
-    initialLines && initialLines.length > 0 ? initialLines : [newLine()],
+    initialLines && initialLines.length > 0
+      ? initialLines.map((l) => ({
+          ...l,
+          vatRate: vatRegistered ? l.vatRate : 0,
+        }))
+      : [newLine(lineDefault)],
   );
   const [onGenerate, setOnGenerate] = useState<"draft" | "send">(
     template?.onGenerate ?? "draft",
@@ -74,13 +92,21 @@ export function RecurringInvoiceForm({
           .map((l) => ({
             quantity: Number(l.quantity) || 0,
             unitPricePence: poundsToPence(l.unitPricePounds || "0"),
-            vatRate: 0,
+            vatRate: vatRegistered ? l.vatRate : 0,
           })),
       );
     } catch {
       return { netPence: 0, vatPence: 0, grossPence: 0 };
     }
-  }, [lines]);
+  }, [lines, vatRegistered]);
+
+  function setLineVat(index: number, value: VatRateFieldValue) {
+    setLines((prev) =>
+      prev.map((l, i) =>
+        i === index ? { ...l, vatRate: vatRateFromChoice(value) } : l,
+      ),
+    );
+  }
 
   function onSubmit(formData: FormData) {
     setError(null);
@@ -91,6 +117,7 @@ export function RecurringInvoiceForm({
           description: l.description,
           quantity: Number(l.quantity),
           unitPricePounds: l.unitPricePounds,
+          vatRate: vatRegistered ? l.vatRate : 0,
         })),
       ),
     );
@@ -233,16 +260,27 @@ export function RecurringInvoiceForm({
 
       <div className="space-y-2">
         <Label>Line items</Label>
-        <div className="hidden gap-2 text-xs font-medium text-muted sm:grid sm:grid-cols-[1fr_80px_120px_2.5rem]">
+        <div
+          className={`hidden gap-2 text-xs font-medium text-muted sm:grid ${
+            vatRegistered
+              ? "sm:grid-cols-[1fr_80px_120px_110px_2.5rem]"
+              : "sm:grid-cols-[1fr_80px_120px_2.5rem]"
+          }`}
+        >
           <span>Description</span>
           <span>Qty</span>
-          <span>Unit £</span>
+          <span>Unit £ (ex VAT)</span>
+          {vatRegistered ? <span>VAT</span> : null}
           <span className="sr-only">Remove</span>
         </div>
         {lines.map((line, index) => (
           <div
             key={line.key}
-            className="grid gap-2 sm:grid-cols-[1fr_80px_120px_2.5rem]"
+            className={`grid gap-2 ${
+              vatRegistered
+                ? "sm:grid-cols-[1fr_80px_120px_110px_2.5rem]"
+                : "sm:grid-cols-[1fr_80px_120px_2.5rem]"
+            }`}
           >
             <Input
               placeholder="Description"
@@ -283,6 +321,16 @@ export function RecurringInvoiceForm({
                 )
               }
             />
+            {vatRegistered ? (
+              <VatRateField
+                id={`vat-${line.key}`}
+                label=""
+                compact
+                value={choiceFromVatRate(line.vatRate)}
+                onChange={(v) => setLineVat(index, v)}
+                disabled={pending}
+              />
+            ) : null}
             <Button
               type="button"
               variant="ghost"
@@ -301,14 +349,26 @@ export function RecurringInvoiceForm({
           type="button"
           variant="secondary"
           disabled={pending}
-          onClick={() => setLines((prev) => [...prev, newLine()])}
+          onClick={() => setLines((prev) => [...prev, newLine(lineDefault)])}
         >
           <Plus className="h-4 w-4" />
           Add line
         </Button>
-        <p className="text-right font-display text-lg font-semibold">
-          Total {formatGBP(totals.grossPence)}
-        </p>
+        <div className="space-y-1 text-right">
+          {vatRegistered && totals.vatPence > 0 ? (
+            <>
+              <p className="text-sm text-muted">
+                Net {formatGBP(totals.netPence)}
+              </p>
+              <p className="text-sm text-muted">
+                VAT {formatGBP(totals.vatPence)}
+              </p>
+            </>
+          ) : null}
+          <p className="font-display text-lg font-semibold">
+            Total {formatGBP(totals.grossPence)}
+          </p>
+        </div>
       </div>
 
       <div>

@@ -8,6 +8,12 @@ import { formatGBP, invoiceTotals, lineNetPence, poundsToPence } from "@/lib/mon
 import { PaymentScheduleEditor } from "@/components/quotes/payment-schedule-editor";
 import { createQuote, updateQuote } from "@/actions/quotes";
 import { clientDisplayName } from "@/lib/clients/display";
+import {
+  VatRateField,
+  choiceFromVatRate,
+  vatRateFromChoice,
+  type VatRateFieldValue,
+} from "@/components/documents/vat-rate-field";
 import { Plus, Trash2 } from "lucide-react";
 
 export type QuoteLineDraft = {
@@ -15,10 +21,17 @@ export type QuoteLineDraft = {
   description: string;
   quantity: string;
   unitPricePounds: string;
+  vatRate: number;
 };
 
-function newLine(): QuoteLineDraft {
-  return { key: crypto.randomUUID(), description: "", quantity: "1", unitPricePounds: "" };
+function newLine(defaultVatRate: number): QuoteLineDraft {
+  return {
+    key: crypto.randomUUID(),
+    description: "",
+    quantity: "1",
+    unitPricePounds: "",
+    vatRate: defaultVatRate,
+  };
 }
 
 function isCompleteLine(line: QuoteLineDraft): boolean {
@@ -43,6 +56,8 @@ export function QuoteForm({
   quote,
   initialLines,
   initialMilestones,
+  vatRegistered = false,
+  defaultVatRate = 0,
 }: {
   mode: "create" | "edit";
   clients: { id: string; name: string; companyName?: string | null }[];
@@ -61,12 +76,20 @@ export function QuoteForm({
     dueDate: string | null;
     dueInDays: number | null;
   }>;
+  vatRegistered?: boolean;
+  defaultVatRate?: number;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const lineDefault = vatRegistered ? defaultVatRate : 0;
   const [lines, setLines] = useState<QuoteLineDraft[]>(
-    initialLines && initialLines.length > 0 ? initialLines : [newLine()],
+    initialLines && initialLines.length > 0
+      ? initialLines.map((l) => ({
+          ...l,
+          vatRate: vatRegistered ? l.vatRate : 0,
+        }))
+      : [newLine(lineDefault)],
   );
 
   const totals = useMemo(() => {
@@ -77,12 +100,21 @@ export function QuoteForm({
           .map((l) => ({
             quantity: Number(l.quantity) || 0,
             unitPricePence: poundsToPence(l.unitPricePounds),
+            vatRate: vatRegistered ? l.vatRate : 0,
           })),
       );
     } catch {
       return { netPence: 0, vatPence: 0, grossPence: 0 };
     }
-  }, [lines]);
+  }, [lines, vatRegistered]);
+
+  function setLineVat(index: number, value: VatRateFieldValue) {
+    setLines((prev) =>
+      prev.map((l, i) =>
+        i === index ? { ...l, vatRate: vatRateFromChoice(value) } : l,
+      ),
+    );
+  }
 
   function onSubmit(formData: FormData) {
     const clientId = String(formData.get("clientId") ?? "").trim();
@@ -104,6 +136,7 @@ export function QuoteForm({
           description: l.description,
           quantity: Number(l.quantity),
           unitPricePounds: l.unitPricePounds,
+          vatRate: vatRegistered ? l.vatRate : 0,
         })),
       ),
     );
@@ -120,6 +153,10 @@ export function QuoteForm({
       }
     });
   }
+
+  const lineGrid = vatRegistered
+    ? "sm:grid-cols-[1fr_70px_100px_110px_90px_2.5rem]"
+    : "sm:grid-cols-[1fr_70px_100px_90px_2.5rem]";
 
   return (
     <form className="space-y-4" action={onSubmit}>
@@ -166,20 +203,20 @@ export function QuoteForm({
         </div>
       </div>
       <div className="space-y-2">
-        <div className="hidden gap-2 text-xs font-medium text-muted sm:grid sm:grid-cols-[1fr_70px_100px_90px_2.5rem]">
+        <div
+          className={`hidden gap-2 text-xs font-medium text-muted sm:grid ${lineGrid}`}
+        >
           <span>Description</span>
           <span>Qty</span>
-          <span>Unit £</span>
+          <span>Unit £ (ex VAT)</span>
+          {vatRegistered ? <span>VAT</span> : null}
           <span className="text-right">Total</span>
           <span className="sr-only">Remove</span>
         </div>
         {lines.map((line, index) => {
           const totalPence = lineTotalPence(line);
           return (
-            <div
-              key={line.key}
-              className="grid gap-2 sm:grid-cols-[1fr_70px_100px_90px_2.5rem]"
-            >
+            <div key={line.key} className={`grid gap-2 ${lineGrid}`}>
               <Input
                 placeholder="Description"
                 value={line.description}
@@ -217,6 +254,16 @@ export function QuoteForm({
                   )
                 }
               />
+              {vatRegistered ? (
+                <VatRateField
+                  id={`vat-${line.key}`}
+                  label=""
+                  compact
+                  value={choiceFromVatRate(line.vatRate)}
+                  onChange={(v) => setLineVat(index, v)}
+                  disabled={pending}
+                />
+              ) : null}
               <p className="flex items-center justify-end text-sm font-medium tabular-nums">
                 {totalPence === null ? "—" : formatGBP(totalPence)}
               </p>
@@ -236,11 +283,23 @@ export function QuoteForm({
         <Button
           type="button"
           variant="secondary"
-          onClick={() => setLines((p) => [...p, newLine()])}
+          onClick={() => setLines((p) => [...p, newLine(lineDefault)])}
         >
           <Plus className="h-4 w-4" /> Add line
         </Button>
-        <p className="text-right font-medium">Total {formatGBP(totals.grossPence)}</p>
+        <div className="space-y-1 text-right">
+          {vatRegistered && totals.vatPence > 0 ? (
+            <>
+              <p className="text-sm text-muted">
+                Net {formatGBP(totals.netPence)}
+              </p>
+              <p className="text-sm text-muted">
+                VAT {formatGBP(totals.vatPence)}
+              </p>
+            </>
+          ) : null}
+          <p className="font-medium">Total {formatGBP(totals.grossPence)}</p>
+        </div>
       </div>
       <PaymentScheduleEditor
         grossPence={totals.grossPence}

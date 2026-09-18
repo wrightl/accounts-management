@@ -235,7 +235,7 @@ async function generateFromTemplateRow(
     lines.map((l) => ({
       quantity: l.quantity,
       unitPricePence: l.unitPricePence,
-      vatRate: 0,
+      vatRate: l.vatRate ?? 0,
     })),
   );
 
@@ -271,7 +271,7 @@ async function generateFromTemplateRow(
           description: l.description,
           quantity: l.quantity,
           unitPricePence: l.unitPricePence,
-          vatRate: 0,
+          vatRate: l.vatRate ?? 0,
           position: i,
         })),
       );

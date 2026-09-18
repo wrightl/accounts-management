@@ -16,12 +16,15 @@ import {
   countGeneratedInvoices,
 } from "@/lib/invoices/recurring-queries";
 import { generateRecurringInvoiceForTemplate } from "@/lib/invoices/recurring-generate";
+import { getOrCreateCompanySettings } from "@/lib/settings/queries";
+import { parseVatRate, resolveLineVatRate } from "@/lib/vat";
 import { revalidatePath } from "next/cache";
 
 const lineSchema = z.object({
   description: z.string().trim().min(1).max(500),
   quantity: z.coerce.number().positive().max(1_000_000),
   unitPricePounds: z.string().trim().min(1),
+  vatRate: z.coerce.number().int().min(0).max(100).optional(),
 });
 
 const templateSchema = z.object({
@@ -56,11 +59,13 @@ function parseLinesFromForm(formData: FormData) {
 
 function buildLineTemplate(
   lines: z.infer<typeof lineSchema>[],
+  company: { vatRegistered: boolean },
 ): RecurringLineTemplate[] {
   return lines.map((l) => ({
     description: l.description,
     quantity: l.quantity,
     unitPricePence: poundsToPence(l.unitPricePounds),
+    vatRate: resolveLineVatRate(company, parseVatRate(l.vatRate)),
   }));
 }
 
@@ -105,13 +110,6 @@ export async function createRecurringInvoice(
     return { ok: false, error: "End date must be today or later" };
   }
 
-  let lineTemplate: RecurringLineTemplate[];
-  try {
-    lineTemplate = buildLineTemplate(parsed.data.lines);
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Invalid amount" };
-  }
-
   const maxOccurrences = parseMaxOccurrences(parsed.data.maxOccurrences);
   const enabled = parsed.data.enabled !== "false";
   const nextRunOn = computeNextRunOn(parsed.data.dayOfMonth, today, null);
@@ -119,6 +117,14 @@ export async function createRecurringInvoice(
   return mutate(
     "accounts:write",
     async ({ companyId }) => {
+      const company = await getOrCreateCompanySettings(companyId);
+      let lineTemplate: RecurringLineTemplate[];
+      try {
+        lineTemplate = buildLineTemplate(parsed.data.lines, company);
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : "Invalid amount" };
+      }
+
       const db = getDb();
       const [client] = await db
         .select({ id: clients.id })
@@ -178,13 +184,6 @@ export async function updateRecurringInvoice(
     };
   }
 
-  let lineTemplate: RecurringLineTemplate[];
-  try {
-    lineTemplate = buildLineTemplate(parsed.data.lines);
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Invalid amount" };
-  }
-
   const endsOn = parseEndsOn(parsed.data.endsOn);
   const maxOccurrences = parseMaxOccurrences(parsed.data.maxOccurrences);
   const enabled = parsed.data.enabled !== "false";
@@ -192,6 +191,14 @@ export async function updateRecurringInvoice(
   return mutate(
     "accounts:write",
     async ({ companyId }) => {
+      const company = await getOrCreateCompanySettings(companyId);
+      let lineTemplate: RecurringLineTemplate[];
+      try {
+        lineTemplate = buildLineTemplate(parsed.data.lines, company);
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : "Invalid amount" };
+      }
+
       const db = getDb();
       const [existing] = await db
         .select()

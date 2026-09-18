@@ -28,6 +28,7 @@ import {
   getProfitAndLoss,
   getVatSummary,
 } from "@/lib/reports/queries";
+import { renderVatSummaryPdf } from "@/lib/reports/vat-pdf";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { getStorage } from "@/lib/storage";
 
@@ -56,7 +57,7 @@ export async function buildAccountantPack({
 
   const [pnl, vat, aged] = await Promise.all([
     getProfitAndLoss(companyId, from, to),
-    getVatSummary(from, to),
+    getVatSummary(companyId, from, to),
     getAgedReceivables(companyId),
   ]);
 
@@ -516,6 +517,24 @@ export async function buildAccountantPack({
     ),
     "README.txt": buildReadme({ from, to, warnings }),
   };
+
+  try {
+    const company = await getOrCreateCompanySettings(companyId);
+    binaryFiles["summary/vat.pdf"] = await renderVatSummaryPdf({
+      companyName: company.name,
+      vatNumber: vat.vatNumber,
+      from,
+      to,
+      vatOnSalesPence: vat.vatOnSalesPence,
+      vatOnPurchasesPence: vat.vatOnPurchasesPence,
+      netVatPence: vat.netVatPence,
+      note: vat.note,
+    });
+  } catch (e) {
+    warnings.push(
+      `VAT PDF skipped: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
 
   const allFiles: Record<string, ZipEntry> = { ...textFiles, ...binaryFiles };
   const zip = buildStoreZip(allFiles);

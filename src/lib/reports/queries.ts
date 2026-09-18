@@ -22,7 +22,7 @@ export async function getProfitAndLoss(
 ) {
   const db = getDb();
   const [income] = await db
-    .select({ total: sum(invoices.grossPence).mapWith(Number) })
+    .select({ total: sum(invoices.netPence).mapWith(Number) })
     .from(invoices)
     .where(
       and(
@@ -35,7 +35,11 @@ export async function getProfitAndLoss(
     );
 
   const [expenseTotal] = await db
-    .select({ total: sum(expenses.amountPence).mapWith(Number) })
+    .select({
+      total: sql<number>`coalesce(sum(${expenses.amountPence} - ${expenses.vatPence}), 0)`.mapWith(
+        Number,
+      ),
+    })
     .from(expenses)
     .where(
       and(
@@ -57,7 +61,7 @@ export async function getProfitAndLoss(
     profitFormatted: formatGBP(incomePence - expensePence),
     basis: "accrual" as const,
     basisNote:
-      "Accrual basis: income is invoiced (issue date, including unpaid) in the period. Expenses are by spend date. VAT is £0 until the company is VAT-registered.",
+      "Accrual basis: income is invoiced net (ex-VAT) by issue date. Expenses are net of VAT by spend date. See VAT summary for output/input VAT.",
   };
 }
 
@@ -142,7 +146,7 @@ export async function getIncomeByMonth(
   const rows = await db
     .select({
       month: sql<string>`to_char(${invoices.issueDate}, 'YYYY-MM')`,
-      total: sum(invoices.grossPence).mapWith(Number),
+      total: sum(invoices.netPence).mapWith(Number),
     })
     .from(invoices)
     .where(
@@ -203,7 +207,9 @@ export async function getExpenseByCategory(
   const rows = await db
     .select({
       category: expenses.category,
-      total: sum(expenses.amountPence).mapWith(Number),
+      total: sql<number>`coalesce(sum(${expenses.amountPence} - ${expenses.vatPence}), 0)`.mapWith(
+        Number,
+      ),
     })
     .from(expenses)
     .where(
@@ -215,7 +221,7 @@ export async function getExpenseByCategory(
       ),
     )
     .groupBy(expenses.category)
-    .orderBy(desc(sum(expenses.amountPence)));
+    .orderBy(desc(sql`sum(${expenses.amountPence} - ${expenses.vatPence})`));
 
   return rows.map((r) => ({
     category: r.category ?? "Uncategorised",
@@ -224,15 +230,57 @@ export async function getExpenseByCategory(
   }));
 }
 
-export async function getVatSummary(from: string, to: string) {
-  // Not VAT registered — always 0 for now.
+export async function getVatSummary(
+  companyId: string,
+  from: string,
+  to: string,
+) {
+  const db = getDb();
+  const company = await getCompanySettings(companyId);
+
+  const [sales] = await db
+    .select({ total: sum(invoices.vatPence).mapWith(Number) })
+    .from(invoices)
+    .where(
+      and(
+        eq(invoices.companyId, companyId),
+        ne(invoices.status, "void"),
+        ne(invoices.status, "draft"),
+        gte(invoices.issueDate, from),
+        lte(invoices.issueDate, to),
+      ),
+    );
+
+  const [purchases] = await db
+    .select({ total: sum(expenses.vatPence).mapWith(Number) })
+    .from(expenses)
+    .where(
+      and(
+        eq(expenses.companyId, companyId),
+        ne(expenses.status, "pending"),
+        gte(expenses.spentAt, from),
+        lte(expenses.spentAt, to),
+      ),
+    );
+
+  const vatOnSalesPence = sales?.total ?? 0;
+  const vatOnPurchasesPence = purchases?.total ?? 0;
+  const netVatPence = vatOnSalesPence - vatOnPurchasesPence;
+
+  const note = company.vatRegistered
+    ? "Export for your accountant — this app does not submit to HMRC."
+    : "Company is not marked VAT registered in Settings. Figures reflect any VAT stored on documents.";
+
   return {
-    vatOnSalesPence: 0,
-    vatOnPurchasesPence: 0,
-    netVatPence: 0,
-    vatOnSalesFormatted: formatGBP(0),
-    vatOnPurchasesFormatted: formatGBP(0),
-    note: "Not VAT registered — VAT summary is £0.00 until MTD is enabled.",
+    vatOnSalesPence,
+    vatOnPurchasesPence,
+    netVatPence,
+    vatOnSalesFormatted: formatGBP(vatOnSalesPence),
+    vatOnPurchasesFormatted: formatGBP(vatOnPurchasesPence),
+    netVatFormatted: formatGBP(netVatPence),
+    vatRegistered: company.vatRegistered,
+    vatNumber: company.vatNumber,
+    note,
     from,
     to,
   };

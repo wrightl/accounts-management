@@ -12,8 +12,8 @@ import { todayIsoDate } from "@/lib/invoices/status";
 import { getQuoteDetail, getQuoteVersionSnapshot } from "@/lib/quotes/queries";
 import { loadOrRenderQuotePdf } from "@/lib/quotes/pdf-cache";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
+import { parseVatRate, resolveLineVatRate } from "@/lib/vat";
 import { sendEmail } from "@/lib/email";
-import { escapeHtml } from "@/lib/html";
 import {
   canEditQuote,
   canRollbackQuote,
@@ -30,6 +30,11 @@ import {
   type PaymentMilestoneInput,
 } from "@/lib/quotes/payment-schedule";
 import { canTransitionQuote } from "@/lib/quotes/transitions";
+import { quoteEmailHtml } from "@/lib/quotes/email";
+import {
+  generatePublicQuoteToken,
+  publicQuoteUrl,
+} from "@/lib/quotes/public-token";
 import type { ActionResult } from "@/actions/result";
 
 const lineSchema = z.object({
@@ -39,6 +44,7 @@ const lineSchema = z.object({
     .int("Quantity must be a whole number")
     .min(1, "Quantity must be at least 1"),
   unitPricePounds: z.string().trim().min(1, "Unit price is required"),
+  vatRate: z.coerce.number().int().min(0).max(100).optional(),
 });
 
 const quoteSchema = z.object({
@@ -102,25 +108,26 @@ export async function createQuote(formData: FormData): Promise<ActionResult> {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
 
-  let lineValues;
-  try {
-    lineValues = parsed.data.lines.map((l, i) => ({
-      description: l.description,
-      quantity: l.quantity,
-      unitPricePence: poundsToPence(l.unitPricePounds),
-      vatRate: 0,
-      position: i,
-    }));
-  } catch {
-    return { ok: false, error: "Enter a valid unit price on each line item" };
-  }
-  const totals = invoiceTotals(lineValues);
-  const milestoneResult = parseAndValidateMilestones(formData, totals.grossPence);
-  if (!milestoneResult.ok) return { ok: false, error: milestoneResult.error };
-
   return mutate(
     "accounts:write",
     async ({ companyId, localUserId }) => {
+      const company = await getOrCreateCompanySettings(companyId);
+      let lineValues;
+      try {
+        lineValues = parsed.data.lines.map((l, i) => ({
+          description: l.description,
+          quantity: l.quantity,
+          unitPricePence: poundsToPence(l.unitPricePounds),
+          vatRate: resolveLineVatRate(company, parseVatRate(l.vatRate)),
+          position: i,
+        }));
+      } catch {
+        return { ok: false, error: "Enter a valid unit price on each line item" };
+      }
+      const totals = invoiceTotals(lineValues);
+      const milestoneResult = parseAndValidateMilestones(formData, totals.grossPence);
+      if (!milestoneResult.ok) return { ok: false, error: milestoneResult.error };
+
       const db = getDb();
       const quoteId = await db.transaction(async (tx) => {
         const number = await allocateQuoteNumber(tx, companyId, parsed.data.issueDate);
@@ -185,25 +192,26 @@ export async function updateQuote(id: string, formData: FormData): Promise<Actio
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
 
-  let lineValues;
-  try {
-    lineValues = parsed.data.lines.map((l, i) => ({
-      description: l.description,
-      quantity: l.quantity,
-      unitPricePence: poundsToPence(l.unitPricePounds),
-      vatRate: 0,
-      position: i,
-    }));
-  } catch {
-    return { ok: false, error: "Enter a valid unit price on each line item" };
-  }
-  const totals = invoiceTotals(lineValues);
-  const milestoneResult = parseAndValidateMilestones(formData, totals.grossPence);
-  if (!milestoneResult.ok) return { ok: false, error: milestoneResult.error };
-
   return mutate(
     "accounts:write",
     async ({ companyId, localUserId }) => {
+      const company = await getOrCreateCompanySettings(companyId);
+      let lineValues;
+      try {
+        lineValues = parsed.data.lines.map((l, i) => ({
+          description: l.description,
+          quantity: l.quantity,
+          unitPricePence: poundsToPence(l.unitPricePounds),
+          vatRate: resolveLineVatRate(company, parseVatRate(l.vatRate)),
+          position: i,
+        }));
+      } catch {
+        return { ok: false, error: "Enter a valid unit price on each line item" };
+      }
+      const totals = invoiceTotals(lineValues);
+      const milestoneResult = parseAndValidateMilestones(formData, totals.grossPence);
+      if (!milestoneResult.ok) return { ok: false, error: milestoneResult.error };
+
       const db = getDb();
       const [existing] = await db
         .select()
@@ -503,10 +511,6 @@ const sendQuoteSchema = z.object({
   message: z.string().trim().min(1, "Message is required"),
 });
 
-function messageToHtml(message: string): string {
-  return escapeHtml(message).replace(/\n/g, "<br/>");
-}
-
 export async function sendQuote(quoteId: string, formData: FormData): Promise<ActionResult> {
   const parsed = sendQuoteSchema.safeParse({
     to: formData.get("to"),
@@ -531,10 +535,24 @@ export async function sendQuote(quoteId: string, formData: FormData): Promise<Ac
       const company = await getOrCreateCompanySettings(companyId);
       const { bytes, filename } = await loadOrRenderQuotePdf(companyId, quoteId);
 
+      const db = getDb();
+      let rawToken = detail.quote.publicToken;
+      if (!rawToken) {
+        rawToken = generatePublicQuoteToken();
+        await db
+          .update(quotes)
+          .set({ publicToken: rawToken })
+          .where(and(eq(quotes.id, quoteId), eq(quotes.companyId, companyId)));
+      }
+      const publicUrl = publicQuoteUrl(rawToken);
+
       await sendEmail({
         to: parsed.data.to,
         subject: `Quote ${formatQuoteReference(detail.quote.number, detail.quote.version)} from ${company.name}`,
-        html: messageToHtml(parsed.data.message),
+        html: quoteEmailHtml({
+          message: parsed.data.message,
+          publicUrl,
+        }),
         text: parsed.data.message,
         attachments: [
           {
@@ -545,7 +563,6 @@ export async function sendQuote(quoteId: string, formData: FormData): Promise<Ac
         ],
       });
 
-      const db = getDb();
       const now = new Date();
       await db
         .update(quotes)
@@ -561,7 +578,7 @@ export async function sendQuote(quoteId: string, formData: FormData): Promise<Ac
         action: "quote.send",
         entityType: "quote",
         entityId: quoteId,
-        meta: { to: parsed.data.to },
+        meta: { to: parsed.data.to, hasPublicLink: true },
       });
 
       return { ok: true, id: quoteId };

@@ -7,12 +7,24 @@ import { mutate, mutateWide } from "@/lib/mutate";
 import { getDb } from "@/db";
 import { companies } from "@/db/schema";
 import { getBankFeedAdapter } from "@/lib/bank/adapters";
+import { parseCsvTable } from "@/lib/bank/csv";
 import { parseGenericCsvMapping, isGenericCsvMapping } from "@/lib/bank/generic-csv";
+import {
+  detectBankProvider,
+  getMatchedColumnLabels,
+  matchesPresetFingerprint,
+} from "@/lib/bank/presets";
+import {
+  getImportHelp,
+  getPresetExpectedColumns,
+} from "@/lib/bank/import-help";
 import {
   bankLabel,
   isBankProviderId,
+  isPresetBankProviderId,
   parseProviderFromLegacyName,
   type BankProviderId,
+  type PresetBankProviderId,
 } from "@/lib/bank/providers";
 import {
   BANK_PAGE_SIZE,
@@ -120,6 +132,8 @@ export async function getBankImportContext(): Promise<
       provider: BankProviderId;
       bankLabel: string;
       savedMapping: import("@/lib/bank/types").GenericCsvMapping | null;
+      importHelp: string | null;
+      expectedColumns: string[];
     }
   | { ok: false; error: string }
 > {
@@ -134,14 +148,24 @@ export async function getBankImportContext(): Promise<
     );
     const mapping = account.csvMapping ?? null;
 
+    if (isPresetBankProviderId(resolved.provider)) {
+      return {
+        ok: true,
+        provider: resolved.provider,
+        bankLabel: bankLabel(resolved.provider),
+        savedMapping: mapping,
+        importHelp: getImportHelp(resolved.provider),
+        expectedColumns: getPresetExpectedColumns(resolved.provider),
+      };
+    }
+
     return {
       ok: true,
       provider: resolved.provider,
-      bankLabel:
-        resolved.provider === "other"
-          ? resolved.bankName?.trim() || "Other bank"
-          : bankLabel(resolved.provider),
+      bankLabel: resolved.bankName?.trim() || "Other bank",
       savedMapping: mapping,
+      importHelp: null,
+      expectedColumns: [],
     };
   });
 }
@@ -152,6 +176,11 @@ export async function importBankCsv(formData: FormData): Promise<
     skipped?: number;
     skippedNonGbp?: number;
     suggestions?: SuggestedMatch[];
+    /** Client should open the generic column mapper for this file. */
+    needsMapping?: boolean;
+    detectedProvider?: PresetBankProviderId | null;
+    matchedColumns?: { role: string; header: string }[];
+    usedProvider?: BankProviderId;
   }
 > {
   return mutateWide(
@@ -165,29 +194,75 @@ export async function importBankCsv(formData: FormData): Promise<
         return { ok: false, error: "Choose a CSV statement file" };
       }
 
-      const mapping =
-        resolved.provider === "other"
-          ? parseGenericCsvMapping(formData.get("csvMapping"))
-          : null;
-      if (resolved.provider === "other" && !mapping) {
-        return {
-          ok: false,
-          error: "Map the CSV columns for your bank before importing.",
-        };
+      const text = await file.text();
+      const { headers, rawHeaders } = parseCsvTable(text);
+      const forceMapper = formData.get("forceMapper") === "1";
+      const mappingFromForm = parseGenericCsvMapping(formData.get("csvMapping"));
+
+      let importProvider: BankProviderId = resolved.provider;
+      let mapping = mappingFromForm;
+      let detected: PresetBankProviderId | null = null;
+
+      if (forceMapper || resolved.provider === "other") {
+        importProvider = "other";
+        if (!mapping) {
+          return {
+            ok: false,
+            error: "Map the CSV columns for your bank before importing.",
+            needsMapping: true,
+            detectedProvider: detectBankProvider(headers),
+          };
+        }
+      } else if (isPresetBankProviderId(resolved.provider)) {
+        if (matchesPresetFingerprint(resolved.provider, headers)) {
+          importProvider = resolved.provider;
+        } else {
+          detected = detectBankProvider(headers);
+          if (detected && detected !== resolved.provider) {
+            // Unique other preset — import with that adapter for this file only.
+            importProvider = detected;
+          } else if (mapping) {
+            importProvider = "other";
+          } else {
+            return {
+              ok: false,
+              error:
+                "This file does not match your bank in Settings. Map the columns below, or change the bank in Settings.",
+              needsMapping: true,
+              detectedProvider: detected,
+            };
+          }
+        }
       }
 
-      const text = await file.text();
       let rows;
       try {
-        rows = getBankFeedAdapter(resolved.provider, mapping).parse(text);
+        rows = getBankFeedAdapter(
+          importProvider,
+          importProvider === "other" ? mapping : null,
+        ).parse(text);
       } catch (e) {
+        // Fingerprint rejection → guided mapper instead of hard error.
+        if (importProvider !== "other" && !mapping) {
+          return {
+            ok: false,
+            error:
+              e instanceof Error
+                ? e.message
+                : "Could not parse this CSV. Map the columns below.",
+            needsMapping: true,
+            detectedProvider: detectBankProvider(headers),
+          };
+        }
         return { ok: false, error: e instanceof Error ? e.message : "Parse failed" };
       }
 
+      // Prefer the adapter we actually used; do not rewrite companies.bank_provider.
+      const accountProvider = importProvider;
       const account = await getOrCreateBankAccount(
         companyId,
-        resolved.provider,
-        resolved.bankName,
+        accountProvider,
+        accountProvider === resolved.provider ? resolved.bankName : null,
       );
       const { inserted, skipped, skippedNonGbp } = await importBankRows(
         companyId,
@@ -195,11 +270,19 @@ export async function importBankCsv(formData: FormData): Promise<
         rows,
       );
 
-      if (resolved.provider === "other" && mapping && isGenericCsvMapping(mapping)) {
+      if (
+        importProvider === "other" &&
+        mapping &&
+        isGenericCsvMapping(mapping)
+      ) {
         await saveBankAccountCsvMapping(companyId, account.id, mapping);
       }
 
       const suggestions = await suggestMatches(companyId);
+      const matchedColumns =
+        isPresetBankProviderId(importProvider)
+          ? getMatchedColumnLabels(importProvider, rawHeaders)
+          : [];
 
       await writeAudit({
         companyId,
@@ -208,7 +291,8 @@ export async function importBankCsv(formData: FormData): Promise<
         entityType: "bank_account",
         entityId: account.id,
         meta: {
-          provider: resolved.provider,
+          provider: accountProvider,
+          usedProvider: importProvider,
           inserted,
           skipped,
           skippedNonGbp,
@@ -223,6 +307,9 @@ export async function importBankCsv(formData: FormData): Promise<
         skipped,
         skippedNonGbp,
         suggestions,
+        usedProvider: importProvider,
+        matchedColumns,
+        detectedProvider: detected,
       };
     },
     { paths: ["/transactions"] },

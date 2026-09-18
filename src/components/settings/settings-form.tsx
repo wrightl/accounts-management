@@ -7,6 +7,7 @@ import { FieldError, Input, Label, Select, Textarea } from "@/components/ui/form
 import { BankFields } from "@/components/settings/bank-fields";
 import { financialYearStartMonth } from "@/lib/dates";
 import { updateCompany } from "@/actions/settings";
+import { STANDARD_VAT_RATE } from "@/lib/vat";
 
 const MONTHS = [
   "January",
@@ -32,6 +33,9 @@ export function SettingsForm({
     legalName: string;
     companyNumber: string | null;
     utr: string | null;
+    vatRegistered: boolean;
+    vatNumber: string | null;
+    defaultVatRate: number;
     addressLines: string | null;
     email: string | null;
     bankProvider: string | null;
@@ -52,6 +56,23 @@ export function SettingsForm({
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [vatRegistered, setVatRegistered] = useState(settings.vatRegistered);
+  const initialRate = settings.defaultVatRate;
+  const [rateChoice, setRateChoice] = useState<"0" | "20" | "custom">(
+    initialRate === 0 ? "0" : initialRate === STANDARD_VAT_RATE ? "20" : "custom",
+  );
+  const [customRate, setCustomRate] = useState(
+    initialRate !== 0 && initialRate !== STANDARD_VAT_RATE
+      ? String(initialRate)
+      : "",
+  );
+
+  const resolvedDefaultRate =
+    rateChoice === "0"
+      ? 0
+      : rateChoice === "20"
+        ? STANDARD_VAT_RATE
+        : Number(customRate) || STANDARD_VAT_RATE;
 
   return (
     <div className="mx-auto max-w-2xl space-y-10">
@@ -59,6 +80,10 @@ export function SettingsForm({
         action={(formData) => {
           setError(null);
           setMessage(null);
+          formData.set("defaultVatRate", String(resolvedDefaultRate));
+          if (!vatRegistered) {
+            formData.delete("vatRegistered");
+          }
           startTransition(async () => {
             const result = await updateCompany(formData);
             if (!result.ok) setError(result.error);
@@ -165,6 +190,78 @@ export function SettingsForm({
             Shown in the navigation and on invoices. PNG or JPG, under 2 MB. Leave empty to keep the current logo.
           </p>
         </div>
+
+        <h2 className="pt-4 font-display text-lg font-semibold">VAT</h2>
+        <label className="flex items-start gap-3 text-sm">
+          <input
+            type="checkbox"
+            name="vatRegistered"
+            value="on"
+            checked={vatRegistered}
+            onChange={(e) => setVatRegistered(e.target.checked)}
+            disabled={pending}
+            className="mt-1"
+          />
+          <span>
+            <span className="font-medium text-foreground">VAT registered</span>
+            <span className="mt-0.5 block text-xs text-muted">
+              Enables VAT rates on quotes, invoices, orders, and expenses. Export
+              only — this app does not submit to HMRC.
+            </span>
+          </span>
+        </label>
+        {vatRegistered ? (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="vatNumber">VAT number</Label>
+              <Input
+                id="vatNumber"
+                name="vatNumber"
+                required
+                defaultValue={settings.vatNumber ?? ""}
+                disabled={pending}
+                placeholder="GB123456789"
+              />
+            </div>
+            <div>
+              <Label htmlFor="defaultVatRateChoice">Default VAT rate</Label>
+              <Select
+                id="defaultVatRateChoice"
+                value={rateChoice}
+                onChange={(e) =>
+                  setRateChoice(e.target.value as "0" | "20" | "custom")
+                }
+                disabled={pending}
+              >
+                <option value="20">20% (standard)</option>
+                <option value="0">0% (zero-rated)</option>
+                <option value="custom">Custom…</option>
+              </Select>
+              {rateChoice === "custom" ? (
+                <Input
+                  className="mt-2"
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={customRate}
+                  onChange={(e) => setCustomRate(e.target.value)}
+                  disabled={pending}
+                  placeholder="e.g. 5"
+                  aria-label="Custom VAT rate percent"
+                />
+              ) : null}
+              <input type="hidden" name="defaultVatRate" value={resolvedDefaultRate} />
+              <p className="mt-1 text-xs text-muted">
+                Applied to new document lines. You can override per line.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <>
+            <input type="hidden" name="vatNumber" value="" />
+            <input type="hidden" name="defaultVatRate" value="20" />
+          </>
+        )}
 
         <h2 className="pt-4 font-display text-lg font-semibold">Bank details</h2>
         <BankFields

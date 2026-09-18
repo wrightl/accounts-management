@@ -6,6 +6,8 @@ export type RecurringLineTemplate = {
   description: string;
   quantity: number;
   unitPricePence: number;
+  /** Percent 0–100; missing on older templates → treat as 0. */
+  vatRate: number;
 };
 
 /**

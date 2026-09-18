@@ -6,6 +6,8 @@ import { getRecurringInvoiceDetail } from "@/lib/invoices/recurring-queries";
 import { RecurringInvoiceForm } from "@/components/recurring-invoices/recurring-form";
 import { buttonClasses } from "@/components/ui/button";
 import { penceToPounds } from "@/lib/money";
+import { getOrCreateCompanySettings } from "@/lib/settings/queries";
+import { defaultLineVatRate } from "@/lib/vat";
 
 export default async function EditRecurringInvoicePage({
   params,
@@ -18,7 +20,10 @@ export default async function EditRecurringInvoicePage({
   const detail = await getRecurringInvoiceDetail(companyId, id);
   if (!detail) notFound();
 
-  const clients = await listClients(companyId);
+  const [clients, company] = await Promise.all([
+    listClients(companyId),
+    getOrCreateCompanySettings(companyId),
+  ]);
   const { template } = detail;
 
   return (
@@ -51,7 +56,10 @@ export default async function EditRecurringInvoicePage({
           description: l.description,
           quantity: String(l.quantity),
           unitPricePounds: String(penceToPounds(l.unitPricePence)),
+          vatRate: l.vatRate ?? 0,
         }))}
+        vatRegistered={company.vatRegistered}
+        defaultVatRate={defaultLineVatRate(company)}
       />
     </div>
   );

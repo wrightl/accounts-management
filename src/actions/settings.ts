@@ -12,70 +12,91 @@ import { storeCompanyLogo } from "@/lib/company-logo";
 import { resolveBankFieldsFromForm } from "@/lib/bank/resolve-bank-fields";
 import type { ActionResult } from "@/actions/result";
 
-const settingsSchema = z.object({
-  name: z.string().trim().min(1).max(200),
-  legalName: z.string().trim().min(1).max(200),
-  companyNumber: z
-    .string()
-    .trim()
-    .optional()
-    .or(z.literal(""))
-    .transform((v) => (v === "" ? null : v ?? null)),
-  utr: z
-    .string()
-    .trim()
-    .optional()
-    .or(z.literal(""))
-    .transform((v) => (v === "" ? null : v ?? null)),
-  addressLines: z
-    .string()
-    .trim()
-    .optional()
-    .or(z.literal(""))
-    .transform((v) => (v === "" ? null : v ?? null)),
-  email: z
-    .union([z.literal(""), z.string().trim().email("Enter a valid email address")])
-    .transform((v) => (v === "" ? null : v)),
-  bankAccountName: z
-    .string()
-    .trim()
-    .optional()
-    .or(z.literal(""))
-    .transform((v) => (v === "" ? null : v ?? null)),
-  sortCode: z
-    .string()
-    .trim()
-    .optional()
-    .or(z.literal(""))
-    .transform((v) => (v === "" ? null : v ?? null)),
-  accountNumber: z
-    .string()
-    .trim()
-    .optional()
-    .or(z.literal(""))
-    .transform((v) => (v === "" ? null : v ?? null)),
-  financialYearStartMonth: z.coerce.number().int().min(1).max(12),
-  invoiceNumberPrefix: z
-    .string()
-    .trim()
-    .min(1)
-    .max(10)
-    .regex(/^[A-Za-z0-9]+$/, "Prefix must be alphanumeric"),
-  quoteNumberPrefix: z
-    .string()
-    .trim()
-    .min(1)
-    .max(10)
-    .regex(/^[A-Za-z0-9]+$/, "Prefix must be alphanumeric"),
-  orderNumberPrefix: z
-    .string()
-    .trim()
-    .min(1)
-    .max(10)
-    .regex(/^[A-Za-z0-9]+$/, "Prefix must be alphanumeric"),
-  invoicePaymentTermsDays: z.coerce.number().int().min(1).max(365),
-  defaultMileageRatePence: z.coerce.number().int().min(1).max(1000),
-});
+const settingsSchema = z
+  .object({
+    name: z.string().trim().min(1).max(200),
+    legalName: z.string().trim().min(1).max(200),
+    companyNumber: z
+      .string()
+      .trim()
+      .optional()
+      .or(z.literal(""))
+      .transform((v) => (v === "" ? null : v ?? null)),
+    utr: z
+      .string()
+      .trim()
+      .optional()
+      .or(z.literal(""))
+      .transform((v) => (v === "" ? null : v ?? null)),
+    vatRegistered: z
+      .union([z.literal("on"), z.literal("true"), z.literal("1"), z.literal("")])
+      .optional()
+      .transform((v) => v === "on" || v === "true" || v === "1"),
+    vatNumber: z
+      .string()
+      .trim()
+      .optional()
+      .or(z.literal(""))
+      .transform((v) => (v === "" ? null : v ?? null)),
+    defaultVatRate: z.coerce.number().int().min(0).max(100),
+    addressLines: z
+      .string()
+      .trim()
+      .optional()
+      .or(z.literal(""))
+      .transform((v) => (v === "" ? null : v ?? null)),
+    email: z
+      .union([z.literal(""), z.string().trim().email("Enter a valid email address")])
+      .transform((v) => (v === "" ? null : v)),
+    bankAccountName: z
+      .string()
+      .trim()
+      .optional()
+      .or(z.literal(""))
+      .transform((v) => (v === "" ? null : v ?? null)),
+    sortCode: z
+      .string()
+      .trim()
+      .optional()
+      .or(z.literal(""))
+      .transform((v) => (v === "" ? null : v ?? null)),
+    accountNumber: z
+      .string()
+      .trim()
+      .optional()
+      .or(z.literal(""))
+      .transform((v) => (v === "" ? null : v ?? null)),
+    financialYearStartMonth: z.coerce.number().int().min(1).max(12),
+    invoiceNumberPrefix: z
+      .string()
+      .trim()
+      .min(1)
+      .max(10)
+      .regex(/^[A-Za-z0-9]+$/, "Prefix must be alphanumeric"),
+    quoteNumberPrefix: z
+      .string()
+      .trim()
+      .min(1)
+      .max(10)
+      .regex(/^[A-Za-z0-9]+$/, "Prefix must be alphanumeric"),
+    orderNumberPrefix: z
+      .string()
+      .trim()
+      .min(1)
+      .max(10)
+      .regex(/^[A-Za-z0-9]+$/, "Prefix must be alphanumeric"),
+    invoicePaymentTermsDays: z.coerce.number().int().min(1).max(365),
+    defaultMileageRatePence: z.coerce.number().int().min(1).max(1000),
+  })
+  .superRefine((data, ctx) => {
+    if (data.vatRegistered && !data.vatNumber) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Enter your VAT number when VAT registered",
+        path: ["vatNumber"],
+      });
+    }
+  });
 
 export async function updateCompany(formData: FormData): Promise<ActionResult> {
   const bank = resolveBankFieldsFromForm({
@@ -90,6 +111,9 @@ export async function updateCompany(formData: FormData): Promise<ActionResult> {
     legalName: formData.get("legalName"),
     companyNumber: formData.get("companyNumber") ?? "",
     utr: formData.get("utr") ?? "",
+    vatRegistered: formData.get("vatRegistered") ?? "",
+    vatNumber: formData.get("vatNumber") ?? "",
+    defaultVatRate: formData.get("defaultVatRate") ?? "20",
     addressLines: formData.get("addressLines") ?? "",
     email: formData.get("email") ?? "",
     bankAccountName: formData.get("bankAccountName") ?? "",
@@ -113,6 +137,7 @@ export async function updateCompany(formData: FormData): Promise<ActionResult> {
       const current = await getOrCreateCompanySettings(companyId);
       const patch = {
         ...rest,
+        vatNumber: rest.vatRegistered ? rest.vatNumber : null,
         bankProvider: bank.value.bankProvider,
         bankName: bank.value.bankName,
         companyNumber:

@@ -15,6 +15,20 @@ import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { formatGBP, lineNetPence } from "@/lib/money";
 import { clientDisplayName } from "@/lib/clients/display";
+import { publicQuoteUrl } from "@/lib/quotes/public-token";
+
+function formatTs(d: Date | string | null | undefined): string | null {
+  if (!d) return null;
+  const date = typeof d === "string" ? new Date(d) : d;
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 export default async function QuoteDetailPage({
   params,
@@ -33,12 +47,21 @@ export default async function QuoteDetailPage({
   ]);
   if (!detail) notFound();
 
+  const publicUrl = detail.quote.publicToken
+    ? publicQuoteUrl(detail.quote.publicToken)
+    : null;
   const defaultMessage = defaultQuoteEmailMessage({
     number: detail.quote.number,
     version: detail.quote.version,
     grossFormatted: detail.quote.grossFormatted,
     companyName: company.name,
+    publicUrl,
   });
+
+  const sentLabel = formatTs(detail.quote.sentAt);
+  const viewedLabel = formatTs(detail.quote.viewedAt);
+  const acceptedLabel = formatTs(detail.quote.acceptedAt);
+  const declinedLabel = formatTs(detail.quote.declinedAt);
 
   return (
     <div>
@@ -66,6 +89,24 @@ export default async function QuoteDetailPage({
           <p className="mt-1 text-muted">
             {quoteStatusLabel(detail.quote.status as QuoteStatus)} · {clientDisplayName(detail.client)}
           </p>
+          <p className="mt-1 text-xs text-muted">
+            {[
+              sentLabel ? `Sent ${sentLabel}` : null,
+              viewedLabel ? `Viewed ${viewedLabel}` : null,
+              acceptedLabel ? `Accepted ${acceptedLabel}` : null,
+              declinedLabel ? `Declined ${declinedLabel}` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ") || "Not sent yet"}
+          </p>
+          {publicUrl ? (
+            <p className="mt-1 text-xs text-muted">
+              Client link:{" "}
+              <a href={publicUrl} className="underline" target="_blank" rel="noreferrer">
+                {publicUrl}
+              </a>
+            </p>
+          ) : null}
           {canWrite ? (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <QuoteStatusActions

@@ -46,6 +46,8 @@ async function renderFromSnapshot(
       issueDate: snapshot.issueDate,
       validUntil: snapshot.validUntil,
       notes: snapshot.notes,
+      netPence: snapshot.netPence,
+      vatPence: snapshot.vatPence,
       grossPence: snapshot.grossPence,
     },
     client: {
@@ -110,6 +112,8 @@ export async function loadOrRenderQuotePdf(
       issueDate: detail.quote.issueDate,
       validUntil: detail.quote.validUntil,
       notes: detail.quote.notes,
+      netPence: detail.quote.netPence,
+      vatPence: detail.quote.vatPence,
       grossPence: detail.quote.grossPence,
     },
     client: {

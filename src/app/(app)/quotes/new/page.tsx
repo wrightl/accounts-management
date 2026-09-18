@@ -3,11 +3,16 @@ import { guardTenantPage } from "@/lib/auth";
 import { listClients } from "@/lib/clients/queries";
 import { QuoteForm } from "@/components/quotes/quote-form";
 import { buttonClasses } from "@/components/ui/button";
+import { getOrCreateCompanySettings } from "@/lib/settings/queries";
+import { defaultLineVatRate } from "@/lib/vat";
 
 export default async function NewQuotePage() {
   const { companyId } = await guardTenantPage("accounts:write");
 
-  const clients = await listClients(companyId);
+  const [clients, company] = await Promise.all([
+    listClients(companyId),
+    getOrCreateCompanySettings(companyId),
+  ]);
 
   return (
     <div>
@@ -27,7 +32,12 @@ export default async function NewQuotePage() {
         </p>
       ) : (
         <div className="max-w-2xl">
-        <QuoteForm mode="create" clients={clients} />
+          <QuoteForm
+            mode="create"
+            clients={clients}
+            vatRegistered={company.vatRegistered}
+            defaultVatRate={defaultLineVatRate(company)}
+          />
         </div>
       )}
     </div>

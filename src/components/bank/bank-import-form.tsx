@@ -62,10 +62,17 @@ export function BankImportForm({
   const [loadingContext, setLoadingContext] = useState(true);
   const [provider, setProvider] = useState<BankProviderId | null>(null);
   const [bankLabelText, setBankLabelText] = useState("your bank");
+  const [importHelp, setImportHelp] = useState<string | null>(null);
+  const [expectedColumns, setExpectedColumns] = useState<string[]>([]);
   const [savedMapping, setSavedMapping] = useState<GenericCsvMapping | null>(null);
   const [headers, setHeaders] = useState<string[]>([]);
   const [sampleRows, setSampleRows] = useState<string[][]>([]);
   const [mapping, setMapping] = useState<GenericCsvMapping | null>(null);
+  const [forceMapper, setForceMapper] = useState(false);
+  const [matchedColumns, setMatchedColumns] = useState<
+    { role: string; header: string }[]
+  >([]);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [fileKey, setFileKey] = useState(0);
 
   useEffect(() => {
@@ -80,6 +87,8 @@ export function BankImportForm({
       }
       setProvider(ctx.provider);
       setBankLabelText(ctx.bankLabel);
+      setImportHelp(ctx.importHelp);
+      setExpectedColumns(ctx.expectedColumns);
       if (ctx.savedMapping && isGenericCsvMapping(ctx.savedMapping)) {
         setSavedMapping(ctx.savedMapping);
       }
@@ -90,7 +99,7 @@ export function BankImportForm({
   }, []);
 
   const isOther = provider === "other";
-  const needsMapping = isOther;
+  const needsMapping = isOther || forceMapper;
 
   const headerOptions = useMemo(
     () => [
@@ -100,14 +109,7 @@ export function BankImportForm({
     [headers],
   );
 
-  const onFileChange = async (file: File | null) => {
-    setError(null);
-    setMessage(null);
-    setHeaders([]);
-    setSampleRows([]);
-    setMapping(null);
-    if (!file || !needsMapping) return;
-
+  const openMapperForFile = async (file: File) => {
     const text = await file.text();
     const lines = text
       .replace(/^\uFEFF/, "")
@@ -136,6 +138,21 @@ export function BankImportForm({
       setMapping(savedMapping);
     } else {
       setMapping(guessed);
+    }
+    setForceMapper(true);
+  };
+
+  const onFileChange = async (file: File | null) => {
+    setError(null);
+    setMessage(null);
+    setHeaders([]);
+    setSampleRows([]);
+    setMapping(null);
+    setMatchedColumns([]);
+    setPendingFile(file);
+    if (!file) return;
+    if (needsMapping || isOther) {
+      await openMapperForFile(file);
     }
   };
 
@@ -173,33 +190,67 @@ export function BankImportForm({
             return;
           }
           formData.set("csvMapping", JSON.stringify(mapping));
+          formData.set("forceMapper", "1");
         }
         startTransition(async () => {
           const result = await importBankCsv(formData);
-          if (!result.ok) setError(result.error);
-          else {
-            const nonGbp =
-              result.skippedNonGbp && result.skippedNonGbp > 0
-                ? ` ${result.skippedNonGbp} non-GBP row${result.skippedNonGbp === 1 ? "" : "s"} skipped.`
-                : "";
-            setMessage(
-              `Imported ${result.inserted ?? 0} new rows (${result.skipped ?? 0} duplicates skipped).${nonGbp}`,
-            );
-            router.refresh();
-            onSuccess?.();
-            if (result.suggestions?.length) {
-              onSuggestions?.(result.suggestions);
+          if (!result.ok) {
+            if (result.needsMapping && pendingFile) {
+              setError(result.error);
+              await openMapperForFile(pendingFile);
+              return;
             }
+            setError(result.error);
+            return;
+          }
+          const nonGbp =
+            result.skippedNonGbp && result.skippedNonGbp > 0
+              ? ` ${result.skippedNonGbp} non-GBP row${result.skippedNonGbp === 1 ? "" : "s"} skipped.`
+              : "";
+          setMessage(
+            `Imported ${result.inserted ?? 0} new rows (${result.skipped ?? 0} duplicates skipped).${nonGbp}`,
+          );
+          if (result.matchedColumns?.length) {
+            setMatchedColumns(result.matchedColumns);
+          }
+          setForceMapper(false);
+          router.refresh();
+          onSuccess?.();
+          if (result.suggestions?.length) {
+            onSuggestions?.(result.suggestions);
           }
         });
       }}
     >
       <p className="text-sm text-muted">
         Importing as <span className="font-medium text-foreground">{bankLabelText}</span>
-        {isOther
+        {isOther || forceMapper
           ? " — map your CSV columns below."
           : ". Change the bank in Settings if this is wrong."}
       </p>
+
+      {importHelp && !forceMapper ? (
+        <p className="text-xs text-muted">{importHelp}</p>
+      ) : null}
+
+      {!isOther && !forceMapper && expectedColumns.length > 0 ? (
+        <p className="text-xs text-muted">
+          Expected columns: {expectedColumns.join(", ")}.
+        </p>
+      ) : null}
+
+      {matchedColumns.length > 0 && !forceMapper ? (
+        <div className="rounded-xl border border-border bg-wash/40 p-3 text-xs">
+          <p className="mb-1 font-medium text-foreground">Columns matched</p>
+          <ul className="space-y-0.5 text-muted">
+            {matchedColumns.map((c) => (
+              <li key={`${c.role}-${c.header}`}>
+                {c.role}: <span className="text-foreground">{c.header}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <div>
         <Label htmlFor="csv">Statement file</Label>
@@ -280,6 +331,8 @@ export function BankImportForm({
               setHeaders([]);
               setSampleRows([]);
               setMapping(null);
+              setForceMapper(false);
+              setPendingFile(null);
             }}
           >
             Choose a different file

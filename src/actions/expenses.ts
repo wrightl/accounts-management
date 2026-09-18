@@ -31,6 +31,11 @@ import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { isReceiptOcrProvider } from "@/lib/expenses/receipt-parse";
 import { listFounders } from "@/lib/expenses/queries";
 import { getReceiptOcrSettings } from "@/lib/platform-settings";
+import {
+  parseVatRate,
+  resolveLineVatRate,
+  vatFromInclusiveGross,
+} from "@/lib/vat";
 import type { ActionResult } from "@/actions/result";
 
 export type ExpenseImportPreviewResult =
@@ -87,6 +92,7 @@ const expenseSchema = z.object({
     .optional()
     .or(z.literal(""))
     .transform((v) => (v === "" || !v ? null : Number(v))),
+  vatRate: z.coerce.number().int().min(0).max(100).optional(),
 });
 
 function resolveExpenseAmount(data: {
@@ -142,6 +148,7 @@ function parseExpense(formData: FormData) {
     useMileage: formData.get("useMileage") ?? "",
     mileageMiles: formData.get("mileageMiles") ?? "",
     mileageRatePence: formData.get("mileageRatePence") ?? "",
+    vatRate: formData.get("vatRate") ?? "0",
   });
 }
 
@@ -181,6 +188,7 @@ export async function createExpense(formData: FormData): Promise<ActionResult> {
   return mutate(
     "accounts:write",
     async ({ companyId, localUserId }) => {
+      const company = await getOrCreateCompanySettings(companyId);
       const paidByDefault =
         parsed.data.status === "reimbursable"
           ? (parsed.data.paidByUserId ?? localUserId)
@@ -191,6 +199,12 @@ export async function createExpense(formData: FormData): Promise<ActionResult> {
       });
       if (!normalized.ok) return { ok: false, error: normalized.error };
 
+      // Mileage is always 0% VAT; otherwise use posted rate when registered.
+      const vatRate = parsed.data.useMileage
+        ? 0
+        : resolveLineVatRate(company, parseVatRate(parsed.data.vatRate));
+      const vatPence = vatFromInclusiveGross(amountPence, vatRate);
+
       const db = getDb();
       const [row] = await db
         .insert(expenses)
@@ -200,7 +214,8 @@ export async function createExpense(formData: FormData): Promise<ActionResult> {
           category: parsed.data.category || null,
           spentAt: parsed.data.spentAt || null,
           amountPence,
-          vatPence: 0,
+          vatRate,
+          vatPence,
           status: normalized.status,
           billable: parsed.data.billable,
           billableClientId: parsed.data.billable ? parsed.data.billableClientId : null,
@@ -280,6 +295,12 @@ export async function updateExpense(
         return { ok: false, error: normalized.error };
       }
 
+      const company = await getOrCreateCompanySettings(companyId);
+      const vatRate = parsed.data.useMileage
+        ? 0
+        : resolveLineVatRate(company, parseVatRate(parsed.data.vatRate));
+      const vatPence = vatFromInclusiveGross(amountPence, vatRate);
+
       await db
         .update(expenses)
         .set({
@@ -287,6 +308,8 @@ export async function updateExpense(
           category: parsed.data.category || null,
           spentAt: parsed.data.spentAt || null,
           amountPence,
+          vatRate,
+          vatPence,
           status,
           billable: parsed.data.billable,
           billableClientId: parsed.data.billable ? parsed.data.billableClientId : null,
@@ -368,6 +391,16 @@ export async function approveExpense(
       });
       if (!normalized.ok) return { ok: false, error: normalized.error };
 
+      const company = await getOrCreateCompanySettings(companyId);
+      const vatRate = resolveLineVatRate(
+        company,
+        parseVatRate(parsed.data.vatRate),
+      );
+      const vatPence = vatFromInclusiveGross(
+        amountResult.amountPence,
+        vatRate,
+      );
+
       await db
         .update(expenses)
         .set({
@@ -375,6 +408,8 @@ export async function approveExpense(
           category: parsed.data.category || null,
           spentAt: parsed.data.spentAt || null,
           amountPence: amountResult.amountPence,
+          vatRate,
+          vatPence,
           status: normalized.status,
           billable: parsed.data.billable,
           billableClientId: parsed.data.billable ? parsed.data.billableClientId : null,

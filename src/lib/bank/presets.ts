@@ -180,7 +180,10 @@ const PRESETS: Record<PresetBankProviderId, PresetConfig> = {
   starling: {
     provider: "starling",
     adapterName: "starling-csv",
-    fingerprint: [["date", "transaction date", "created"]],
+    fingerprint: [
+      ["date", "transaction date", "created"],
+      ["counter party", "counterparty"],
+    ],
     dateAliases: ["date", "transaction date", "created"],
     amount: {
       kind: "signed",
@@ -200,6 +203,7 @@ const PRESETS: Record<PresetBankProviderId, PresetConfig> = {
     fingerprint: [
       ["date", "date & time", "created"],
       ["amount"],
+      ["transaction id", "currency", "local currency"],
     ],
     dateAliases: ["date", "date & time", "created", "time"],
     amount: { kind: "signed", aliases: ["amount"] },
@@ -214,15 +218,12 @@ const PRESETS: Record<PresetBankProviderId, PresetConfig> = {
   revolut: {
     provider: "revolut",
     adapterName: "revolut-csv",
+    // Business export: require UTC completed date + payment currency so
+    // plain Date/Amount files do not collide with Starling/Monzo/Tide.
     fingerprint: [
-      [
-        "date completed (utc)",
-        "date completed",
-        "completed date",
-        "date started (utc)",
-        "date",
-      ],
+      ["date completed (utc)", "date completed", "completed date"],
       ["amount"],
+      ["payment currency", "orig currency"],
     ],
     dateAliases: [
       "date completed (utc)",
@@ -242,7 +243,11 @@ const PRESETS: Record<PresetBankProviderId, PresetConfig> = {
   wise: {
     provider: "wise",
     adapterName: "wise-csv",
-    fingerprint: [["date", "created on"], ["amount", "amount (total)", "total"]],
+    fingerprint: [
+      ["date", "created on"],
+      ["amount", "amount (total)", "total"],
+      ["transferwise id", "payee name", "payer name"],
+    ],
     dateAliases: ["date", "created on", "finished on"],
     amount: {
       kind: "signed",
@@ -257,7 +262,9 @@ const PRESETS: Record<PresetBankProviderId, PresetConfig> = {
   tide: {
     provider: "tide",
     adapterName: "tide-csv",
-    fingerprint: [["date", "transaction date"], ["amount"]],
+    // Tide exports are sparse; keep fingerprint loose but require Description
+    // so plain Date/Amount alone does not claim Tide over guided mapper.
+    fingerprint: [["date", "transaction date"], ["amount"], ["description"]],
     dateAliases: ["date", "transaction date"],
     amount: { kind: "signed", aliases: ["amount"] },
     counterpartyAliases: ["description", "counterparty", "merchant"],
@@ -334,4 +341,92 @@ const PRESETS: Record<PresetBankProviderId, PresetConfig> = {
 
 export function createPresetAdapter(provider: PresetBankProviderId): PresetCsvAdapter {
   return new PresetCsvAdapter(PRESETS[provider]);
+}
+
+/** Whether all fingerprint groups match at least one header alias. */
+export function matchesPresetFingerprint(
+  provider: PresetBankProviderId,
+  headers: string[],
+): boolean {
+  const config = PRESETS[provider];
+  const normalized = headers.map((h) =>
+    h.trim().toLowerCase().replace(/\s+/g, " "),
+  );
+  return config.fingerprint.every((names) => headerIndex(normalized, names) >= 0);
+}
+
+/**
+ * Score how specifically a preset matches headers (more matched groups +
+ * longer preferred aliases → higher). Used to break ties between presets.
+ */
+function fingerprintScore(
+  provider: PresetBankProviderId,
+  headers: string[],
+): number {
+  const config = PRESETS[provider];
+  let score = 0;
+  for (const names of config.fingerprint) {
+    const idx = headerIndex(headers, names);
+    if (idx < 0) return -1;
+    // Prefer longer / more specific alias hits within the group.
+    const hit = names.find((n) => headers.includes(n)) ?? "";
+    score += 10 + hit.length;
+  }
+  return score;
+}
+
+/**
+ * Detect a unique preset bank from CSV headers.
+ * Returns null when zero or multiple presets match equally well.
+ */
+export function detectBankProvider(
+  headers: string[],
+): PresetBankProviderId | null {
+  const normalized = headers.map((h) => h.trim().toLowerCase().replace(/\s+/g, " "));
+  const matches: { provider: PresetBankProviderId; score: number }[] = [];
+  for (const provider of Object.keys(PRESETS) as PresetBankProviderId[]) {
+    const score = fingerprintScore(provider, normalized);
+    if (score > 0) matches.push({ provider, score });
+  }
+  if (matches.length === 0) return null;
+  matches.sort((a, b) => b.score - a.score);
+  if (matches.length > 1 && matches[0].score === matches[1].score) {
+    return null;
+  }
+  return matches[0].provider;
+}
+
+/** Columns the preset matched in this file (for read-only preview). */
+export function getMatchedColumnLabels(
+  provider: PresetBankProviderId,
+  rawHeaders: string[],
+): { role: string; header: string }[] {
+  const config = PRESETS[provider];
+  const headers = rawHeaders.map((h) =>
+    h.trim().toLowerCase().replace(/\s+/g, " "),
+  );
+  const out: { role: string; header: string }[] = [];
+  const push = (role: string, aliases: string[] | undefined) => {
+    if (!aliases?.length) return;
+    const idx = headerIndex(headers, aliases);
+    if (idx >= 0) out.push({ role, header: rawHeaders[idx] ?? headers[idx] });
+  };
+  push("Date", config.dateAliases);
+  if (config.amount.kind === "signed") {
+    push("Amount", config.amount.aliases);
+  } else if (config.amount.kind === "debit_credit") {
+    push("Money out", config.amount.outAliases);
+    push("Money in", config.amount.inAliases);
+  } else {
+    push("Amount", config.amount.signedAliases);
+    push("Money out", config.amount.outAliases);
+    push("Money in", config.amount.inAliases);
+  }
+  push("Counterparty", config.counterpartyAliases);
+  push("Reference", config.referenceAliases);
+  push("Description", config.descriptionAliases);
+  push("Category", config.categoryAliases);
+  push("Currency", config.currencyAliases);
+  push("Transaction ID", config.nativeIdAliases);
+  return out;
 }

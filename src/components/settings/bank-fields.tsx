@@ -5,9 +5,11 @@ import { Input, Label, Select } from "@/components/ui/form";
 import {
   BANK_PROVIDER_OPTIONS,
   isBankProviderId,
+  isPresetBankProviderId,
   parseProviderFromLegacyName,
   type BankProviderId,
 } from "@/lib/bank/providers";
+import { getPresetExpectedColumns } from "@/lib/bank/import-help";
 
 export function BankFields({
   bankProvider,
@@ -39,6 +41,10 @@ export function BankFields({
 
   const [provider, setProvider] = useState<BankProviderId | "">(initialProvider);
   const isOther = provider === "other";
+  const expectedColumns =
+    provider && isPresetBankProviderId(provider)
+      ? getPresetExpectedColumns(provider)
+      : [];
 
   const selectOptions = required
     ? BANK_PROVIDER_OPTIONS
@@ -66,6 +72,11 @@ export function BankFields({
         {optionalHint ? (
           <p className="mt-1 text-xs text-muted">{optionalHint}</p>
         ) : null}
+        {!isOther && expectedColumns.length > 0 ? (
+          <p className="mt-1 text-xs text-muted">
+            CSV import expects columns like: {expectedColumns.join(", ")}.
+          </p>
+        ) : null}
       </div>
 
       {isOther ? (
@@ -82,7 +93,8 @@ export function BankFields({
             placeholder="e.g. Metro Bank"
           />
           <p className="mt-1 text-xs text-muted">
-            Shown on invoices. CSV import will ask you to map columns.
+            Shown on invoices. Column mapping is saved on first successful CSV
+            import.
           </p>
         </div>
       ) : (

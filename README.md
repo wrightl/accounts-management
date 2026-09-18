@@ -12,10 +12,12 @@ company; accountants can be invited to many and switch between them. New users
 sign up with Google, then complete **onboarding** (limited company or sole
 trader) before they can open the books.
 
-> **Status:** Day-to-day accounting is in the app — including quote PDF/email,
-> orders with payment milestones, recurring invoices, inbound expense
-> email, and receipt OCR. Bank import is Starling CSV (no live feed). Books are
-> **GBP only**; VAT/MTD is not enabled. See [What’s next](#whats-next).
+> **Status:** Day-to-day accounting is in the app — including quote PDF/email
+> with client accept links, orders with payment milestones, recurring invoices,
+> inbound expense email, and receipt OCR. Bank import supports major UK banks
+> via CSV (no live feed). Books are **GBP only**. VAT rates and accountant
+> export are available when registered; there is no HMRC/MTD submit. See
+> [What’s next](#whats-next).
 
 ## Stack
 
@@ -37,8 +39,9 @@ trader) before they can open the books.
 
 - **Clients** — contact details, notes, quote/invoice history.
 - **Quotes** — numbered drafts, version history and rollback, branded PDF,
-  email send, accept/decline (with decline reasons), optional payment
-  schedule. Accepting a quote creates an **order**.
+  email send with a public accept/decline link, staff accept/decline (with
+  decline reasons), optional payment schedule. Accepting a quote creates an
+  **order**.
 - **Orders** — copied from a quote (line items + milestones). Raise invoices
   against milestones as work is billed.
 - **Invoices** — draft → sent → paid/void; overdue is computed from the due
@@ -62,8 +65,9 @@ trader) before they can open the books.
 
 **Banking & money out**
 
-- **Transactions** — import a Starling business CSV; de-dupe; suggest and
-  confirm matches to invoice payments or expenses.
+- **Transactions** — import a bank CSV (Starling, Monzo, Tide, Revolut
+  Business, Wise, high-street banks, or a guided mapper for other formats);
+  de-dupe; suggest and confirm matches to invoice payments or expenses.
 - **Spending** — category snapshot from imported bank rows.
 - **Reimbursements** — batch reimbursable expenses per founder; mark paid;
   export a run summary.
@@ -73,8 +77,9 @@ trader) before they can open the books.
 **Reporting & admin**
 
 - Dashboard KPIs, aged receivables, income vs expense.
-- **Reports** — accrual P&L, VAT summary (0% until registered), accountant
-  pack (zip of CSVs, invoice PDFs, receipts, bank, dividends).
+- **Reports** — accrual P&L (ex-VAT), VAT summary and CSV download when
+  registered, accountant pack (zip of CSVs, invoice PDFs, receipts, bank,
+  dividends, optional VAT PDF).
 - **Audit log** (admins), **inbound email** job queue, **settings** (company
   profile, bank details, numbering, logo, OCR), **users** (invite, role).
 - Command palette (`⌘K` / `Ctrl+K`) for navigation.
@@ -194,8 +199,9 @@ the scheduled Action is the drain/retry when no new mail arrives.
 - **Money** is integer pence (`src/lib/money.ts`). Books are **GBP**.
 - **Dates** use `Europe/London` (`src/lib/dates.ts`), not UTC, so overdue and
   financial-year windows do not flip a day early.
-- **VAT** fields exist on line items; the UI stays at 0% until the company is
-  VAT registered (MTD is out of scope).
+- **VAT** — when the company is VAT registered in Settings, document lines and
+  expenses use selectable rates (default 20%). Unregistered companies stay at
+  0%. Export is for your accountant; MTD submit is out of scope.
 - Every mutation is a Server Action or route handler that re-checks
   permissions (`requirePermission` in `src/lib/auth.ts`). The client is never
   trusted. Queries take `companyId` from the session tenant.
@@ -228,10 +234,10 @@ GitHub Actions (`.github/workflows/ci.yml`) runs lint, typecheck, Vitest,
 
 | Area                    | State                                                                 |
 | ----------------------- | --------------------------------------------------------------------- |
-| Recurring invoices      | UI + cron; monthly retainers; draft or auto-send; platform flag defaults off |
-| Live bank feed          | CSV import only (Starling adapter seam for a future API)              |
-| VAT / Making Tax Digital| Fields reserved; not registered, no HMRC submission                   |
+| Live bank feed          | CSV import for major UK banks; Open Banking / live feed later         |
+| VAT / Making Tax Digital| Rates + period summary/export when registered; no HMRC submission     |
 | Multi-currency books    | GBP only; foreign receipt currency is informational                   |
+| Subscriptions / pricing | Planned — see [`docs/plans/gaps-subscriptions-pricing.md`](./docs/plans/gaps-subscriptions-pricing.md) |
 
 The original phased plan (invoicing → expenses → reimbursements → bank →
 reports → quotes/cron) is in [`docs/plan.md`](./docs/plan.md). Treat unfinished
