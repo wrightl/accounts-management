@@ -5,7 +5,7 @@ Accounting software for **UK limited companies and sole traders**, built by
 spreadsheets and shared folders with one app for quotes, orders, invoicing,
 expenses, reimbursements, bank reconciliation, and reporting.
 
-Production: [accounts.dotanddashconsulting.com](https://accounts.dotanddashconsulting.com)
+Production: [accounts-manager.dotanddashconsulting.com](https://accounts-manager.dotanddashconsulting.com)
 
 Each organisation is a **tenant** (one legal entity). Founders belong to one
 company; accountants can be invited to many and switch between them. New users
@@ -21,17 +21,17 @@ trader) before they can open the books.
 
 ## Stack
 
-| Concern      | Choice                                                              |
-| ------------ | ------------------------------------------------------------------- |
-| Framework    | Next.js 16 (App Router, RSC, Server Actions), React 19, TypeScript  |
-| Styling      | Tailwind CSS v4, brand-themed design tokens                         |
-| Auth & roles | Clerk (identity + Google SSO); roles in Postgres, not Clerk metadata |
-| Database     | Neon Postgres + Drizzle ORM (PGlite for tests)                      |
-| File storage | Vercel Blob (private, streamed via authorised routes)               |
+| Concern      | Choice                                                                 |
+| ------------ | ---------------------------------------------------------------------- |
+| Framework    | Next.js 16 (App Router, RSC, Server Actions), React 19, TypeScript     |
+| Styling      | Tailwind CSS v4, brand-themed design tokens                            |
+| Auth & roles | Clerk (identity + Google SSO); roles in Postgres, not Clerk metadata   |
+| Database     | Neon Postgres + Drizzle ORM (PGlite for tests)                         |
+| File storage | Vercel Blob (private, streamed via authorised routes)                  |
 | Email        | Pluggable provider (Resend); `console` in dev (rejected in production) |
-| AI / OCR     | Local Tesseract, or Vercel AI Gateway (optional)                    |
-| Testing      | Vitest (unit + integration), Playwright (e2e)                       |
-| Hosting/CI   | Vercel (merge to `main` + PR previews) + GitHub Actions             |
+| AI / OCR     | Local Tesseract, or Vercel AI Gateway (optional)                       |
+| Testing      | Vitest (unit + integration), Playwright (e2e)                          |
+| Hosting/CI   | Vercel (merge to `main` + PR previews) + GitHub Actions                |
 
 ## What it does
 
@@ -90,12 +90,12 @@ Clerk is identity only. Role and company come from Postgres
 (`users` + `company_memberships`). First sign-in creates a local user as
 **pending** unless the email is in the bootstrap lists.
 
-| Role          | Access                                                                 |
-| ------------- | ---------------------------------------------------------------------- |
-| **admin**     | Full access, including users and settings.                             |
-| **user**      | Co-founder: day-to-day accounting, reports, and export.                |
-| **accountant**| Read-only + export. May belong to **multiple** companies.              |
-| **pending**   | Signed in, no books access. Assigned from Dashboard → Users.           |
+| Role           | Access                                                       |
+| -------------- | ------------------------------------------------------------ |
+| **admin**      | Full access, including users and settings.                   |
+| **user**       | Co-founder: day-to-day accounting, reports, and export.      |
+| **accountant** | Read-only + export. May belong to **multiple** companies.    |
+| **pending**    | Signed in, no books access. Assigned from Dashboard → Users. |
 
 Self-serve onboarding creates a company and makes that user **admin**. Invited
 users skip onboarding and attach to the inviting company. Platform operators
@@ -126,24 +126,24 @@ first login. Do not run seed on every production deploy.
 
 ## Scripts
 
-| Command                 | Description                                                          |
-| ----------------------- | -------------------------------------------------------------------- |
-| `npm run dev`           | Next.js dev server on port **3001**                                  |
-| `npm run build`         | Migrate (if a database URL is set) then production build             |
-| `npm run start`         | Next.js production server                                            |
-| `npm run lint`          | ESLint                                                               |
-| `npm run typecheck`     | TypeScript, no emit                                                  |
-| `npm test`              | Vitest unit + integration (PGlite)                                   |
-| `npm run test:watch`    | Vitest watch mode                                                    |
-| `npm run test:e2e`      | Playwright e2e (own server on port 3100)                             |
-| `npm run db:generate`   | Generate a Drizzle migration from the schema                         |
-| `npm run db:migrate`    | Apply migrations over a direct Postgres connection (`pg`)            |
-| `npm run db:seed`       | Seed platform admins (`PLATFORM_ADMIN_EMAILS` + Clerk invites). Refuses production/remote URLs unless `ALLOW_PROD_SEED=1`. |
-| `npm run auth:agent`    | Mint a one-time Clerk sign-in URL for a local tenant founder (Cursor agent browser). Development keys only. |
-| `npm run db:push`       | **Unsafe** while Drizzle meta snapshots lag behind hand migrations (after `0010`). Prefer `db:generate` + `db:migrate`. Do not point at Neon production. |
-| `npm run db:studio`     | Drizzle Studio                                                       |
-| `npm run tunnel`        | ngrok to port 3001 (inbound webhooks in local dev)                   |
-| `npm run promo:all`     | Seed demo data, record UI, assemble the promo video                  |
+| Command               | Description                                                                                                                                              |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`         | Next.js dev server on port **3001**                                                                                                                      |
+| `npm run build`       | Migrate (if a database URL is set) then production build                                                                                                 |
+| `npm run start`       | Next.js production server                                                                                                                                |
+| `npm run lint`        | ESLint                                                                                                                                                   |
+| `npm run typecheck`   | TypeScript, no emit                                                                                                                                      |
+| `npm test`            | Vitest unit + integration (PGlite)                                                                                                                       |
+| `npm run test:watch`  | Vitest watch mode                                                                                                                                        |
+| `npm run test:e2e`    | Playwright e2e (own server on port 3100)                                                                                                                 |
+| `npm run db:generate` | Generate a Drizzle migration from the schema                                                                                                             |
+| `npm run db:migrate`  | Apply migrations over a direct Postgres connection (`pg`)                                                                                                |
+| `npm run db:seed`     | Seed platform admins (`PLATFORM_ADMIN_EMAILS` + Clerk invites). Refuses production/remote URLs unless `ALLOW_PROD_SEED=1`.                               |
+| `npm run auth:agent`  | Mint a one-time Clerk sign-in URL for a local tenant founder (Cursor agent browser). Development keys only.                                              |
+| `npm run db:push`     | **Unsafe** while Drizzle meta snapshots lag behind hand migrations (after `0010`). Prefer `db:generate` + `db:migrate`. Do not point at Neon production. |
+| `npm run db:studio`   | Drizzle Studio                                                                                                                                           |
+| `npm run tunnel`      | ngrok to port 3001 (inbound webhooks in local dev)                                                                                                       |
+| `npm run promo:all`   | Seed demo data, record UI, assemble the promo video                                                                                                      |
 
 Promo video notes: [`docs/promo-video.md`](./docs/promo-video.md).
 
@@ -175,18 +175,18 @@ Vercel Hobby only allows cron jobs **once per day**, so scheduling is split:
 
 **Vercel Cron** (`vercel.json`) — daily at 07:00 UTC, `Authorization: Bearer $CRON_SECRET`:
 
-| Path                | Schedule    | Purpose                                                      |
-| ------------------- | ----------- | ------------------------------------------------------------ |
-| `/api/cron/daily`   | 07:00 daily | Recurring invoice generation + overdue reminders   |
+| Path              | Schedule    | Purpose                                          |
+| ----------------- | ----------- | ------------------------------------------------ |
+| `/api/cron/daily` | 07:00 daily | Recurring invoice generation + overdue reminders |
 
 Manual triggers (same auth) still available: `/api/cron/reminders`,
 `/api/cron/recurring`, `/api/cron/inbound-email`.
 
 **GitHub Actions** (`.github/workflows/cron-inbound-email.yml`) — every 15 minutes:
 
-| Path                         | Purpose                                 |
-| ---------------------------- | --------------------------------------- |
-| `/api/cron/inbound-email`    | Retry stuck/failed inbound expense jobs |
+| Path                      | Purpose                                 |
+| ------------------------- | --------------------------------------- |
+| `/api/cron/inbound-email` | Retry stuck/failed inbound expense jobs |
 
 Requires GitHub Actions secrets `CRON_SECRET` and `APP_URL` (production base URL,
 no trailing slash).
@@ -233,13 +233,13 @@ GitHub Actions (`.github/workflows/ci.yml`) runs lint, typecheck, Vitest,
 
 ## What’s next
 
-| Area                    | State                                                                 |
-| ----------------------- | --------------------------------------------------------------------- |
-| Live bank feed          | CSV import for major UK banks; Open Banking / live feed later         |
-| VAT / Making Tax Digital| Rates + period summary/export when registered; no HMRC submission     |
-| Multi-currency books    | GBP only; foreign receipt currency is informational                   |
-| Public `/pricing`       | Live — Trial / Essentials (£19) / Premium (£29); Stripe conversion still planned                      |
-| Subscriptions / billing | Planned — see [`docs/plans/gaps-subscriptions-pricing.md`](./docs/plans/gaps-subscriptions-pricing.md) |
+| Area                     | State                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------ |
+| Live bank feed           | CSV import for major UK banks; Open Banking / live feed later                                          |
+| VAT / Making Tax Digital | Rates + period summary/export when registered; no HMRC submission                                      |
+| Multi-currency books     | GBP only; foreign receipt currency is informational                                                    |
+| Public `/pricing`        | Live — Trial / Essentials (£19) / Premium (£29); Stripe conversion still planned                       |
+| Subscriptions / billing  | Planned — see [`docs/plans/gaps-subscriptions-pricing.md`](./docs/plans/gaps-subscriptions-pricing.md) |
 
 The original phased plan (invoicing → expenses → reimbursements → bank →
 reports → quotes/cron) is in [`docs/plan.md`](./docs/plan.md). Treat unfinished
