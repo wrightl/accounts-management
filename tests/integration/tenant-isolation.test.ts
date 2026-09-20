@@ -3,20 +3,37 @@ import { eq } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
 import {
+  bankAccounts,
+  bankTransactions,
   clients,
   companies,
   companyMemberships,
   dividendDeclarations,
   expenseReceipts,
   expenses,
+  inboundEmailJobs,
   invoices,
+  payments,
+  reconciliationMatches,
   users,
 } from "@/db/schema";
 import { getInvoiceDetail, listInvoices } from "@/lib/invoices/queries";
+import { listReimbursableExpenses } from "@/lib/expenses/queries";
+import {
+  confirmMatch,
+  dismissMatch,
+  ReconciliationError,
+  suggestMatches,
+} from "@/lib/bank/queries";
 import { seedCompany } from "@/lib/test/seed-company";
 import { createClient } from "@/actions/clients";
 import { deleteReceipt } from "@/actions/expenses";
 import { deleteDividendDeclaration } from "@/actions/dividends";
+import { createReimbursementRun } from "@/actions/reimbursements";
+import {
+  retryAllInboundEmailIssues,
+  retryInboundEmailJob,
+} from "@/actions/inbound-email";
 import { GET as getReceipt } from "@/app/api/receipts/[id]/route";
 import { getStorage } from "@/lib/storage";
 
@@ -173,6 +190,218 @@ describe("tenant isolation", () => {
       "B-2026-0001",
     ]);
     expect(await getInvoiceDetail(companyB.id, (await listInvoices(companyA.id))[0]!.id)).toBeNull();
+  });
+
+  it("scopes listReimbursableExpenses to company", async () => {
+    const companyA = await seedCompany(db, { name: "Company A" });
+    const companyB = await seedCompany(db, { name: "Company B" });
+
+    const [userA] = await db
+      .insert(users)
+      .values({
+        companyId: companyA.id,
+        clerkUserId: "user_clerk_a",
+        email: "admin-a@example.com",
+        role: "admin",
+      })
+      .returning();
+    const [userB] = await db
+      .insert(users)
+      .values({
+        companyId: companyB.id,
+        clerkUserId: "user_clerk_b",
+        email: "admin-b@example.com",
+        role: "admin",
+      })
+      .returning();
+
+    const [expA] = await db
+      .insert(expenses)
+      .values({
+        companyId: companyA.id,
+        description: "A reimbursable",
+        category: "Travel",
+        spentAt: "2026-03-01",
+        amountPence: 1000,
+        status: "reimbursable",
+        paidByUserId: userA.id,
+      })
+      .returning();
+    const [expB] = await db
+      .insert(expenses)
+      .values({
+        companyId: companyB.id,
+        description: "B reimbursable",
+        category: "Travel",
+        spentAt: "2026-03-01",
+        amountPence: 2000,
+        status: "reimbursable",
+        paidByUserId: userB.id,
+      })
+      .returning();
+
+    const listed = await listReimbursableExpenses(companyA.id);
+    expect(listed.map((e) => e.id)).toEqual([expA.id]);
+    expect(listed.map((e) => e.id)).not.toContain(expB.id);
+  });
+
+  it("refuses createReimbursementRun with another company's expense ids", async () => {
+    const companyA = await seedCompany(db, { name: "Company A" });
+    const companyB = await seedCompany(db, { name: "Company B" });
+
+    const [userA] = await db
+      .insert(users)
+      .values({
+        companyId: companyA.id,
+        clerkUserId: "user_clerk_a",
+        email: "admin-a@example.com",
+        role: "admin",
+      })
+      .returning();
+    const [userB] = await db
+      .insert(users)
+      .values({
+        companyId: companyB.id,
+        clerkUserId: "user_clerk_b",
+        email: "admin-b@example.com",
+        role: "admin",
+      })
+      .returning();
+
+    const [expB] = await db
+      .insert(expenses)
+      .values({
+        companyId: companyB.id,
+        description: "B reimbursable",
+        category: "Travel",
+        spentAt: "2026-03-01",
+        amountPence: 2000,
+        status: "reimbursable",
+        paidByUserId: userB.id,
+      })
+      .returning();
+
+    const form = new FormData();
+    form.set("payeeUserId", userA.id);
+    form.set("expenseIdsJson", JSON.stringify([expB.id]));
+    form.set("reference", "Cross tenant");
+
+    const result = await createReimbursementRun(form);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/not reimbursable/i);
+  });
+
+  it("refuses confirmMatch and dismissMatch for another company's match", async () => {
+    const companyA = await seedCompany(db, { name: "Company A" });
+    const companyB = await seedCompany(db, { name: "Company B" });
+
+    const [accountB] = await db
+      .insert(bankAccounts)
+      .values({ companyId: companyB.id, name: "B Bank", provider: "starling" })
+      .returning();
+    const [clientB] = await db
+      .insert(clients)
+      .values({ companyId: companyB.id, name: "Client B", companyName: "Acme B" })
+      .returning();
+    const [invoiceB] = await db
+      .insert(invoices)
+      .values({
+        companyId: companyB.id,
+        number: "B-2026-0001",
+        clientId: clientB.id,
+        status: "sent",
+        issueDate: "2026-04-01",
+        dueDate: "2026-04-15",
+        grossPence: 25_000,
+        netPence: 25_000,
+      })
+      .returning();
+    await db.insert(bankTransactions).values({
+      bankAccountId: accountB.id,
+      externalId: "tx-b-1",
+      bookedAt: "2026-04-02",
+      amountPence: 25_000,
+      counterparty: "Acme B",
+      reference: "B20260001 payment",
+    });
+
+    const suggestions = await suggestMatches(companyB.id);
+    expect(suggestions).toHaveLength(1);
+    const matchId = suggestions[0].matchId;
+
+    await expect(confirmMatch(companyA.id, matchId)).rejects.toBeInstanceOf(
+      ReconciliationError,
+    );
+
+    const paymentsB = await db
+      .select()
+      .from(payments)
+      .where(eq(payments.invoiceId, invoiceB.id));
+    expect(paymentsB).toHaveLength(0);
+
+    const [invoiceStill] = await db
+      .select()
+      .from(invoices)
+      .where(eq(invoices.id, invoiceB.id));
+    expect(invoiceStill.status).toBe("sent");
+
+    await expect(dismissMatch(companyA.id, matchId)).rejects.toBeInstanceOf(
+      ReconciliationError,
+    );
+
+    const [matchStill] = await db
+      .select()
+      .from(reconciliationMatches)
+      .where(eq(reconciliationMatches.id, matchId));
+    expect(matchStill).toBeTruthy();
+    expect(matchStill.confirmed).toBe(false);
+  });
+
+  it("refuses tenant inbound-email retry against another company's job", async () => {
+    const companyA = await seedCompany(db, { name: "Company A" });
+    const companyB = await seedCompany(db, { name: "Company B" });
+
+    await db.insert(users).values({
+      companyId: companyA.id,
+      clerkUserId: "user_clerk_a",
+      email: "admin-a@example.com",
+      role: "admin",
+    });
+
+    const [jobB] = await db
+      .insert(inboundEmailJobs)
+      .values({
+        companyId: companyB.id,
+        resendEmailId: "re_other_tenant",
+        fromEmail: "sender@example.com",
+        toEmail: "expenses+b@example.com",
+        subject: "Receipt",
+        status: "failed",
+        lastError: "OCR failed",
+        attempts: 2,
+      })
+      .returning();
+
+    const retry = await retryInboundEmailJob(jobB.id);
+    expect(retry.ok).toBe(false);
+    if (!retry.ok) expect(retry.error).toMatch(/not found/i);
+
+    const [jobStill] = await db
+      .select()
+      .from(inboundEmailJobs)
+      .where(eq(inboundEmailJobs.id, jobB.id));
+    expect(jobStill.status).toBe("failed");
+    expect(jobStill.attempts).toBe(2);
+
+    const retryAll = await retryAllInboundEmailIssues();
+    expect(retryAll.ok).toBe(false);
+    if (!retryAll.ok) expect(retryAll.error).toMatch(/no jobs/i);
+
+    const [jobStillAfterAll] = await db
+      .select()
+      .from(inboundEmailJobs)
+      .where(eq(inboundEmailJobs.id, jobB.id));
+    expect(jobStillAfterAll.status).toBe("failed");
   });
 
   it("refuses deleteReceipt for another company's receipt", async () => {

@@ -2,17 +2,17 @@
 
 import { mutate } from "@/lib/mutate";
 import {
-  adminDismissInboundEmailJob,
-  adminRetryAllInboundEmailIssues,
-  adminRetryInboundEmailJob,
+  dismissInboundEmailJobForCompany,
+  retryAllInboundEmailIssuesForCompany,
+  retryInboundEmailJobForCompany,
 } from "@/lib/expenses/inbound-email";
 import type { ActionResult } from "@/actions/result";
 
 export async function retryInboundEmailJob(jobId: string): Promise<ActionResult> {
   return mutate(
     "users:manage",
-    async () => {
-      const result = await adminRetryInboundEmailJob(jobId);
+    async ({ companyId }) => {
+      const result = await retryInboundEmailJobForCompany(companyId, jobId);
       if (!result.ok) return { ok: false, error: result.error ?? "Retry failed" };
       return { ok: true, id: jobId };
     },
@@ -33,8 +33,8 @@ export async function dismissInboundEmailJob(
 ): Promise<ActionResult> {
   return mutate(
     "users:manage",
-    async () => {
-      const result = await adminDismissInboundEmailJob(jobId, reason);
+    async ({ companyId }) => {
+      const result = await dismissInboundEmailJobForCompany(companyId, jobId, reason);
       if (!result.ok) return { ok: false, error: result.error ?? "Dismiss failed" };
       return { ok: true, id: jobId };
     },
@@ -53,8 +53,8 @@ export async function dismissInboundEmailJob(
 export async function retryAllInboundEmailIssues(): Promise<ActionResult> {
   return mutate(
     "users:manage",
-    async () => {
-      const result = await adminRetryAllInboundEmailIssues();
+    async ({ companyId }) => {
+      const result = await retryAllInboundEmailIssuesForCompany(companyId);
       if (result.retried === 0) {
         return { ok: false, error: "No jobs need attention." };
       }

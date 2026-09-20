@@ -1,4 +1,4 @@
-import { eq, inArray, sql } from "drizzle-orm";
+import { eq, inArray, sql, and } from "drizzle-orm";
 import { expenses, reimbursementItems, reimbursements } from "@/db/schema";
 import type { getDb } from "@/db";
 
@@ -14,6 +14,7 @@ export class ReimbursementPayError extends Error {
 /** Mark a pending reimbursement run paid and flip linked expenses to reimbursed. */
 export async function payReimbursementRun(
   tx: DbTx,
+  companyId: string,
   reimbursementId: string,
   paidAt: Date,
 ) {
@@ -24,7 +25,12 @@ export async function payReimbursementRun(
   const [run] = await tx
     .select()
     .from(reimbursements)
-    .where(eq(reimbursements.id, reimbursementId))
+    .where(
+      and(
+        eq(reimbursements.id, reimbursementId),
+        eq(reimbursements.companyId, companyId),
+      ),
+    )
     .limit(1);
   if (!run) throw new ReimbursementPayError("Reimbursement not found");
   if (run.status === "paid") throw new ReimbursementPayError("Already paid");
@@ -37,16 +43,24 @@ export async function payReimbursementRun(
   await tx
     .update(reimbursements)
     .set({ status: "paid", paidAt })
-    .where(eq(reimbursements.id, reimbursementId));
+    .where(
+      and(
+        eq(reimbursements.id, reimbursementId),
+        eq(reimbursements.companyId, companyId),
+      ),
+    );
 
   if (items.length > 0) {
     await tx
       .update(expenses)
       .set({ status: "reimbursed" })
       .where(
-        inArray(
-          expenses.id,
-          items.map((i) => i.expenseId),
+        and(
+          inArray(
+            expenses.id,
+            items.map((i) => i.expenseId),
+          ),
+          eq(expenses.companyId, companyId),
         ),
       );
   }

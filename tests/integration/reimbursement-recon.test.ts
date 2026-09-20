@@ -110,7 +110,7 @@ describe("reimbursement bank reconciliation", () => {
     const suggestions = await suggestMatches(companyId);
     expect(suggestions).toHaveLength(1);
 
-    await confirmMatch(suggestions[0].matchId);
+    await confirmMatch(companyId, suggestions[0].matchId);
 
     const [updatedRun] = await db
       .select()

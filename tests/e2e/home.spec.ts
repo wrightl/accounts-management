@@ -2,7 +2,9 @@ import { test, expect } from "@playwright/test";
 
 test("landing page renders the brand and primary actions", async ({ page }) => {
   await page.goto("/");
+  await expect(page).toHaveTitle(/Alfa by Dot\+Dash/);
   await expect(page.getByRole("heading", { name: "Your books, in one place." }).first()).toBeVisible();
+  await expect(page.getByText("Alfa by Dot+Dash").first()).toBeVisible();
   await expect(page.getByRole("link", { name: "Sign up" }).first()).toBeVisible();
   await expect(page.getByRole("link", { name: "Sign in" }).first()).toBeVisible();
 });

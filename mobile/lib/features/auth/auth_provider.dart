@@ -31,17 +31,15 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
   
-  Future<bool> setTokenAndValidate(String token) async {
+  Future<bool> syncWithBackend() async {
     _isLoading = true;
     _error = null;
     notifyListeners();
-    
-    await _authService.setToken(token);
+
     final result = await validateToken();
-    
+
     _isLoading = false;
     notifyListeners();
-    
     return result;
   }
   

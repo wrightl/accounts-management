@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/db";
 import { expenses } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
+import { requireMobileAuth } from "@/lib/mobile-auth";
 
 type Params = Promise<{ id: string }>;
 
@@ -12,14 +12,9 @@ export async function POST(
 ) {
   const params = await segmentData.params;
   try {
-    const user = await getCurrentUser();
-    
-    if (!user || !user.companyId) {
-      return NextResponse.json(
-        { ok: false, error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
+    const authz = await requireMobileAuth("accounts:write", { checkSuspended: true });
+    if (!authz.ok) return authz.response;
+    const { user } = authz;
 
     const body = await request.json();
     const approvalType = body.approvalType || "recorded";

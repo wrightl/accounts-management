@@ -1,8 +1,10 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import '../constants/app_constants.dart';
+import '../../core/constants/app_constants.dart';
 
 class ApiClient {
+  static Future<String?> Function()? sessionTokenProvider;
+
   late final Dio _dio;
   final FlutterSecureStorage _storage;
   
@@ -23,8 +25,11 @@ class ApiClient {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
-          final token = await _storage.read(key: AppConstants.keyAuthToken);
-          if (token != null) {
+          final liveToken = await sessionTokenProvider?.call();
+          final token = (liveToken != null && liveToken.isNotEmpty)
+              ? liveToken
+              : await _storage.read(key: AppConstants.keyAuthToken);
+          if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
           }
           return handler.next(options);

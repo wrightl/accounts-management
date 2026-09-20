@@ -23,7 +23,10 @@ const BASE_URL = process.env.PROMO_BASE_URL ?? "http://localhost:3001";
 const CLERK_EMAIL = process.env.PROMO_CLERK_EMAIL?.trim();
 
 function assertNotPlatformAdmin(email: string) {
-  const blocked = (process.env.PLATFORM_ADMIN_EMAILS ?? "admin@dotanddashconsulting.com")
+  const blocked = (
+    process.env.PLATFORM_ADMIN_EMAILS ??
+    "lee+admin@dotanddashconsulting.com"
+  )
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);

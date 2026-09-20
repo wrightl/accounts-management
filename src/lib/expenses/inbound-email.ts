@@ -695,3 +695,51 @@ export async function adminRetryAllInboundEmailIssues(): Promise<{
 
   return { retried: jobs.length, succeeded, failed };
 }
+
+/** Tenant: retry a job only if it belongs to the caller's company. */
+export async function retryInboundEmailJobForCompany(
+  companyId: string,
+  jobId: string,
+): Promise<{ ok: boolean; error?: string; expenseId?: string }> {
+  const job = await getInboundEmailJob(companyId, jobId);
+  if (!job) return { ok: false, error: "Inbound email job not found" };
+  return adminRetryInboundEmailJob(jobId);
+}
+
+/** Tenant: dismiss a job only if it belongs to the caller's company. */
+export async function dismissInboundEmailJobForCompany(
+  companyId: string,
+  jobId: string,
+  reason?: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const job = await getInboundEmailJob(companyId, jobId);
+  if (!job) return { ok: false, error: "Inbound email job not found" };
+  return adminDismissInboundEmailJob(jobId, reason);
+}
+
+/** Tenant: retry issue jobs scoped to one company. */
+export async function retryAllInboundEmailIssuesForCompany(
+  companyId: string,
+): Promise<{
+  retried: number;
+  succeeded: number;
+  failed: number;
+}> {
+  const db = getDb();
+  const jobs = await db
+    .select({ id: inboundEmailJobs.id })
+    .from(inboundEmailJobs)
+    .where(and(eq(inboundEmailJobs.companyId, companyId), inboundIssueFilter))
+    .orderBy(inboundEmailJobs.createdAt)
+    .limit(20);
+
+  let succeeded = 0;
+  let failed = 0;
+  for (const job of jobs) {
+    const result = await adminRetryInboundEmailJob(job.id);
+    if (result.ok) succeeded++;
+    else failed++;
+  }
+
+  return { retried: jobs.length, succeeded, failed };
+}

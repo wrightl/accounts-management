@@ -1,4 +1,4 @@
-# Dot + Dash competitor research
+# Alfa competitor research
 
 **Research date:** 18 September 2026  
 **Sources:** public vendor sites, pricing pages, help docs, and UK review round-ups only (no paid trials).  
@@ -6,11 +6,11 @@
 
 Prices below are **excluding VAT** unless noted. Promotional and bank-tied offers are flagged.
 
-> **Update since research:** Recurring invoices now have a tenant UI (monthly templates, draft vs auto-send, end limits). The matrix below still reflects the research snapshot where Dot + Dash was “Partial” on recurring.
+> **Update since research:** Recurring invoices now have a tenant UI (monthly templates, draft vs auto-send, end limits). The matrix below still reflects the research snapshot where Alfa was “Partial” on recurring.
 
 ## Frame
 
-Dot + Dash Accounts is day-to-day books for UK consultancies, studios, and small agencies: quotes → orders → milestone invoices, expenses, bank CSV matching, accountant pack — spreadsheet replacement, **not** a Xero-class suite.
+Alfa is day-to-day books for UK consultancies, studios, and small agencies: quotes → orders → milestone invoices, expenses, bank CSV matching, accountant pack — spreadsheet replacement, **not** a Xero-class suite.
 
 The real competitive fight is:
 
@@ -23,7 +23,7 @@ The real competitive fight is:
 | --- | --- |
 | Deep-dive substitutes | 7 |
 | Xero / FreeAgent envelope | £18–£39 / mo |
-| Pricing hypothesis for Dot + Dash | £15–£29 / org / mo |
+| Pricing hypothesis for Alfa | £15–£29 / org / mo |
 | Gaps that actually matter (at research date) | 3 |
 
 ## Landscape
@@ -35,7 +35,7 @@ Axes: **project quote-to-cash depth** (left → right) vs **UK books / complianc
 | **Higher UK books** | Crunch, FreeAgent, Xero, Starling Accounting | *(sparse)* |
 | **Lower UK books** | Spreadsheets | Harvest, Bonsai |
 
-**Dot + Dash** sits in the sparse middle-right: strong project billing + enough books for a consultancy’s weekly rhythm, without pretending to file VAT/MTD.
+**Alfa** sits in the sparse middle-right: strong project billing + enough books for a consultancy’s weekly rhythm, without pretending to file VAT/MTD.
 
 Approximate plot positions (0–100):
 
@@ -48,7 +48,7 @@ Approximate plot positions (0–100):
 | Crunch | 32 | 78 |
 | FreeAgent | 48 | 82 |
 | Xero | 55 | 90 |
-| Dot + Dash | 78 | 52 |
+| Alfa | 78 | 52 |
 
 ## Competitor snapshots
 
@@ -96,13 +96,13 @@ Studio staple: track time → raise invoice → sync to Xero.
 
 ### Status quo — Spreadsheets + accountant
 
-Excel/Sheets + Drive + bank CSV + year-end dump. Software cost ~£0; real cost is founder evenings and accountant clean-up. **This is what Dot + Dash replaces.** Messaging that only attacks Xero misses the buyer who never opened Xero.
+Excel/Sheets + Drive + bank CSV + year-end dump. Software cost ~£0; real cost is founder evenings and accountant clean-up. **This is what Alfa replaces.** Messaging that only attacks Xero misses the buyer who never opened Xero.
 
 ## Feature matrix
 
 Yes = native / solid · Partial = limited, add-on, or via accountant workflow · No = not a product strength · N/A = category mismatch.
 
-| Capability | Dot + Dash | Xero | FreeAgent | Starling | Crunch | Bonsai | Harvest | Sheets |
+| Capability | Alfa | Xero | FreeAgent | Starling | Crunch | Bonsai | Harvest | Sheets |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Versioned quotes → accept | Yes | Partial | Partial | No | Partial | Yes | No | Partial |
 | Orders / milestones | Yes | Partial | Partial | No | No | Partial | Partial | Partial |
@@ -135,7 +135,7 @@ Yes = native / solid · Partial = limited, add-on, or via accountant workflow ·
 | Bonsai | ~£19/user (Essentials) | Still need Xero/FA for UK books | Per-seat; Basic lacks invoices |
 | Harvest | $9/seat + usage | Time shops syncing to Xero | 2026 Flex fees hurt predictability |
 | Spreadsheets | £0 + accountant fees | Default until pain peaks | Hidden cost: catch-up before year-end |
-| Dot + Dash | No public price | Hypothesis £15–£29 / org / mo | Under FA Ltd & Xero Grow; per-org not per-seat |
+| Alfa | No public price | Hypothesis £15–£29 / org / mo | Under FA Ltd & Xero Grow; per-org not per-seat |
 
 ### Pricing hypothesis (not a published price)
 
@@ -152,7 +152,7 @@ Software-only day-to-day books for a 1–5 person UK consultancy should land at 
 - **Bonsai:** Proposals, contracts, get paid — client workflow first.
 - **Harvest:** Time → invoice → accounting sync.
 
-### Dot + Dash lines to keep / sharpen
+### Alfa lines to keep / sharpen
 
 - “Your books, in one place.” — still the right category claim vs Drive chaos.
 - “Fifteen minutes a week beats a month of catch-up” — attacks spreadsheets, not Xero.
@@ -168,7 +168,7 @@ Software-only day-to-day books for a 1–5 person UK consultancy should land at 
 
 ### Channels
 
-Xero/FreeAgent win via accountant recommendation. Crunch sells the accountant. Starling/Tide/Coconut sell via the bank. Bonsai/Harvest sell via freelance/agency communities. Dot + Dash should lead with **founders**, with accountants as invitees — not as the primary acquisition channel yet.
+Xero/FreeAgent win via accountant recommendation. Crunch sells the accountant. Starling/Tide/Coconut sell via the bank. Bonsai/Harvest sell via freelance/agency communities. Alfa should lead with **founders**, with accountants as invitees — not as the primary acquisition channel yet.
 
 ### Watch list (one-line)
 
@@ -178,7 +178,7 @@ Xero/FreeAgent win via accountant recommendation. Crunch sells the accountant. S
 - FreshBooks — invoicing-led freelancers.
 - Sage — established firms / payroll skew.
 
-## Where Dot + Dash wins vs where they win
+## Where Alfa wins vs where they win
 
 ### Genuinely different
 

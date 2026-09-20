@@ -1,9 +1,7 @@
 import { isPlatformAdminRole } from "@/lib/roles";
 
-const DEFAULT_PLATFORM_ADMIN_EMAILS = ["admin@dotanddashconsulting.com"];
-
-function parseEmailList(value: string | undefined, fallback: string[]): string[] {
-  if (value === undefined) return fallback;
+function parseEmailList(value: string | undefined): string[] {
+  if (value === undefined) return [];
   return value
     .split(",")
     .map((s) => s.trim().toLowerCase())
@@ -11,15 +9,12 @@ function parseEmailList(value: string | undefined, fallback: string[]): string[]
 }
 
 /**
- * Break-glass platform admin emails (`PLATFORM_ADMIN_EMAILS`).
+ * Optional break-glass platform admin emails (`PLATFORM_ADMIN_EMAILS`).
  * These always have portal access regardless of `users.role`.
- * Also used by `npm run db:seed` to provision operator rows + Clerk invites.
+ * Unset or empty = no overlay (operators come from data migrations / UI).
  */
 export function platformAdminEmails(): string[] {
-  return parseEmailList(
-    process.env.PLATFORM_ADMIN_EMAILS,
-    DEFAULT_PLATFORM_ADMIN_EMAILS,
-  );
+  return parseEmailList(process.env.PLATFORM_ADMIN_EMAILS);
 }
 
 /** Whether an email is on the break-glass platform admin allowlist. */

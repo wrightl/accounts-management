@@ -22,12 +22,13 @@ export async function POST(_request: NextRequest) {
     return NextResponse.json({
       success: true,
       user: {
-        id: user.localUserId,
+        id: user.localUserId ?? user.userId,
         clerkUserId: user.userId,
-        email: user.email,
-        name: user.name,
+        email: user.email ?? "",
+        name: user.name ?? "",
         role: user.role,
         companyId: user.companyId,
+        entityType: user.entityType,
       },
     });
   } catch (error) {

@@ -29,7 +29,7 @@ export function AudienceStrip() {
           UK consultancies, studios, and small agencies
         </h2>
         <p className="mx-auto mt-4 max-w-2xl text-center text-white/70">
-          We built Dot + Dash Accounts to get our own books out of spreadsheets,
+          We built Alfa to get our own books out of spreadsheets,
           Drive folders, and emailed receipts — then opened it for firms like
           ours.
         </p>

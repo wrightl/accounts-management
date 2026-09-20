@@ -11,10 +11,9 @@ export interface SeedResult {
 }
 
 /**
- * Idempotent platform-admin seed. Inserts a `users` row for each
- * PLATFORM_ADMIN_EMAILS address (or sets role `platform_admin` on an existing
- * row and detaches any company). Clerk invitations are sent by scripts/seed.ts
- * when Clerk is configured.
+ * Idempotent platform-admin upsert. Inserts a `users` row for each email
+ * (or sets role `platform_admin` on an existing row and detaches any company).
+ * Used by install-time data migrations and tests — not a CLI seed entrypoint.
  */
 export async function seedPlatformAdmins(
   db: Database,

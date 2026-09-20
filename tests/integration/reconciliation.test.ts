@@ -104,7 +104,7 @@ describe("bank reconciliation integration", () => {
     const suggestions = await suggestMatches(companyId);
     expect(suggestions).toHaveLength(1);
 
-    await confirmMatch(suggestions[0].matchId);
+    await confirmMatch(companyId, suggestions[0].matchId);
 
     const paymentRows = await db
       .select()
@@ -131,7 +131,7 @@ describe("bank reconciliation integration", () => {
   it("dismisses a suggestion so the transaction can be suggested again", async () => {
     await seedInvoicePaymentScenario();
     const suggestions = await suggestMatches(companyId);
-    await dismissMatch(suggestions[0].matchId);
+    await dismissMatch(companyId, suggestions[0].matchId);
 
     const again = await suggestMatches(companyId);
     expect(again).toHaveLength(1);

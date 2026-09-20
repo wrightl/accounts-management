@@ -29,7 +29,7 @@ export function PublicHeader({
     >
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3">
         <Link href="/" className="shrink-0">
-          <Logo showConsulting size={40} priority />
+          <Logo size={40} priority />
         </Link>
         <nav
           aria-label="Marketing"

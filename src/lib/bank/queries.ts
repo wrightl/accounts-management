@@ -907,6 +907,7 @@ function isUniqueViolation(err: unknown): boolean {
 
 async function createPaymentFromBankMatch(
   tx: ReturnType<typeof getDb>,
+  companyId: string,
   match: typeof reconciliationMatches.$inferSelect,
   bankTx: typeof bankTransactions.$inferSelect,
 ) {
@@ -917,7 +918,7 @@ async function createPaymentFromBankMatch(
   const [inv] = await tx
     .select()
     .from(invoices)
-    .where(eq(invoices.id, match.invoiceId))
+    .where(and(eq(invoices.id, match.invoiceId), eq(invoices.companyId, companyId)))
     .limit(1);
   if (!inv) throw new ReconciliationError("Invoice not found");
 
@@ -955,20 +956,40 @@ async function createPaymentFromBankMatch(
     await tx
       .update(invoices)
       .set({ status: "paid", paidAt: receivedAt })
-      .where(eq(invoices.id, inv.id));
+      .where(and(eq(invoices.id, inv.id), eq(invoices.companyId, companyId)));
   }
 
   return payment.id;
 }
 
-export async function confirmMatch(matchId: string) {
+/** Load a reconciliation match only if its bank account belongs to the company. */
+async function getMatchForCompany(
+  tx: ReturnType<typeof getDb>,
+  companyId: string,
+  matchId: string,
+) {
+  const [row] = await tx
+    .select({ match: reconciliationMatches })
+    .from(reconciliationMatches)
+    .innerJoin(
+      bankTransactions,
+      eq(reconciliationMatches.bankTransactionId, bankTransactions.id),
+    )
+    .innerJoin(bankAccounts, eq(bankTransactions.bankAccountId, bankAccounts.id))
+    .where(
+      and(
+        eq(reconciliationMatches.id, matchId),
+        eq(bankAccounts.companyId, companyId),
+      ),
+    )
+    .limit(1);
+  return row?.match ?? null;
+}
+
+export async function confirmMatch(companyId: string, matchId: string) {
   const db = getDb();
   await db.transaction(async (tx) => {
-    const [match] = await tx
-      .select()
-      .from(reconciliationMatches)
-      .where(eq(reconciliationMatches.id, matchId))
-      .limit(1);
+    const match = await getMatchForCompany(tx, companyId, matchId);
     if (!match) throw new ReconciliationError("Match not found");
     if (match.confirmed) return;
 
@@ -980,7 +1001,7 @@ export async function confirmMatch(matchId: string) {
         .limit(1);
       if (!bankTx) throw new ReconciliationError("Bank transaction not found");
 
-      const paymentId = await createPaymentFromBankMatch(tx, match, bankTx);
+      const paymentId = await createPaymentFromBankMatch(tx, companyId, match, bankTx);
       await tx
         .update(reconciliationMatches)
         .set({ paymentId, confirmed: true })
@@ -994,7 +1015,7 @@ export async function confirmMatch(matchId: string) {
       if (!bankTx) throw new ReconciliationError("Bank transaction not found");
 
       const paidAt = new Date(`${bankTx.bookedAt}T12:00:00Z`);
-      await payReimbursementRun(tx, match.reimbursementId, paidAt);
+      await payReimbursementRun(tx, companyId, match.reimbursementId, paidAt);
       await tx
         .update(reconciliationMatches)
         .set({ confirmed: true })
@@ -1003,7 +1024,9 @@ export async function confirmMatch(matchId: string) {
       await tx
         .update(expenses)
         .set({ status: "company_paid", paidByUserId: null })
-        .where(eq(expenses.id, match.expenseId));
+        .where(
+          and(eq(expenses.id, match.expenseId), eq(expenses.companyId, companyId)),
+        );
       await tx
         .update(reconciliationMatches)
         .set({ confirmed: true })
@@ -1017,30 +1040,27 @@ export async function confirmMatch(matchId: string) {
   });
 }
 
-export async function confirmMatchesBatch(matchIds: string[]) {
+export async function confirmMatchesBatch(companyId: string, matchIds: string[]) {
   for (const id of matchIds) {
-    await confirmMatch(id);
+    await confirmMatch(companyId, id);
   }
 }
 
-export async function dismissMatch(matchId: string) {
+export async function dismissMatch(companyId: string, matchId: string) {
   const db = getDb();
+  const match = await getMatchForCompany(db, companyId, matchId);
+  if (!match) throw new ReconciliationError("Match not found");
   await db
     .delete(reconciliationMatches)
     .where(and(eq(reconciliationMatches.id, matchId), eq(reconciliationMatches.confirmed, false)));
 }
 
-export async function dismissMatchesBatch(matchIds: string[]) {
+export async function dismissMatchesBatch(companyId: string, matchIds: string[]) {
   const db = getDb();
   if (matchIds.length === 0) return;
-  await db
-    .delete(reconciliationMatches)
-    .where(
-      and(
-        inArray(reconciliationMatches.id, matchIds),
-        eq(reconciliationMatches.confirmed, false),
-      ),
-    );
+  for (const id of matchIds) {
+    await dismissMatch(companyId, id);
+  }
 }
 
 /** Incoming bank transactions not linked to any reconciliation match. */

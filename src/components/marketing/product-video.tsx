@@ -42,7 +42,7 @@ export function ProductVideo() {
           {reducedMotion ? (
             <Image
               src="/marketing/poster.png"
-              alt="Product tour poster — Accounts dashboard"
+              alt="Product tour poster — Alfa dashboard"
               width={1440}
               height={900}
               className="h-auto w-full"

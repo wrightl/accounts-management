@@ -929,6 +929,22 @@ export const companySupportNotes = pgTable(
   (t) => [index("idx_company_support_notes_company").on(t.companyId)],
 );
 
+/** Ledger for install-time data migrations (see src/db/data-migrate.ts). */
+export const dataMigrationStatusEnum = pgEnum("data_migration_status", [
+  "pending_effects",
+  "applied",
+  "failed",
+]);
+
+export const dataMigrations = pgTable("data_migrations", {
+  id: text("id").primaryKey(),
+  checksum: text("checksum").notNull(),
+  status: dataMigrationStatusEnum("status").notNull(),
+  error: text("error"),
+  startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+});
+
 export type EntityType = (typeof entityTypeEnum.enumValues)[number];
 export type Company = typeof companies.$inferSelect;
 export type PlatformSettings = typeof platformSettings.$inferSelect;
@@ -969,4 +985,5 @@ export const schema = {
   platformSettings,
   platformLogs,
   companySupportNotes,
+  dataMigrations,
 };

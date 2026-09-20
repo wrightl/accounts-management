@@ -21,9 +21,5 @@ fi
 
 npm run db:migrate
 
-if [[ -f .env.local ]] && grep -qE '^DATABASE_URL(_UNPOOLED)?=.+' .env.local; then
-  npm run db:seed
-fi
-
 echo "Starting http://localhost:3001"
 exec npm run dev

@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { getStorage } from "@/lib/storage";
 
-const DEFAULT_LOGO_PATH = path.join(process.cwd(), "public/brand/logo.png");
+const DEFAULT_LOGO_PATH = path.join(process.cwd(), "public/brand/alfa.png");
 
 /** Logo source suitable for @react-pdf Image (file path or data URI). */
 export async function resolvePdfLogoSrc(logoUrl: string | null | undefined): Promise<string> {
@@ -27,7 +27,7 @@ export async function resolvePdfLogoSrc(logoUrl: string | null | undefined): Pro
 }
 
 /**
- * Company logo only for client-facing PDFs. Never falls back to the Dot + Dash
+ * Company logo only for client-facing PDFs. Never falls back to the Alfa
  * product mark — returns null when unset or unreadable.
  */
 export async function resolveCompanyPdfLogoSrc(

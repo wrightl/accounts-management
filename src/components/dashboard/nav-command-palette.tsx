@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Command } from "cmdk";
 import { Search } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { NavGroup } from "./nav";
+import { HELP_NAV_ITEM, type NavGroup } from "./nav";
 import { NAV_ICONS } from "./nav-links";
 
 export function NavCommandPalette({
@@ -18,6 +18,17 @@ export function NavCommandPalette({
   onOpenChange: (open: boolean) => void;
 }) {
   const router = useRouter();
+
+  useEffect(() => {
+    if (!open) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      onOpenChange(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onOpenChange]);
 
   function navigate(href: string) {
     onOpenChange(false);
@@ -55,10 +66,15 @@ export function NavCommandPalette({
             <Command.Empty className="px-3 py-6 text-center text-sm text-muted">
               No pages found.
             </Command.Empty>
-            {groups.map((group) => (
+            {[
+              ...groups,
+              { id: "help", items: [HELP_NAV_ITEM] } satisfies NavGroup,
+            ].map((group) => (
               <Command.Group
                 key={group.id}
-                heading={group.label ?? "Overview"}
+                heading={
+                  group.id === "help" ? "Help" : (group.label ?? "Overview")
+                }
                 className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-muted"
               >
                 {group.items.map((item) => {
@@ -66,7 +82,11 @@ export function NavCommandPalette({
                   return (
                     <Command.Item
                       key={item.href}
-                      value={`${group.label ?? ""} ${item.label}`}
+                      value={
+                        item.href === HELP_NAV_ITEM.href
+                          ? `${item.label} how to use this app`
+                          : `${group.label ?? ""} ${item.label}`
+                      }
                       onSelect={() => navigate(item.href)}
                       className={cn(
                         "flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm",

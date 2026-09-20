@@ -27,13 +27,14 @@ outside the repo; once done, add the listed secrets to the Cursor agent
    migrate. Do **not** use `npm run db:push` against Neon — meta snapshots after
    `0010` are incomplete, so push can invent wrong diffs. Always use
    `db:generate` + `db:migrate` (or rely on migrate-on-build).
-5. After migrate, seed platform operators locally with `npm run db:seed`. That
-   inserts `PLATFORM_ADMIN_EMAILS` (default `admin@dotanddashconsulting.com`) with
-   role `platform_admin` and no company, and sends Clerk invitations so they set a
-   password on first login. Platform operators use `/platform` **only** — they
-   never join a tenant or complete company onboarding. Do **not** run seed on
-   every production deploy. Seed refuses production / Vercel Preview unless
-   `ALLOW_PROD_SEED=1`.
+5. After schema migrate, the same install step runs **data migrations**
+   (`src/db/data-migrations/`). The first one bootstraps the platform operator
+   (`lee+admin@dotanddashconsulting.com` as `platform_admin`, no company) and
+   sends a Clerk invitation when `CLERK_SECRET_KEY` is set. Platform operators
+   use `/platform` **only** — they never join a tenant or complete company
+   onboarding. Later operators are invited from **Platform → Users**. Do not
+   run ad-hoc SQL or CLI seeds against production; add a new data migration
+   (or use the app) instead.
 
 ## 3. Clerk (Vercel integration + Clerk dashboard) **(you)**
 
@@ -51,11 +52,10 @@ outside the repo; once done, add the listed secrets to the Cursor agent
   (read-only + export); founders remain one company per login.
 - **Roles**: do **not** put roles in Clerk metadata. First sign-in creates a
   `users` row as **pending**. Self-serve onboarding makes the founder
-  **admin** of their new company. Platform operators come from
-  `PLATFORM_ADMIN_EMAILS` / `npm run db:seed` (or the portal Users page) and
-  go to `/platform` — they never join a company. Assign company roles
-  from **Dashboard → Users**. Keep sign-up invite-only so random Google
-  accounts cannot wander in.
+  **admin** of their new company. Platform operators come from install-time
+  data migrations / the portal Users page and go to `/platform` — they never
+  join a company. Assign company roles from **Dashboard → Users**. Keep
+  sign-up invite-only so random Google accounts cannot wander in.
 - **Paths**: sign-in `/sign-in`, sign-up `/sign-up`, after sign-in
   `/dashboard` (platform operators are redirected to `/platform`; tenants
   without a company go to `/onboarding`), after sign-up `/onboarding` (set
@@ -133,6 +133,7 @@ in Vercel.
 - [ ] `EMAIL_PROVIDER=resend` + verified domain + `RESEND_*` (`console` is rejected in production)
 - [ ] `CRON_SECRET` set; Vercel cron firing; GH secrets `CRON_SECRET` + `APP_URL`
 - [ ] Resend webhook → production `/api/webhooks/resend`
-- [ ] One-time `ALLOW_PROD_SEED=1 npm run db:seed` for platform admins
+- [ ] First Production deploy applied data migration `0001_platform_admin` (Clerk invite received)
+- [ ] Remove unused `ALLOW_PROD_SEED` from Vercel if it was set for the old CLI seed
 - [ ] `/platform` health all green
 - [ ] Errors appear in `/platform` logs (`reportError` / `onRequestError`); add Sentry when you outgrow `platform_logs`

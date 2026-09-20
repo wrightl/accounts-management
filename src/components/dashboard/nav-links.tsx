@@ -23,7 +23,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { NavGroup, NavIcon, NavItem } from "./nav";
+import { HELP_NAV_ITEM, type NavGroup, type NavIcon, type NavItem } from "./nav";
 
 export const NAV_ICONS: Record<NavIcon, LucideIcon> = {
   overview: LayoutDashboard,
@@ -172,6 +172,37 @@ export function NavLinks({
         </div>
       ))}
     </div>
+  );
+}
+
+export function NavHelpLink({
+  collapsed,
+  pathname,
+  onNavigate,
+}: {
+  collapsed: boolean;
+  pathname: string;
+  onNavigate?: () => void;
+}) {
+  const active = isNavItemActive(pathname, HELP_NAV_ITEM.href);
+
+  return (
+    <Link
+      href={HELP_NAV_ITEM.href}
+      onClick={onNavigate}
+      title={HELP_NAV_ITEM.label}
+      aria-label={HELP_NAV_ITEM.label}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "flex shrink-0 items-center justify-center overflow-hidden rounded-full text-sm transition-colors",
+        collapsed ? "mx-auto p-2" : "p-2",
+        active
+          ? "bg-white/10 text-brand"
+          : "text-white/70 hover:bg-white/5 hover:text-white",
+      )}
+    >
+      <CircleHelp className="h-4 w-4" />
+    </Link>
   );
 }
 

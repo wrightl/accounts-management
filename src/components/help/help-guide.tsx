@@ -134,7 +134,7 @@ export function HelpGuide({
         <section aria-labelledby="what-for">
           <SectionHeading id="what-for">What this app is for</SectionHeading>
           <p className="mt-3 text-sm text-foreground/90">
-            Dot + Dash Accounts replaces the usual pile of spreadsheets, Drive
+            Alfa replaces the usual pile of spreadsheets, Drive
             folders, and emailed receipts. You record what you billed, what you
             spent, and what hit the bank — in one place.
           </p>

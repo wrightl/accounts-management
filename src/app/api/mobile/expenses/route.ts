@@ -1,20 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
 import { listExpenses } from "@/lib/expenses/queries";
 import { getDb } from "@/db";
 import { expenses, expenseReceipts } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { requireMobileAuth } from "@/lib/mobile-auth";
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getCurrentUser();
-    
-    if (!user || !user.companyId) {
-      return NextResponse.json(
-        { ok: false, error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
+    const authz = await requireMobileAuth("accounts:read");
+    if (!authz.ok) return authz.response;
+    const { user } = authz;
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status") || undefined;
@@ -71,14 +66,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getCurrentUser();
-    
-    if (!user || !user.companyId) {
-      return NextResponse.json(
-        { ok: false, error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
+    const authz = await requireMobileAuth("accounts:write", { checkSuspended: true });
+    if (!authz.ok) return authz.response;
+    const { user } = authz;
 
     const body = await request.json();
     const { description, amountPence, category, expenseDate, billable } = body;

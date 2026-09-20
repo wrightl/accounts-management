@@ -555,7 +555,7 @@ function buildReadme({
   warnings: string[];
 }) {
   const lines = [
-    "Dot + Dash accountant pack",
+    "Alfa accountant pack",
     `Period: ${from} to ${to}`,
     `Generated: ${new Date().toISOString()}`,
     "",

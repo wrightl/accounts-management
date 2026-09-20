@@ -13,10 +13,10 @@ describe("platformAdminEmails / resolvePlatformAdmin", () => {
     else process.env.PLATFORM_ADMIN_EMAILS = prev;
   });
 
-  it("defaults to admin@dotanddashconsulting.com when unset", () => {
+  it("treats unset PLATFORM_ADMIN_EMAILS as no allowlist", () => {
     delete process.env.PLATFORM_ADMIN_EMAILS;
-    expect(platformAdminEmails()).toContain("admin@dotanddashconsulting.com");
-    expect(isPlatformAdminEmail("admin@dotanddashconsulting.com")).toBe(true);
+    expect(platformAdminEmails()).toEqual([]);
+    expect(isPlatformAdminEmail("admin@dotanddashconsulting.com")).toBe(false);
   });
 
   it("grants access when role is platform_admin", () => {
@@ -28,7 +28,7 @@ describe("platformAdminEmails / resolvePlatformAdmin", () => {
     ).toBe(true);
   });
 
-  it("respects PLATFORM_ADMIN_EMAILS override", () => {
+  it("respects PLATFORM_ADMIN_EMAILS allowlist", () => {
     process.env.PLATFORM_ADMIN_EMAILS = "ops@example.com";
     expect(isPlatformAdminEmail("ops@example.com")).toBe(true);
     expect(isPlatformAdminEmail("admin@dotanddashconsulting.com")).toBe(false);

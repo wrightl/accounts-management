@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PRODUCT_LOCKUP } from "@/lib/product";
 
 /**
  * Centralised, typed access to environment variables.
@@ -26,7 +27,7 @@ const serverSchema = z.object({
   EMAIL_PROVIDER: z.enum(["resend", "console"]).default("console"),
   RESEND_API_KEY: z.string().optional(),
   RESEND_WEBHOOK_SECRET: z.string().optional(),
-  EMAIL_FROM: z.string().default("Dot + Dash Accounts <accounts@dotanddashconsulting.com>"),
+  EMAIL_FROM: z.string().default(`${PRODUCT_LOCKUP} <accounts@dotanddashconsulting.com>`),
   /** Domain that receives inbound expense emails (Resend Receiving). */
   EXPENSE_INBOUND_DOMAIN: z.string().default("dotanddashconsulting.com"),
   /** Local-part prefix for per-user plus-addresses, e.g. expenses+company.user@domain. */
@@ -35,7 +36,7 @@ const serverSchema = z.object({
   // Cron / automation. Routes refuse to run until CRON_SECRET is set.
   CRON_SECRET: z.string().optional(),
 
-  // Platform ops break-glass emails (comma-separated). Combined with users.role = platform_admin.
+  // Optional break-glass /platform emails (comma-separated). Unset = none.
   PLATFORM_ADMIN_EMAILS: z.string().optional(),
 
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),

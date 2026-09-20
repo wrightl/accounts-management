@@ -4,6 +4,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { brand } from "@/lib/brand";
+import { PRODUCT_LOCKUP, PRODUCT_TAGLINE } from "@/lib/product";
 import { AppProviders } from "@/components/providers";
 import "./globals.css";
 
@@ -14,12 +15,12 @@ const outfit = Outfit({
 
 export const metadata: Metadata = {
   title: {
-    default: "Dot + Dash Accounts — books for UK consultancies",
-    template: "%s — Dot + Dash Accounts",
+    default: `${PRODUCT_LOCKUP} — ${PRODUCT_TAGLINE}`,
+    template: `%s — ${PRODUCT_LOCKUP}`,
   },
   description:
     "Quotes, invoices, expenses, reimbursements and reporting for UK consultancies, studios, and small agencies. Limited companies and sole traders — your books in one place.",
-  applicationName: "Dot + Dash Accounts",
+  applicationName: PRODUCT_LOCKUP,
 };
 
 export const viewport: Viewport = {

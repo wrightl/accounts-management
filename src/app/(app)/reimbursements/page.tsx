@@ -4,15 +4,12 @@ import {
   getReimbursementBalances,
   listReimbursements,
 } from "@/lib/reimbursements/queries";
-import { listFounders } from "@/lib/expenses/queries";
+import { listFounders, listReimbursableExpenses } from "@/lib/expenses/queries";
 import { CreateReimbursementButton } from "@/components/reimbursements/create-button";
 import { ReimbursementActions } from "@/components/reimbursements/actions";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { buttonClasses } from "@/components/ui/button";
-import { getDb } from "@/db";
-import { expenses } from "@/db/schema";
-import { eq } from "drizzle-orm";
 
 const WORKFLOW_STEPS = [
   "Log expenses as reimbursable when you pay personally",
@@ -31,22 +28,17 @@ export default async function ReimbursementsPage({
   const sp = await searchParams;
   const runFilter = sp.filter === "paid" ? "paid" : sp.filter === "pending" ? "pending" : "all";
 
-  const [allRuns, balances, founders] = await Promise.all([
+  const [allRuns, balances, founders, reimbursable] = await Promise.all([
     listReimbursements(companyId),
     getReimbursementBalances(companyId),
     listFounders(companyId),
+    listReimbursableExpenses(companyId),
   ]);
 
   const runs =
     runFilter === "all"
       ? allRuns
       : allRuns.filter((r) => r.status === runFilter);
-
-  const db = getDb();
-  const reimbursable = await db
-    .select()
-    .from(expenses)
-    .where(eq(expenses.status, "reimbursable"));
 
   const initialPayee =
     sp.payee && founders.some((f) => f.id === sp.payee) ? sp.payee : undefined;

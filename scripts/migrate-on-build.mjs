@@ -14,8 +14,15 @@
  * Do not ALTER TYPE "role" before migrate: on a fresh database the type is
  * created in 0000_init.sql, so a pre-migrate ALTER fails with
  * `type "role" does not exist`.
+ *
+ * After schema migrate, install-time data migrations run
+ * (`scripts/data-migrate.ts`) — versioned bootstrap / DML, fail the build
+ * if incomplete.
  */
 import { config } from "dotenv";
+import { spawnSync } from "node:child_process";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
@@ -87,4 +94,15 @@ try {
   process.exit(1);
 } finally {
   await client.end().catch(() => {});
+}
+
+const tsx = join(dirname(fileURLToPath(import.meta.url)), "../node_modules/.bin/tsx");
+console.log("Running install-time data migrations");
+const dataResult = spawnSync(tsx, ["scripts/data-migrate.ts"], {
+  stdio: "inherit",
+  env: process.env,
+});
+if (dataResult.status !== 0) {
+  console.error("Data migrations failed");
+  process.exit(dataResult.status ?? 1);
 }

@@ -8,7 +8,7 @@ export function PublicFooter() {
     <footer className="border-t border-white/10 bg-navy px-6 py-12 text-white">
       <div className="mx-auto flex max-w-6xl flex-col gap-8 md:flex-row md:items-start md:justify-between">
         <div>
-          <Logo showConsulting size={36} />
+          <Logo size={36} />
           <p className="mt-3 max-w-xs text-sm text-white/60">
             Books for UK consultancies, studios, and small agencies — quotes,
             invoices, expenses, and an accountant pack in one place.

@@ -343,9 +343,9 @@ export async function runSuggestMatches(): Promise<
 export async function confirmBankMatch(matchId: string): Promise<ActionResult> {
   return mutate(
     "accounts:write",
-    async () => {
+    async ({ companyId }) => {
       try {
-        await confirmMatch(matchId);
+        await confirmMatch(companyId, matchId);
       } catch (e) {
         if (e instanceof ReconciliationError) return { ok: false, error: e.message };
         throw e;
@@ -385,7 +385,7 @@ export async function confirmBankMatchesBatch(matchIds: string[]): Promise<Actio
     "accounts:write",
     async ({ companyId, localUserId }) => {
       try {
-        await confirmMatchesBatch(matchIds);
+        await confirmMatchesBatch(companyId, matchIds);
       } catch (e) {
         if (e instanceof ReconciliationError) return { ok: false, error: e.message };
         throw e;
@@ -405,8 +405,13 @@ export async function confirmBankMatchesBatch(matchIds: string[]): Promise<Actio
 export async function dismissBankMatch(matchId: string): Promise<ActionResult> {
   return mutate(
     "accounts:write",
-    async () => {
-      await dismissMatch(matchId);
+    async ({ companyId }) => {
+      try {
+        await dismissMatch(companyId, matchId);
+      } catch (e) {
+        if (e instanceof ReconciliationError) return { ok: false, error: e.message };
+        throw e;
+      }
       return { ok: true, id: matchId };
     },
     {
@@ -424,7 +429,12 @@ export async function dismissBankMatchesBatch(matchIds: string[]): Promise<Actio
   return mutate(
     "accounts:write",
     async ({ companyId, localUserId }) => {
-      await dismissMatchesBatch(matchIds);
+      try {
+        await dismissMatchesBatch(companyId, matchIds);
+      } catch (e) {
+        if (e instanceof ReconciliationError) return { ok: false, error: e.message };
+        throw e;
+      }
       await writeAudit({
         companyId,
         actorUserId: localUserId,

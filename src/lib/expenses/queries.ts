@@ -167,18 +167,19 @@ export async function getReimbursableSummary(
 
 export async function listReimbursableExpenses(
   companyId: string,
-  payeeUserId: string,
+  payeeUserId?: string,
 ) {
   const db = getDb();
+  const conditions = [
+    eq(expenses.companyId, companyId),
+    eq(expenses.status, "reimbursable" as ExpenseStatus),
+  ];
+  if (payeeUserId) {
+    conditions.push(eq(expenses.paidByUserId, payeeUserId));
+  }
   return db
     .select()
     .from(expenses)
-    .where(
-      and(
-        eq(expenses.companyId, companyId),
-        eq(expenses.status, "reimbursable"),
-        eq(expenses.paidByUserId, payeeUserId),
-      ),
-    )
+    .where(and(...conditions))
     .orderBy(desc(expenses.spentAt));
 }

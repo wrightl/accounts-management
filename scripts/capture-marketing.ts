@@ -397,7 +397,10 @@ async function provisionFounder(page: Page, email: string) {
 
 async function main() {
   // Refuse platform admin emails
-  const blocked = (process.env.PLATFORM_ADMIN_EMAILS ?? "admin@dotanddashconsulting.com")
+  const blocked = (
+    process.env.PLATFORM_ADMIN_EMAILS ??
+    "lee+admin@dotanddashconsulting.com"
+  )
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);

@@ -1,10 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../data/models/user.dart';
+import '../../../features/auth/auth_provider.dart';
 import '../dashboard_provider.dart';
-import '../../../core/utils/formatters.dart';
+import '../widgets/attention_panel.dart';
+import '../widgets/expense_mix.dart';
+import '../widgets/hero_kpis.dart';
+import '../widgets/horizontal_charts.dart';
+import '../widgets/period_chips.dart';
+import '../widgets/quote_to_cash_funnel.dart';
+import '../widgets/series_charts.dart';
+import '../widgets/spending_snapshot.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  const DashboardScreen({super.key, this.onOpenExpenses});
+
+  final VoidCallback? onOpenExpenses;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -25,285 +37,199 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Dashboard'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.account_circle),
-            onPressed: () => Navigator.pushNamed(context, '/profile'),
+    final user = context.watch<AuthProvider>().user;
+
+    return Consumer<DashboardProvider>(
+      builder: (context, provider, child) {
+        if (provider.isLoading && provider.dashboardData == null) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (provider.error != null && provider.dashboardData == null) {
+          return _MessageState(
+            icon: Icons.error_outline,
+            iconColor: BrandColors.destructive,
+            message: provider.error!,
+            actionLabel: 'Retry',
+            onAction: _handleRefresh,
+          );
+        }
+
+        final data = provider.dashboardData;
+        if (data == null) {
+          return const _MessageState(
+            icon: Icons.insights_outlined,
+            message: 'Dashboard metrics are unavailable.',
+          );
+        }
+
+        if (data.isPending || user?.role == 'pending') {
+          return _PendingState(user: user, firstName: data.firstName);
+        }
+
+        return RefreshIndicator(
+          onRefresh: _handleRefresh,
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (provider.isLoading)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 12),
+                          child: LinearProgressIndicator(minHeight: 2),
+                        ),
+                      _WelcomeHeader(
+                        firstName: data.firstName.isNotEmpty
+                            ? data.firstName
+                            : user?.firstName ?? '',
+                        todayLabel: data.todayLabel,
+                      ),
+                      const SizedBox(height: 16),
+                      PeriodChips(
+                        current: provider.period,
+                        onSelected: provider.setPeriod,
+                      ),
+                      const SizedBox(height: 20),
+                      HeroKpiGrid(heroes: data.heroes),
+                      const SizedBox(height: 20),
+                      CashVsInvoicedCard(data: data.cashSeries),
+                      const SizedBox(height: 16),
+                      QuoteToCashFunnelCard(
+                        stages: data.funnel,
+                        periodLabel: data.periodLabel,
+                      ),
+                      const SizedBox(height: 16),
+                      AgedReceivablesCard(data: data.agedReceivables),
+                      const SizedBox(height: 16),
+                      IncomeExpenseCard(data: data.cashSeries),
+                      const SizedBox(height: 16),
+                      TopClientsCard(
+                        clients: data.topClients,
+                        periodLabel: data.periodLabel,
+                      ),
+                      const SizedBox(height: 16),
+                      ExpenseMixCard(
+                        slices: data.expenseMix,
+                        periodLabel: data.periodLabel,
+                      ),
+                      const SizedBox(height: 16),
+                      SpendingSnapshotCard(data: data.spending),
+                      const SizedBox(height: 16),
+                      AttentionPanelCard(
+                        items: data.attention,
+                        onOpenExpenses: widget.onOpenExpenses,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _WelcomeHeader extends StatelessWidget {
+  const _WelcomeHeader({
+    required this.firstName,
+    required this.todayLabel,
+  });
+
+  final String firstName;
+  final String todayLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          firstName.isEmpty ? 'Welcome' : 'Welcome, $firstName',
+          style: Theme.of(context).textTheme.headlineMedium,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          todayLabel,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+    );
+  }
+}
+
+class _PendingState extends StatelessWidget {
+  const _PendingState({required this.user, required this.firstName});
+
+  final User? user;
+  final String firstName;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = firstName.isNotEmpty ? firstName : user?.firstName ?? '';
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            name.isEmpty ? 'Welcome' : 'Welcome, $name',
+            style: Theme.of(context).textTheme.headlineMedium,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Your account is waiting for an administrator to assign a role '
+            '(admin, co-founder, or accountant). You cannot view or change '
+            'the books until then.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: BrandColors.muted,
+                ),
           ),
         ],
       ),
-      body: Consumer<DashboardProvider>(
-        builder: (context, provider, child) {
-          if (provider.isLoading && provider.dashboardData == null) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          if (provider.error != null && provider.dashboardData == null) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                  const SizedBox(height: 16),
-                  Text(provider.error!),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _handleRefresh,
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          final data = provider.dashboardData;
-          if (data == null) {
-            return const Center(child: Text('No data available'));
-          }
-
-          return RefreshIndicator(
-            onRefresh: _handleRefresh,
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildKpiSection(data.kpis),
-                  const SizedBox(height: 24),
-                  _buildAttentionSection(data.attentionItems),
-                  const SizedBox(height: 24),
-                  _buildRecentActivitySection(data.recentActivity),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
     );
   }
+}
 
-  Widget _buildKpiSection(kpis) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Overview',
-          style: Theme.of(context).textTheme.headlineMedium,
-        ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: _buildKpiCard(
-                'Total Revenue',
-                CurrencyUtils.formatPence(kpis.totalRevenuePence),
-                Icons.trending_up,
-                Colors.green,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildKpiCard(
-                'Outstanding',
-                CurrencyUtils.formatPence(kpis.outstandingPence),
-                Icons.payment,
-                Colors.orange,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _buildKpiCard(
-                'Expenses',
-                CurrencyUtils.formatPence(kpis.expensesThisMonthPence),
-                Icons.receipt_long,
-                Colors.blue,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildKpiCard(
-                'Pending',
-                '${kpis.pendingExpensesCount}',
-                Icons.pending_actions,
-                Colors.purple,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
+class _MessageState extends StatelessWidget {
+  const _MessageState({
+    required this.icon,
+    required this.message,
+    this.iconColor,
+    this.actionLabel,
+    this.onAction,
+  });
 
-  Widget _buildKpiCard(String label, String value, IconData icon, Color color) {
-    return Card(
+  final IconData icon;
+  final String message;
+  final Color? iconColor;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(24),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Row(
-              children: [
-                Icon(icon, size: 20, color: color),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
+            Icon(icon, size: 48, color: iconColor ?? BrandColors.muted),
+            const SizedBox(height: 16),
+            Text(message, textAlign: TextAlign.center),
+            if (actionLabel != null && onAction != null) ...[
+              const SizedBox(height: 16),
+              ElevatedButton(onPressed: onAction, child: Text(actionLabel!)),
+            ],
           ],
         ),
       ),
     );
-  }
-
-  Widget _buildAttentionSection(List attentionItems) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'Needs Attention',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-            if (attentionItems.isNotEmpty)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.red,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '${attentionItems.length}',
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        if (attentionItems.isEmpty)
-          const Card(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(
-                child: Column(
-                  children: [
-                    Icon(Icons.check_circle_outline, size: 48, color: Colors.green),
-                    SizedBox(height: 8),
-                    Text('All caught up!'),
-                  ],
-                ),
-              ),
-            ),
-          )
-        else
-          ...attentionItems.map((item) => Card(
-                child: ListTile(
-                  leading: Icon(
-                    _getIconForType(item.type),
-                    color: item.isHighPriority ? Colors.red : Colors.orange,
-                  ),
-                  title: Text(item.title),
-                  subtitle: Text(item.description),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _handleAttentionItemTap(item),
-                ),
-              )),
-      ],
-    );
-  }
-
-  Widget _buildRecentActivitySection(recentActivity) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Recent Activity',
-          style: Theme.of(context).textTheme.headlineMedium,
-        ),
-        const SizedBox(height: 16),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                _buildActivityRow(
-                  'Expenses',
-                  recentActivity.recentExpensesCount,
-                  Icons.receipt_long,
-                ),
-                const Divider(),
-                _buildActivityRow(
-                  'Invoices',
-                  recentActivity.recentInvoicesCount,
-                  Icons.description,
-                ),
-                const Divider(),
-                _buildActivityRow(
-                  'Quotes',
-                  recentActivity.recentQuotesCount,
-                  Icons.request_quote,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildActivityRow(String label, int count, IconData icon) {
-    return Row(
-      children: [
-        Icon(icon, size: 20),
-        const SizedBox(width: 12),
-        Text(label, style: Theme.of(context).textTheme.bodyMedium),
-        const Spacer(),
-        Text(
-          '$count',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-        ),
-      ],
-    );
-  }
-
-  IconData _getIconForType(String type) {
-    switch (type) {
-      case 'expense':
-        return Icons.receipt_long;
-      case 'invoice':
-        return Icons.description;
-      case 'quote':
-        return Icons.request_quote;
-      default:
-        return Icons.notification_important;
-    }
-  }
-
-  void _handleAttentionItemTap(item) {
-    if (item.type == 'expense') {
-      Navigator.pushNamed(context, '/expenses');
-    }
   }
 }

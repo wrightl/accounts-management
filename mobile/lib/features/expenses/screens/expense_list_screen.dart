@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide DateUtils;
 import 'package:provider/provider.dart';
 import '../expense_provider.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../data/models/expense.dart';
 
 class ExpenseListScreen extends StatefulWidget {
   const ExpenseListScreen({super.key});
@@ -153,7 +154,7 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: _getStatusColor(status).withOpacity(0.2),
+        color: _getStatusColor(status).withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
@@ -184,7 +185,7 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
     }
   }
 
-  void _showExpenseDetail(expense) {
+  void _showExpenseDetail(Expense expense) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,

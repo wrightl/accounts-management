@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide DateUtils;
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import '../expense_provider.dart';
@@ -23,18 +23,6 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
   DateTime _selectedDate = DateTime.now();
   bool _billable = false;
   XFile? _capturedReceipt;
-  String? _tempExpenseId;
-
-  final List<String> _categories = [
-    'Travel',
-    'Accommodation',
-    'Meals',
-    'Office Supplies',
-    'Software',
-    'Marketing',
-    'Professional Services',
-    'Other',
-  ];
 
   @override
   void dispose() {
@@ -104,7 +92,6 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
 
     final expenseId = provider.selectedExpense?.id;
     if (expenseId != null && _capturedReceipt != null) {
-      setState(() => _tempExpenseId = expenseId);
       await _uploadReceipt(expenseId);
     }
 
@@ -249,12 +236,12 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
-                    value: _selectedCategory,
+                    initialValue: _selectedCategory,
                     decoration: const InputDecoration(
                       labelText: 'Category',
                       prefixIcon: Icon(Icons.category),
                     ),
-                    items: _categories.map((category) {
+                    items: expenseCategories.map((category) {
                       return DropdownMenuItem(
                         value: category,
                         child: Text(category),

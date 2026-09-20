@@ -1,6 +1,6 @@
-# Dot + Dash Accounts
+# Alfa by Dot+Dash
 
-Accounting software for **UK limited companies and sole traders**, built by
+**Alfa** is accounting software for **UK limited companies and sole traders**, built by
 **Dot and Dash Consulting Ltd** (stylised _Dot + Dash Consulting_). Replaces
 spreadsheets and shared folders with one app for quotes, orders, invoicing,
 expenses, reimbursements, bank reconciliation, and reporting.
@@ -99,7 +99,8 @@ Clerk is identity only. Role and company come from Postgres
 
 Self-serve onboarding creates a company and makes that user **admin**. Invited
 users skip onboarding and attach to the inviting company. Platform operators
-are provisioned separately via `PLATFORM_ADMIN_EMAILS` / `npm run db:seed`
+are provisioned by install-time data migrations (`src/db/data-migrations/`) on
+`npm run db:migrate` / Vercel build, then invited from **Platform → Users**
 (not a company role).
 
 ## Getting started
@@ -113,23 +114,23 @@ npm run dev                  # http://localhost:3001
 The app runs **without credentials**: public pages work, and auth/DB activate
 once their env vars are present (see [Configuration](#configuration)).
 
-When `DATABASE_URL` is set, apply schema then seed platform admins:
+When `DATABASE_URL` is set, apply schema **and** install-time data migrations:
 
 ```bash
-npm run db:migrate
-npm run db:seed    # inserts PLATFORM_ADMIN_EMAILS + Clerk invites
+npm run db:migrate   # schema + data migrations (e.g. bootstrap platform admin)
 ```
 
-Seeded operators get the `platform_admin` role (no company) and use `/platform` only —
-they never join a tenant. Clerk sends an invitation so they set a password on
-first login. Do not run seed on every production deploy.
+The first platform operator is created by data migration `0001_platform_admin`
+(`lee+admin@dotanddashconsulting.com`, role `platform_admin`, no company) and
+invited via Clerk when `CLERK_SECRET_KEY` is set. Operators use `/platform` only —
+they never join a tenant. Later operators are invited from the portal UI.
 
 ## Scripts
 
 | Command               | Description                                                                                                                                              |
 | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `npm run dev`         | Next.js dev server on port **3001**                                                                                                                      |
-| `npm run build`       | Migrate (if a database URL is set) then production build                                                                                                 |
+| `npm run build`       | Migrate (schema + data, if a database URL is set) then production build                                                                                  |
 | `npm run start`       | Next.js production server                                                                                                                                |
 | `npm run lint`        | ESLint                                                                                                                                                   |
 | `npm run typecheck`   | TypeScript, no emit                                                                                                                                      |
@@ -137,8 +138,7 @@ first login. Do not run seed on every production deploy.
 | `npm run test:watch`  | Vitest watch mode                                                                                                                                        |
 | `npm run test:e2e`    | Playwright e2e (own server on port 3100)                                                                                                                 |
 | `npm run db:generate` | Generate a Drizzle migration from the schema                                                                                                             |
-| `npm run db:migrate`  | Apply migrations over a direct Postgres connection (`pg`)                                                                                                |
-| `npm run db:seed`     | Seed platform admins (`PLATFORM_ADMIN_EMAILS` + Clerk invites). Refuses production/remote URLs unless `ALLOW_PROD_SEED=1`.                               |
+| `npm run db:migrate`  | Apply schema migrations then install-time data migrations over a direct Postgres connection (`pg`)                                                       |
 | `npm run auth:agent`  | Mint a one-time Clerk sign-in URL for a local tenant founder (Cursor agent browser). Development keys only.                                              |
 | `npm run db:push`     | **Unsafe** while Drizzle meta snapshots lag behind hand migrations (after `0010`). Prefer `db:generate` + `db:migrate`. Do not point at Neon production. |
 | `npm run db:studio`   | Drizzle Studio                                                                                                                                           |
@@ -206,8 +206,9 @@ the scheduled Action is the drain/retry when no new mail arrives.
 - Every mutation is a Server Action or route handler that re-checks
   permissions (`requirePermission` in `src/lib/auth.ts`). The client is never
   trusted. Queries take `companyId` from the session tenant.
-- Schema lives in [`src/db/schema.ts`](./src/db/schema.ts). Migrations run on
-  Vercel build via `scripts/migrate-on-build.mjs` when a database URL is set.
+- Schema lives in [`src/db/schema.ts`](./src/db/schema.ts). Schema + install-time
+  data migrations run on Vercel build via `scripts/migrate-on-build.mjs` when a
+  database URL is set (`src/db/data-migrations/`).
 
 ## Security
 

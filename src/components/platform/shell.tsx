@@ -32,7 +32,7 @@ export function PlatformShell({
           <p className="font-display text-lg font-semibold tracking-tight">
             Platform
           </p>
-          <p className="mt-0.5 text-xs text-white/50">Dot + Dash ops</p>
+          <p className="mt-0.5 text-xs text-white/50">Alfa ops</p>
         </div>
         <nav className="flex gap-1 overflow-x-auto px-3 pb-3 md:min-h-0 md:flex-1 md:flex-col md:overflow-y-auto">
           {PLATFORM_NAV.map((item) => {

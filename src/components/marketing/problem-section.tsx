@@ -43,7 +43,7 @@ export function ProblemSection() {
           ))}
         </div>
         <p className="mx-auto mt-10 max-w-2xl text-center text-base font-medium text-navy">
-          Dot + Dash Accounts puts quotes, invoices, expenses, bank matching,
+          Alfa puts quotes, invoices, expenses, bank matching,
           and an accountant pack in one place.
         </p>
       </div>

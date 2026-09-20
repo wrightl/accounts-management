@@ -1,4 +1,4 @@
-# Dot + Dash Accounts — promo video
+# Alfa by Dot+Dash — promo video
 
 2–3 minute 16:9 product tour for YouTube/Vimeo. **Audience:** UK consultancies, studios, and small agencies. **Status:** coming soon / waitlist — not generally available.
 
@@ -51,8 +51,8 @@ Captions mirror this text. Record your own VO over the picture-lock, or ship cap
 
 | Time | Super (optional) | VO |
 | --- | --- | --- |
-| 0:00–0:05 | Dot + Dash Accounts | If you run a UK consultancy or studio, your books probably live in spreadsheets, a Drive folder, and emails to your accountant. |
-| 0:05–0:12 | First look · Not on sale yet | We built Dot + Dash Accounts to get our own books out of that mess. This is a first look — it is not on sale yet. |
+| 0:00–0:05 | Alfa by Dot+Dash | If you run a UK consultancy or studio, your books probably live in spreadsheets, a Drive folder, and emails to your accountant. |
+| 0:05–0:12 | First look · Not on sale yet | We built Alfa to get our own books out of that mess. This is a first look — it is not on sale yet. |
 | 0:12–0:18 | | Quotes, invoices, receipts, bank matching, and an accountant pack — in one place. |
 | 0:18–0:28 | Morning overview | Start the day on one dashboard: what you are owed, what is overdue, and what needs attention. |
 | 0:28–0:40 | | No more jumping between five tabs to see if cash is healthy. |
@@ -68,7 +68,7 @@ Captions mirror this text. Record your own VO over the picture-lock, or ship cap
 | 2:25–2:35 | Roles & audit | Invite your accountant read-only. Every sensitive change is in the audit log. |
 | 2:35–2:45 | Join the waitlist | If that sounds like your studio, join the waitlist — link in the description. Built for consultancies like ours. Coming soon. |
 
-**Waitlist URL (end card + description):** `mailto:lee@dotanddashconsulting.com?subject=Accounts%20waitlist`
+**Waitlist URL (end card + description):** `mailto:lee@dotanddashconsulting.com?subject=Alfa%20waitlist`
 
 ---
 
@@ -89,16 +89,16 @@ Hide Clerk user chip where possible (crop or scroll). Demo data only — run `np
 
 ## YouTube listing
 
-**Title:** Dot + Dash Accounts — books for UK consultancies (first look)
+**Title:** Alfa by Dot+Dash — books for UK consultancies (first look)
 
 **Description:**
 
 ```
-Dot + Dash Accounts is a first look at the books app we built for our UK consultancy — quotes, orders, invoices, expenses, reimbursements, bank CSV matching, and an accountant export pack. Not on sale yet.
+Alfa by Dot+Dash is a first look at the books app we built for our UK consultancy — quotes, orders, invoices, expenses, reimbursements, bank CSV matching, and an accountant export pack. Not on sale yet.
 
 For UK consultancies, studios, and small agencies still running on spreadsheets and shared folders.
 
-Join the waitlist: mailto:lee@dotanddashconsulting.com?subject=Accounts%20waitlist
+Join the waitlist: mailto:lee@dotanddashconsulting.com?subject=Alfa%20waitlist
 
 Chapters:
 0:00 Intro

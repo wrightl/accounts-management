@@ -7,7 +7,7 @@ export function AuthFrame({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-full flex-1 flex-col bg-navy">
       <header className="bg-accent px-6 py-4 text-white">
         <Link href="/" className="inline-flex">
-          <Logo showConsulting size={40} priority />
+          <Logo size={40} priority />
         </Link>
       </header>
       <div className="hero-dots flex flex-1 items-center justify-center px-6 py-12">

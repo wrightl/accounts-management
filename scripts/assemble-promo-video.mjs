@@ -21,7 +21,7 @@ const rawDir = join(root, "promo", "raw");
 const outDir = join(root, "promo", "output");
 const assetsDir = join(root, "promo", "assets");
 const captionsSrc = join(root, "promo", "captions.srt");
-const logoPath = join(root, "public", "brand", "logo.png");
+const logoPath = join(root, "public", "brand", "alfa.png");
 
 const playwrightFfmpegDir = join(root, ".playwright-browsers", "ffmpeg-1011");
 const playwrightFfmpeg = join(playwrightFfmpegDir, "ffmpeg-mac");
@@ -234,7 +234,7 @@ async function main() {
 
   const introPng = await renderStill(
     "intro.png",
-    ["Dot + Dash Accounts", "Your books, in one place."],
+    ["Alfa by Dot+Dash", "Your books, in one place."],
     "First look · Not on sale yet",
   );
   const outroPng = await renderStill(

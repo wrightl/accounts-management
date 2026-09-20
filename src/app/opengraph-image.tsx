@@ -2,13 +2,14 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ImageResponse } from "next/og";
 import { brand } from "@/lib/brand";
+import { PRODUCT_LOCKUP, PRODUCT_MAKER, PRODUCT_NAME } from "@/lib/product";
 
-export const alt = "Dot + Dash Consulting — Accounts";
+export const alt = PRODUCT_LOCKUP;
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
 export default async function OpenGraphImage() {
-  const logo = await readFile(join(process.cwd(), "public/brand/logo.png"));
+  const logo = await readFile(join(process.cwd(), "public/brand/alfa.png"));
   const logoSrc = `data:image/png;base64,${logo.toString("base64")}`;
 
   return new ImageResponse(
@@ -28,11 +29,9 @@ export default async function OpenGraphImage() {
         <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
           <img src={logoSrc} width={112} height={112} alt="" />
           <div style={{ display: "flex", flexDirection: "column" }}>
-            <div style={{ fontSize: 36, letterSpacing: -0.5 }}>
-              Dot + Dash Consulting
-            </div>
+            <div style={{ fontSize: 36, letterSpacing: -0.5 }}>{PRODUCT_NAME}</div>
             <div style={{ marginTop: 8, fontSize: 22, color: brand.pink }}>
-              Accounts
+              by {PRODUCT_MAKER}
             </div>
           </div>
         </div>

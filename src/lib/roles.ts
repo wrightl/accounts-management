@@ -1,5 +1,5 @@
 /**
- * Role-based access control for Dot + Dash Accounts.
+ * Role-based access control for Alfa by Dot+Dash.
  *
  *  - admin:          full access, incl. user & settings management.
  *  - user:           co-founder access to all day-to-day accounting.

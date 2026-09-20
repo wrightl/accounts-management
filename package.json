@@ -14,7 +14,6 @@
         "test:e2e": "playwright test",
         "db:generate": "drizzle-kit generate",
         "db:migrate": "node ./scripts/migrate-on-build.mjs",
-        "db:seed": "tsx scripts/seed.ts",
         "auth:agent": "tsx scripts/agent-auth.ts",
         "promo:seed": "tsx scripts/seed-promo-demo.ts",
         "promo:record": "PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers tsx scripts/record-promo.ts",

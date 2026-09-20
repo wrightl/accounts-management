@@ -73,6 +73,7 @@ export async function createReimbursementRun(
             .where(
               and(
                 inArray(expenses.id, ids),
+                eq(expenses.companyId, companyId),
                 eq(expenses.status, "reimbursable"),
                 eq(expenses.paidByUserId, parsed.data.payeeUserId),
               ),
@@ -185,6 +186,7 @@ export async function updateReimbursementRun(
             .where(
               and(
                 inArray(expenses.id, ids),
+                eq(expenses.companyId, companyId),
                 eq(expenses.status, "reimbursable"),
                 eq(expenses.paidByUserId, run.payeeUserId),
               ),
@@ -300,7 +302,7 @@ export async function markReimbursementPaid(
 
       try {
         await db.transaction(async (tx) => {
-          await payReimbursementRun(tx, id, paidAt);
+          await payReimbursementRun(tx, companyId, id, paidAt);
 
           if (bankTransactionId) {
             const existing = await tx

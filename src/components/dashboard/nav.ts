@@ -38,6 +38,14 @@ export interface NavGroup {
     items: NavItem[];
 }
 
+/** Utility destination, rendered in the sidebar footer rather than the main list. */
+export const HELP_NAV_ITEM: NavItem = {
+    href: '/help',
+    label: 'Help',
+    icon: 'help',
+    permission: 'accounts:read',
+};
+
 export const NAV_GROUPS: NavGroup[] = [
     {
         id: 'overview',
@@ -46,12 +54,6 @@ export const NAV_GROUPS: NavGroup[] = [
                 href: '/dashboard',
                 label: 'Overview',
                 icon: 'overview',
-                permission: 'accounts:read',
-            },
-            {
-                href: '/help',
-                label: 'Help',
-                icon: 'help',
                 permission: 'accounts:read',
             },
         ],

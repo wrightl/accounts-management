@@ -67,13 +67,24 @@ class AuthService {
         );
         return ApiResponse.success(user);
       } else {
-        return ApiResponse.error('Invalid token');
+        return ApiResponse.error(_responseError(response.data, 'Invalid token'));
       }
     } on DioException catch (e) {
-      return ApiResponse.error(e.message ?? 'Network error');
+      return ApiResponse.error(_dioError(e, 'Network error'));
     } catch (e) {
       return ApiResponse.error('Unexpected error: $e');
     }
+  }
+
+  String _dioError(DioException error, String fallback) {
+    return _responseError(error.response?.data, error.message ?? fallback);
+  }
+
+  String _responseError(dynamic data, String fallback) {
+    if (data is Map && data['error'] is String) {
+      return data['error'] as String;
+    }
+    return fallback;
   }
   
   Future<void> logout() async {

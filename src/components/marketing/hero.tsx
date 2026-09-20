@@ -1,13 +1,14 @@
 import Image from "next/image";
 import Link from "next/link";
 import { buttonClasses } from "@/components/ui/button";
+import { PRODUCT_LOCKUP } from "@/lib/product";
 
 export function MarketingHero() {
   return (
     <section className="hero-dots relative overflow-hidden px-6 pb-16 pt-16 text-white md:pb-24 md:pt-20">
       <div className="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-2 lg:gap-16">
         <div className="text-center lg:text-left">
-          <p className="text-sm tracking-widest text-brand uppercase">Accounts</p>
+          <p className="text-sm tracking-widest text-brand uppercase">{PRODUCT_LOCKUP}</p>
           <h1 className="mt-4 font-display text-4xl font-normal leading-tight tracking-tight sm:text-5xl md:text-6xl">
             Your books, in one place.
           </h1>
@@ -35,7 +36,7 @@ export function MarketingHero() {
           <div className="overflow-hidden rounded-2xl border border-white/15 bg-navy/40 shadow-2xl shadow-black/40 ring-1 ring-white/10">
             <Image
               src="/marketing/dashboard.png"
-              alt="Dot + Dash Accounts dashboard showing receivables, overdue invoices, and needs-attention items"
+              alt="Alfa dashboard showing receivables, overdue invoices, and needs-attention items"
               width={1440}
               height={900}
               className="h-auto w-full"

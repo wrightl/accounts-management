@@ -10,7 +10,7 @@ import {
   CompanyNavBrand,
   type CompanySwitcherOption,
 } from "./company-nav-brand";
-import { NavLinks } from "./nav-links";
+import { NavHelpLink, NavLinks } from "./nav-links";
 import { NavSearchTrigger } from "./nav-command-palette";
 import { NavUserProfile } from "./nav-user-profile";
 
@@ -106,7 +106,18 @@ export function NavMobileDrawer({
             />
           </div>
           <div className="shrink-0 pt-2">
-            <NavSearchTrigger collapsed={false} onClick={onSearch} />
+            <div className="mx-3 flex items-center gap-0.5">
+              <NavSearchTrigger
+                collapsed={false}
+                onClick={onSearch}
+                className="mx-0 w-auto flex-1"
+              />
+              <NavHelpLink
+                collapsed={false}
+                pathname={pathname}
+                onNavigate={onClose}
+              />
+            </div>
             {showPlatformLink ? (
               <Link
                 href="/platform"

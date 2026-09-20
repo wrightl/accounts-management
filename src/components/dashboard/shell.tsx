@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import type { Role } from "@/lib/roles";
 import { CompanyNavBrand, type CompanySwitcherOption } from "./company-nav-brand";
 import { NAV_COLLAPSED_COOKIE, type NavGroup } from "./nav";
-import { NavLinks } from "./nav-links";
+import { NavHelpLink, NavLinks } from "./nav-links";
 import {
   NavCommandPalette,
   NavSearchTrigger,
@@ -125,10 +125,19 @@ export function DashboardShell({
             />
           </div>
           <div className={cn("shrink-0 pt-2", collapsed ? "px-1.5" : "px-0")}>
-            <NavSearchTrigger
-              collapsed={collapsed}
-              onClick={() => setCommandOpen(true)}
-            />
+            <div
+              className={cn(
+                "flex items-center",
+                collapsed ? "flex-col" : "mx-3 gap-0.5",
+              )}
+            >
+              <NavSearchTrigger
+                collapsed={collapsed}
+                onClick={() => setCommandOpen(true)}
+                className={collapsed ? undefined : "mx-0 w-auto flex-1"}
+              />
+              <NavHelpLink collapsed={collapsed} pathname={pathname} />
+            </div>
             {showPlatformLink ? (
               <Link
                 href="/platform"

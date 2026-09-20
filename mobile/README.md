@@ -1,6 +1,6 @@
-# Mobile App - Dot + Dash Accounts
+# Mobile App - Alfa by Dot+Dash
 
-Flutter mobile application for Dot + Dash Accounts, providing on-the-go access to expense management and dashboard features.
+Flutter mobile application for Alfa, providing on-the-go access to expense management and dashboard features.
 
 ## Features
 
@@ -10,7 +10,7 @@ Flutter mobile application for Dot + Dash Accounts, providing on-the-go access t
   - Upload receipts
   - Approve/reject pending expenses
   - View expense history
-- **Secure Authentication**: JWT-based authentication via Clerk
+- **Secure Authentication**: Clerk sign-in (Google and other dashboard providers), same instance as the web app
 
 ## Requirements
 
@@ -31,15 +31,28 @@ flutter pub get
 flutter pub run build_runner build --delete-conflicting-outputs
 ```
 
-3. Configure API base URL:
-Set the `API_BASE_URL` environment variable or update the default in `lib/core/constants/app_constants.dart`.
+3. API URL and Clerk: debug builds load `.env.development`.
+   Set `CLERK_PUBLISHABLE_KEY` to the same value as the web app's
+   `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`. Never add `CLERK_SECRET_KEY` to the
+   mobile app.
+
+   For a device-specific API URL, copy `.env.example` to `.env.local` and run:
+
+```bash
+flutter run --dart-define-from-file=.env.local
+```
 
 ## Running the App
 
 ### Development
+
+Start the Next.js API (`npm run dev` in the repo root), then:
+
 ```bash
 flutter run
 ```
+
+Debug/profile builds load `mobile/.env.development` (`API_BASE_URL=http://localhost:3001`). `--dart-define` / `--dart-define-from-file` override the file.
 
 ### Build for Release
 
@@ -97,10 +110,12 @@ The mobile app communicates with these API endpoints:
 
 ## Authentication
 
-The app uses JWT tokens from Clerk for authentication. Users need to:
-1. Sign in to the web portal
-2. Copy their authentication token
-3. Enter the token in the mobile app
+Sign-in uses the Clerk Flutter SDK against the same Clerk application as the
+website. Google opens in the **system browser** (not an in-app WebView), then
+returns to the app via `com.clerk.flutter://callback`. After sign-in the app
+sends the Clerk session JWT to `/api/mobile/*` as `Authorization: Bearer`.
+
+In the Clerk Dashboard, enable **Native applications** for this instance.
 
 ## Development Notes
 

@@ -4,7 +4,6 @@ import 'package:mockito/mockito.dart';
 import 'package:ddapp_mobile/data/repositories/auth_service.dart';
 import 'package:ddapp_mobile/data/api/api_client.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:dio/dio.dart';
 
 @GenerateMocks([ApiClient, FlutterSecureStorage])
 import 'auth_service_test.mocks.dart';

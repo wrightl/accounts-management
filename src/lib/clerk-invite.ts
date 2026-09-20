@@ -1,7 +1,7 @@
 /**
  * Shared Clerk invitation helpers (invite flows + platform seed).
  * Uses `@clerk/backend` with an explicit secret so invites work outside
- * Next.js request context (e.g. `npm run db:seed`).
+ * Next.js request context (e.g. install-time data migrations).
  */
 import { createClerkClient } from "@clerk/backend";
 

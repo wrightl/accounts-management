@@ -1,0 +1,73 @@
+1
+00:00:00,000 --> 00:00:05,000
+If you run a UK consultancy or studio, your books probably live in spreadsheets,
+
+2
+00:00:05,000 --> 00:00:12,000
+a Drive folder, and emails to your accountant.
+
+3
+00:00:12,000 --> 00:00:18,000
+We built Alfa to get our own books out of that mess.
+This is a first look — not on sale yet.
+
+4
+00:00:18,000 --> 00:00:28,000
+Start the day on one dashboard: what you are owed, what is overdue,
+and what needs attention.
+
+5
+00:00:28,000 --> 00:00:40,000
+No more jumping between five tabs to see if cash is healthy.
+
+6
+00:00:40,000 --> 00:00:52,000
+When a client says yes, the quote becomes an order —
+same line items, same numbers, no retyping.
+
+7
+00:00:52,000 --> 00:01:08,000
+Turn the order into a branded invoice PDF.
+Send it from your usual workflow; the books stay in sync.
+
+8
+00:01:08,000 --> 00:01:20,000
+Payment recorded — receivables and the dashboard update.
+
+9
+00:01:20,000 --> 00:01:32,000
+Founders email receipts to a dedicated address.
+They land as pending expenses for review.
+
+10
+00:01:32,000 --> 00:01:45,000
+Mark what the company owes back, batch it into a reimbursement run,
+and settle it cleanly.
+
+11
+00:01:45,000 --> 00:01:55,000
+Receipts stay attached — not lost in someone's inbox.
+
+12
+00:01:55,000 --> 00:02:08,000
+Export a CSV from your bank, import it,
+and match incoming payments to invoices.
+
+13
+00:02:08,000 --> 00:02:18,000
+Suggested matches mean less manual reconciliation.
+
+14
+00:02:18,000 --> 00:02:25,000
+Reports and a one-click accountant pack:
+CSVs, invoice PDFs, receipts, and bank.
+
+15
+00:02:25,000 --> 00:02:35,000
+Invite your accountant read-only.
+Every sensitive change is in the audit log.
+
+16
+00:02:35,000 --> 00:02:45,000
+If that sounds like your studio, join the waitlist —
+link in the description. Coming soon.

@@ -1,102 +1,63 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import { getDashboardKpis, countOverdueInvoices } from "@/lib/invoices/queries";
-import { listPendingExpenses } from "@/lib/expenses/inbound-email";
-import { countUnreconciledBankTransactions } from "@/lib/bank/queries";
-import { getExpenseByMonth } from "@/lib/reports/queries";
-import { todayIsoDate } from "@/lib/dates";
+import { firstNameFrom, toMobileDashboard } from "@/lib/dashboard/mobile";
+import { getDashboardOverview } from "@/lib/dashboard/queries";
+import { can } from "@/lib/roles";
 
-export async function GET(_request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser();
-    
-    if (!user || !user.companyId) {
+
+    if (!user) {
       return NextResponse.json(
-        { ok: false, error: "Unauthorized" },
-        { status: 401 }
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
       );
     }
 
-    const companyId = user.companyId;
-    const today = todayIsoDate();
-    const currentMonth = today.substring(0, 7);
-    const monthStart = `${currentMonth}-01`;
+    const firstName = firstNameFrom(user.name);
 
-    const [
-      invoiceKpis,
-      overdueCount,
-      pendingExpenses,
-      unreconciledCount,
-      expensesThisMonth,
-    ] = await Promise.all([
-      getDashboardKpis(companyId),
-      countOverdueInvoices(companyId),
-      listPendingExpenses(companyId, 10),
-      countUnreconciledBankTransactions(companyId),
-      getExpenseByMonth(companyId, monthStart, today),
-    ]);
-
-    const expensesThisMonthPence = expensesThisMonth[0]?.totalPence ?? 0;
-    const recentInvoicesCount = 5; // Placeholder since count is not in the data
-
-    const attentionItems = [];
-    
-    if (overdueCount > 0) {
-      attentionItems.push({
-        id: "overdue-invoices",
-        type: "invoice",
-        title: "Overdue Invoices",
-        description: `${overdueCount} invoice${overdueCount === 1 ? "" : "s"} overdue`,
-        priority: "high",
-        createdAt: new Date().toISOString(),
+    if (user.role === "pending") {
+      return NextResponse.json({
+        success: true,
+        data: { role: "pending", firstName },
       });
     }
 
-    if (pendingExpenses.length > 0) {
-      attentionItems.push({
-        id: "pending-expenses",
-        type: "expense",
-        title: "Pending Expenses",
-        description: `${pendingExpenses.length} expense${pendingExpenses.length === 1 ? "" : "s"} awaiting approval`,
-        priority: "medium",
-        createdAt: new Date().toISOString(),
-      });
+    if (!can(user.role, "accounts:read")) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Your role cannot view dashboard metrics.",
+          code: "no_permission",
+        },
+        { status: 403 },
+      );
     }
 
-    if (unreconciledCount > 0) {
-      attentionItems.push({
-        id: "unreconciled-transactions",
-        type: "bank",
-        title: "Unreconciled Transactions",
-        description: `${unreconciledCount} bank transaction${unreconciledCount === 1 ? "" : "s"} to reconcile`,
-        priority: "low",
-        createdAt: new Date().toISOString(),
-      });
+    if (!user.companyId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Complete onboarding to view dashboard metrics.",
+          code: "no_company",
+        },
+        { status: 403 },
+      );
     }
+
+    const period = request.nextUrl.searchParams.get("period");
+    const overview = await getDashboardOverview(user.companyId, user, period);
 
     return NextResponse.json({
       success: true,
-      data: {
-        kpis: {
-          totalRevenuePence: invoiceKpis.invoicedThisMonthPence,
-          outstandingPence: invoiceKpis.outstandingPence,
-          expensesThisMonthPence,
-          pendingExpensesCount: pendingExpenses.length,
-          overdueInvoicesCount: overdueCount,
-        },
-        attentionItems,
-        recentActivity: {
-          recentExpensesCount: pendingExpenses.length,
-          recentInvoicesCount,
-          recentQuotesCount: 0,
-        },
-      },
+      data: toMobileDashboard(overview, { role: user.role, firstName }),
     });
   } catch (error) {
     console.error("Dashboard error:", error);
     return NextResponse.json(
-      { ok: false, error: "Internal server error" },
-      { status: 500 }
+      { success: false, error: "Internal server error" },
+      { status: 500 },
     );
   }
 }
