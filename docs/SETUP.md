@@ -108,13 +108,13 @@ outside the repo; once done, add the listed secrets to the Cursor agent
 
 1. Create a **UK** Stripe account at stripe.com (GBP settlement).
 2. Create four Products/Prices in `gbp`:
-   - Essentials monthly £19 → `STRIPE_PRICE_ESSENTIALS_MONTHLY`
-   - Essentials yearly £190 → `STRIPE_PRICE_ESSENTIALS_YEARLY`
-   - Premium monthly £29 → `STRIPE_PRICE_PREMIUM_MONTHLY`
-   - Premium yearly £290 → `STRIPE_PRICE_PREMIUM_YEARLY`
+    - Essentials monthly £19 → `STRIPE_PRICE_ESSENTIALS_MONTHLY`
+    - Essentials yearly £190 → `STRIPE_PRICE_ESSENTIALS_YEARLY`
+    - Premium monthly £29 → `STRIPE_PRICE_PREMIUM_MONTHLY`
+    - Premium yearly £290 → `STRIPE_PRICE_PREMIUM_YEARLY`
 3. Create a restricted API key (Checkout, Billing, Customers, Webhooks) → `STRIPE_SECRET_KEY`.
 4. Publishable key → `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`.
-5. Webhook endpoint → `https://accounts-manager.dotanddashconsulting.com/api/webhooks/stripe`  
+5. Webhook endpoint → `https://alfa.dotanddashconsulting.com/api/webhooks/stripe`  
    Events: `checkout.session.completed`, `customer.subscription.created|updated|deleted`,
    `invoice.paid`, `invoice.payment_failed`, `invoice.upcoming`.  
    Signing secret → `STRIPE_WEBHOOK_SECRET`.
