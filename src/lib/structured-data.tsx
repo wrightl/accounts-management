@@ -239,14 +239,16 @@ export function generatePricingSchema() {
 
 /**
  * Component to inject structured data into pages
+ * Must be used in server components only
  */
 export function StructuredData({ data }: { data: Record<string, unknown> | Array<Record<string, unknown>> }) {
+  const jsonLd = JSON.stringify(data);
+  
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{
-        __html: JSON.stringify(data),
-      }}
+      dangerouslySetInnerHTML={{ __html: jsonLd }}
+      suppressHydrationWarning
     />
   );
 }

@@ -4,7 +4,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { brand } from "@/lib/brand";
-import { PRODUCT_LOCKUP, PRODUCT_TAGLINE } from "@/lib/product";
+import { PRODUCT_LOCKUP, PRODUCT_TAGLINE, MAKER_DISPLAY } from "@/lib/product";
 import { AppProviders } from "@/components/providers";
 import "./globals.css";
 
