@@ -16,9 +16,14 @@ export default async function PlatformOverviewPage() {
     );
   }
 
-  const [stats, settings] = await Promise.all([
+  const [stats, settings, billingStats] = await Promise.all([
     getPlatformOverviewStats(),
     getPlatformSettings(),
+    hasDatabaseClient()
+      ? import("@/lib/platform/billing-queries").then((m) =>
+          m.getPlatformBillingStats(),
+        )
+      : null,
   ]);
 
   const cards = [
@@ -27,6 +32,16 @@ export default async function PlatformOverviewPage() {
       value: stats.companies,
       href: "/platform/companies",
       note: stats.suspended ? `${stats.suspended} suspended` : undefined,
+    },
+    {
+      label: "MRR (ex VAT)",
+      value: billingStats
+        ? `£${(billingStats.mrrPence / 100).toFixed(0)}`
+        : "—",
+      href: "/platform/billing",
+      note: billingStats
+        ? `${billingStats.trialing} trial · ${billingStats.pastDue} past due`
+        : undefined,
     },
     {
       label: "Errors (24h)",

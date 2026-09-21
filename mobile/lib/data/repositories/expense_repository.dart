@@ -4,12 +4,24 @@ import '../models/expense.dart';
 import '../models/api_response.dart';
 import '../../core/constants/app_constants.dart';
 
+ApiResponse<T> _dioError<T>(DioException e) {
+  final data = e.response?.data;
+  if (data is Map) {
+    final error = data['error']?.toString();
+    final code = data['code']?.toString();
+    if (error != null && error.isNotEmpty) {
+      return ApiResponse.error(error, code: code);
+    }
+  }
+  return ApiResponse.error(e.message ?? 'Network error');
+}
+
 class ExpenseRepository {
   final ApiClient _apiClient;
-  
-  ExpenseRepository({ApiClient? apiClient}) 
+
+  ExpenseRepository({ApiClient? apiClient})
       : _apiClient = apiClient ?? ApiClient();
-  
+
   Future<ApiResponse<List<Expense>>> getExpenses({
     String? status,
     int? limit,
@@ -20,12 +32,12 @@ class ExpenseRepository {
       if (status != null) queryParams['status'] = status;
       if (limit != null) queryParams['limit'] = limit;
       if (offset != null) queryParams['offset'] = offset;
-      
+
       final response = await _apiClient.get(
         AppConstants.expensesEndpoint,
         queryParameters: queryParams,
       );
-      
+
       if (response.statusCode == 200) {
         final expenses = (response.data['data'] as List)
             .map((json) => Expense.fromJson(json))
@@ -35,17 +47,17 @@ class ExpenseRepository {
         return ApiResponse.error('Failed to load expenses');
       }
     } on DioException catch (e) {
-      return ApiResponse.error(e.message ?? 'Network error');
+      return _dioError(e);
     } catch (e) {
       return ApiResponse.error('Unexpected error: $e');
     }
   }
-  
+
   Future<ApiResponse<Expense>> getExpense(String id) async {
     try {
       final path = AppConstants.expenseEndpoint.replaceAll(':id', id);
       final response = await _apiClient.get(path);
-      
+
       if (response.statusCode == 200) {
         final expense = Expense.fromJson(response.data['data']);
         return ApiResponse.success(expense);
@@ -53,19 +65,21 @@ class ExpenseRepository {
         return ApiResponse.error('Failed to load expense');
       }
     } on DioException catch (e) {
-      return ApiResponse.error(e.message ?? 'Network error');
+      return _dioError(e);
     } catch (e) {
       return ApiResponse.error('Unexpected error: $e');
     }
   }
-  
-  Future<ApiResponse<Expense>> createExpense(CreateExpenseRequest request) async {
+
+  Future<ApiResponse<Expense>> createExpense(
+    CreateExpenseRequest request,
+  ) async {
     try {
       final response = await _apiClient.post(
         AppConstants.expensesEndpoint,
         data: request.toJson(),
       );
-      
+
       if (response.statusCode == 201 || response.statusCode == 200) {
         final expense = Expense.fromJson(response.data['data']);
         return ApiResponse.success(expense);
@@ -73,27 +87,28 @@ class ExpenseRepository {
         return ApiResponse.error('Failed to create expense');
       }
     } on DioException catch (e) {
-      return ApiResponse.error(e.message ?? 'Network error');
+      return _dioError(e);
     } catch (e) {
       return ApiResponse.error('Unexpected error: $e');
     }
   }
-  
+
   Future<ApiResponse<String>> uploadReceipt(
     String expenseId,
     String filePath, {
     Function(int, int)? onProgress,
   }) async {
     try {
-      final path = AppConstants.uploadReceiptEndpoint.replaceAll(':id', expenseId);
+      final path =
+          AppConstants.uploadReceiptEndpoint.replaceAll(':id', expenseId);
       final response = await _apiClient.uploadFile(
         path,
         filePath,
-        onSendProgress: onProgress != null 
+        onSendProgress: onProgress != null
             ? (sent, total) => onProgress(sent, total)
             : null,
       );
-      
+
       if (response.statusCode == 200 || response.statusCode == 201) {
         return ApiResponse.success(
           response.data['receiptId'] ?? 'success',
@@ -103,12 +118,12 @@ class ExpenseRepository {
         return ApiResponse.error('Failed to upload receipt');
       }
     } on DioException catch (e) {
-      return ApiResponse.error(e.message ?? 'Network error');
+      return _dioError(e);
     } catch (e) {
       return ApiResponse.error('Unexpected error: $e');
     }
   }
-  
+
   Future<ApiResponse<Expense>> approveExpense(
     String id, {
     String approvalType = 'recorded',
@@ -119,7 +134,7 @@ class ExpenseRepository {
         path,
         data: {'approvalType': approvalType},
       );
-      
+
       if (response.statusCode == 200) {
         final expense = Expense.fromJson(response.data['data']);
         return ApiResponse.success(
@@ -130,12 +145,12 @@ class ExpenseRepository {
         return ApiResponse.error('Failed to approve expense');
       }
     } on DioException catch (e) {
-      return ApiResponse.error(e.message ?? 'Network error');
+      return _dioError(e);
     } catch (e) {
       return ApiResponse.error('Unexpected error: $e');
     }
   }
-  
+
   Future<ApiResponse<Expense>> rejectExpense(
     String id, {
     String? reason,
@@ -146,7 +161,7 @@ class ExpenseRepository {
         path,
         data: {'reason': reason},
       );
-      
+
       if (response.statusCode == 200) {
         final expense = Expense.fromJson(response.data['data']);
         return ApiResponse.success(
@@ -157,7 +172,7 @@ class ExpenseRepository {
         return ApiResponse.error('Failed to reject expense');
       }
     } on DioException catch (e) {
-      return ApiResponse.error(e.message ?? 'Network error');
+      return _dioError(e);
     } catch (e) {
       return ApiResponse.error('Unexpected error: $e');
     }

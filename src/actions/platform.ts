@@ -5,8 +5,10 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   companies,
+  companyBilling,
   companySupportNotes,
   sendJobs,
+  subscriptionTiers,
   users,
 } from "@/db/schema";
 import { platformMutate } from "@/lib/platform";
@@ -40,9 +42,12 @@ import {
   companyInviteAdminRawFromFormData,
   parseCompanyInviteAdminInput,
   parseCompanySupportNoteInput,
+  parseExtendTrialInput,
+  parseGrantComplimentaryInput,
   parsePlatformInviteAdminInput,
   parsePlatformSettingsInput,
   parseSuspendCompanyInput,
+  parseUpdateTierInput,
   platformInviteAdminRawFromFormData,
   platformSettingsRawFromFormData,
 } from "@/lib/platform/schema";
@@ -501,10 +506,15 @@ export async function platformRunDailyCron(): Promise<ActionResult> {
     async () => {
       const recurring = await generateRecurringInvoices();
       let reminders: Record<string, unknown> = { skipped: "no database" };
+      let billingEmails: Record<string, unknown> = { skipped: "no database" };
       if (process.env.DATABASE_URL) {
         const queued = await enqueueOverdueReminders();
         const drained = await drainSendJobs();
         reminders = { queued, ...drained };
+        const { processBillingLifecycleEmails } = await import(
+          "@/lib/billing/emails"
+        );
+        billingEmails = await processBillingLifecycleEmails();
       }
       const purged = await purgeOldPlatformLogs(90);
       await updatePlatformSettings({ lastCronDailyAt: new Date() });
@@ -512,7 +522,7 @@ export async function platformRunDailyCron(): Promise<ActionResult> {
         level: "info",
         source: "cron.daily.manual",
         message: "Platform admin triggered daily cron",
-        meta: { recurring, reminders, purged },
+        meta: { recurring, reminders, purged, billingEmails },
       });
       return { ok: true, id: "cron-daily" };
     },
@@ -546,4 +556,212 @@ export async function reportClientError(params: {
 
 export async function getPlatformSettingsForForm() {
   return getPlatformSettings();
+}
+
+export async function grantComplimentaryAccess(
+  formData: FormData,
+): Promise<ActionResult> {
+  const parsed = parseGrantComplimentaryInput({
+    companyId: formData.get("companyId") ?? "",
+    note: formData.get("note") ?? "",
+    expiresAt: formData.get("expiresAt") ?? "",
+  });
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
+  }
+
+  return platformMutate(
+    async ({ localUserId }) => {
+      const { ensureCompanyBilling } = await import(
+        "@/lib/billing/company-billing"
+      );
+      await ensureCompanyBilling(parsed.data.companyId);
+      const db = getDb();
+      const expiresAt = parsed.data.expiresAt
+        ? new Date(parsed.data.expiresAt)
+        : null;
+      await db
+        .update(companyBilling)
+        .set({
+          access: "complimentary_unlimited",
+          complimentaryGrantedAt: new Date(),
+          complimentaryGrantedByUserId: localUserId,
+          complimentaryNote: parsed.data.note,
+          complimentaryExpiresAt: expiresAt,
+          updatedAt: new Date(),
+        })
+        .where(eq(companyBilling.companyId, parsed.data.companyId));
+
+      try {
+        const { sendBillingEmail } = await import("@/lib/billing/emails");
+        await sendBillingEmail(
+          parsed.data.companyId,
+          "complimentary_granted",
+          `grant_${Date.now()}`,
+        );
+      } catch {
+        /* best-effort */
+      }
+
+      return { ok: true, id: parsed.data.companyId };
+    },
+    {
+      audit: {
+        action: "platform.billing.complimentary_grant",
+        entityType: "company",
+        entityId: parsed.data.companyId,
+        companyId: parsed.data.companyId,
+        meta: { note: parsed.data.note },
+      },
+      paths: [
+        `/platform/companies/${parsed.data.companyId}`,
+        "/platform/billing",
+      ],
+    },
+  );
+}
+
+export async function revokeComplimentaryAccess(
+  companyId: string,
+): Promise<ActionResult> {
+  if (!z.string().uuid().safeParse(companyId).success) {
+    return { ok: false, error: "Invalid company id" };
+  }
+
+  return platformMutate(
+    async () => {
+      const db = getDb();
+      await db
+        .update(companyBilling)
+        .set({
+          access: "standard",
+          complimentaryGrantedAt: null,
+          complimentaryGrantedByUserId: null,
+          complimentaryNote: null,
+          complimentaryExpiresAt: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(companyBilling.companyId, companyId));
+      return { ok: true, id: companyId };
+    },
+    {
+      audit: {
+        action: "platform.billing.complimentary_revoke",
+        entityType: "company",
+        entityId: companyId,
+        companyId,
+      },
+      paths: [`/platform/companies/${companyId}`, "/platform/billing"],
+    },
+  );
+}
+
+export async function extendCompanyTrial(
+  formData: FormData,
+): Promise<ActionResult> {
+  const parsed = parseExtendTrialInput({
+    companyId: formData.get("companyId") ?? "",
+    days: formData.get("days") ?? "7",
+  });
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
+  }
+
+  return platformMutate(
+    async () => {
+      const { ensureCompanyBilling } = await import(
+        "@/lib/billing/company-billing"
+      );
+      await ensureCompanyBilling(parsed.data.companyId);
+      const db = getDb();
+      const [row] = await db
+        .select()
+        .from(companyBilling)
+        .where(eq(companyBilling.companyId, parsed.data.companyId))
+        .limit(1);
+      const base =
+        row?.trialEndsAt && row.trialEndsAt.getTime() > Date.now()
+          ? row.trialEndsAt
+          : new Date();
+      const next = new Date(base);
+      next.setUTCDate(next.getUTCDate() + parsed.data.days);
+      await db
+        .update(companyBilling)
+        .set({
+          plan: "trial",
+          status: "trialing",
+          trialEndsAt: next,
+          updatedAt: new Date(),
+        })
+        .where(eq(companyBilling.companyId, parsed.data.companyId));
+      return { ok: true, id: parsed.data.companyId };
+    },
+    {
+      audit: {
+        action: "platform.billing.extend_trial",
+        entityType: "company",
+        entityId: parsed.data.companyId,
+        companyId: parsed.data.companyId,
+        meta: { days: parsed.data.days },
+      },
+      paths: [
+        `/platform/companies/${parsed.data.companyId}`,
+        "/platform/billing",
+      ],
+    },
+  );
+}
+
+export async function updateSubscriptionTier(
+  formData: FormData,
+): Promise<ActionResult> {
+  const parsed = parseUpdateTierInput({
+    slug: formData.get("slug") ?? "",
+    maxUsers: formData.get("maxUsers") ?? "0",
+    vatExport: formData.get("vatExport") ?? "",
+    liveBankFeed: formData.get("liveBankFeed") ?? "",
+    prioritySupport: formData.get("prioritySupport") ?? "",
+  });
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
+  }
+
+  return platformMutate(
+    async () => {
+      const db = getDb();
+      await db
+        .update(subscriptionTiers)
+        .set({
+          maxUsers: parsed.data.maxUsers,
+          vatExport: parsed.data.vatExport,
+          liveBankFeed: parsed.data.liveBankFeed,
+          prioritySupport: parsed.data.prioritySupport,
+          updatedAt: new Date(),
+        })
+        .where(eq(subscriptionTiers.slug, parsed.data.slug));
+      return { ok: true, id: parsed.data.slug };
+    },
+    {
+      audit: {
+        action: "platform.billing.tier_update",
+        entityType: "subscription_tier",
+        entityId: parsed.data.slug,
+        companyId: null,
+        meta: parsed.data,
+      },
+      paths: ["/platform/billing/tiers", "/platform/billing"],
+    },
+  );
 }

@@ -27,7 +27,7 @@ const FAQS = [
   {
     id: "per_seat",
     q: "Is pricing per seat?",
-    a: "No. You pay per organisation. Essentials covers up to 3 users (founders plus accountant); Premium goes up to 15. Fair-use seats, not a seat tax.",
+    a: "No. You pay per organisation. Essentials covers up to 5 users (founders plus accountant); Premium goes up to 15. Fair-use seats, not a seat tax.",
   },
   {
     id: "annual_discount",

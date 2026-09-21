@@ -33,6 +33,16 @@ const serverSchema = z.object({
   /** Local-part prefix for per-user plus-addresses, e.g. expenses+company.user@domain. */
   EXPENSE_INBOUND_PREFIX: z.string().default("expenses"),
 
+  // Stripe Billing (manual keys — not Vercel Marketplace).
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  STRIPE_PRICE_ESSENTIALS_MONTHLY: z.string().optional(),
+  STRIPE_PRICE_ESSENTIALS_YEARLY: z.string().optional(),
+  STRIPE_PRICE_PREMIUM_MONTHLY: z.string().optional(),
+  STRIPE_PRICE_PREMIUM_YEARLY: z.string().optional(),
+  /** When "true", Checkout uses automatic_tax (requires UK VAT registration in Stripe). */
+  STRIPE_TAX_ENABLED: z.enum(["true", "false"]).optional(),
+
   // Cron / automation. Routes refuse to run until CRON_SECRET is set.
   CRON_SECRET: z.string().optional(),
 
@@ -45,6 +55,7 @@ const serverSchema = z.object({
 const clientSchema = z.object({
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().optional(),
   NEXT_PUBLIC_APP_URL: z.string().url().optional(),
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().optional(),
 });
 
 type ServerEnv = z.infer<typeof serverSchema>;
@@ -73,6 +84,8 @@ export const clientEnv: ClientEnv = clientSchema.parse({
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:
     process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:
+    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
 });
 
 /** A required server value, throwing a clear error when absent. */

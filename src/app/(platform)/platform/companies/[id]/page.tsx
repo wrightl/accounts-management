@@ -3,12 +3,14 @@ import { notFound } from "next/navigation";
 import { requirePlatformAdmin } from "@/lib/platform";
 import { hasDatabaseClient } from "@/db";
 import { getPlatformCompanyDetail } from "@/lib/platform/queries";
+import { getCompanyBillingDetail } from "@/lib/platform/billing-queries";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import {
   CompanyInviteAdminForm,
   CompanySupportNoteForm,
   CompanySuspendForm,
 } from "@/components/platform/company-ops-forms";
+import { CompanyBillingOpsForm } from "@/components/platform/company-billing-ops";
 import { roleLabel, isRole } from "@/lib/roles";
 
 export default async function PlatformCompanyDetailPage({
@@ -33,6 +35,7 @@ export default async function PlatformCompanyDetailPage({
 
   const { company, members, recentAudit, notes, inboundCounts, sendCounts } =
     detail;
+  const { billing, entitlements } = await getCompanyBillingDetail(id);
 
   return (
     <div>
@@ -113,6 +116,20 @@ export default async function PlatformCompanyDetailPage({
         <CompanySuspendForm
           companyId={company.id}
           suspended={Boolean(company.suspendedAt)}
+        />
+
+        <CompanyBillingOpsForm
+          companyId={company.id}
+          complimentary={entitlements.complimentary}
+          plan={billing.plan}
+          status={billing.status}
+          trialEndsAt={billing.trialEndsAt}
+          currentPeriodEnd={billing.currentPeriodEnd}
+          stripeCustomerId={billing.stripeCustomerId}
+          stripeSubscriptionId={billing.stripeSubscriptionId}
+          complimentaryNote={billing.complimentaryNote}
+          complimentaryExpiresAt={billing.complimentaryExpiresAt}
+          readOnly={entitlements.readOnly}
         />
 
         <section className="rounded-2xl border border-border bg-white p-5">

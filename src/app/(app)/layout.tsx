@@ -76,12 +76,21 @@ export default async function AppLayout({
   }
 
   let maintenanceBanner: string | null = null;
+  let billingBanner: Awaited<
+    ReturnType<typeof import("@/lib/billing/queries").getBillingBanner>
+  > = null;
   if (hasDatabaseClient()) {
     try {
       const settings = await getPlatformSettings();
       maintenanceBanner = settings.maintenanceBanner;
     } catch {
       maintenanceBanner = null;
+    }
+    try {
+      const { getBillingBanner } = await import("@/lib/billing/queries");
+      billingBanner = await getBillingBanner(user.companyId);
+    } catch {
+      billingBanner = null;
     }
   }
 
@@ -105,6 +114,7 @@ export default async function AppLayout({
       overdueInvoiceCount={overdueInvoiceCount}
       showPlatformLink={showPlatformLink}
       maintenanceBanner={maintenanceBanner}
+      billingBanner={billingBanner}
       suspendedReason={
         company.suspendedAt
           ? company.suspendedReason ??

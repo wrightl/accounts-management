@@ -188,6 +188,12 @@ export async function inviteUser(formData: FormData): Promise<ActionResult> {
         };
       }
 
+      const { canInviteUser } = await import("@/lib/billing/entitlements");
+      const inviteGate = await canInviteUser(companyId);
+      if (!inviteGate.ok) {
+        return { ok: false, error: inviteGate.error ?? "User limit reached." };
+      }
+
       const existing = await findUserByEmail(email);
       if (isPlatformAdminRole(existing?.role)) {
         return {

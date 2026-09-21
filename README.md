@@ -239,8 +239,8 @@ GitHub Actions (`.github/workflows/ci.yml`) runs lint, typecheck, Vitest,
 | Live bank feed           | CSV import for major UK banks; Open Banking / live feed later                                          |
 | VAT / Making Tax Digital | Rates + period summary/export when registered; no HMRC submission                                      |
 | Multi-currency books     | GBP only; foreign receipt currency is informational                                                    |
-| Public `/pricing`        | Live — Trial / Essentials (£19) / Premium (£29); Stripe conversion still planned                       |
-| Subscriptions / billing  | Planned — see [`docs/plans/gaps-subscriptions-pricing.md`](./docs/plans/gaps-subscriptions-pricing.md) |
+| Public `/pricing`        | Live — Trial / Essentials (£19) / Premium (£29); Checkout from Settings → Billing                       |
+| Subscriptions / billing  | Live — Stripe Checkout + Portal, entitlements, platform complimentary / tiers / metrics, lifecycle emails |
 
 The original phased plan (invoicing → expenses → reimbursements → bank →
 reports → quotes/cron) is in [`docs/plan.md`](./docs/plan.md). Treat unfinished

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart' hide DateUtils;
 import 'package:provider/provider.dart';
 import '../expense_provider.dart';
+import '../../auth/auth_provider.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../data/models/expense.dart';
 
@@ -142,11 +143,13 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.pushNamed(context, '/expenses/capture'),
-        icon: const Icon(Icons.camera_alt),
-        label: const Text('Capture'),
-      ),
+      floatingActionButton: context.watch<AuthProvider>().user?.isBillingReadOnly == true
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () => Navigator.pushNamed(context, '/expenses/capture'),
+              icon: const Icon(Icons.camera_alt),
+              label: const Text('Capture'),
+            ),
     );
   }
 

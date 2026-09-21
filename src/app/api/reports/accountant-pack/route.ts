@@ -21,6 +21,19 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Complete onboarding first" }, { status: 403 });
   }
 
+  const { getEntitlements } = await import("@/lib/billing/entitlements");
+  const entitlements = await getEntitlements(user.companyId);
+  if (!entitlements.vatExport) {
+    return NextResponse.json(
+      {
+        error:
+          "VAT export in the accountant pack requires Essentials or Premium. Upgrade to download.",
+        code: "feature_not_on_plan",
+      },
+      { status: 403 },
+    );
+  }
+
   const url = new URL(request.url);
   const defaults = await defaultReportPeriod(user.companyId);
   const from = url.searchParams.get("from") ?? defaults.from;

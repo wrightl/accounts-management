@@ -50,8 +50,14 @@ class AppConstants {
   static const double defaultPadding = 16.0;
   static const double defaultBorderRadius = 8.0;
   static const int animationDuration = 300;
-  
+
   // Currency
   static const String currencySymbol = '£';
   static const String currencyCode = 'GBP';
+
+  /// Web billing settings (manage plan / upgrade).
+  static String get webBillingUrl {
+    final base = apiBaseUrl.replaceAll(RegExp(r'/$'), '');
+    return '$base/settings/billing';
+  }
 }

@@ -6,6 +6,7 @@ export type PlatformNavItem = {
 export const PLATFORM_NAV: PlatformNavItem[] = [
   { href: "/platform", label: "Overview" },
   { href: "/platform/companies", label: "Companies" },
+  { href: "/platform/billing", label: "Billing" },
   { href: "/platform/users", label: "Users" },
   { href: "/platform/activity", label: "Activity" },
   { href: "/platform/logs", label: "Logs" },

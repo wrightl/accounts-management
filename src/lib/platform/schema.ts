@@ -164,3 +164,70 @@ export function parseSuspendCompanyInput(
 ): ParseOk<SuspendCompanyParsed> | ParseFail {
   return parseWithFieldErrors(suspendCompanySchema, raw);
 }
+
+export const grantComplimentarySchema = z.object({
+  companyId: z.string().uuid("Invalid company id"),
+  note: z
+    .string()
+    .trim()
+    .max(2000, "Note must be 2000 characters or fewer")
+    .optional()
+    .or(z.literal(""))
+    .transform((v) => (v === "" || v == null ? null : v)),
+  expiresAt: z
+    .string()
+    .trim()
+    .optional()
+    .or(z.literal(""))
+    .transform((v) => (v === "" || v == null ? null : v))
+    .refine(
+      (v) => v == null || !Number.isNaN(Date.parse(v)),
+      "Enter a valid expiry date",
+    ),
+});
+
+export type GrantComplimentaryParsed = z.infer<typeof grantComplimentarySchema>;
+
+export function parseGrantComplimentaryInput(
+  raw: unknown,
+): ParseOk<GrantComplimentaryParsed> | ParseFail {
+  return parseWithFieldErrors(grantComplimentarySchema, raw);
+}
+
+export const extendTrialSchema = z.object({
+  companyId: z.string().uuid("Invalid company id"),
+  days: z.coerce.number().int().min(1).max(90),
+});
+
+export type ExtendTrialParsed = z.infer<typeof extendTrialSchema>;
+
+export function parseExtendTrialInput(
+  raw: unknown,
+): ParseOk<ExtendTrialParsed> | ParseFail {
+  return parseWithFieldErrors(extendTrialSchema, raw);
+}
+
+export const updateTierSchema = z.object({
+  slug: z.enum(["trial", "essentials", "premium"]),
+  maxUsers: z.coerce.number().int().min(0).max(1000),
+  vatExport: z
+    .union([z.literal("on"), z.literal("true"), z.literal("1"), z.literal("")])
+    .optional()
+    .transform((v) => v === "on" || v === "true" || v === "1"),
+  liveBankFeed: z
+    .union([z.literal("on"), z.literal("true"), z.literal("1"), z.literal("")])
+    .optional()
+    .transform((v) => v === "on" || v === "true" || v === "1"),
+  prioritySupport: z
+    .union([z.literal("on"), z.literal("true"), z.literal("1"), z.literal("")])
+    .optional()
+    .transform((v) => v === "on" || v === "true" || v === "1"),
+});
+
+export type UpdateTierParsed = z.infer<typeof updateTierSchema>;
+
+export function parseUpdateTierInput(
+  raw: unknown,
+): ParseOk<UpdateTierParsed> | ParseFail {
+  return parseWithFieldErrors(updateTierSchema, raw);
+}

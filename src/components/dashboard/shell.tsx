@@ -38,6 +38,7 @@ export function DashboardShell({
   showPlatformLink = false,
   maintenanceBanner = null,
   suspendedReason = null,
+  billingBanner = null,
   children,
 }: {
   groups: NavGroup[];
@@ -53,6 +54,12 @@ export function DashboardShell({
   showPlatformLink?: boolean;
   maintenanceBanner?: string | null;
   suspendedReason?: string | null;
+  billingBanner?: {
+    tone: "info" | "warn" | "danger";
+    message: string;
+    ctaHref: string;
+    ctaLabel: string;
+  } | null;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -166,7 +173,7 @@ export function DashboardShell({
           onClick={() => setMobileOpen(true)}
           className="absolute left-4 top-4 z-10 bg-navy text-white shadow-sm hover:bg-navy/90"
         />
-        {(maintenanceBanner || suspendedReason) && (
+        {(maintenanceBanner || suspendedReason || billingBanner) && (
           <div className="shrink-0 space-y-0 border-b border-border">
             {maintenanceBanner ? (
               <div className="bg-amber-50 px-6 py-2 text-sm text-amber-950">
@@ -176,6 +183,24 @@ export function DashboardShell({
             {suspendedReason ? (
               <div className="bg-red-50 px-6 py-2 text-sm text-red-900">
                 {suspendedReason}
+              </div>
+            ) : null}
+            {billingBanner ? (
+              <div
+                className={cn(
+                  "flex flex-wrap items-center justify-between gap-2 px-6 py-2 text-sm",
+                  billingBanner.tone === "danger" && "bg-red-50 text-red-900",
+                  billingBanner.tone === "warn" && "bg-amber-50 text-amber-950",
+                  billingBanner.tone === "info" && "bg-sky-50 text-sky-950",
+                )}
+              >
+                <span>{billingBanner.message}</span>
+                <Link
+                  href={billingBanner.ctaHref}
+                  className="font-medium underline underline-offset-2"
+                >
+                  {billingBanner.ctaLabel}
+                </Link>
               </div>
             ) : null}
           </div>

@@ -24,7 +24,7 @@ const PLANS: Plan[] = [
     features: [
       "Core books — quotes, invoices, expenses, reports",
       "Recurring invoices",
-      "Up to 3 users (founders + accountant)",
+      "Up to 5 users (founders + accountant)",
       "All multi-bank CSV providers",
       "VAT summary only (no export)",
     ],
@@ -39,7 +39,7 @@ const PLANS: Plan[] = [
     features: [
       "Everything in Trial",
       "VAT rates + VAT export for your accountant",
-      "Up to 3 users",
+      "Up to 5 users",
       "All multi-bank CSV providers",
       "Accountant pack",
     ],
@@ -83,8 +83,8 @@ const COMPARE_ROWS: CompareRow[] = [
   },
   {
     label: "Users",
-    trial: "Up to 3",
-    essentials: "Up to 3",
+    trial: "Up to 5",
+    essentials: "Up to 5",
     premium: "Up to 15",
   },
   {

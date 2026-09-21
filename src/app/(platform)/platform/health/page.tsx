@@ -35,6 +35,23 @@ export default async function PlatformHealthPage() {
     { label: "Resend webhook secret", ok: Boolean(env.RESEND_WEBHOOK_SECRET) },
     { label: "AI Gateway", ok: Boolean(env.AI_GATEWAY_API_KEY) },
     { label: "Cron secret", ok: Boolean(env.CRON_SECRET) },
+    {
+      label: "Stripe secret key",
+      ok: Boolean(env.STRIPE_SECRET_KEY),
+    },
+    {
+      label: "Stripe webhook secret",
+      ok: Boolean(env.STRIPE_WEBHOOK_SECRET),
+    },
+    {
+      label: "Stripe price IDs",
+      ok: Boolean(
+        env.STRIPE_PRICE_ESSENTIALS_MONTHLY &&
+          env.STRIPE_PRICE_ESSENTIALS_YEARLY &&
+          env.STRIPE_PRICE_PREMIUM_MONTHLY &&
+          env.STRIPE_PRICE_PREMIUM_YEARLY,
+      ),
+    },
   ];
 
   const settings =

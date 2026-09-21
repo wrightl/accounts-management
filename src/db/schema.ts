@@ -870,6 +870,115 @@ export const recurringInvoices = pgTable(
   (t) => [index("idx_recurring_invoices_company").on(t.companyId)],
 );
 
+export const billingPlanEnum = pgEnum("billing_plan", [
+  "trial",
+  "essentials",
+  "premium",
+]);
+export const billingStatusEnum = pgEnum("billing_status", [
+  "trialing",
+  "active",
+  "past_due",
+  "canceled",
+  "unpaid",
+]);
+export const billingAccessEnum = pgEnum("billing_access", [
+  "standard",
+  "complimentary_unlimited",
+]);
+export const billingIntervalEnum = pgEnum("billing_interval", [
+  "month",
+  "year",
+]);
+
+/** Per-company subscription / trial state (synced from Stripe + platform grants). */
+export const companyBilling = pgTable(
+  "company_billing",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" })
+      .unique(),
+    plan: billingPlanEnum("plan").notNull().default("trial"),
+    status: billingStatusEnum("status").notNull().default("trialing"),
+    access: billingAccessEnum("access").notNull().default("standard"),
+    stripeCustomerId: text("stripe_customer_id"),
+    stripeSubscriptionId: text("stripe_subscription_id"),
+    trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
+    currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+    billingInterval: billingIntervalEnum("billing_interval"),
+    complimentaryGrantedAt: timestamp("complimentary_granted_at", {
+      withTimezone: true,
+    }),
+    complimentaryGrantedByUserId: uuid(
+      "complimentary_granted_by_user_id",
+    ).references(() => users.id, { onDelete: "set null" }),
+    complimentaryNote: text("complimentary_note"),
+    complimentaryExpiresAt: timestamp("complimentary_expires_at", {
+      withTimezone: true,
+    }),
+    pastDueSince: timestamp("past_due_since", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("idx_company_billing_stripe_customer").on(t.stripeCustomerId),
+    index("idx_company_billing_stripe_subscription").on(t.stripeSubscriptionId),
+    index("idx_company_billing_status").on(t.status),
+  ],
+);
+
+/** Editable plan limits (seeded; managed in platform admin). */
+export const subscriptionTiers = pgTable("subscription_tiers", {
+  slug: text("slug").primaryKey(),
+  name: text("name").notNull(),
+  /** Max company members; 0 = unlimited for that tier. */
+  maxUsers: integer("max_users").notNull(),
+  vatExport: boolean("vat_export").notNull().default(false),
+  liveBankFeed: boolean("live_bank_feed").notNull().default(false),
+  prioritySupport: boolean("priority_support").notNull().default(false),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+/** Idempotent Stripe webhook processing. */
+export const stripeWebhookEvents = pgTable("stripe_webhook_events", {
+  eventId: text("event_id").primaryKey(),
+  type: text("type").notNull(),
+  processedAt: timestamp("processed_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+/** Dedupes lifecycle billing emails (cron + webhook). */
+export const billingEmailLog = pgTable(
+  "billing_email_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    template: text("template").notNull(),
+    periodKey: text("period_key").notNull(),
+    sentAt: timestamp("sent_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("uniq_billing_email_log_company_template_period").on(
+      t.companyId,
+      t.template,
+      t.periodKey,
+    ),
+    index("idx_billing_email_log_company").on(t.companyId),
+  ],
+);
+
 /** Singleton platform knobs (id = 1). Secrets stay in env. */
 export const platformSettings = pgTable("platform_settings", {
   id: integer("id").primaryKey(),
@@ -949,6 +1058,12 @@ export type EntityType = (typeof entityTypeEnum.enumValues)[number];
 export type Company = typeof companies.$inferSelect;
 export type PlatformSettings = typeof platformSettings.$inferSelect;
 export type PlatformLogLevel = "error" | "warn" | "info";
+export type BillingPlan = (typeof billingPlanEnum.enumValues)[number];
+export type BillingStatus = (typeof billingStatusEnum.enumValues)[number];
+export type BillingAccess = (typeof billingAccessEnum.enumValues)[number];
+export type BillingInterval = (typeof billingIntervalEnum.enumValues)[number];
+export type CompanyBilling = typeof companyBilling.$inferSelect;
+export type SubscriptionTier = typeof subscriptionTiers.$inferSelect;
 
 export const schema = {
   users,
@@ -982,6 +1097,10 @@ export const schema = {
   recurringInvoices,
   sendJobs,
   inboundEmailJobs,
+  companyBilling,
+  subscriptionTiers,
+  stripeWebhookEvents,
+  billingEmailLog,
   platformSettings,
   platformLogs,
   companySupportNotes,

@@ -8,6 +8,10 @@ import type { Permission } from "@/lib/roles";
 import type { ActionResult } from "@/actions/result";
 import { companies, type EntityType } from "@/db/schema";
 import { getDb } from "@/db";
+import {
+  getEntitlements,
+  readOnlyMessage,
+} from "@/lib/billing/entitlements";
 
 export interface MutateAudit {
   action: string;
@@ -50,6 +54,21 @@ async function prepareMutate(permission: Permission): Promise<MutatePrep> {
         ? `This company is suspended: ${company.suspendedReason.trim()}`
         : "This company is suspended. Contact support for help.",
     };
+  }
+
+  try {
+    const entitlements = await getEntitlements(authz.user.companyId);
+    if (entitlements.readOnly) {
+      return { ok: false, error: readOnlyMessage(entitlements.reason) };
+    }
+  } catch (err) {
+    console.warn(
+      JSON.stringify({
+        level: "warn",
+        msg: "entitlements_check_failed",
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    );
   }
 
   const localUserId = await ensureLocalUser(authz.user);

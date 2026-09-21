@@ -5,6 +5,10 @@ import { getCurrentUser, type SessionUser } from "@/lib/auth";
 import { can, type Permission } from "@/lib/roles";
 import { companies } from "@/db/schema";
 import { getDb } from "@/db";
+import {
+  getEntitlements,
+  readOnlyMessage,
+} from "@/lib/billing/entitlements";
 
 export type MobileAuthUser = SessionUser & {
   companyId: string;
@@ -16,7 +20,7 @@ type MobileAuthFail = { ok: false; response: NextResponse };
 /**
  * Authz for mobile API routes. Mirrors web `mutate` / `requirePermission`:
  * 401 unauthenticated, 403 missing permission / company, and for writes
- * refuses suspended companies.
+ * refuses suspended companies and read-only billing.
  */
 export async function requireMobileAuth(
   permission: Permission,
@@ -88,6 +92,36 @@ export async function requireMobileAuth(
           { status: 403 },
         ),
       };
+    }
+
+    try {
+      const entitlements = await getEntitlements(user.companyId);
+      if (entitlements.readOnly) {
+        const code =
+          entitlements.reason === "trial_expired"
+            ? "trial_expired"
+            : "plan_read_only";
+        return {
+          ok: false,
+          response: NextResponse.json(
+            {
+              ok: false,
+              success: false,
+              error: readOnlyMessage(entitlements.reason),
+              code,
+            },
+            { status: 403 },
+          ),
+        };
+      }
+    } catch (err) {
+      console.warn(
+        JSON.stringify({
+          level: "warn",
+          msg: "mobile_entitlements_check_failed",
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
     }
   }
 

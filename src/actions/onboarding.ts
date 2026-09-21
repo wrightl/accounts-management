@@ -112,6 +112,16 @@ export async function completeOnboarding(
     name: data.userName,
   });
 
+  const { startCompanyTrial } = await import("@/lib/billing/company-billing");
+  await startCompanyTrial(company.id);
+
+  try {
+    const { sendBillingEmail } = await import("@/lib/billing/emails");
+    await sendBillingEmail(company.id, "trial_welcome", `welcome_${company.id}`);
+  } catch {
+    /* best-effort */
+  }
+
   await writeAudit({
     companyId: company.id,
     actorUserId: localUserId,

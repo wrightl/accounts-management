@@ -98,7 +98,7 @@ From competitor research hypothesis, refined to publishable numbers:
 | ------------------------------------------------------------------------------------------------------------- | ----------------- | ------------- | ------------- |
 | Core books (clients, quotes, orders, invoices, expenses, reimbursements, dividends, reports, accountant pack) | Yes               | Yes           | Yes           |
 | Recurring invoices                                                                                            | Yes               | Yes           | Yes           |
-| Users (founders + accountant)                                                                                 | Up to 3           | Up to 3       | Up to 15      |
+| Users (founders + accountant)                                                                                 | Up to 5           | Up to 5       | Up to 15      |
 | Multi-bank CSV providers                                                                                      | All supported     | All supported | All supported |
 | VAT rates + VAT export                                                                                        | Summary only / £0 | Yes           | Yes           |
 | Live bank feed (when built)                                                                                   | No                | No            | Yes (future)  |
@@ -207,14 +207,16 @@ flowchart LR
 
 ### Billing
 
-- [ ] Provision Stripe via Vercel Marketplace; pull env
-- [ ] Schema migration for subscription fields
-- [ ] `lib/billing/entitlements.ts` + gate critical writes after trial
-- [ ] Checkout session create action; Customer Portal link
-- [ ] Webhook route (raw body verify) + idempotent updates
-- [ ] Settings → Billing UI
-- [ ] Platform admin: plan/status + complimentary grant
-- [ ] Tests: webhook fixtures; entitlement matrix; trial expiry soft-lock
+- [x] Manual Stripe env (not Vercel Marketplace)
+- [x] Schema migration for subscription fields + editable tiers
+- [x] `lib/billing/entitlements.ts` + gate critical writes after trial
+- [x] Checkout session create action; Customer Portal link
+- [x] Webhook route (raw body verify) + idempotent updates
+- [x] Settings → Billing UI
+- [x] Platform admin: plan/status + complimentary grant + tier editor + metrics
+- [x] Lifecycle emails (trial, renewal, lapsed, payment)
+- [x] Mobile entitlements + billing banner
+- [ ] Tests: webhook fixtures; entitlement matrix; trial expiry soft-lock (partial unit coverage)
 
 ### Gaps
 
