@@ -32,7 +32,7 @@ export const metadata: Metadata = {
     title: "Limited Company Financial Requirements Guide - UK",
     description:
       "Complete guide to UK limited company financial requirements, including Companies House filings, Corporation Tax obligations, and statutory accounts.",
-    url: "https://accounts-manager.dotanddashconsulting.com/guides/limited-companies",
+    url: "https://alfa.dotanddashconsulting.com/guides/limited-companies",
     siteName: "Alfa by Dot+Dash",
     locale: "en_GB",
     type: "article",
@@ -44,7 +44,7 @@ export const metadata: Metadata = {
       "Complete guide to UK limited company financial requirements for company directors.",
   },
   alternates: {
-    canonical: "https://accounts-manager.dotanddashconsulting.com/guides/limited-companies",
+    canonical: "https://alfa.dotanddashconsulting.com/guides/limited-companies",
   },
 };
 

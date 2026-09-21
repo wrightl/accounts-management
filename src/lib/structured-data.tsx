@@ -10,7 +10,7 @@ export interface StructuredDataProps {
   data?: Record<string, unknown>;
 }
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://accounts-manager.dotanddashconsulting.com";
+const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://alfa.dotanddashconsulting.com";
 
 /**
  * Generate Organization schema

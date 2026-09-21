@@ -81,7 +81,7 @@ outside the repo; once done, add the listed secrets to the Cursor agent
    add GitHub Actions secrets on the repo:
 
 - `CRON_SECRET` — same value as Vercel Production
-- `APP_URL` — `https://accounts-manager.dotanddashconsulting.com` (no trailing slash) Workflow: `.github/workflows/cron-inbound-email.yml`.
+- `APP_URL` — `https://alfa.dotanddashconsulting.com` (no trailing slash) Workflow: `.github/workflows/cron-inbound-email.yml`.
 
 ## 5. Email — Resend **(you)**
 
@@ -90,7 +90,7 @@ outside the repo; once done, add the listed secrets to the Cursor agent
    leave the default console transport on the live project.
 2. Verify the sending domain (add the DNS records Resend provides for **outbound**).
 3. Enable **Receiving** on `dotanddashconsulting.com` (MX records — separate from sending DNS).
-4. Create a webhook → `https://accounts-manager.dotanddashconsulting.com/api/webhooks/resend` with event `email.received`. Copy the signing secret → `RESEND_WEBHOOK_SECRET`.
+4. Create a webhook → `https://alfa.dotanddashconsulting.com/api/webhooks/resend` with event `email.received`. Copy the signing secret → `RESEND_WEBHOOK_SECRET`.
 5. Set inbound routing env:
 
 - `EXPENSE_INBOUND_DOMAIN=dotanddashconsulting.com` (the receiving domain)
@@ -109,7 +109,7 @@ outside the repo; once done, add the listed secrets to the Cursor agent
 1. Vercel → Project → **Domains** → add `accounts.dotanddashconsulting.com`.
 2. In **Squarespace DNS**, add the record Vercel shows — typically a `CNAME`
    for `accounts` → `cname.vercel-dns.com`.
-3. Set `NEXT_PUBLIC_APP_URL=https://accounts-manager.dotanddashconsulting.com`.
+3. Set `NEXT_PUBLIC_APP_URL=https://alfa.dotanddashconsulting.com`.
 
 ## 7. Secrets to add to the Cursor agent **(you)**
 

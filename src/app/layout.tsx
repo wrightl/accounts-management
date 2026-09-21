@@ -33,7 +33,7 @@ export const metadata: Metadata = {
   authors: [{ name: MAKER_DISPLAY }],
   creator: MAKER_DISPLAY,
   publisher: MAKER_DISPLAY,
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://accounts-manager.dotanddashconsulting.com"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://alfa.dotanddashconsulting.com"),
   openGraph: {
     type: "website",
     locale: "en_GB",

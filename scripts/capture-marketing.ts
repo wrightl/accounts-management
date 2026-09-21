@@ -9,7 +9,7 @@
  *
  * Usage:
  *   npm run marketing:capture
- *   PROMO_BASE_URL=https://accounts-manager.dotanddashconsulting.com npm run marketing:capture:production
+ *   PROMO_BASE_URL=https://alfa.dotanddashconsulting.com npm run marketing:capture:production
  *
  * Production capture needs live Clerk + DB secrets in `.env.production.local`
  * (Vercel marks them Sensitive and will not pull them).
@@ -41,7 +41,7 @@ const marketingDir = join(root, "public", "marketing");
 const rawDir = join(root, "promo", "raw-marketing");
 const routesPath = join(root, "promo", "routes.json");
 
-const PRODUCTION_URL = "https://accounts-manager.dotanddashconsulting.com";
+const PRODUCTION_URL = "https://alfa.dotanddashconsulting.com";
 
 // Load local env first, then optionally overlay non-placeholder production secrets.
 config({ path: ".env.local" });

@@ -32,7 +32,7 @@ export const metadata: Metadata = {
     title: "Sole Trader Financial Requirements Guide - UK",
     description:
       "Complete guide to UK sole trader financial requirements, including Self Assessment, Income Tax, National Insurance, and record keeping obligations.",
-    url: "https://accounts-manager.dotanddashconsulting.com/guides/sole-traders",
+    url: "https://alfa.dotanddashconsulting.com/guides/sole-traders",
     siteName: "Alfa by Dot+Dash",
     locale: "en_GB",
     type: "article",
@@ -44,7 +44,7 @@ export const metadata: Metadata = {
       "Complete guide to UK sole trader financial requirements for self-employed individuals.",
   },
   alternates: {
-    canonical: "https://accounts-manager.dotanddashconsulting.com/guides/sole-traders",
+    canonical: "https://alfa.dotanddashconsulting.com/guides/sole-traders",
   },
 };
 

@@ -5,7 +5,7 @@
 spreadsheets and shared folders with one app for quotes, orders, invoicing,
 expenses, reimbursements, bank reconciliation, and reporting.
 
-Production: [accounts-manager.dotanddashconsulting.com](https://accounts-manager.dotanddashconsulting.com)
+Production: [alfa.dotanddashconsulting.com](https://alfa.dotanddashconsulting.com)
 
 Each organisation is a **tenant** (one legal entity). Founders belong to one
 company; accountants can be invited to many and switch between them. New users

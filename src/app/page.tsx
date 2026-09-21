@@ -47,13 +47,13 @@ export const metadata: Metadata = {
     title: "Alfa - UK Accounting Software for Limited Companies & Sole Traders",
     description:
       "Replace spreadsheets with integrated bookkeeping. Quotes, invoices, expenses, bank reconciliation, and reporting built specifically for UK businesses. Free 30-day trial.",
-    url: "https://accounts-manager.dotanddashconsulting.com",
+    url: "https://alfa.dotanddashconsulting.com",
     siteName: "Alfa by Dot+Dash",
     locale: "en_GB",
     type: "website",
     images: [
       {
-        url: "https://accounts-manager.dotanddashconsulting.com/marketing/dashboard.png",
+        url: "https://alfa.dotanddashconsulting.com/marketing/dashboard.png",
         width: 1440,
         height: 900,
         alt: "Alfa dashboard showing receivables, overdue invoices, and needs-attention items",
@@ -65,10 +65,10 @@ export const metadata: Metadata = {
     title: "Alfa - UK Accounting Software for Limited Companies & Sole Traders",
     description:
       "Replace spreadsheets with integrated bookkeeping. Built specifically for UK consultancies, studios, and agencies. Free 30-day trial.",
-    images: ["https://accounts-manager.dotanddashconsulting.com/marketing/dashboard.png"],
+    images: ["https://alfa.dotanddashconsulting.com/marketing/dashboard.png"],
   },
   alternates: {
-    canonical: "https://accounts-manager.dotanddashconsulting.com",
+    canonical: "https://alfa.dotanddashconsulting.com",
   },
 };
 
