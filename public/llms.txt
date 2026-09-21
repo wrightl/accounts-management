@@ -9,7 +9,7 @@ The product replaces spreadsheets and shared folders with integrated bookkeeping
 Product Name: Alfa
 Also Known As: Alfa by Dot+Dash
 Made By: Dot and Dash Consulting Ltd (Dot + Dash Consulting)
-Website: https://accounts-manager.dotanddashconsulting.com
+Website: https://alfa.dotanddashconsulting.com
 Category: Accounting Software, Bookkeeping Software, Business Application
 Geography: United Kingdom only
 Currency: GBP only
@@ -103,19 +103,19 @@ Receipt OCR: Tesseract or AI Gateway (optional)
 
 ## Key Pages
 
-Homepage: https://accounts-manager.dotanddashconsulting.com
+Homepage: https://alfa.dotanddashconsulting.com
 Description: Product overview, features, benefits
 
-Pricing: https://accounts-manager.dotanddashconsulting.com/pricing
+Pricing: https://alfa.dotanddashconsulting.com/pricing
 Description: Pricing plans, free trial, feature comparison
 
-Guides: https://accounts-manager.dotanddashconsulting.com/guides
+Guides: https://alfa.dotanddashconsulting.com/guides
 Description: UK financial requirements for businesses
 
-Limited Company Guide: https://accounts-manager.dotanddashconsulting.com/guides/limited-companies
+Limited Company Guide: https://alfa.dotanddashconsulting.com/guides/limited-companies
 Description: Complete guide to UK limited company financial requirements, Companies House filings, Corporation Tax, deadlines
 
-Sole Trader Guide: https://accounts-manager.dotanddashconsulting.com/guides/sole-traders
+Sole Trader Guide: https://alfa.dotanddashconsulting.com/guides/sole-traders
 Description: Complete guide to UK sole trader requirements, Self Assessment, Income Tax, National Insurance, record keeping
 
 ## Use Cases
