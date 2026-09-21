@@ -108,8 +108,8 @@ export default async function Home() {
       <StructuredData data={generateOrganizationSchema()} />
       <StructuredData data={generateSoftwareApplicationSchema()} />
       <StructuredData data={generateFaqSchema(FAQ_DATA)} />
+      <PublicHeader />
       <main className="flex flex-1 flex-col bg-navy text-foreground">
-        <PublicHeader />
         <MarketingHero />
         <AudienceStrip />
         <ProblemSection />
@@ -121,8 +121,8 @@ export default async function Home() {
         <FaqSection />
         <GuidesTeaser />
         <FinalCta />
-        <PublicFooter />
       </main>
+      <PublicFooter />
     </>
   );
 }

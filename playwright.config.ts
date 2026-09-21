@@ -18,12 +18,14 @@ export default defineConfig({
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
   ],
   webServer: {
-    command: "npm run start",
+    // CI already ran `npm run build`. Locally rebuild so e2e never hits a
+    // stale `.next` from an older brand or marketing copy.
+    command: process.env.CI ? "npm run start" : "npx next build && npx next start",
     url: baseURL,
     // Always start our own server so we never accidentally hit another app
     // that happens to be listening on the same port.
     reuseExistingServer: false,
-    timeout: 120_000,
+    timeout: 180_000,
     env: {
       ...process.env,
       PORT: String(PORT),

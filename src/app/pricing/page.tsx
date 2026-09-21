@@ -57,8 +57,8 @@ export default function PricingPage() {
     <>
       <StructuredData data={generatePricingSchema()} />
       <StructuredData data={generateBreadcrumbSchema(breadcrumbs)} />
+      <PublicHeader />
       <main className="flex flex-1 flex-col bg-navy text-foreground">
-        <PublicHeader />
         <PricingHero />
         <PricingPlans />
         <PricingFaq />
@@ -71,8 +71,8 @@ export default function PricingPage() {
           ctaLocation="final_cta"
           from="pricing"
         />
-        <PublicFooter />
       </main>
+      <PublicFooter />
     </>
   );
 }

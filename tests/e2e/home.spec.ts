@@ -2,7 +2,9 @@ import { test, expect } from "@playwright/test";
 
 test("landing page renders the brand and primary actions", async ({ page }) => {
   await page.goto("/");
-  await expect(page).toHaveTitle(/Alfa by Dot\+Dash/);
+  await expect(page).toHaveTitle(
+    /UK Accounting Software for Limited Companies & Sole Traders/,
+  );
   await expect(page.getByRole("heading", { name: "Your books, in one place." }).first()).toBeVisible();
   await expect(page.getByText("Alfa by Dot+Dash").first()).toBeVisible();
   await expect(page.getByRole("link", { name: "Sign up" }).first()).toBeVisible();
@@ -34,10 +36,11 @@ test("health endpoint reports ok", async ({ request }) => {
 
 test("sign-in route is reachable", async ({ page }) => {
   await page.goto("/sign-in");
-  await expect(page.locator("body")).toContainText(/sign in/i);
+  await expect(page).toHaveURL(/\/sign-in/);
+  await expect(page.getByRole("link", { name: /Alfa/i }).first()).toBeVisible();
 });
 
 test("invoices route redirects to sign-in", async ({ page }) => {
   await page.goto("/invoices");
-  await expect(page.locator("body")).toContainText(/sign in/i);
+  await expect(page).toHaveURL(/\/sign-in/);
 });

@@ -85,7 +85,7 @@ test.describe("Guides - Public Access", () => {
     await expect(page.getByRole("link", { name: /UK Financial Guides/ }).first()).toBeVisible();
     
     // Click the link and verify it navigates to guides
-    await page.getByRole("link", { name: /View UK Financial Guides/ }).click();
+    await page.getByRole("link", { name: /View all UK Financial Guides/i }).click();
     await expect(page).toHaveURL("/guides");
     await expect(page.getByRole("heading", { name: "UK Financial Requirements" })).toBeVisible();
   });
