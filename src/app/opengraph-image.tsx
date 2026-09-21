@@ -29,14 +29,15 @@ export default async function OpenGraphImage() {
         <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
           <img src={logoSrc} width={112} height={112} alt="" />
           <div style={{ display: "flex", flexDirection: "column" }}>
-            <div style={{ fontSize: 36, letterSpacing: -0.5 }}>{PRODUCT_NAME}</div>
-            <div style={{ marginTop: 8, fontSize: 22, color: brand.pink }}>
+            <div style={{ display: "flex", fontSize: 36, letterSpacing: -0.5 }}>{PRODUCT_NAME}</div>
+            <div style={{ display: "flex", marginTop: 8, fontSize: 22, color: brand.pink }}>
               by {PRODUCT_MAKER}
             </div>
           </div>
         </div>
         <div
           style={{
+            display: "flex",
             marginTop: 48,
             fontSize: 64,
             lineHeight: 1.1,
