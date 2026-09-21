@@ -19,8 +19,40 @@ export const metadata: Metadata = {
     template: `%s — ${PRODUCT_LOCKUP}`,
   },
   description:
-    "Quotes, invoices, expenses, reimbursements and reporting for UK consultancies, studios, and small agencies. Limited companies and sole traders — your books in one place.",
+    "Accounting software built specifically for UK limited companies and sole traders. Manage quotes, invoices, expenses, reimbursements, bank reconciliation, VAT, and reporting. Perfect for UK consultancies, studios, and small agencies. Replace spreadsheets with integrated bookkeeping.",
   applicationName: PRODUCT_LOCKUP,
+  keywords: [
+    "UK accounting software",
+    "UK bookkeeping",
+    "limited company accounting",
+    "sole trader accounting",
+    "UK consultancy accounting",
+    "UK freelancer invoicing",
+    "UK small business",
+  ],
+  authors: [{ name: MAKER_DISPLAY }],
+  creator: MAKER_DISPLAY,
+  publisher: MAKER_DISPLAY,
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://accounts-manager.dotanddashconsulting.com"),
+  openGraph: {
+    type: "website",
+    locale: "en_GB",
+    siteName: PRODUCT_LOCKUP,
+  },
+  twitter: {
+    card: "summary_large_image",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
 };
 
 export const viewport: Viewport = {

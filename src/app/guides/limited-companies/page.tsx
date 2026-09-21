@@ -10,15 +10,41 @@ import {
   GuideWarning,
 } from "@/components/guides/guide-section";
 import { HmrcLink } from "@/components/guides/hmrc-link";
+import { StructuredData, generateBreadcrumbSchema } from "@/lib/structured-data";
 
 export const metadata: Metadata = {
-  title: "Limited Company Financial Requirements Guide",
+  title: "Limited Company Financial Requirements Guide - UK Companies House & HMRC",
   description:
-    "Comprehensive guide to UK limited company financial requirements, including record keeping, Companies House filings, Corporation Tax, and statutory accounts.",
+    "Complete guide to UK limited company financial requirements. Learn about Companies House filings, Corporation Tax obligations, statutory accounts, director responsibilities, filing deadlines, and penalties. Essential information for UK company directors to stay compliant with HMRC and Companies House regulations.",
+  keywords: [
+    "UK limited company requirements",
+    "Companies House filing deadlines",
+    "UK Corporation Tax",
+    "UK statutory accounts",
+    "limited company director responsibilities",
+    "UK company record keeping",
+    "UK Corporation Tax rates",
+    "Companies House penalties",
+    "UK limited company compliance",
+    "UK business accounting obligations",
+  ],
   openGraph: {
-    title: "Limited Company Financial Requirements Guide",
+    title: "Limited Company Financial Requirements Guide - UK",
     description:
-      "Comprehensive guide to UK limited company financial requirements, including record keeping, Companies House filings, Corporation Tax, and statutory accounts.",
+      "Complete guide to UK limited company financial requirements, including Companies House filings, Corporation Tax obligations, and statutory accounts.",
+    url: "https://accounts-manager.dotanddashconsulting.com/guides/limited-companies",
+    siteName: "Alfa by Dot+Dash",
+    locale: "en_GB",
+    type: "article",
+  },
+  twitter: {
+    card: "summary",
+    title: "Limited Company Financial Requirements Guide - UK",
+    description:
+      "Complete guide to UK limited company financial requirements for company directors.",
+  },
+  alternates: {
+    canonical: "https://accounts-manager.dotanddashconsulting.com/guides/limited-companies",
   },
 };
 
@@ -32,15 +58,23 @@ const sections = [
 ];
 
 export default function LimitedCompaniesGuidePage() {
+  const breadcrumbs = [
+    { name: "Home", url: "/" },
+    { name: "Guides", url: "/guides" },
+    { name: "Limited Companies", url: "/guides/limited-companies" },
+  ];
+
   return (
-    <main className="flex flex-1 flex-col bg-background">
-      <Link
-        href="/guides"
-        className="mx-auto flex w-full max-w-7xl items-center gap-1 px-6 pt-8 text-sm text-navy hover:underline"
-      >
-        <ChevronLeft className="h-4 w-4" />
-        Back to guides
-      </Link>
+    <>
+      <StructuredData data={generateBreadcrumbSchema(breadcrumbs)} />
+      <main className="flex flex-1 flex-col bg-background">
+        <Link
+          href="/guides"
+          className="mx-auto flex w-full max-w-7xl items-center gap-1 px-6 pt-8 text-sm text-navy hover:underline"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Back to guides
+        </Link>
 
       <GuideLayout
         title="Limited Company Financial Requirements"
@@ -450,5 +484,6 @@ export default function LimitedCompaniesGuidePage() {
         </section>
       </GuideLayout>
     </main>
+    </>
   );
 }

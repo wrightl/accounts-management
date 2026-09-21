@@ -10,15 +10,41 @@ import {
   GuideWarning,
 } from "@/components/guides/guide-section";
 import { HmrcLink } from "@/components/guides/hmrc-link";
+import { StructuredData, generateBreadcrumbSchema } from "@/lib/structured-data";
 
 export const metadata: Metadata = {
-  title: "Sole Trader Financial Requirements Guide",
+  title: "Sole Trader Financial Requirements Guide - UK Self Assessment & HMRC",
   description:
-    "Comprehensive guide to UK sole trader financial requirements, including Self Assessment, record keeping, Income Tax, National Insurance, and tax obligations.",
+    "Complete guide to UK sole trader financial requirements. Learn about Self Assessment, record keeping, Income Tax, National Insurance, VAT registration, allowable expenses, and filing deadlines. Essential information for UK self-employed individuals to stay compliant with HMRC regulations.",
+  keywords: [
+    "UK sole trader requirements",
+    "UK Self Assessment",
+    "UK self-employed tax",
+    "sole trader Income Tax UK",
+    "sole trader National Insurance",
+    "UK sole trader record keeping",
+    "self-employed allowable expenses UK",
+    "UK sole trader filing deadlines",
+    "UK self-employment compliance",
+    "sole trader VAT registration UK",
+  ],
   openGraph: {
-    title: "Sole Trader Financial Requirements Guide",
+    title: "Sole Trader Financial Requirements Guide - UK",
     description:
-      "Comprehensive guide to UK sole trader financial requirements, including Self Assessment, record keeping, Income Tax, National Insurance, and tax obligations.",
+      "Complete guide to UK sole trader financial requirements, including Self Assessment, Income Tax, National Insurance, and record keeping obligations.",
+    url: "https://accounts-manager.dotanddashconsulting.com/guides/sole-traders",
+    siteName: "Alfa by Dot+Dash",
+    locale: "en_GB",
+    type: "article",
+  },
+  twitter: {
+    card: "summary",
+    title: "Sole Trader Financial Requirements Guide - UK",
+    description:
+      "Complete guide to UK sole trader financial requirements for self-employed individuals.",
+  },
+  alternates: {
+    canonical: "https://accounts-manager.dotanddashconsulting.com/guides/sole-traders",
   },
 };
 
@@ -32,15 +58,23 @@ const sections = [
 ];
 
 export default function SoleTradersGuidePage() {
+  const breadcrumbs = [
+    { name: "Home", url: "/" },
+    { name: "Guides", url: "/guides" },
+    { name: "Sole Traders", url: "/guides/sole-traders" },
+  ];
+
   return (
-    <main className="flex flex-1 flex-col bg-background">
-      <Link
-        href="/guides"
-        className="mx-auto flex w-full max-w-7xl items-center gap-1 px-6 pt-8 text-sm text-navy hover:underline"
-      >
-        <ChevronLeft className="h-4 w-4" />
-        Back to guides
-      </Link>
+    <>
+      <StructuredData data={generateBreadcrumbSchema(breadcrumbs)} />
+      <main className="flex flex-1 flex-col bg-background">
+        <Link
+          href="/guides"
+          className="mx-auto flex w-full max-w-7xl items-center gap-1 px-6 pt-8 text-sm text-navy hover:underline"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Back to guides
+        </Link>
 
       <GuideLayout
         title="Sole Trader Financial Requirements"
@@ -493,5 +527,6 @@ export default function SoleTradersGuidePage() {
         </section>
       </GuideLayout>
     </main>
+    </>
   );
 }
