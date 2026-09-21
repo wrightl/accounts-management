@@ -28,7 +28,7 @@ export const metadata: Metadata = {
     title: "UK Financial Requirements Guides for Limited Companies & Sole Traders",
     description:
       "Comprehensive guides to UK financial requirements, record keeping, and tax obligations for limited companies and sole traders.",
-    url: "https://accounts-manager.dotanddashconsulting.com/guides",
+    url: "https://alfa.dotanddashconsulting.com/guides",
     siteName: "Alfa by Dot+Dash",
     locale: "en_GB",
     type: "article",
@@ -40,7 +40,7 @@ export const metadata: Metadata = {
       "Comprehensive guides to UK financial requirements for limited companies and sole traders.",
   },
   alternates: {
-    canonical: "https://accounts-manager.dotanddashconsulting.com/guides",
+    canonical: "https://alfa.dotanddashconsulting.com/guides",
   },
 };
 

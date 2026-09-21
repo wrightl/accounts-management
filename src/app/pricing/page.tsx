@@ -31,7 +31,7 @@ export const metadata: Metadata = {
     title: "Pricing - UK Accounting Software £19-£29/month | Free 30-Day Trial",
     description:
       "Transparent pricing for UK accounting software. Free 30-day trial. Essentials £19/month or Premium £29/month. Built for UK limited companies and sole traders.",
-    url: "https://accounts-manager.dotanddashconsulting.com/pricing",
+    url: "https://alfa.dotanddashconsulting.com/pricing",
     siteName: "Alfa by Dot+Dash",
     locale: "en_GB",
     type: "website",
@@ -43,7 +43,7 @@ export const metadata: Metadata = {
       "Free 30-day trial. Essentials £19/month or Premium £29/month. Built for UK businesses. No hidden fees.",
   },
   alternates: {
-    canonical: "https://accounts-manager.dotanddashconsulting.com/pricing",
+    canonical: "https://alfa.dotanddashconsulting.com/pricing",
   },
 };
 

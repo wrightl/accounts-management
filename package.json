@@ -20,7 +20,7 @@
         "promo:assemble": "node scripts/assemble-promo-video.mjs",
         "promo:all": "npm run promo:seed && npm run promo:record && npm run promo:assemble",
         "marketing:capture": "PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers tsx scripts/capture-marketing.ts",
-        "marketing:capture:production": "PROMO_BASE_URL=https://accounts-manager.dotanddashconsulting.com PROMO_SEED_ALLOW_REMOTE=1 PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers tsx scripts/capture-marketing.ts",
+        "marketing:capture:production": "PROMO_BASE_URL=https://alfa.dotanddashconsulting.com PROMO_SEED_ALLOW_REMOTE=1 PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers tsx scripts/capture-marketing.ts",
         "marketing:capture:prod-local": "PROMO_BASE_URL=http://localhost:3002 PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers tsx scripts/capture-marketing.ts",
         "db:push": "drizzle-kit push",
         "db:studio": "drizzle-kit studio",
