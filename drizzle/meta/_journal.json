@@ -281,6 +281,20 @@
       "when": 1787700000000,
       "tag": "0039_subscriptions_billing",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1787800000000,
+      "tag": "0040_users_ui_prefs",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1787900000000,
+      "tag": "0041_stripe_price_ids",
+      "breakpoints": true
     }
   ]
 }

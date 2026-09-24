@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { guardTenantPage, hasPermission } from '@/lib/auth';
 import { listRecurringInvoices } from '@/lib/invoices/recurring-queries';
 import { buttonClasses } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
 
 export default async function RecurringInvoicesPage() {
@@ -34,9 +35,12 @@ export default async function RecurringInvoicesPage() {
 
             <div className="mt-6">
                 {rows.length === 0 ? (
-                    <p className="text-sm text-muted">
-                        No recurring schedules yet.
-                    </p>
+                    <EmptyState
+                        title="No recurring schedules yet"
+                        description="Set up a monthly retainer so invoices create themselves on schedule."
+                        actionHref={canWrite ? '/recurring-invoices/new' : undefined}
+                        actionLabel={canWrite ? 'New schedule' : undefined}
+                    />
                 ) : (
                     <Table>
                         <THead>

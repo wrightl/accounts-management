@@ -149,6 +149,14 @@ export const users = pgTable(
      * (`expenses+{companySlug}.{expenseInboundSlug}@domain`). Stable once set.
      */
     expenseInboundSlug: text("expense_inbound_slug"),
+    /**
+     * Display and focus preferences (motion, text size, contrast, font, toasts).
+     * Shape: {@link import("@/lib/ui-prefs").UiPrefs}
+     */
+    uiPrefs: jsonb("ui_prefs")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
@@ -993,6 +1001,11 @@ export const platformSettings = pgTable("platform_settings", {
     .default("google/gemini-2.5-flash"),
   lastCronDailyAt: timestamp("last_cron_daily_at", { withTimezone: true }),
   lastCronInboundAt: timestamp("last_cron_inbound_at", { withTimezone: true }),
+  /** Stripe Price IDs for paid plans (managed in Platform → Settings). */
+  stripePriceEssentialsMonthly: text("stripe_price_essentials_monthly"),
+  stripePriceEssentialsYearly: text("stripe_price_essentials_yearly"),
+  stripePricePremiumMonthly: text("stripe_price_premium_monthly"),
+  stripePricePremiumYearly: text("stripe_price_premium_yearly"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

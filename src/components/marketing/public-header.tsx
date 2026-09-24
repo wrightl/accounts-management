@@ -6,6 +6,7 @@ import { PricingAwareSignUpLink } from "@/components/marketing/pricing-aware-sig
 
 const NAV_LINKS = [
   { href: "/#product", label: "Product" },
+  { href: "/#focus", label: "Focus" },
   { href: "/#who", label: "Who it's for" },
   { href: "/#how", label: "How it works" },
   { href: "/pricing", label: "Pricing" },
@@ -27,6 +28,9 @@ export function PublicHeader({
           : "border-border bg-white/90 text-foreground",
       )}
     >
+      <a href="#main-content" className="skip-link">
+        Skip to main content
+      </a>
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3">
         <Link href="/" className="shrink-0">
           <Logo size={40} priority />

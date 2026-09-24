@@ -4,6 +4,7 @@ const DIFFERENT = [
   "Quote → order → invoice with milestones — built for project work, not just one-off invoices",
   "Founder receipt email + reimbursement runs — the consultancy expense pain, solved",
   "Accountant as a first-class role — multi-company read-only and a one-click pack",
+  "Display and focus controls — motion, text size, contrast, readable font, quieter notifications",
   "Honest scope: GBP, bank CSV matching, VAT export (not HMRC filing), no live bank feeds",
 ] as const;
 
@@ -38,6 +39,7 @@ const FOR = [
   "Founders of UK consultancies, studios, and small agencies",
   "Limited companies and sole traders who want day-to-day books in one place",
   "Teams that still hand year-end to an accountant",
+  "Neurodiverse founders who want quieter screens, plain language, and display controls they can set",
 ] as const;
 
 const NOT_FOR = [

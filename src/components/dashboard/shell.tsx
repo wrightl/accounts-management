@@ -77,6 +77,9 @@ export function DashboardShell({
 
   return (
     <div className="flex h-dvh overflow-hidden">
+      <a href="#main-content" className="skip-link">
+        Skip to main content
+      </a>
       <aside
         id="dashboard-nav"
         className={cn(
@@ -205,7 +208,11 @@ export function DashboardShell({
             ) : null}
           </div>
         )}
-        <main className="min-h-0 flex-1 overflow-y-auto px-6 py-8 pt-16 md:pt-8">
+        <main
+          id="main-content"
+          className="min-h-0 flex-1 overflow-y-auto px-6 py-8 pt-16 md:pt-8"
+          tabIndex={-1}
+        >
           {children}
         </main>
       </div>

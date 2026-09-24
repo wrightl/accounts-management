@@ -2,6 +2,7 @@ import Link from "next/link";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { listClients } from "@/lib/clients/queries";
 import { buttonClasses } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 
 export default async function ClientsPage() {
@@ -26,7 +27,12 @@ export default async function ClientsPage() {
 
       <div className="mt-6">
         {rows.length === 0 ? (
-          <p className="text-sm text-muted">No clients yet.</p>
+          <EmptyState
+            title="No clients yet"
+            description="Add the people or companies you invoice so quotes and invoices have somewhere to go."
+            actionHref={canWrite ? "/clients/new" : undefined}
+            actionLabel={canWrite ? "Add a client" : undefined}
+          />
         ) : (
           <Table>
             <THead>

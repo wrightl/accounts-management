@@ -14,6 +14,8 @@ import {
   filterNavGroups,
 } from "@/components/dashboard/nav";
 import { DashboardShell } from "@/components/dashboard/shell";
+import { SyncUiPrefsCookie } from "@/components/users/sync-ui-prefs-cookie";
+import { parseUiPrefs } from "@/lib/ui-prefs";
 
 export default async function AppLayout({
   children,
@@ -24,6 +26,7 @@ export default async function AppLayout({
   const clerkUser = await safeCurrentUser();
   const avatarUrl = clerkUser?.imageUrl ?? null;
   let localUserId: string | null = user.localUserId;
+  let uiPrefsRaw: Record<string, unknown> | undefined;
   if (hasDatabaseClient()) {
     localUserId = await ensureLocalUser(user);
     const local = await findLocalUser(user.userId);
@@ -36,11 +39,34 @@ export default async function AppLayout({
         localUserId: local.id,
       };
       localUserId = local.id;
+      uiPrefsRaw = local.uiPrefs;
     }
   }
 
   if (!user.companyId) {
     redirect(isPlatformAdmin(user) ? "/platform" : "/onboarding");
+  }
+
+  if (hasDatabaseClient()) {
+    const { getDb } = await import("@/db");
+    const { eq } = await import("drizzle-orm");
+    const { companyBilling } = await import("@/db/schema");
+    const db = getDb();
+    const [billing] = await db
+      .select({
+        status: companyBilling.status,
+        stripeSubscriptionId: companyBilling.stripeSubscriptionId,
+      })
+      .from(companyBilling)
+      .where(eq(companyBilling.companyId, user.companyId))
+      .limit(1);
+    if (
+      billing &&
+      billing.status === "unpaid" &&
+      !billing.stripeSubscriptionId
+    ) {
+      redirect("/subscribe");
+    }
   }
 
   const company = await getCompanySettings(user.companyId);
@@ -95,34 +121,38 @@ export default async function AppLayout({
   }
 
   const showPlatformLink = isPlatformAdmin(user);
+  const uiPrefs = parseUiPrefs(uiPrefsRaw);
 
   return (
-    <DashboardShell
-      groups={groups}
-      role={user.role}
-      userName={user.name}
-      avatarUrl={avatarUrl}
-      companyId={user.companyId}
-      companyName={company.name}
-      companyLogoUrl={company.logoUrl}
-      memberships={memberships.map((m) => ({
-        companyId: m.companyId,
-        companyName: m.companyName,
-        logoUrl: m.logoUrl,
-      }))}
-      navCollapsed={navCollapsed}
-      overdueInvoiceCount={overdueInvoiceCount}
-      showPlatformLink={showPlatformLink}
-      maintenanceBanner={maintenanceBanner}
-      billingBanner={billingBanner}
-      suspendedReason={
-        company.suspendedAt
-          ? company.suspendedReason ??
-            "This company is suspended. Contact support for help."
-          : null
-      }
-    >
-      {children}
-    </DashboardShell>
+    <>
+      <SyncUiPrefsCookie prefs={uiPrefs} />
+      <DashboardShell
+        groups={groups}
+        role={user.role}
+        userName={user.name}
+        avatarUrl={avatarUrl}
+        companyId={user.companyId}
+        companyName={company.name}
+        companyLogoUrl={company.logoUrl}
+        memberships={memberships.map((m) => ({
+          companyId: m.companyId,
+          companyName: m.companyName,
+          logoUrl: m.logoUrl,
+        }))}
+        navCollapsed={navCollapsed}
+        overdueInvoiceCount={overdueInvoiceCount}
+        showPlatformLink={showPlatformLink}
+        maintenanceBanner={maintenanceBanner}
+        billingBanner={billingBanner}
+        suspendedReason={
+          company.suspendedAt
+            ? company.suspendedReason ??
+              "This company is suspended. Contact support for help."
+            : null
+        }
+      >
+        {children}
+      </DashboardShell>
+    </>
   );
 }

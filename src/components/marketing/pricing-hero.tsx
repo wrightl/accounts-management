@@ -2,7 +2,11 @@ import Link from "next/link";
 import { buttonClasses } from "@/components/ui/button";
 import { TrackedSignUpLink } from "@/components/marketing/tracked-sign-up-link";
 
-export function PricingHero() {
+export function PricingHero({
+  essentialsMonthLabel,
+}: {
+  essentialsMonthLabel: string | null;
+}) {
   return (
     <section className="hero-dots relative overflow-hidden px-6 pb-16 pt-16 text-white md:pb-24 md:pt-20">
       <div className="mx-auto max-w-3xl text-center">
@@ -11,8 +15,12 @@ export function PricingHero() {
           Books for the week. Clear, honest pricing.
         </h1>
         <p className="mx-auto mt-5 max-w-xl text-lg text-white/75">
-          Per organisation, not per seat. Start with a 30-day trial — then from
-          £19 / month ex VAT. Replace the spreadsheets; keep your accountant.
+          Per organisation, not per seat. Start with a 30-day trial
+          {essentialsMonthLabel
+            ? ` — then from ${essentialsMonthLabel} / month ex VAT`
+            : ""}
+          . Replace the spreadsheets; keep your accountant. Display and focus
+          controls included on every plan.
         </p>
         <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
           <TrackedSignUpLink

@@ -20,6 +20,7 @@ export type NavIcon =
     | 'audit'
     | 'inboundEmail'
     | 'settings'
+    | 'billing'
     | 'users';
 
 export interface NavItem {
@@ -174,6 +175,12 @@ export const NAV_GROUPS: NavGroup[] = [
                 href: '/settings',
                 label: 'Settings',
                 icon: 'settings',
+                permission: 'settings:manage',
+            },
+            {
+                href: '/settings/billing',
+                label: 'Billing',
+                icon: 'billing',
                 permission: 'settings:manage',
             },
             {

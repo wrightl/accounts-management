@@ -1,5 +1,6 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getDb } from "@/db";
 import { companies } from "@/db/schema";
@@ -13,11 +14,22 @@ import {
   onboardingRawFromFormData,
   parseOnboardingInput,
 } from "@/lib/onboarding/schema";
+import {
+  SIGNUP_PLAN_COOKIE,
+  parseSignupPlanCookie,
+  type SignupPlanChoice,
+} from "@/lib/signup-plan";
 import type { ActionResult } from "@/actions/result";
+
+async function readSignupPlanChoice(): Promise<SignupPlanChoice | null> {
+  const jar = await cookies();
+  return parseSignupPlanCookie(jar.get(SIGNUP_PLAN_COOKIE)?.value);
+}
 
 /**
  * Create the user's company and attach them as admin.
  * Idempotent if they already have a companyId (redirects to dashboard).
+ * Trial starts a 30-day trial; paid tiers open Stripe Checkout.
  */
 export async function completeOnboarding(
   formData: FormData,
@@ -42,6 +54,14 @@ export async function completeOnboarding(
   }
   if (session.companyId) {
     redirect("/dashboard");
+  }
+
+  const planChoice = await readSignupPlanChoice();
+  if (!planChoice) {
+    return {
+      ok: false,
+      error: "Choose a subscription tier before finishing setup.",
+    };
   }
 
   const parsed = parseOnboardingInput(onboardingRawFromFormData(formData));
@@ -112,15 +132,44 @@ export async function completeOnboarding(
     name: data.userName,
   });
 
-  const { startCompanyTrial } = await import("@/lib/billing/company-billing");
-  await startCompanyTrial(company.id);
+  const { clearSignupPlanCookie } = await import("@/actions/signup-plan");
 
-  try {
-    const { sendBillingEmail } = await import("@/lib/billing/emails");
-    await sendBillingEmail(company.id, "trial_welcome", `welcome_${company.id}`);
-  } catch {
-    /* best-effort */
+  if (planChoice.plan === "trial") {
+    const { startCompanyTrial } = await import("@/lib/billing/company-billing");
+    await startCompanyTrial(company.id);
+
+    try {
+      const { sendBillingEmail } = await import("@/lib/billing/emails");
+      await sendBillingEmail(
+        company.id,
+        "trial_welcome",
+        `welcome_${company.id}`,
+      );
+    } catch {
+      /* best-effort */
+    }
+
+    await writeAudit({
+      companyId: company.id,
+      actorUserId: localUserId,
+      action: "onboarding.complete",
+      entityType: "company",
+      entityId: company.id,
+      meta: { entityType: data.entityType, plan: "trial" },
+    });
+
+    await clearSignupPlanCookie();
+    redirect("/dashboard");
   }
+
+  const { startCompanyPaidSignup } = await import(
+    "@/lib/billing/company-billing"
+  );
+  await startCompanyPaidSignup(
+    company.id,
+    planChoice.plan,
+    planChoice.interval,
+  );
 
   await writeAudit({
     companyId: company.id,
@@ -128,8 +177,20 @@ export async function completeOnboarding(
     action: "onboarding.complete",
     entityType: "company",
     entityId: company.id,
-    meta: { entityType: data.entityType },
+    meta: {
+      entityType: data.entityType,
+      plan: planChoice.plan,
+      interval: planChoice.interval,
+    },
   });
 
-  redirect("/dashboard");
+  await clearSignupPlanCookie();
+
+  const { startSignupCheckout } = await import("@/actions/billing");
+  return startSignupCheckout({
+    companyId: company.id,
+    plan: planChoice.plan,
+    interval: planChoice.interval,
+    actorEmail: session.email,
+  });
 }

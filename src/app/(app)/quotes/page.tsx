@@ -7,6 +7,7 @@ import { QUOTE_STATUSES, quoteStatusLabel, type QuoteStatus } from "@/lib/quotes
 import { QuotesSummaryPanel } from "@/components/quotes/quotes-summary";
 import { clientDisplayName } from "@/lib/clients/display";
 import { buttonClasses } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Label, Select } from "@/components/ui/form";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 
@@ -83,9 +84,16 @@ export default async function QuotesPage({
 
           <div className="mt-6">
             {rows.length === 0 ? (
-              <p className="text-sm text-muted">
-                {filtersActive ? "No quotes match these filters." : "No quotes yet."}
-              </p>
+              filtersActive ? (
+                <p className="text-sm text-muted">No quotes match these filters.</p>
+              ) : (
+                <EmptyState
+                  title="No quotes yet"
+                  description="Start with a quote so clients can accept work before you invoice."
+                  actionHref={canWrite ? "/quotes/new" : undefined}
+                  actionLabel={canWrite ? "Create a quote" : undefined}
+                />
+              )
             ) : (
               <Table>
                 <THead>

@@ -13,6 +13,7 @@ import {
 import { BankCardsFeed } from "@/components/bank/bank-cards-feed";
 import { TransactionsSummaryPanel } from "@/components/bank/transactions-summary";
 import { listBankSpendingCategoriesWithUsage } from "@/lib/bank/spending-categories";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export default async function TransactionsPage({
   searchParams,
@@ -91,11 +92,16 @@ export default async function TransactionsPage({
 
           <div className="mt-4">
             {rows.length === 0 ? (
-              <p className="text-sm text-muted">
-                {hasActiveBankFilters(params)
-                  ? "No transactions match these filters."
-                  : "No transactions imported yet."}
-              </p>
+              hasActiveBankFilters(params) ? (
+                <p className="text-sm text-muted">
+                  No transactions match these filters.
+                </p>
+              ) : (
+                <EmptyState
+                  title="No transactions imported yet"
+                  description="Export a CSV from your bank, then use Import above to match payments to invoices."
+                />
+              )
             ) : params.view === "cards" ? (
               <BankCardsFeed
                 initialRows={rows}

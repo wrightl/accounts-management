@@ -23,6 +23,7 @@ const SECTIONS: HelpSection[] = [
   { id: "accountant", title: "Year-end & your accountant" },
   { id: "roles", title: "Who can do what" },
   { id: "rhythm", title: "A simple rhythm" },
+  { id: "easier", title: "Make the app easier to use" },
   { id: "limits", title: "What this app does not do" },
 ];
 
@@ -508,6 +509,41 @@ export function HelpGuide({
               </>,
             ]}
           />
+        </section>
+
+        <section aria-labelledby="easier">
+          <SectionHeading id="easier">Make the app easier to use</SectionHeading>
+          <p className="mt-3 text-sm text-foreground/90">
+            You can change how Alfa looks and moves without changing your
+            company settings. These controls live on your{" "}
+            <HelpLink href="/profile">Profile</HelpLink> under{" "}
+            <strong>Display and focus</strong>.
+          </p>
+          <BulletList
+            items={[
+              <>
+                <strong>Motion</strong> — reduce animations, or follow your
+                device setting.
+              </>,
+              <>
+                <strong>Text size</strong> and <strong>contrast</strong> — larger
+                type and stronger borders when you need them.
+              </>,
+              <>
+                <strong>Readable font</strong> — Atkinson Hyperlegible for
+                clearer letter shapes.
+              </>,
+              <>
+                <strong>Success messages</strong> — keep them on screen until you
+                dismiss them.
+              </>,
+            ]}
+          />
+          <p className="mt-4 text-sm text-foreground/90">
+            Alfa works with the accessibility tools already on your phone or
+            computer — VoiceOver, TalkBack, magnification, and dictation. We do
+            not replace those apps; we aim to stay out of their way.
+          </p>
         </section>
 
         <section aria-labelledby="limits">

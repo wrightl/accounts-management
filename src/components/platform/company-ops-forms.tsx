@@ -9,6 +9,7 @@ import { preventResetSubmit } from '@/components/ui/prevent-reset-submit';
 import { useFieldErrors } from '@/components/ui/use-field-errors';
 import {
     addCompanySupportNote,
+    deleteCompanyAsPlatform,
     platformInviteCompanyAdmin,
     suspendCompany,
     unsuspendCompany,
@@ -18,8 +19,10 @@ import {
     companyInviteAdminRawFromFormData,
     parseCompanyInviteAdminInput,
     parseCompanySupportNoteInput,
+    parseDeleteCompanyInput,
     parseSuspendCompanyInput,
 } from '@/lib/platform/schema';
+import { useAlert } from '@/components/ui/alert-dialog';
 
 export function CompanySuspendForm({
     companyId,
@@ -288,5 +291,126 @@ export function CompanyInviteAdminForm({ companyId }: { companyId: string }) {
                 Invite admin
             </Button>
         </form>
+    );
+}
+
+export function CompanyDeleteForm({
+    companyId,
+    companyName,
+}: {
+    companyId: string;
+    companyName: string;
+}) {
+    const router = useRouter();
+    const { confirm, alert } = useAlert();
+    const [pending, start] = useTransition();
+    const {
+        fieldErrors,
+        error,
+        clearAll,
+        clearField,
+        applyFail,
+        applyActionResult,
+    } = useFieldErrors();
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [confirmationName, setConfirmationName] = useState('');
+
+    return (
+        <div
+            ref={containerRef}
+            className="rounded-2xl border border-red-200 bg-red-50/40 p-5"
+        >
+            <h2 className="font-display text-lg font-semibold text-red-900">
+                Delete company
+            </h2>
+            <p className="mt-1 text-sm text-red-900/80">
+                Permanently delete this company, all tenant data, and member
+                accounts (Clerk + database). Type{' '}
+                <span className="font-semibold">{companyName}</span> to confirm.
+            </p>
+            <div className="mt-3">
+                <Label htmlFor="platformDeleteConfirmation" required>
+                    Company name
+                </Label>
+                <Input
+                    id="platformDeleteConfirmation"
+                    value={confirmationName}
+                    onChange={(e) => {
+                        setConfirmationName(e.target.value);
+                        clearField('confirmationName');
+                    }}
+                    disabled={pending}
+                    autoComplete="off"
+                    aria-invalid={Boolean(fieldErrors.confirmationName)}
+                    aria-describedby={
+                        fieldErrors.confirmationName
+                            ? 'platformDeleteConfirmation-error'
+                            : undefined
+                    }
+                />
+                <FieldError id="platformDeleteConfirmation-error">
+                    {fieldErrors.confirmationName}
+                </FieldError>
+            </div>
+            <FieldError>{error}</FieldError>
+            <Button
+                type="button"
+                variant="destructive"
+                className="mt-4"
+                disabled={pending}
+                onClick={async () => {
+                    clearAll();
+                    const clientParsed = parseDeleteCompanyInput({
+                        companyId,
+                        confirmationName,
+                    });
+                    if (!clientParsed.ok) {
+                        applyFail(clientParsed);
+                        scheduleFocusFirstFieldError(
+                            containerRef.current,
+                            clientParsed.fieldErrors,
+                        );
+                        return;
+                    }
+                    // Confirm must run outside startTransition — otherwise the
+                    // dialog open update is deferred while pending waits on it.
+                        const ok = await confirm({
+                            title: 'Delete company permanently?',
+                            message: `This permanently deletes ${companyName}, all of its data, and member accounts. This cannot be undone.`,
+                            confirmLabel: 'Delete company',
+                            variant: 'destructive',
+                        });
+                    if (!ok) return;
+
+                    start(async () => {
+                        const result = await deleteCompanyAsPlatform(
+                            companyId,
+                            confirmationName,
+                        );
+                        if (result.ok) {
+                            toast('Company deleted.');
+                            router.push('/platform/companies');
+                            router.refresh();
+                            return;
+                        }
+                        applyActionResult(result);
+                        if (!result.ok) {
+                            scheduleFocusFirstFieldError(
+                                containerRef.current,
+                                result.fieldErrors,
+                            );
+                            // Don't await — awaiting alert inside a transition
+                            // defers the dialog the same way confirm did.
+                            void alert({
+                                title: "Couldn't delete company",
+                                message: result.error,
+                            });
+                        }
+                    });
+                }}
+            >
+                {pending ? 'Deleting…' : 'Delete company'}
+            </Button>
+        </div>
     );
 }

@@ -25,6 +25,7 @@ export default async function PlatformHealthPage() {
   await requirePlatformAdmin();
 
   const env = serverEnv();
+  const settings = hasDatabaseClient() ? await getPlatformSettings() : null;
   const checks = [
     { label: "Database", ok: hasDatabaseClient() },
     { label: "Vercel Blob", ok: Boolean(env.BLOB_READ_WRITE_TOKEN) },
@@ -46,18 +47,13 @@ export default async function PlatformHealthPage() {
     {
       label: "Stripe price IDs",
       ok: Boolean(
-        env.STRIPE_PRICE_ESSENTIALS_MONTHLY &&
-          env.STRIPE_PRICE_ESSENTIALS_YEARLY &&
-          env.STRIPE_PRICE_PREMIUM_MONTHLY &&
-          env.STRIPE_PRICE_PREMIUM_YEARLY,
+        settings?.stripePriceEssentialsMonthly &&
+          settings?.stripePriceEssentialsYearly &&
+          settings?.stripePricePremiumMonthly &&
+          settings?.stripePricePremiumYearly,
       ),
     },
   ];
-
-  const settings =
-    hasDatabaseClient()
-      ? await getPlatformSettings()
-      : null;
 
   return (
     <div>

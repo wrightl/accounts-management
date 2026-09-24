@@ -1,6 +1,7 @@
 import { guardTenantPage } from "@/lib/auth";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { SettingsForm } from "@/components/settings/settings-form";
+import { DeleteCompanyDangerZone } from "@/components/settings/delete-company-danger-zone";
 
 export default async function SettingsPage() {
   const { companyId } = await guardTenantPage("settings:manage");
@@ -17,6 +18,7 @@ export default async function SettingsPage() {
         </a>
       </p>
       <SettingsForm settings={settings} />
+      <DeleteCompanyDangerZone companyName={settings.name} />
     </div>
   );
 }

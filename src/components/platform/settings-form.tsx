@@ -8,7 +8,10 @@ import { FormStickyActions } from "@/components/ui/form-sticky-actions";
 import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
 import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
 import { useFieldErrors } from "@/components/ui/use-field-errors";
-import { updatePlatformSettingsAction } from "@/actions/platform";
+import {
+  refreshStripeCatalogAction,
+  updatePlatformSettingsAction,
+} from "@/actions/platform";
 import { toast } from "@/components/ui/toast";
 import {
   CUSTOM_RECEIPT_OCR_MODEL,
@@ -21,19 +24,41 @@ import {
   platformSettingsRawFromFormData,
 } from "@/lib/platform/schema";
 
+type CatalogPreview = {
+  essentials: {
+    name: string;
+    description: string | null;
+    monthLabel: string;
+    yearLabel: string;
+  } | null;
+  premium: {
+    name: string;
+    description: string | null;
+    monthLabel: string;
+    yearLabel: string;
+  } | null;
+};
+
 export function PlatformSettingsForm({
   initial,
   ocrModels = [],
+  catalogPreview,
 }: {
   initial: {
     maintenanceBanner: string | null;
     defaultReceiptOcrProvider: string;
     defaultReceiptOcrModel: string;
+    stripePriceEssentialsMonthly: string | null;
+    stripePriceEssentialsYearly: string | null;
+    stripePricePremiumMonthly: string | null;
+    stripePricePremiumYearly: string | null;
   };
   ocrModels?: ReceiptOcrModelOption[];
+  catalogPreview: CatalogPreview;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const [refreshPending, startRefresh] = useTransition();
   const {
     fieldErrors,
     error,
@@ -216,6 +241,166 @@ export function PlatformSettingsForm({
         name="defaultReceiptOcrModel"
         value={resolvedModel || DEFAULT_RECEIPT_OCR_MODEL}
       />
+
+      <div className="border-t border-border pt-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="font-display text-base font-semibold">Stripe plans</h2>
+            <p className="mt-1 text-xs text-muted">
+              Paste Price IDs from the Stripe Dashboard. Name, description, and
+              amounts are loaded from Stripe and cached.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={refreshPending || pending}
+            onClick={() => {
+              startRefresh(async () => {
+                const result = await refreshStripeCatalogAction();
+                if (result.ok) {
+                  toast("Stripe catalog refreshed.");
+                  router.refresh();
+                } else {
+                  toast(result.error ?? "Could not refresh catalog.");
+                }
+              });
+            }}
+          >
+            {refreshPending ? "Refreshing…" : "Refresh Stripe catalog"}
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <Label htmlFor="stripePriceEssentialsMonthly">
+            Essentials monthly
+          </Label>
+          <Input
+            id="stripePriceEssentialsMonthly"
+            name="stripePriceEssentialsMonthly"
+            defaultValue={initial.stripePriceEssentialsMonthly ?? ""}
+            placeholder="price_…"
+            disabled={pending}
+            autoComplete="off"
+            aria-invalid={Boolean(fieldErrors.stripePriceEssentialsMonthly)}
+            aria-describedby={
+              fieldErrors.stripePriceEssentialsMonthly
+                ? "stripePriceEssentialsMonthly-error"
+                : undefined
+            }
+            onChange={() => clearField("stripePriceEssentialsMonthly")}
+          />
+          <FieldError id="stripePriceEssentialsMonthly-error">
+            {fieldErrors.stripePriceEssentialsMonthly}
+          </FieldError>
+        </div>
+        <div>
+          <Label htmlFor="stripePriceEssentialsYearly">
+            Essentials yearly
+          </Label>
+          <Input
+            id="stripePriceEssentialsYearly"
+            name="stripePriceEssentialsYearly"
+            defaultValue={initial.stripePriceEssentialsYearly ?? ""}
+            placeholder="price_…"
+            disabled={pending}
+            autoComplete="off"
+            aria-invalid={Boolean(fieldErrors.stripePriceEssentialsYearly)}
+            aria-describedby={
+              fieldErrors.stripePriceEssentialsYearly
+                ? "stripePriceEssentialsYearly-error"
+                : undefined
+            }
+            onChange={() => clearField("stripePriceEssentialsYearly")}
+          />
+          <FieldError id="stripePriceEssentialsYearly-error">
+            {fieldErrors.stripePriceEssentialsYearly}
+          </FieldError>
+        </div>
+      </div>
+      {catalogPreview.essentials ? (
+        <p className="rounded-xl bg-wash/60 px-3 py-2 text-xs text-muted">
+          <span className="font-medium text-foreground">
+            {catalogPreview.essentials.name}
+          </span>
+          {catalogPreview.essentials.description
+            ? ` — ${catalogPreview.essentials.description}`
+            : null}
+          <br />
+          {catalogPreview.essentials.monthLabel}/mo ·{" "}
+          {catalogPreview.essentials.yearLabel}/yr
+        </p>
+      ) : (
+        <p className="text-xs text-muted">
+          Cached Essentials details appear here once both price IDs are set and
+          Stripe responds.
+        </p>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <Label htmlFor="stripePricePremiumMonthly">Premium monthly</Label>
+          <Input
+            id="stripePricePremiumMonthly"
+            name="stripePricePremiumMonthly"
+            defaultValue={initial.stripePricePremiumMonthly ?? ""}
+            placeholder="price_…"
+            disabled={pending}
+            autoComplete="off"
+            aria-invalid={Boolean(fieldErrors.stripePricePremiumMonthly)}
+            aria-describedby={
+              fieldErrors.stripePricePremiumMonthly
+                ? "stripePricePremiumMonthly-error"
+                : undefined
+            }
+            onChange={() => clearField("stripePricePremiumMonthly")}
+          />
+          <FieldError id="stripePricePremiumMonthly-error">
+            {fieldErrors.stripePricePremiumMonthly}
+          </FieldError>
+        </div>
+        <div>
+          <Label htmlFor="stripePricePremiumYearly">Premium yearly</Label>
+          <Input
+            id="stripePricePremiumYearly"
+            name="stripePricePremiumYearly"
+            defaultValue={initial.stripePricePremiumYearly ?? ""}
+            placeholder="price_…"
+            disabled={pending}
+            autoComplete="off"
+            aria-invalid={Boolean(fieldErrors.stripePricePremiumYearly)}
+            aria-describedby={
+              fieldErrors.stripePricePremiumYearly
+                ? "stripePricePremiumYearly-error"
+                : undefined
+            }
+            onChange={() => clearField("stripePricePremiumYearly")}
+          />
+          <FieldError id="stripePricePremiumYearly-error">
+            {fieldErrors.stripePricePremiumYearly}
+          </FieldError>
+        </div>
+      </div>
+      {catalogPreview.premium ? (
+        <p className="rounded-xl bg-wash/60 px-3 py-2 text-xs text-muted">
+          <span className="font-medium text-foreground">
+            {catalogPreview.premium.name}
+          </span>
+          {catalogPreview.premium.description
+            ? ` — ${catalogPreview.premium.description}`
+            : null}
+          <br />
+          {catalogPreview.premium.monthLabel}/mo ·{" "}
+          {catalogPreview.premium.yearLabel}/yr
+        </p>
+      ) : (
+        <p className="text-xs text-muted">
+          Cached Premium details appear here once both price IDs are set and
+          Stripe responds.
+        </p>
+      )}
 
       <FormStickyActions error={error}>
         <Button type="submit" disabled={pending}>

@@ -4,6 +4,7 @@ import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { listShareholders } from "@/lib/shareholders/queries";
 import { TotalSharesForm } from "@/components/shareholders/total-shares-form";
 import { buttonClasses } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 
 export default async function ShareholdersPage() {
@@ -53,7 +54,12 @@ export default async function ShareholdersPage() {
         <h2 className="font-display text-lg font-semibold">Active</h2>
         <div className="mt-4">
           {active.length === 0 ? (
-            <p className="text-sm text-muted">No active shareholders yet.</p>
+            <EmptyState
+              title="No active shareholders yet"
+              description="Add shareholders so dividend runs can split amounts by shareholding."
+              actionHref={canWrite ? "/shareholders/new" : undefined}
+              actionLabel={canWrite ? "Add a shareholder" : undefined}
+            />
           ) : (
             <Table>
               <THead>

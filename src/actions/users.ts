@@ -41,8 +41,17 @@ import {
   roleUpdateRawFromFormData,
   updateUserRawFromFormData,
 } from "@/lib/users/schema";
+import {
+  parseUiPrefs,
+  parseUiPrefsInput,
+  UI_PREFS_COOKIE,
+  uiPrefsFromFormData,
+  serializeUiPrefsCookie,
+  type UiPrefs,
+} from "@/lib/ui-prefs";
 import type { ActionResult } from "@/actions/result";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 
 function splitName(name: string | null | undefined): { firstName?: string; lastName?: string } {
   const trimmed = name?.trim();
@@ -592,6 +601,62 @@ export async function updateOwnProfile(formData: FormData): Promise<ActionResult
       companyId: session.companyId,
       actorUserId: localUserId,
       action: "user.profile.update",
+      entityType: "user",
+      entityId: localUserId,
+    });
+  }
+
+  revalidatePath("/profile");
+  revalidatePath("/platform/profile");
+  revalidatePath("/", "layout");
+
+  return { ok: true, id: localUserId };
+}
+
+async function writeUiPrefsCookie(prefs: UiPrefs) {
+  const jar = await cookies();
+  jar.set(UI_PREFS_COOKIE, serializeUiPrefsCookie(prefs), {
+    path: "/",
+    maxAge: 31536000,
+    sameSite: "lax",
+    httpOnly: false,
+  });
+}
+
+export async function updateOwnUiPrefs(formData: FormData): Promise<ActionResult> {
+  const parsed = parseUiPrefsInput(uiPrefsFromFormData(formData));
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
+  }
+
+  const session = await requireUser();
+  const localUserId = await ensureLocalUser(session);
+  const prefs = parseUiPrefs(parsed.data);
+
+  const db = getDb();
+  const [target] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.id, localUserId))
+    .limit(1);
+  if (!target) return { ok: false, error: "User not found" };
+
+  await db
+    .update(users)
+    .set({ uiPrefs: prefs })
+    .where(eq(users.id, localUserId));
+
+  await writeUiPrefsCookie(prefs);
+
+  if (session.companyId) {
+    await writeAudit({
+      companyId: session.companyId,
+      actorUserId: localUserId,
+      action: "user.ui_prefs.update",
       entityType: "user",
       entityId: localUserId,
     });

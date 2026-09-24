@@ -107,20 +107,29 @@ outside the repo; once done, add the listed secrets to the Cursor agent
 ## 5b. Stripe Billing **(you)** — manual account (not Vercel Marketplace)
 
 1. Create a **UK** Stripe account at stripe.com (GBP settlement).
-2. Create four Products/Prices in `gbp`:
-    - Essentials monthly £19 → `STRIPE_PRICE_ESSENTIALS_MONTHLY`
-    - Essentials yearly £190 → `STRIPE_PRICE_ESSENTIALS_YEARLY`
-    - Premium monthly £29 → `STRIPE_PRICE_PREMIUM_MONTHLY`
-    - Premium yearly £290 → `STRIPE_PRICE_PREMIUM_YEARLY`
+2. Create four Products/Prices in `gbp` (amounts are whatever you set in Stripe):
+    - Essentials monthly
+    - Essentials yearly
+    - Premium monthly
+    - Premium yearly
 3. Create a restricted API key (Checkout, Billing, Customers, Webhooks) → `STRIPE_SECRET_KEY`.
 4. Publishable key → `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`.
 5. Webhook endpoint → `https://alfa.dotanddashconsulting.com/api/webhooks/stripe`  
    Events: `checkout.session.completed`, `customer.subscription.created|updated|deleted`,
    `invoice.paid`, `invoice.payment_failed`, `invoice.upcoming`.  
    Signing secret → `STRIPE_WEBHOOK_SECRET`.
-6. Customer Portal: payment method, invoices, cancel at period end, switch plans.
-7. Optional: enable Stripe Tax + UK VAT registration, then set `STRIPE_TAX_ENABLED=true`.
-8. Confirm `/platform/health` shows Stripe keys and price IDs as configured.
+6. In-app billing on **Settings → Billing**: plan changes (Subscriptions API with
+   proration), invoice history, and cancel / resume at period end. **Update card**
+   opens Stripe Customer Portal (`payment_method_update` flow) — enable payment
+   method updates in Stripe → Settings → Billing → Customer portal.
+7. Paste the four `price_…` IDs into **Platform → Settings → Stripe plans** (not Vercel env).
+   Name, description, and amounts are loaded from Stripe and cached.
+8. Optional: enable Stripe Tax + UK VAT registration, then set `STRIPE_TAX_ENABLED=true`.
+9. Confirm `/platform/health` shows Stripe keys and price IDs as configured.
+
+Legacy: `STRIPE_PRICE_ESSENTIALS_MONTHLY` / `_YEARLY` / `STRIPE_PRICE_PREMIUM_*` env vars only
+seed empty DB columns on first read after migration `0041_stripe_price_ids`. Prefer
+Platform Settings going forward; you can remove the env vars once the DB is seeded.
 
 ## 6. Custom subdomain **(you)**
 
@@ -141,7 +150,7 @@ in the Secrets panel:
 - `RESEND_API_KEY` (+ set `EMAIL_PROVIDER=resend`)
 - `RESEND_WEBHOOK_SECRET`, `EXPENSE_INBOUND_DOMAIN`, `EXPENSE_INBOUND_PREFIX` (inbound expense emails)
 - `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`
-- `STRIPE_PRICE_ESSENTIALS_MONTHLY`, `STRIPE_PRICE_ESSENTIALS_YEARLY`, `STRIPE_PRICE_PREMIUM_MONTHLY`, `STRIPE_PRICE_PREMIUM_YEARLY`
+- (Optional legacy seed) `STRIPE_PRICE_ESSENTIALS_MONTHLY`, `STRIPE_PRICE_ESSENTIALS_YEARLY`, `STRIPE_PRICE_PREMIUM_MONTHLY`, `STRIPE_PRICE_PREMIUM_YEARLY` — prefer Platform → Settings
 
 Use **test/development** credentials here where possible; production values live
 in Vercel.

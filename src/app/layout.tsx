@@ -1,16 +1,29 @@
 import type { Metadata, Viewport } from "next";
-import { Outfit } from "next/font/google";
+import { Atkinson_Hyperlegible, Outfit } from "next/font/google";
+import { cookies } from "next/headers";
 import { ClerkProvider } from "@clerk/nextjs";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { brand } from "@/lib/brand";
 import { PRODUCT_LOCKUP, PRODUCT_TAGLINE, MAKER_DISPLAY } from "@/lib/product";
 import { AppProviders } from "@/components/providers";
+import {
+  DEFAULT_UI_PREFS,
+  parseUiPrefsCookie,
+  uiPrefsHtmlAttributes,
+  UI_PREFS_COOKIE,
+} from "@/lib/ui-prefs";
 import "./globals.css";
 
 const outfit = Outfit({
   variable: "--font-outfit",
   subsets: ["latin"],
+});
+
+const atkinson = Atkinson_Hyperlegible({
+  variable: "--font-readable",
+  subsets: ["latin"],
+  weight: ["400", "700"],
 });
 
 export const metadata: Metadata = {
@@ -19,7 +32,7 @@ export const metadata: Metadata = {
     template: `%s — ${PRODUCT_LOCKUP}`,
   },
   description:
-    "Accounting software built specifically for UK limited companies and sole traders. Manage quotes, invoices, expenses, reimbursements, bank reconciliation, VAT, and reporting. Perfect for UK consultancies, studios, and small agencies. Replace spreadsheets with integrated bookkeeping.",
+    "Accounting software for UK limited companies, sole traders, and neurodiverse founders. Quotes, invoices, expenses, reimbursements, bank reconciliation, VAT, and reporting — plus display and focus controls. Built for UK consultancies, studios, and small agencies.",
   applicationName: PRODUCT_LOCKUP,
   keywords: [
     "UK accounting software",
@@ -86,13 +99,22 @@ const clerkAppearance = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const jar = await cookies();
+  const prefs =
+    parseUiPrefsCookie(jar.get(UI_PREFS_COOKIE)?.value) ?? DEFAULT_UI_PREFS;
+  const uiAttrs = uiPrefsHtmlAttributes(prefs);
+
   const body = (
-    <html lang="en" className={`${outfit.variable} h-full antialiased`}>
+    <html
+      lang="en-GB"
+      className={`${outfit.variable} ${atkinson.variable} h-full antialiased`}
+      {...uiAttrs}
+    >
       <body className="flex min-h-full flex-col bg-background font-sans text-foreground">
         <AppProviders>{children}</AppProviders>
         <Analytics />

@@ -19,6 +19,34 @@ describe("parsePlatformSettingsInput", () => {
     expect(result.data.maintenanceBanner).toBe("Hello");
     expect(result.data.defaultReceiptOcrProvider).toBe("local");
     expect(result.data.defaultReceiptOcrModel).toBe("google/gemini-2.5-flash");
+    expect(result.data.stripePriceEssentialsMonthly).toBeNull();
+  });
+
+  it("accepts Stripe price IDs and rejects garbage", () => {
+    const ok = parsePlatformSettingsInput({
+      maintenanceBanner: "",
+      defaultReceiptOcrProvider: "local",
+      defaultReceiptOcrModel: "",
+      stripePriceEssentialsMonthly: "price_abc123",
+      stripePriceEssentialsYearly: "",
+      stripePricePremiumMonthly: "price_XYZ9",
+      stripePricePremiumYearly: "",
+    });
+    expect(ok.ok).toBe(true);
+    if (!ok.ok) return;
+    expect(ok.data.stripePriceEssentialsMonthly).toBe("price_abc123");
+    expect(ok.data.stripePriceEssentialsYearly).toBeNull();
+    expect(ok.data.stripePricePremiumMonthly).toBe("price_XYZ9");
+
+    const bad = parsePlatformSettingsInput({
+      maintenanceBanner: "",
+      defaultReceiptOcrProvider: "local",
+      defaultReceiptOcrModel: "",
+      stripePriceEssentialsMonthly: "prod_not_a_price",
+    });
+    expect(bad.ok).toBe(false);
+    if (bad.ok) return;
+    expect(bad.fieldErrors.stripePriceEssentialsMonthly).toMatch(/price_/);
   });
 
   it("rejects invalid gateway model with fieldErrors", () => {

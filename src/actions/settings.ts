@@ -1,16 +1,21 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { companySettings } from "@/db/schema";
+import { requireActionPermission } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
+import { deleteCompanyById } from "@/lib/companies/delete";
 import { mutate } from "@/lib/mutate";
 import { financialYearEndMonth } from "@/lib/dates";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { storeCompanyLogo } from "@/lib/company-logo";
+import { ensureLocalUser } from "@/lib/users";
 import {
   companySettingsRawFromFormData,
   parseCompanySettingsInput,
+  parseDeleteOwnCompanyInput,
 } from "@/lib/settings/schema";
 import type { ActionResult } from "@/actions/result";
 
@@ -120,4 +125,47 @@ export async function uploadLogo(formData: FormData): Promise<ActionResult> {
     },
     { paths: ["/settings", "/dashboard"] },
   );
+}
+
+/**
+ * Permanently delete the signed-in admin's company.
+ * Bypasses suspended / billing read-only gates so teardown still works.
+ */
+export async function deleteCompany(
+  confirmationName: string,
+): Promise<ActionResult> {
+  const parsed = parseDeleteOwnCompanyInput({ confirmationName });
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
+  }
+
+  const authz = await requireActionPermission("settings:manage");
+  if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+
+  const companyId = authz.user.companyId;
+  const localUserId = await ensureLocalUser(authz.user);
+  const result = await deleteCompanyById(
+    companyId,
+    parsed.data.confirmationName,
+    {
+      actorUserId: localUserId,
+      auditAction: "company.delete",
+    },
+  );
+  if (!result.ok) return result;
+
+  revalidatePath("/settings");
+  revalidatePath("/dashboard");
+  revalidatePath("/onboarding");
+  revalidatePath("/");
+  revalidatePath("/platform/companies");
+
+  return { ok: true, id: result.id };
 }

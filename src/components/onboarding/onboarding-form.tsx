@@ -9,10 +9,16 @@ import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-
 import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
 import { useFieldErrors } from "@/components/ui/use-field-errors";
 import { BankFields } from "@/components/settings/bank-fields";
+import { SignupPlanPicker } from "@/components/signup/plan-picker";
 import {
   onboardingRawFromFormData,
   parseOnboardingInput,
 } from "@/lib/onboarding/schema";
+import type { StripeCatalog } from "@/lib/billing/catalog-types";
+import {
+  signupPlanLabel,
+  type SignupPlanChoice,
+} from "@/lib/signup-plan";
 
 const MONTHS = [
   "January",
@@ -34,10 +40,17 @@ type EntityChoice = "limited_company" | "sole_trader" | null;
 export function OnboardingForm({
   defaultEmail,
   defaultName,
+  catalog,
+  initialPlanChoice,
 }: {
   defaultEmail: string | null;
   defaultName: string | null;
+  catalog: StripeCatalog | null;
+  initialPlanChoice: SignupPlanChoice | null;
 }) {
+  const [planChoice, setPlanChoice] = useState<SignupPlanChoice | null>(
+    initialPlanChoice,
+  );
   const [entityType, setEntityType] = useState<EntityChoice>(null);
   const {
     fieldErrors,
@@ -62,11 +75,40 @@ export function OnboardingForm({
     return () => URL.revokeObjectURL(url);
   }, [logoFile]);
 
+  if (!planChoice) {
+    return (
+      <SignupPlanPicker
+        catalog={catalog}
+        initialPlan={null}
+        tone="light"
+        title="Choose your plan"
+        subtitle="Select a subscription tier before setting up your business."
+        onConfirmed={setPlanChoice}
+      />
+    );
+  }
+
   if (!entityType) {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="font-display text-2xl font-semibold">
+          <p className="text-sm text-muted">
+            Plan:{" "}
+            <span className="font-medium text-foreground">
+              {signupPlanLabel(planChoice)}
+            </span>{" "}
+            <button
+              type="button"
+              className="underline-offset-2 hover:underline"
+              onClick={() => {
+                setPlanChoice(null);
+                setEntityType(null);
+              }}
+            >
+              Change
+            </button>
+          </p>
+          <h1 className="mt-2 font-display text-2xl font-semibold">
             Set up your business
           </h1>
           <p className="mt-2 text-muted">
@@ -124,14 +166,28 @@ export function OnboardingForm({
           return;
         }
         startTransition(async () => {
-          const result = await completeOnboarding(formData);
-          if (result) {
-            if (!applyActionResult(result) && !result.ok) {
-              scheduleFocusFirstFieldError(
-                formRef.current,
-                result.fieldErrors,
-              );
+          try {
+            const result = await completeOnboarding(formData);
+            if (result) {
+              if (!applyActionResult(result) && !result.ok) {
+                scheduleFocusFirstFieldError(
+                  formRef.current,
+                  result.fieldErrors,
+                );
+              }
             }
+          } catch (err) {
+            const { isRedirectError } = await import(
+              "next/dist/client/components/redirect-error"
+            );
+            if (isRedirectError(err)) throw err;
+            applyActionResult({
+              ok: false,
+              error:
+                err instanceof Error
+                  ? err.message
+                  : "Could not finish setup. Try again.",
+            });
           }
         });
       })}
@@ -151,6 +207,12 @@ export function OnboardingForm({
         >
           ← Change business type
         </button>
+        <p className="mt-2 text-sm text-muted">
+          Plan:{" "}
+          <span className="font-medium text-foreground">
+            {signupPlanLabel(planChoice)}
+          </span>
+        </p>
         <h1 className="mt-2 font-display text-2xl font-semibold">
           {isLtd ? "Limited company details" : "Sole trader details"}
         </h1>
@@ -158,6 +220,9 @@ export function OnboardingForm({
           {isLtd
             ? "Enter your details and your company as registered at Companies House."
             : "Enter your details and trading name."}
+          {planChoice.plan !== "trial"
+            ? " After this step you will add a card on Stripe — you get 30 days free before the first charge."
+            : null}
         </p>
       </div>
 
@@ -351,7 +416,11 @@ export function OnboardingForm({
 
       <FormStickyActions error={error}>
         <Button type="submit" disabled={pending}>
-          {pending ? "Creating…" : "Create account"}
+          {pending
+            ? "Creating…"
+            : planChoice.plan === "trial"
+              ? "Create account"
+              : "Continue — start free trial"}
         </Button>
       </FormStickyActions>
     </form>

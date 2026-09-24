@@ -14,13 +14,7 @@ type Tier = {
   prioritySupport: boolean;
 };
 
-export function SubscriptionTiersForm({
-  tiers,
-  priceIds,
-}: {
-  tiers: Tier[];
-  priceIds: Record<string, string | undefined>;
-}) {
+export function SubscriptionTiersForm({ tiers }: { tiers: Tier[] }) {
   const [pending, start] = useTransition();
 
   return (
@@ -78,23 +72,6 @@ export function SubscriptionTiersForm({
               </label>
             </div>
           </div>
-
-          {(tier.slug === "essentials" || tier.slug === "premium") && (
-            <dl className="mt-4 space-y-1 text-xs text-muted">
-              <div>
-                Monthly price ID:{" "}
-                <span className="font-mono">
-                  {priceIds[`${tier.slug}_month`] ?? "—"}
-                </span>
-              </div>
-              <div>
-                Yearly price ID:{" "}
-                <span className="font-mono">
-                  {priceIds[`${tier.slug}_year`] ?? "—"}
-                </span>
-              </div>
-            </dl>
-          )}
 
           <button
             type="submit"

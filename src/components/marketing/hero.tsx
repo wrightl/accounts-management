@@ -15,7 +15,8 @@ export function MarketingHero() {
           <p className="mt-5 max-w-xl text-lg text-white/75 mx-auto lg:mx-0">
             Quotes, invoices, expenses, reimbursements and reporting for UK
             limited companies and sole traders — no more spreadsheets and shared
-            folders.
+            folders. Clear language, quieter screens, and display controls when
+            you need them.
           </p>
           <div className="mt-10 flex flex-wrap items-center justify-center gap-3 lg:justify-start">
             <Link href="/sign-up" className={buttonClasses("primary", "px-6 py-2.5")}>

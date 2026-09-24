@@ -23,6 +23,10 @@ const FAQS = [
     q: "What currency do you support?",
     a: "GBP only. Foreign receipts can be logged for information, but the books stay in pounds.",
   },
+  {
+    q: "Is this built for neurodiverse users?",
+    a: "We design for neurodiverse founders and small startups: plain language, quieter screens, and Profile controls for motion, text size, contrast, font, and success messages. Alfa works with VoiceOver, TalkBack, magnification, and dictation on your device. We have not been independently certified for accessibility.",
+  },
 ] as const;
 
 export function FaqSection() {

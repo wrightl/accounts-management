@@ -6,7 +6,7 @@ import {
   companyBilling,
   subscriptionTiers,
 } from "@/db/schema";
-import { PLAN_PRICES_PENCE } from "@/lib/billing/constants";
+import { catalogAmountPence, getStripeCatalog } from "@/lib/billing/catalog";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { ensureCompanyBilling } from "@/lib/billing/company-billing";
 
@@ -41,7 +41,10 @@ export type PlatformBillingStats = {
 
 export async function getPlatformBillingStats(): Promise<PlatformBillingStats> {
   const db = getDb();
-  const rows = await db.select().from(companyBilling);
+  const [rows, catalog] = await Promise.all([
+    db.select().from(companyBilling),
+    getStripeCatalog(),
+  ]);
   const now = new Date();
   const in7 = new Date(now);
   in7.setUTCDate(in7.getUTCDate() + 7);
@@ -77,15 +80,15 @@ export async function getPlatformBillingStats(): Promise<PlatformBillingStats> {
       if (row.plan === "premium") activePremium += 1;
       if (!complimentaryActive) {
         if (row.plan === "essentials") {
+          const year = catalogAmountPence(catalog, "essentials", "year");
+          const month = catalogAmountPence(catalog, "essentials", "month");
           mrrPence +=
-            row.billingInterval === "year"
-              ? Math.round(PLAN_PRICES_PENCE.essentials.year / 12)
-              : PLAN_PRICES_PENCE.essentials.month;
+            row.billingInterval === "year" ? Math.round(year / 12) : month;
         } else if (row.plan === "premium") {
+          const year = catalogAmountPence(catalog, "premium", "year");
+          const month = catalogAmountPence(catalog, "premium", "month");
           mrrPence +=
-            row.billingInterval === "year"
-              ? Math.round(PLAN_PRICES_PENCE.premium.year / 12)
-              : PLAN_PRICES_PENCE.premium.month;
+            row.billingInterval === "year" ? Math.round(year / 12) : month;
         }
       }
     } else if (row.status === "past_due") {

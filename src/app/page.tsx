@@ -13,6 +13,7 @@ import {
   DifferentiatorSection,
   WhoItsFor,
 } from "@/components/marketing/who-its-for";
+import { CalmFocusSection } from "@/components/marketing/calm-focus";
 import { FaqSection } from "@/components/marketing/faq";
 import { GuidesTeaser } from "@/components/marketing/guides-teaser";
 import { FinalCta } from "@/components/marketing/final-cta";
@@ -26,7 +27,7 @@ import {
 export const metadata: Metadata = {
   title: "UK Accounting Software for Limited Companies & Sole Traders",
   description:
-    "Alfa is accounting software built specifically for UK consultancies, studios, and small agencies. Manage quotes, invoices, expenses, bank reconciliation, VAT, and reporting. Supports limited companies and sole traders. Replace spreadsheets with integrated bookkeeping. Free 30-day trial.",
+    "Alfa is accounting software for UK consultancies, studios, small agencies, and neurodiverse founders. Quotes, invoices, expenses, bank reconciliation, VAT, and reporting — plus display and focus controls (motion, text size, contrast, readable font). Free 30-day trial.",
   keywords: [
     "UK accounting software",
     "UK bookkeeping software",
@@ -42,11 +43,13 @@ export const metadata: Metadata = {
     "accounting for UK consultancies",
     "UK studio accounting",
     "UK agency bookkeeping",
+    "neurodiverse founders accounting",
+    "accessible UK bookkeeping",
   ],
   openGraph: {
     title: "Alfa - UK Accounting Software for Limited Companies & Sole Traders",
     description:
-      "Replace spreadsheets with integrated bookkeeping. Quotes, invoices, expenses, bank reconciliation, and reporting built specifically for UK businesses. Free 30-day trial.",
+      "Replace spreadsheets with integrated bookkeeping. Built for UK service firms and neurodiverse founders — with display and focus controls. Free 30-day trial.",
     url: "https://alfa.dotanddashconsulting.com",
     siteName: "Alfa by Dot+Dash",
     locale: "en_GB",
@@ -64,7 +67,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Alfa - UK Accounting Software for Limited Companies & Sole Traders",
     description:
-      "Replace spreadsheets with integrated bookkeeping. Built specifically for UK consultancies, studios, and agencies. Free 30-day trial.",
+      "Books for UK consultancies and neurodiverse founders. Clear language, quieter screens, display controls. Free 30-day trial.",
     images: ["https://alfa.dotanddashconsulting.com/marketing/dashboard.png"],
   },
   alternates: {
@@ -97,6 +100,10 @@ const FAQ_DATA = [
     q: "What currency do you support?",
     a: "GBP only. Foreign receipts can be logged for information, but the books stay in pounds.",
   },
+  {
+    q: "Is this built for neurodiverse users?",
+    a: "We design for neurodiverse founders and small startups: plain language, quieter screens, and Profile controls for motion, text size, contrast, font, and success messages. Alfa works with VoiceOver, TalkBack, magnification, and dictation on your device. We have not been independently certified for accessibility.",
+  },
 ];
 
 export default async function Home() {
@@ -109,7 +116,11 @@ export default async function Home() {
       <StructuredData data={generateSoftwareApplicationSchema()} />
       <StructuredData data={generateFaqSchema(FAQ_DATA)} />
       <PublicHeader />
-      <main className="flex flex-1 flex-col bg-navy text-foreground">
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="flex flex-1 flex-col bg-navy text-foreground"
+      >
         <MarketingHero />
         <AudienceStrip />
         <ProblemSection />
@@ -117,10 +128,13 @@ export default async function Home() {
         <FeatureSplits />
         <HowItWorks />
         <DifferentiatorSection />
+        <CalmFocusSection />
         <WhoItsFor />
         <FaqSection />
         <GuidesTeaser />
-        <FinalCta />
+        <FinalCta
+          body="Sign up and set up your company in minutes. Clear language, quieter screens, and display controls when you need them."
+        />
       </main>
       <PublicFooter />
     </>

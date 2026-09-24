@@ -3,6 +3,7 @@ import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { listInvoices } from "@/lib/invoices/queries";
 import { buttonClasses } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
 import { InvoiceDueDate } from "@/components/invoices/invoice-due-date";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import type { InvoiceStatus } from "@/lib/invoices/status";
@@ -29,7 +30,12 @@ export default async function InvoicesPage() {
 
       <div className="mt-6">
         {rows.length === 0 ? (
-          <p className="text-sm text-muted">No invoices yet.</p>
+          <EmptyState
+            title="No invoices yet"
+            description="Create an invoice to bill a client, or convert an accepted quote into an order first."
+            actionHref={canWrite ? "/invoices/new" : undefined}
+            actionLabel={canWrite ? "Create an invoice" : undefined}
+          />
         ) : (
           <Table>
             <THead>

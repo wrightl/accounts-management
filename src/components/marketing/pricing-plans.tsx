@@ -3,6 +3,8 @@ import { buttonClasses } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { PricingPlan } from "@/lib/marketing-analytics";
 import { TrackedSignUpLink } from "@/components/marketing/tracked-sign-up-link";
+import type { StripeCatalog } from "@/lib/billing/catalog-types";
+import { formatCatalogPounds } from "@/lib/billing/catalog-format";
 
 type Plan = {
   id: PricingPlan;
@@ -14,50 +16,73 @@ type Plan = {
   features: string[];
 };
 
-const PLANS: Plan[] = [
-  {
-    id: "trial",
-    name: "Trial",
-    price: "£0",
-    priceNote: "30 days",
-    description: "Try the full weekly rhythm before you pick a paid plan.",
-    features: [
-      "Core books — quotes, invoices, expenses, reports",
-      "Recurring invoices",
-      "Up to 5 users (founders + accountant)",
-      "All multi-bank CSV providers",
-      "VAT summary only (no export)",
-    ],
-  },
-  {
-    id: "essentials",
-    name: "Essentials",
-    price: "£19",
-    priceNote: "/ org / mo · or £190 / year (2 months free)",
-    description: "Default paid plan for 1–3 person consultancies and studios.",
-    featured: true,
-    features: [
-      "Everything in Trial",
-      "VAT rates + VAT export for your accountant",
-      "Up to 5 users",
-      "All multi-bank CSV providers",
-      "Accountant pack",
-    ],
-  },
-  {
-    id: "premium",
-    name: "Premium",
-    price: "£29",
-    priceNote: "/ org / mo · or £290 / year (2 months free)",
-    description: "Higher user limits and earlier access to upcoming extras.",
-    features: [
-      "Everything in Essentials",
-      "Up to 15 users",
-      "Priority support / early features",
-      "Live bank feed — future (not included yet)",
-    ],
-  },
-];
+function buildPlans(catalog: StripeCatalog | null): Plan[] {
+  const essentialsMonth = catalog
+    ? formatCatalogPounds(catalog.essentials.month.amountPence)
+    : null;
+  const essentialsYear = catalog
+    ? formatCatalogPounds(catalog.essentials.year.amountPence)
+    : null;
+  const premiumMonth = catalog
+    ? formatCatalogPounds(catalog.premium.month.amountPence)
+    : null;
+  const premiumYear = catalog
+    ? formatCatalogPounds(catalog.premium.year.amountPence)
+    : null;
+
+  return [
+    {
+      id: "trial",
+      name: "Trial",
+      price: "£0",
+      priceNote: "30 days",
+      description: "Try the full weekly rhythm before you pick a paid plan.",
+      features: [
+        "Core books — quotes, invoices, expenses, reports",
+        "Recurring invoices",
+        "Up to 5 users (founders + accountant)",
+        "All multi-bank CSV providers",
+        "VAT summary only (no export)",
+      ],
+    },
+    {
+      id: "essentials",
+      name: catalog?.essentials.name ?? "Essentials",
+      price: essentialsMonth ?? "—",
+      priceNote: essentialsYear
+        ? `/ org / mo · or ${essentialsYear} / year (2 months free)`
+        : "Pricing temporarily unavailable",
+      description:
+        catalog?.essentials.description ??
+        "Default paid plan for 1–3 person consultancies and studios.",
+      featured: true,
+      features: [
+        "Everything in Trial",
+        "VAT rates + VAT export for your accountant",
+        "Up to 5 users",
+        "All multi-bank CSV providers",
+        "Accountant pack",
+      ],
+    },
+    {
+      id: "premium",
+      name: catalog?.premium.name ?? "Premium",
+      price: premiumMonth ?? "—",
+      priceNote: premiumYear
+        ? `/ org / mo · or ${premiumYear} / year (2 months free)`
+        : "Pricing temporarily unavailable",
+      description:
+        catalog?.premium.description ??
+        "Higher user limits and earlier access to upcoming extras.",
+      features: [
+        "Everything in Essentials",
+        "Up to 15 users",
+        "Priority support / early features",
+        "Live bank feed — future (not included yet)",
+      ],
+    },
+  ];
+}
 
 type Cell = "yes" | "no" | string;
 
@@ -145,7 +170,9 @@ function CompareCell({ value, featured }: { value: Cell; featured?: boolean }) {
   );
 }
 
-export function PricingPlans() {
+export function PricingPlans({ catalog }: { catalog: StripeCatalog | null }) {
+  const plans = buildPlans(catalog);
+
   return (
     <section className="bg-wash px-6 py-16 md:py-24">
       <div className="mx-auto max-w-6xl">
@@ -154,14 +181,14 @@ export function PricingPlans() {
             Simple plans, honest limits
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-muted">
-            Prices exclude VAT. Pay yearly and get two months free. Choose a
-            paid plan before the trial ends — card billing follows when you
-            convert.
+            {catalog
+              ? "Prices exclude VAT. Pay yearly and get two months free. Choose a paid plan before the trial ends — card billing follows when you convert."
+              : "Pricing temporarily unavailable. You can still start a free trial — paid plan amounts will show again shortly."}
           </p>
         </div>
 
         <div className="mt-12 grid gap-6 md:grid-cols-3 md:items-stretch">
-          {PLANS.map((plan) => (
+          {plans.map((plan) => (
             <article
               key={plan.id}
               className={cn(

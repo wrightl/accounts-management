@@ -53,7 +53,7 @@ export default function GuidesPage() {
   return (
     <>
       <StructuredData data={generateBreadcrumbSchema(breadcrumbs)} />
-      <main className="flex flex-1 flex-col bg-background">
+      <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col bg-background">
         <div className="mx-auto w-full max-w-7xl px-6 py-16">
           <div className="text-center">
             <h1 className="font-display text-5xl font-semibold tracking-tight text-foreground md:text-6xl">

@@ -6,6 +6,7 @@ import { getPlatformCompanyDetail } from "@/lib/platform/queries";
 import { getCompanyBillingDetail } from "@/lib/platform/billing-queries";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import {
+  CompanyDeleteForm,
   CompanyInviteAdminForm,
   CompanySupportNoteForm,
   CompanySuspendForm,
@@ -116,6 +117,11 @@ export default async function PlatformCompanyDetailPage({
         <CompanySuspendForm
           companyId={company.id}
           suspended={Boolean(company.suspendedAt)}
+        />
+
+        <CompanyDeleteForm
+          companyId={company.id}
+          companyName={company.name}
         />
 
         <CompanyBillingOpsForm

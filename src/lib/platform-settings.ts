@@ -15,6 +15,10 @@ const DEFAULTS: Omit<PlatformSettings, "updatedAt"> & { updatedAt?: Date } = {
   defaultReceiptOcrModel: "google/gemini-2.5-flash",
   lastCronDailyAt: null,
   lastCronInboundAt: null,
+  stripePriceEssentialsMonthly: null,
+  stripePriceEssentialsYearly: null,
+  stripePricePremiumMonthly: null,
+  stripePricePremiumYearly: null,
 };
 
 /** Ensure the singleton row exists and return it. */
@@ -54,6 +58,10 @@ export async function updatePlatformSettings(
       | "defaultReceiptOcrModel"
       | "lastCronDailyAt"
       | "lastCronInboundAt"
+      | "stripePriceEssentialsMonthly"
+      | "stripePriceEssentialsYearly"
+      | "stripePricePremiumMonthly"
+      | "stripePricePremiumYearly"
     >
   >,
 ): Promise<PlatformSettings> {

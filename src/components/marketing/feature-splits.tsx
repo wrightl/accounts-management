@@ -95,8 +95,8 @@ export function FeatureSplits() {
             What you get
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-muted">
-            Built around how service firms actually get paid and spend — not a
-            generic ledger dumped into a browser.
+            Built around how service firms actually get paid and spend — with
+            calmer screens and display controls for founders who need them.
           </p>
         </div>
         {FEATURES.map((feature) => (

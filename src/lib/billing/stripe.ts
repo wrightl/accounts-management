@@ -1,7 +1,6 @@
 import "server-only";
 import Stripe from "stripe";
 import { serverEnv } from "@/env";
-import type { BillingInterval, BillingPlan } from "@/db/schema";
 
 let client: Stripe | null = null;
 
@@ -16,74 +15,6 @@ export function getStripe(): Stripe {
     typescript: true,
   });
   return client;
-}
-
-export function isStripeConfigured(): boolean {
-  const env = serverEnv();
-  return Boolean(
-    env.STRIPE_SECRET_KEY &&
-      env.STRIPE_PRICE_ESSENTIALS_MONTHLY &&
-      env.STRIPE_PRICE_ESSENTIALS_YEARLY &&
-      env.STRIPE_PRICE_PREMIUM_MONTHLY &&
-      env.STRIPE_PRICE_PREMIUM_YEARLY,
-  );
-}
-
-export function stripePriceId(
-  plan: "essentials" | "premium",
-  interval: BillingInterval,
-): string {
-  const env = serverEnv();
-  const map = {
-    essentials: {
-      month: env.STRIPE_PRICE_ESSENTIALS_MONTHLY,
-      year: env.STRIPE_PRICE_ESSENTIALS_YEARLY,
-    },
-    premium: {
-      month: env.STRIPE_PRICE_PREMIUM_MONTHLY,
-      year: env.STRIPE_PRICE_PREMIUM_YEARLY,
-    },
-  } as const;
-  const id = map[plan][interval];
-  if (!id) {
-    throw new Error(`Missing Stripe price for ${plan}/${interval}`);
-  }
-  return id;
-}
-
-export function planFromPriceId(
-  priceId: string | null | undefined,
-): { plan: BillingPlan; interval: BillingInterval } | null {
-  if (!priceId) return null;
-  const env = serverEnv();
-  const pairs: Array<{
-    id: string | undefined;
-    plan: BillingPlan;
-    interval: BillingInterval;
-  }> = [
-    {
-      id: env.STRIPE_PRICE_ESSENTIALS_MONTHLY,
-      plan: "essentials",
-      interval: "month",
-    },
-    {
-      id: env.STRIPE_PRICE_ESSENTIALS_YEARLY,
-      plan: "essentials",
-      interval: "year",
-    },
-    {
-      id: env.STRIPE_PRICE_PREMIUM_MONTHLY,
-      plan: "premium",
-      interval: "month",
-    },
-    {
-      id: env.STRIPE_PRICE_PREMIUM_YEARLY,
-      plan: "premium",
-      interval: "year",
-    },
-  ];
-  const hit = pairs.find((p) => p.id && p.id === priceId);
-  return hit ? { plan: hit.plan, interval: hit.interval } : null;
 }
 
 export function appBaseUrl(): string {

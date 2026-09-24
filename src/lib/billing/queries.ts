@@ -8,7 +8,28 @@ import {
   type Entitlements,
 } from "@/lib/billing/entitlements";
 import { ensureCompanyBilling } from "@/lib/billing/company-billing";
-import { isStripeConfigured } from "@/lib/billing/stripe";
+import { isStripeConfigured, getStripeCatalog } from "@/lib/billing/catalog";
+import type { StripeCatalog } from "@/lib/billing/catalog-types";
+import { getStripe } from "@/lib/billing/stripe";
+
+export type BillingPaymentMethodSummary = {
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+} | null;
+
+export type BillingInvoiceRow = {
+  id: string;
+  number: string | null;
+  status: string | null;
+  amountPaid: number;
+  amountDue: number;
+  currency: string;
+  created: number;
+  hostedInvoiceUrl: string | null;
+  invoicePdf: string | null;
+};
 
 export type BillingPageData = {
   entitlements: Entitlements;
@@ -17,7 +38,97 @@ export type BillingPageData = {
   billingInterval: "month" | "year" | null;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
+  catalog: StripeCatalog | null;
+  paymentMethod: BillingPaymentMethodSummary;
+  invoices: BillingInvoiceRow[];
 };
+
+async function loadStripeBillingExtras(args: {
+  customerId: string;
+  subscriptionId: string | null;
+}): Promise<{
+  paymentMethod: BillingPaymentMethodSummary;
+  invoices: BillingInvoiceRow[];
+}> {
+  try {
+    const stripe = getStripe();
+    const [customer, invoicesResult] = await Promise.all([
+      stripe.customers.retrieve(args.customerId, {
+        expand: ["invoice_settings.default_payment_method"],
+      }),
+      stripe.invoices.list({ customer: args.customerId, limit: 12 }),
+    ]);
+
+    let paymentMethod: BillingPaymentMethodSummary = null;
+
+    if (!("deleted" in customer && customer.deleted)) {
+      const defaultPm = customer.invoice_settings?.default_payment_method;
+      let pmId: string | null = null;
+      if (typeof defaultPm === "string") {
+        pmId = defaultPm;
+      } else if (defaultPm && typeof defaultPm === "object" && "card" in defaultPm) {
+        const card = defaultPm.card;
+        if (card) {
+          paymentMethod = {
+            brand: card.brand ?? "card",
+            last4: card.last4 ?? "????",
+            expMonth: card.exp_month ?? 0,
+            expYear: card.exp_year ?? 0,
+          };
+        }
+      }
+
+      if (!paymentMethod && args.subscriptionId) {
+        try {
+          const sub = await stripe.subscriptions.retrieve(args.subscriptionId, {
+            expand: ["default_payment_method"],
+          });
+          const subPm = sub.default_payment_method;
+          if (subPm && typeof subPm === "object" && "card" in subPm && subPm.card) {
+            paymentMethod = {
+              brand: subPm.card.brand ?? "card",
+              last4: subPm.card.last4 ?? "????",
+              expMonth: subPm.card.exp_month ?? 0,
+              expYear: subPm.card.exp_year ?? 0,
+            };
+          } else if (typeof subPm === "string") {
+            pmId = subPm;
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+
+      if (!paymentMethod && pmId) {
+        const pm = await stripe.paymentMethods.retrieve(pmId);
+        if (pm.card) {
+          paymentMethod = {
+            brand: pm.card.brand ?? "card",
+            last4: pm.card.last4 ?? "????",
+            expMonth: pm.card.exp_month ?? 0,
+            expYear: pm.card.exp_year ?? 0,
+          };
+        }
+      }
+    }
+
+    const invoices: BillingInvoiceRow[] = invoicesResult.data.map((inv) => ({
+      id: inv.id,
+      number: inv.number,
+      status: inv.status,
+      amountPaid: inv.amount_paid ?? 0,
+      amountDue: inv.amount_due ?? 0,
+      currency: inv.currency ?? "gbp",
+      created: inv.created,
+      hostedInvoiceUrl: inv.hosted_invoice_url ?? null,
+      invoicePdf: inv.invoice_pdf ?? null,
+    }));
+
+    return { paymentMethod, invoices };
+  } catch {
+    return { paymentMethod: null, invoices: [] };
+  }
+}
 
 export async function getBillingPageData(
   companyId: string,
@@ -36,13 +147,31 @@ export async function getBillingPageData(
     .where(eq(companyBilling.companyId, companyId))
     .limit(1);
 
+  const [stripeConfigured, catalog] = await Promise.all([
+    isStripeConfigured(),
+    getStripeCatalog(),
+  ]);
+
+  const customerId = row?.stripeCustomerId ?? null;
+  const subscriptionId = row?.stripeSubscriptionId ?? null;
+  const extras =
+    customerId && stripeConfigured
+      ? await loadStripeBillingExtras({
+          customerId,
+          subscriptionId,
+        })
+      : { paymentMethod: null, invoices: [] };
+
   return {
     entitlements,
     userCount,
-    stripeConfigured: isStripeConfigured(),
+    stripeConfigured,
     billingInterval: row?.billingInterval ?? null,
-    stripeCustomerId: row?.stripeCustomerId ?? null,
-    stripeSubscriptionId: row?.stripeSubscriptionId ?? null,
+    stripeCustomerId: customerId,
+    stripeSubscriptionId: subscriptionId,
+    catalog,
+    paymentMethod: extras.paymentMethod,
+    invoices: extras.invoices,
   };
 }
 

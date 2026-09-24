@@ -67,7 +67,7 @@ export default function LimitedCompaniesGuidePage() {
   return (
     <>
       <StructuredData data={generateBreadcrumbSchema(breadcrumbs)} />
-      <main className="flex flex-1 flex-col bg-background">
+      <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col bg-background">
         <Link
           href="/guides"
           className="mx-auto flex w-full max-w-7xl items-center gap-1 px-6 pt-8 text-sm text-navy hover:underline"

@@ -3,6 +3,7 @@ import { findLocalUser } from "@/lib/users";
 import { ProfileForm } from "@/components/users/profile-form";
 import { ProfilePictureField } from "@/components/users/profile-picture-field";
 import { SignOutSection } from "@/components/users/sign-out-section";
+import { UiPrefsForm } from "@/components/users/ui-prefs-form";
 
 export default async function ProfilePage() {
   const session = await requireUser();
@@ -33,6 +34,7 @@ export default async function ProfilePage() {
           name={session.name ?? local.name}
           role={local.role}
         />
+        <UiPrefsForm prefs={local.uiPrefs} />
         <SignOutSection />
       </div>
     </div>

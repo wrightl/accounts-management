@@ -17,6 +17,14 @@ const INCLUDED = [
     title: "Accountant pack",
     body: "Invite your accountant read-only. One export gives them CSVs, invoice PDFs, receipts, and bank data for year-end.",
   },
+  {
+    title: "Display and focus",
+    body: "Larger text, readable font, higher contrast, reduced motion, and success messages that stay until you dismiss them — all on your Profile.",
+  },
+  {
+    title: "Plain-language help",
+    body: "In-app guidance for busy founders, including how to make the app easier to use with your phone or computer accessibility settings.",
+  },
 ] as const;
 
 export function PricingIncluded() {

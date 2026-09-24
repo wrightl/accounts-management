@@ -8,7 +8,7 @@ import {
   type BillingPlan,
   type BillingStatus,
 } from "@/db/schema";
-import { planFromPriceId } from "@/lib/billing/stripe";
+import { planFromPriceId } from "@/lib/billing/catalog";
 
 function mapStripeStatus(status: Stripe.Subscription.Status): BillingStatus {
   switch (status) {
@@ -50,7 +50,7 @@ export async function applySubscriptionToCompany(
   companyId: string,
   sub: Stripe.Subscription,
 ): Promise<void> {
-  const mapped = planFromPriceId(subscriptionPriceId(sub));
+  const mapped = await planFromPriceId(subscriptionPriceId(sub));
   const plan: BillingPlan = mapped?.plan ?? "essentials";
   const interval: BillingInterval | null = mapped?.interval ?? null;
   const status = mapStripeStatus(sub.status);
@@ -68,6 +68,13 @@ export async function applySubscriptionToCompany(
       ? existing?.pastDueSince ?? now
       : null;
 
+  const trialEndsAt =
+    typeof sub.trial_end === "number"
+      ? new Date(sub.trial_end * 1000)
+      : status === "trialing"
+        ? (existing?.trialEndsAt ?? null)
+        : null;
+
   const values = {
     plan,
     status,
@@ -78,6 +85,7 @@ export async function applySubscriptionToCompany(
     currentPeriodEnd: periodEnd(sub),
     cancelAtPeriodEnd: Boolean(sub.cancel_at_period_end),
     pastDueSince,
+    trialEndsAt,
     updatedAt: now,
   };
 
@@ -90,7 +98,6 @@ export async function applySubscriptionToCompany(
     await db.insert(companyBilling).values({
       companyId,
       access: "standard",
-      trialEndsAt: null,
       ...values,
     });
   }

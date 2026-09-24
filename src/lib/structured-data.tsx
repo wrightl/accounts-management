@@ -38,10 +38,32 @@ export function generateOrganizationSchema() {
   };
 }
 
+export type CatalogOfferAmounts = {
+  essentials: string;
+  premium: string;
+  essentialsName?: string;
+  premiumName?: string;
+  essentialsDescription?: string | null;
+  premiumDescription?: string | null;
+};
+
 /**
  * Generate SoftwareApplication schema
  */
-export function generateSoftwareApplicationSchema() {
+export function generateSoftwareApplicationSchema(
+  amounts?: CatalogOfferAmounts | null,
+) {
+  const essentialsPrice = amounts?.essentials ?? "19";
+  const premiumPrice = amounts?.premium ?? "29";
+  const essentialsName = amounts?.essentialsName ?? "Essentials";
+  const premiumName = amounts?.premiumName ?? "Premium";
+  const essentialsDescription =
+    amounts?.essentialsDescription ??
+    "Core accounting features for consultancies";
+  const premiumDescription =
+    amounts?.premiumDescription ??
+    "Advanced features including recurring invoices and receipt OCR";
+
   return {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
@@ -54,7 +76,7 @@ export function generateSoftwareApplicationSchema() {
       "@type": "AggregateOffer",
       priceCurrency: "GBP",
       lowPrice: "0",
-      highPrice: "29",
+      highPrice: premiumPrice,
       priceSpecification: [
         {
           "@type": "UnitPriceSpecification",
@@ -65,23 +87,23 @@ export function generateSoftwareApplicationSchema() {
         },
         {
           "@type": "UnitPriceSpecification",
-          price: "19",
+          price: essentialsPrice,
           priceCurrency: "GBP",
-          name: "Essentials",
-          description: "Core accounting features for consultancies",
+          name: essentialsName,
+          description: essentialsDescription,
           billingDuration: "P1M",
         },
         {
           "@type": "UnitPriceSpecification",
-          price: "29",
+          price: premiumPrice,
           priceCurrency: "GBP",
-          name: "Premium",
-          description: "Advanced features including recurring invoices and receipt OCR",
+          name: premiumName,
+          description: premiumDescription,
           billingDuration: "P1M",
         },
       ],
     },
-    description: "Accounting software for UK limited companies and sole traders. Manage quotes, invoices, expenses, reimbursements, bank reconciliation, and reporting. Built specifically for UK consultancies, studios, and small agencies. Replaces spreadsheets with integrated bookkeeping.",
+    description: "Accounting software for UK limited companies, sole traders, and neurodiverse founders. Manage quotes, invoices, expenses, reimbursements, bank reconciliation, and reporting — with display and focus controls. Built for UK consultancies, studios, and small agencies.",
     featureList: [
       "Quote creation and client acceptance workflow",
       "Invoice generation and tracking",
@@ -153,7 +175,18 @@ export function generateBreadcrumbSchema(items: Array<{ name: string; url: strin
 /**
  * Generate Offer/Product schema for pricing
  */
-export function generatePricingSchema() {
+export function generatePricingSchema(amounts?: CatalogOfferAmounts | null) {
+  const essentialsPrice = amounts?.essentials ?? "19";
+  const premiumPrice = amounts?.premium ?? "29";
+  const essentialsName = amounts?.essentialsName ?? "Essentials";
+  const premiumName = amounts?.premiumName ?? "Premium";
+  const essentialsDescription =
+    amounts?.essentialsDescription ??
+    "Core accounting features: quotes, invoices, expenses, bank reconciliation, and reporting for UK businesses.";
+  const premiumDescription =
+    amounts?.premiumDescription ??
+    "Advanced features: recurring invoices, receipt OCR, multi-user access, and priority support for growing UK consultancies.";
+
   return {
     "@context": "https://schema.org",
     "@graph": [
@@ -182,15 +215,15 @@ export function generatePricingSchema() {
       {
         "@type": "Product",
         "@id": `${BASE_URL}/pricing#essentials`,
-        name: `${PRODUCT_NAME} Essentials`,
-        description: "Core accounting features: quotes, invoices, expenses, bank reconciliation, and reporting for UK businesses.",
+        name: `${PRODUCT_NAME} ${essentialsName}`,
+        description: essentialsDescription,
         brand: {
           "@type": "Brand",
           name: PRODUCT_NAME,
         },
         offers: {
           "@type": "Offer",
-          price: "19",
+          price: essentialsPrice,
           priceCurrency: "GBP",
           availability: "https://schema.org/InStock",
           validFrom: "2024-01-01",
@@ -209,15 +242,15 @@ export function generatePricingSchema() {
       {
         "@type": "Product",
         "@id": `${BASE_URL}/pricing#premium`,
-        name: `${PRODUCT_NAME} Premium`,
-        description: "Advanced features: recurring invoices, receipt OCR, multi-user access, and priority support for growing UK consultancies.",
+        name: `${PRODUCT_NAME} ${premiumName}`,
+        description: premiumDescription,
         brand: {
           "@type": "Brand",
           name: PRODUCT_NAME,
         },
         offers: {
           "@type": "Offer",
-          price: "29",
+          price: premiumPrice,
           priceCurrency: "GBP",
           availability: "https://schema.org/InStock",
           validFrom: "2024-01-01",

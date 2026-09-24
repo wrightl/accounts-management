@@ -15,6 +15,7 @@ export default function robots(): MetadataRoute.Robots {
           "/sign-in",
           "/sign-up",
           "/onboarding",
+          "/subscribe",
           "/orders",
           "/quotes",
           "/invoices",
@@ -41,12 +42,12 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "GPTBot",
         allow: ["/", "/pricing", "/guides", "/guides/*", "/llms.txt"],
-        disallow: ["/dashboard", "/platform", "/api", "/sign-in", "/sign-up", "/onboarding"],
+        disallow: ["/dashboard", "/platform", "/api", "/sign-in", "/sign-up", "/onboarding", "/subscribe"],
       },
       {
         userAgent: "ChatGPT-User",
         allow: ["/", "/pricing", "/guides", "/guides/*", "/llms.txt"],
-        disallow: ["/dashboard", "/platform", "/api", "/sign-in", "/sign-up", "/onboarding"],
+        disallow: ["/dashboard", "/platform", "/api", "/sign-in", "/sign-up", "/onboarding", "/subscribe"],
       },
       {
         userAgent: "Google-Extended",

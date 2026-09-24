@@ -19,6 +19,7 @@ import {
   Package,
   RefreshCw,
   Settings,
+  CreditCard,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -43,6 +44,7 @@ export const NAV_ICONS: Record<NavIcon, LucideIcon> = {
   audit: ClipboardList,
   inboundEmail: Mail,
   settings: Settings,
+  billing: CreditCard,
   users: Users,
 };
 
@@ -67,9 +69,10 @@ function NavLabel({
 }
 
 function isNavItemActive(pathname: string, href: string): boolean {
-  return href === "/dashboard"
-    ? pathname === href
-    : pathname.startsWith(href);
+  if (href === "/dashboard" || href === "/settings") {
+    return pathname === href;
+  }
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 function NavLink({
@@ -99,6 +102,12 @@ function NavLink({
           ? `${item.label} (${overdueInvoiceCount} overdue)`
           : item.label
       }
+      aria-label={
+        showOverdueBadge
+          ? `${item.label}, ${overdueInvoiceCount} overdue`
+          : undefined
+      }
+      aria-current={active ? "page" : undefined}
       className={cn(
         "flex items-center overflow-hidden rounded-full py-2 text-sm font-normal transition-colors",
         collapsed ? "justify-center px-0" : "gap-3 px-3",
@@ -108,7 +117,7 @@ function NavLink({
       )}
     >
       <span className="relative shrink-0">
-        <Icon className="h-4 w-4" />
+        <Icon className="h-4 w-4" aria-hidden />
         {showOverdueBadge && collapsed ? (
           <span
             className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-brand"
@@ -118,7 +127,10 @@ function NavLink({
       </span>
       <NavLabel collapsed={collapsed}>{item.label}</NavLabel>
       {showOverdueBadge && !collapsed ? (
-        <span className="ml-auto shrink-0 rounded-full bg-brand px-1.5 py-0.5 text-xs font-medium tabular-nums text-navy">
+        <span
+          className="ml-auto shrink-0 rounded-full bg-brand px-1.5 py-0.5 text-xs font-medium tabular-nums text-navy"
+          aria-hidden
+        >
           {overdueInvoiceCount}
         </span>
       ) : null}

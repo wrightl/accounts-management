@@ -2,7 +2,6 @@ import Link from "next/link";
 import { requirePlatformAdmin } from "@/lib/platform";
 import { hasDatabaseClient } from "@/db";
 import { listSubscriptionTiers } from "@/lib/platform/billing-queries";
-import { serverEnv } from "@/env";
 import { SubscriptionTiersForm } from "@/components/platform/subscription-tiers-form";
 
 export default async function PlatformBillingTiersPage() {
@@ -18,13 +17,6 @@ export default async function PlatformBillingTiersPage() {
   }
 
   const tiers = await listSubscriptionTiers();
-  const env = serverEnv();
-  const priceIds = {
-    essentials_month: env.STRIPE_PRICE_ESSENTIALS_MONTHLY,
-    essentials_year: env.STRIPE_PRICE_ESSENTIALS_YEARLY,
-    premium_month: env.STRIPE_PRICE_PREMIUM_MONTHLY,
-    premium_year: env.STRIPE_PRICE_PREMIUM_YEARLY,
-  };
 
   return (
     <div>
@@ -39,10 +31,14 @@ export default async function PlatformBillingTiersPage() {
       <p className="mt-1 max-w-2xl text-muted">
         Limits apply immediately to all companies on that tier. Existing members
         above a lowered user cap are grandfathered — new invites are blocked.
-        Stripe prices stay in the Dashboard; IDs below are read-only from env.
+        Stripe price IDs are managed in{" "}
+        <Link href="/platform/settings" className="underline">
+          Platform → Settings
+        </Link>
+        .
       </p>
       <div className="mt-8 max-w-2xl">
-        <SubscriptionTiersForm tiers={tiers} priceIds={priceIds} />
+        <SubscriptionTiersForm tiers={tiers} />
       </div>
     </div>
   );

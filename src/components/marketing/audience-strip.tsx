@@ -1,4 +1,4 @@
-import { Building2, Users, Briefcase } from "lucide-react";
+import { Building2, Users, Briefcase, Focus } from "lucide-react";
 
 const AUDIENCES = [
   {
@@ -16,6 +16,11 @@ const AUDIENCES = [
     title: "Ltd & sole traders",
     body: "Same day-to-day books. Limited companies also get shareholders and dividends.",
   },
+  {
+    icon: Focus,
+    title: "Neurodiverse founders",
+    body: "Reduce motion, larger text, higher contrast, a readable font, and success messages that stay put — set once on your Profile.",
+  },
 ] as const;
 
 export function AudienceStrip() {
@@ -26,14 +31,15 @@ export function AudienceStrip() {
           Who we built this for
         </p>
         <h2 className="mt-3 text-center font-display text-3xl font-normal tracking-tight md:text-4xl">
-          UK consultancies, studios, and small agencies
+          UK consultancies, studios — and founders who need calmer software
         </h2>
         <p className="mx-auto mt-4 max-w-2xl text-center text-white/70">
-          We built Alfa to get our own books out of spreadsheets,
-          Drive folders, and emailed receipts — then opened it for firms like
-          ours.
+          We built Alfa to get our own books out of spreadsheets, Drive folders,
+          and emailed receipts. It is for firms like ours, and for neurodiverse
+          founders who want plain language and display controls they can set
+          themselves.
         </p>
-        <div className="mt-10 grid gap-6 sm:grid-cols-3">
+        <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {AUDIENCES.map(({ icon: Icon, title, body }) => (
             <div
               key={title}

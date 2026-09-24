@@ -7,7 +7,11 @@ export const TRIAL_DAYS = 30;
 export const BILLING_PLANS = ["trial", "essentials", "premium"] as const;
 export type PlanSlug = (typeof BILLING_PLANS)[number];
 
-/** Marketing / MRR amounts in pence (ex VAT). */
+/**
+ * Fallback marketing / MRR amounts in pence (ex VAT) when Stripe catalog
+ * is unavailable. Prefer `getStripeCatalog()` / `catalogAmountPence()`.
+ * @deprecated Prefer live Stripe catalog amounts.
+ */
 export const PLAN_PRICES_PENCE = {
   essentials: { month: 1900, year: 19000 },
   premium: { month: 2900, year: 29000 },

@@ -20,6 +20,7 @@ export interface LocalUser {
   role: Role;
   companyId: string | null;
   expenseInboundSlug: string | null;
+  uiPrefs: Record<string, unknown>;
 }
 
 export interface Identity {
@@ -44,6 +45,7 @@ function mapUserRow(row: typeof users.$inferSelect): LocalUser {
     role: isRole(row.role) ? row.role : DEFAULT_ROLE,
     companyId: row.companyId ?? null,
     expenseInboundSlug: row.expenseInboundSlug ?? null,
+    uiPrefs: (row.uiPrefs as Record<string, unknown> | null) ?? {},
   };
 }
 
@@ -258,6 +260,7 @@ export async function listUsers(companyId: string): Promise<LocalUser[]> {
       role: companyMemberships.role,
       companyId: companyMemberships.companyId,
       expenseInboundSlug: users.expenseInboundSlug,
+      uiPrefs: users.uiPrefs,
     })
     .from(companyMemberships)
     .innerJoin(users, eq(users.id, companyMemberships.userId))
@@ -271,6 +274,7 @@ export async function listUsers(companyId: string): Promise<LocalUser[]> {
     role: isTenantRole(row.role) ? row.role : DEFAULT_ROLE,
     companyId: row.companyId,
     expenseInboundSlug: row.expenseInboundSlug ?? null,
+    uiPrefs: (row.uiPrefs as Record<string, unknown> | null) ?? {},
   }));
 }
 

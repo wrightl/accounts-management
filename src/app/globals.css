@@ -11,6 +11,7 @@
  *
  * Display/UI type on the site is Adobe Fonts "roc-grotesk"; Outfit is the
  * licensed-free geometric substitute until Typekit is wired up.
+ * Atkinson Hyperlegible is available via data-ui-font="readable".
  */
 :root {
   --navy: #171d3a;
@@ -24,7 +25,8 @@
   --surface: #ffffff;
   --surface-2: var(--wash);
   --foreground: var(--navy);
-  --muted: #5c6490;
+  /* Darker muted for ~7:1 on background (AAA-friendly helper text). */
+  --muted: #3f4668;
   --border: rgb(23 29 58 / 0.12);
   --destructive: #c23b5a;
   --success: #1a7a55;
@@ -47,8 +49,8 @@
   --color-accent: var(--periwinkle);
   --color-wash: var(--wash);
 
-  --font-sans: "Outfit", "Outfit Fallback", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Outfit", "Outfit Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-outfit), "Outfit Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-outfit), "Outfit Fallback", ui-sans-serif, system-ui, sans-serif;
   --radius-pill: 999px;
 }
 
@@ -78,4 +80,70 @@ h3,
   background-color: var(--navy);
   background-image: radial-gradient(circle at 1px 1px, rgb(148 171 249 / 0.28) 1px, transparent 0);
   background-size: 22px 22px;
+}
+
+/* Skip link — visible on keyboard focus only */
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: 0;
+  z-index: 100;
+  transform: translateY(-120%);
+  border-radius: 999px;
+  background: var(--navy);
+  color: var(--white);
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: transform 0.15s ease;
+}
+
+.skip-link:focus {
+  transform: translateY(0.75rem);
+  outline: 2px solid var(--pink);
+  outline-offset: 2px;
+}
+
+/* Display prefs (Profile → Display and focus) */
+html[data-ui-text="large"] {
+  font-size: 112.5%;
+}
+
+html[data-ui-font="readable"] {
+  --font-sans: var(--font-readable), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-readable), ui-sans-serif, system-ui, sans-serif;
+}
+
+html[data-ui-contrast="high"] {
+  --muted: #2a3050;
+  --border: rgb(23 29 58 / 0.35);
+  --background: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #eef0f8;
+}
+
+html[data-ui-contrast="high"] :focus-visible {
+  outline: 3px solid var(--navy);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-ui-motion="full"]) *,
+  html:not([data-ui-motion="full"]) *::before,
+  html:not([data-ui-motion="full"]) *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+html[data-ui-motion="reduce"] *,
+html[data-ui-motion="reduce"] *::before,
+html[data-ui-motion="reduce"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
 }

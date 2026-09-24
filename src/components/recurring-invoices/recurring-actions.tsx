@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { FieldError } from "@/components/ui/form";
+import { useAlert } from "@/components/ui/alert-dialog";
 import {
   deleteRecurringInvoice,
   generateRecurringInvoiceNow,
@@ -20,6 +21,7 @@ export function RecurringInvoiceActions({
   canWrite: boolean;
 }) {
   const router = useRouter();
+  const { confirm } = useAlert();
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -55,14 +57,14 @@ export function RecurringInvoiceActions({
         <Button
           type="button"
           disabled={pending || !enabled}
-          onClick={() => {
-            if (
-              !confirm(
+          onClick={async () => {
+            const ok = await confirm({
+              title: "Generate invoice now?",
+              message:
                 "Generate an invoice for this schedule now? Only once per calendar month.",
-              )
-            ) {
-              return;
-            }
+              confirmLabel: "Generate",
+            });
+            if (!ok) return;
             run(() => generateRecurringInvoiceNow(id));
           }}
           title={!enabled ? "Resume the schedule first" : undefined}
@@ -73,14 +75,15 @@ export function RecurringInvoiceActions({
           type="button"
           variant="ghost"
           disabled={pending}
-          onClick={() => {
-            if (
-              !confirm(
+          onClick={async () => {
+            const ok = await confirm({
+              title: "Delete schedule?",
+              message:
                 "Delete this schedule? Templates with generated invoices are paused instead.",
-              )
-            ) {
-              return;
-            }
+              confirmLabel: "Delete",
+              variant: "destructive",
+            });
+            if (!ok) return;
             run(async () => {
               const result = await deleteRecurringInvoice(id);
               if (result.ok) {

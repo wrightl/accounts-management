@@ -24,6 +24,23 @@ const emailField = z
   .min(1, "Enter an email address")
   .email("Enter a valid email address");
 
+const optionalStripePriceId = z
+  .string()
+  .trim()
+  .optional()
+  .transform((v) => (v == null || v === "" ? null : v))
+  .pipe(
+    z.union([
+      z.null(),
+      z
+        .string()
+        .regex(
+          /^price_[A-Za-z0-9]+$/,
+          "Enter a Stripe price ID (price_…)",
+        ),
+    ]),
+  );
+
 export const platformSettingsSchema = z
   .object({
     maintenanceBanner: z
@@ -48,6 +65,10 @@ export const platformSettingsSchema = z
       .transform((v) =>
         v === "" || v == null ? DEFAULT_RECEIPT_OCR_MODEL : v,
       ),
+    stripePriceEssentialsMonthly: optionalStripePriceId,
+    stripePriceEssentialsYearly: optionalStripePriceId,
+    stripePricePremiumMonthly: optionalStripePriceId,
+    stripePricePremiumYearly: optionalStripePriceId,
   })
   .superRefine((data, ctx) => {
     if (data.defaultReceiptOcrProvider !== "ai_gateway") return;
@@ -72,6 +93,12 @@ export function platformSettingsRawFromFormData(
       formData.get("defaultReceiptOcrProvider") ?? "local",
     defaultReceiptOcrModel:
       formData.get("defaultReceiptOcrModel") ?? DEFAULT_RECEIPT_OCR_MODEL,
+    stripePriceEssentialsMonthly:
+      formData.get("stripePriceEssentialsMonthly") ?? "",
+    stripePriceEssentialsYearly:
+      formData.get("stripePriceEssentialsYearly") ?? "",
+    stripePricePremiumMonthly: formData.get("stripePricePremiumMonthly") ?? "",
+    stripePricePremiumYearly: formData.get("stripePricePremiumYearly") ?? "",
   };
 }
 
@@ -230,4 +257,20 @@ export function parseUpdateTierInput(
   raw: unknown,
 ): ParseOk<UpdateTierParsed> | ParseFail {
   return parseWithFieldErrors(updateTierSchema, raw);
+}
+
+export const deleteCompanySchema = z.object({
+  companyId: z.string().uuid("Invalid company id"),
+  confirmationName: z
+    .string()
+    .trim()
+    .min(1, "Type the company name to confirm deletion"),
+});
+
+export type DeleteCompanyParsed = z.infer<typeof deleteCompanySchema>;
+
+export function parseDeleteCompanyInput(
+  raw: unknown,
+): ParseOk<DeleteCompanyParsed> | ParseFail {
+  return parseWithFieldErrors(deleteCompanySchema, raw);
 }

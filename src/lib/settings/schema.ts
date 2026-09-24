@@ -173,3 +173,18 @@ export function parseCompanySettingsInput(
     },
   };
 }
+
+export const deleteOwnCompanySchema = z.object({
+  confirmationName: z
+    .string()
+    .trim()
+    .min(1, "Type the company name to confirm deletion"),
+});
+
+export type DeleteOwnCompanyParsed = z.infer<typeof deleteOwnCompanySchema>;
+
+export function parseDeleteOwnCompanyInput(
+  raw: unknown,
+): ParseOk<DeleteOwnCompanyParsed> | ParseFail {
+  return parseWithFieldErrors(deleteOwnCompanySchema, raw);
+}

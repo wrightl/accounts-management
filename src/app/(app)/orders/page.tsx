@@ -2,6 +2,7 @@ import Link from "next/link";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { listOrders } from "@/lib/orders/queries";
 import { buttonClasses } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 
 export default async function OrdersPage() {
@@ -28,7 +29,12 @@ export default async function OrdersPage() {
 
       <div className="mt-6">
         {rows.length === 0 ? (
-          <p className="text-sm text-muted">No orders yet.</p>
+          <EmptyState
+            title="No orders yet"
+            description="Orders come from accepted quotes, or you can create one by hand before invoicing."
+            actionHref={canWrite ? "/orders/new" : undefined}
+            actionLabel={canWrite ? "Create an order" : undefined}
+          />
         ) : (
           <Table>
             <THead>

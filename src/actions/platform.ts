@@ -42,6 +42,7 @@ import {
   companyInviteAdminRawFromFormData,
   parseCompanyInviteAdminInput,
   parseCompanySupportNoteInput,
+  parseDeleteCompanyInput,
   parseExtendTrialInput,
   parseGrantComplimentaryInput,
   parsePlatformInviteAdminInput,
@@ -51,6 +52,7 @@ import {
   platformInviteAdminRawFromFormData,
   platformSettingsRawFromFormData,
 } from "@/lib/platform/schema";
+import { deleteCompanyById } from "@/lib/companies/delete";
 
 export async function suspendCompany(
   companyId: string,
@@ -133,6 +135,41 @@ export async function unsuspendCompany(companyId: string): Promise<ActionResult>
         "/platform/companies",
         `/platform/companies/${companyId}`,
       ],
+    },
+  );
+}
+
+export async function deleteCompanyAsPlatform(
+  companyId: string,
+  confirmationName: string,
+): Promise<ActionResult> {
+  const parsed = parseDeleteCompanyInput({ companyId, confirmationName });
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+      fieldErrors: parsed.fieldErrors,
+    };
+  }
+
+  return platformMutate(
+    async () => {
+      const result = await deleteCompanyById(
+        parsed.data.companyId,
+        parsed.data.confirmationName,
+      );
+      if (!result.ok) return result;
+      return { ok: true, id: result.id };
+    },
+    {
+      audit: {
+        action: "platform.company.delete",
+        entityType: "company",
+        entityId: parsed.data.companyId,
+        companyId: null,
+        meta: { confirmationName: parsed.data.confirmationName },
+      },
+      paths: ["/platform", "/platform/companies"],
     },
   );
 }
@@ -372,6 +409,10 @@ export async function updatePlatformSettingsAction(
     maintenanceBanner,
     defaultReceiptOcrProvider,
     defaultReceiptOcrModel,
+    stripePriceEssentialsMonthly,
+    stripePriceEssentialsYearly,
+    stripePricePremiumMonthly,
+    stripePricePremiumYearly,
   } = parsed.data;
 
   return platformMutate(
@@ -380,7 +421,15 @@ export async function updatePlatformSettingsAction(
         maintenanceBanner,
         defaultReceiptOcrProvider,
         defaultReceiptOcrModel,
+        stripePriceEssentialsMonthly,
+        stripePriceEssentialsYearly,
+        stripePricePremiumMonthly,
+        stripePricePremiumYearly,
       });
+      const { invalidateStripeCatalogCache } = await import(
+        "@/lib/billing/catalog"
+      );
+      invalidateStripeCatalogCache();
       return { ok: true, id: "1" };
     },
     {
@@ -392,9 +441,36 @@ export async function updatePlatformSettingsAction(
         meta: {
           defaultReceiptOcrProvider,
           hasBanner: Boolean(maintenanceBanner),
+          hasStripePriceIds: Boolean(
+            stripePriceEssentialsMonthly ||
+              stripePriceEssentialsYearly ||
+              stripePricePremiumMonthly ||
+              stripePricePremiumYearly,
+          ),
         },
       },
-      paths: ["/platform/settings", "/platform"],
+      paths: ["/platform/settings", "/platform", "/pricing"],
+    },
+  );
+}
+
+export async function refreshStripeCatalogAction(): Promise<ActionResult> {
+  return platformMutate(
+    async () => {
+      const { invalidateStripeCatalogCache } = await import(
+        "@/lib/billing/catalog"
+      );
+      invalidateStripeCatalogCache();
+      return { ok: true, id: "stripe-catalog" };
+    },
+    {
+      audit: {
+        action: "platform.settings.refresh_stripe_catalog",
+        entityType: "platform_settings",
+        entityId: "1",
+        companyId: null,
+      },
+      paths: ["/platform/settings", "/pricing"],
     },
   );
 }

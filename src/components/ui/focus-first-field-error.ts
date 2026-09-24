@@ -74,7 +74,16 @@ function resolveFieldControl(
 }
 
 function focusControl(el: HTMLElement): void {
-  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  const reduceMotion =
+    typeof window !== "undefined" &&
+    (document.documentElement.getAttribute("data-ui-motion") === "reduce" ||
+      (document.documentElement.getAttribute("data-ui-motion") !== "full" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches));
+
+  el.scrollIntoView({
+    behavior: reduceMotion ? "auto" : "smooth",
+    block: "center",
+  });
   if (typeof el.focus === "function") {
     try {
       el.focus({ preventScroll: true });

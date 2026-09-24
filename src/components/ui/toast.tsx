@@ -5,6 +5,8 @@ import { Check, X } from "lucide-react";
 import {
   dismissToast,
   getToastSnapshot,
+  pauseToast,
+  resumeToast,
   subscribeToasts,
   EMPTY_TOASTS,
 } from "@/components/ui/toast-store";
@@ -29,6 +31,10 @@ export function Toaster() {
           key={item.id}
           role="status"
           className="pointer-events-auto flex max-w-sm items-start gap-3 rounded-2xl border border-border bg-surface px-4 py-3 text-sm shadow-xl"
+          onMouseEnter={() => pauseToast(item.id)}
+          onMouseLeave={() => resumeToast(item.id)}
+          onFocusCapture={() => pauseToast(item.id)}
+          onBlurCapture={() => resumeToast(item.id)}
         >
           <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden />
           <p className="flex-1">{item.message}</p>

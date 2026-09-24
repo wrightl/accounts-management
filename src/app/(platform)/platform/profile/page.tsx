@@ -4,6 +4,7 @@ import { ensureLocalUser, findLocalUser } from "@/lib/users";
 import { ProfileForm } from "@/components/users/profile-form";
 import { ProfilePictureField } from "@/components/users/profile-picture-field";
 import { SignOutSection } from "@/components/users/sign-out-section";
+import { UiPrefsForm } from "@/components/users/ui-prefs-form";
 import { hasDatabaseClient } from "@/db";
 
 export default async function PlatformProfilePage() {
@@ -40,6 +41,7 @@ export default async function PlatformProfilePage() {
           role={local.role}
           roleDisplay="Platform operator"
         />
+        <UiPrefsForm prefs={local.uiPrefs} />
         <SignOutSection />
       </div>
     </div>
