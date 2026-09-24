@@ -1,11 +1,12 @@
 /**
- * Sign up a fresh founder (not platform admin), onboard a fictional Ltd,
- * seed demo data into that company, and capture landing-page screenshots + clips.
+ * Sign in as the existing fictional demo company, seed demo data into that
+ * company, and capture landing-page screenshots + a tour clip.
+ *
+ * Does not create a Clerk user or company. The video starts on the dashboard
+ * after sign-in — sign-in itself is not recorded.
  *
  * Prefer a production-mode target (deployed URL or `next start`) so the Next.js
- * DevTools chip never appears. Creates the Clerk user via Backend API when
- * CLERK_SECRET_KEY matches the target, otherwise falls back to UI sign-up.
- * Never uses PLATFORM_ADMIN_EMAILS.
+ * DevTools chip never appears. Never uses PLATFORM_ADMIN_EMAILS.
  *
  * Usage:
  *   npm run marketing:capture
@@ -84,21 +85,70 @@ if (isRemoteTarget) {
 }
 
 const DEMO = {
-    firstName: 'Alex',
-    lastName: 'Harbor',
-    // Stable password so retries can sign in to a just-created user.
+    // Reset on the existing founder so headless sign-in can reuse the company.
     password: process.env.PROMO_FOUNDER_PASSWORD ?? 'PromoCapture!Harbor2026',
     tradingName: 'Northline Studio Ltd',
-    legalName: 'Northline Studio Limited',
     companyNumber: '14998821',
-    address: 'Unit 12\nCanvas Works\nManchester M1 2AB',
 };
 
-function uniqueEmail(): string {
-    if (process.env.PROMO_CLERK_EMAIL?.trim()) {
-        return process.env.PROMO_CLERK_EMAIL.trim();
+async function withDb<T>(fn: (client: pg.Client) => Promise<T>): Promise<T> {
+    const url = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
+    if (!url || url.includes('SENSITIVE')) {
+        throw new Error(
+            'DATABASE_URL / DATABASE_URL_UNPOOLED is required. ' +
+                'For production capture, set them in .env.production.local.',
+        );
     }
-    return `promo.${Date.now()}@example.com`;
+    const client = new pg.Client({
+        connectionString: postgresConnectionString(url),
+    });
+    await client.connect();
+    try {
+        return await fn(client);
+    } finally {
+        await client.end().catch(() => {});
+    }
+}
+
+/** Founder of the existing fictional demo company. Never creates one. */
+async function findExistingDemoFounder(): Promise<{
+    email: string;
+    companyId: string;
+    companyName: string;
+}> {
+    const preferred = process.env.PROMO_CLERK_EMAIL?.trim().toLowerCase();
+    return withDb(async (client) => {
+        const { rows } = await client.query<{
+            id: string;
+            name: string;
+            email: string;
+        }>(
+            `select c.id, c.name, u.email
+             from companies c
+             join users u on u.company_id = c.id
+             where c.company_number = $1
+               and c.name = $2
+               and u.role <> 'platform_admin'
+               and u.clerk_user_id is not null
+             order by c.created_at desc`,
+            [DEMO.companyNumber, DEMO.tradingName],
+        );
+        const match = preferred
+            ? rows.find((row) => row.email.toLowerCase() === preferred)
+            : rows[0];
+        if (!match) {
+            throw new Error(
+                preferred
+                    ? `PROMO_CLERK_EMAIL ${preferred} is not a member of ${DEMO.tradingName}. Refusing to create a company.`
+                    : `No existing company named ${DEMO.tradingName} (${DEMO.companyNumber}). Refusing to create one.`,
+            );
+        }
+        return {
+            email: match.email,
+            companyId: match.id,
+            companyName: match.name,
+        };
+    });
 }
 
 function clerkKeyKind(): 'live' | 'test' | 'missing' {
@@ -146,29 +196,21 @@ async function createFounderInClerk(email: string) {
     }
     const client = createClerkClient({ secretKey });
 
-    // Reuse existing founder when PROMO_CLERK_EMAIL is set.
     const existing = await client.users.getUserList({
         emailAddress: [email],
         limit: 1,
     });
-    if (existing.data[0]) {
-        await client.users.updateUser(existing.data[0].id, {
-            password: DEMO.password,
-            skipPasswordChecks: true,
-        });
-        console.log(`Reusing Clerk user ${existing.data[0].id} (${email})`);
-        return existing.data[0];
+    const user = existing.data[0];
+    if (!user) {
+        throw new Error(
+            `No Clerk user for ${email}. Refusing to create one — reuse the existing demo company.`,
+        );
     }
-
-    const user = await client.users.createUser({
-        emailAddress: [email],
+    await client.users.updateUser(user.id, {
         password: DEMO.password,
-        firstName: DEMO.firstName,
-        lastName: DEMO.lastName,
         skipPasswordChecks: true,
-        skipPasswordRequirement: false,
     });
-    console.log(`Created Clerk user ${user.id} (${email})`);
+    console.log(`Reusing Clerk user ${user.id} (${email})`);
     return user;
 }
 
@@ -202,85 +244,17 @@ async function signInFounderWithPassword(page: Page, email: string) {
         .getByRole('button', { name: /continue|sign in/i })
         .first()
         .click();
-    await page.waitForURL(/\/(onboarding|dashboard)/, { timeout: 60_000 });
+    await page.waitForURL(/\/(onboarding|dashboard|subscribe)/, {
+        timeout: 60_000,
+    });
     console.log(`Signed in via password ${email} → ${page.url()}`);
 }
 
-async function signUpFounderViaUi(page: Page, email: string) {
-    await page.goto(`${BASE_URL}/sign-up`, { waitUntil: 'domcontentloaded' });
-    await waitForApp(page);
-
-    const emailInput = page
-        .locator('input[name="emailAddress"], input[type="email"]')
-        .first();
-    await emailInput.waitFor({ state: 'visible', timeout: 20_000 });
-    await emailInput.fill(email);
-
-    const firstName = page.locator('input[name="firstName"]');
-    if (await firstName.count()) await firstName.fill(DEMO.firstName);
-    const lastName = page.locator('input[name="lastName"]');
-    if (await lastName.count()) await lastName.fill(DEMO.lastName);
-
-    const password = page
-        .locator('input[name="password"], input[type="password"]')
-        .first();
-    await password.fill(DEMO.password);
-
-    // Prefer the email Continue button, not Google OAuth.
-    const emailContinue = page.locator('form').getByRole('button', {
-        name: /^continue$/i,
-    });
-    if (await emailContinue.count()) {
-        await emailContinue.first().click();
-    } else {
-        await page
-            .getByRole('button', { name: /^continue$/i })
-            .last()
-            .click();
-    }
-
-    await page.waitForURL(/\/(onboarding|dashboard)/, { timeout: 90_000 });
-    console.log(`Signed up via UI ${email} → ${page.url()}`);
-}
-
-async function completeOnboarding(page: Page, email: string) {
-    if (!page.url().includes('/onboarding')) {
-        await page.goto(`${BASE_URL}/onboarding`, {
-            waitUntil: 'domcontentloaded',
-        });
-    }
-    await waitForApp(page);
-
-    await page.getByRole('button', { name: /Limited company/i }).click();
-    await page.locator('#userName').fill(`${DEMO.firstName} ${DEMO.lastName}`);
-    await page.locator('#name').fill(DEMO.tradingName);
-    await page.locator('#legalName').fill(DEMO.legalName);
-    await page.locator('#companyNumber').fill(DEMO.companyNumber);
-    await page.locator('#addressLines').fill(DEMO.address);
-    await page.locator('#email').fill(email);
-
-    await page.getByRole('button', { name: /Create account/i }).click();
-    await page.waitForURL(/\/dashboard/, { timeout: 60_000 });
-    console.log('Onboarding complete → dashboard');
-}
-
 async function seedForActor(email: string) {
-    const url = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
-    if (!url || url.includes('SENSITIVE')) {
-        throw new Error(
-            'DATABASE_URL / DATABASE_URL_UNPOOLED is required for seeding. ' +
-                'For production capture, set them in .env.production.local.',
-        );
-    }
-
     process.env.PROMO_SEED_ALLOW_REMOTE =
         process.env.PROMO_SEED_ALLOW_REMOTE ?? '1';
 
-    const client = new pg.Client({
-        connectionString: postgresConnectionString(url),
-    });
-    await client.connect();
-    try {
+    return withDb(async (client) => {
         const db = drizzle(client, { schema });
         const result = await seedPromoDemo(db as unknown as Database, {
             force: true,
@@ -293,9 +267,32 @@ async function seedForActor(email: string) {
         );
         console.log('Seeded promo demo for', email);
         return result.routes;
-    } finally {
-        await client.end().catch(() => {});
+    });
+}
+
+/** Confirm the signed-in founder already has a company and can open the app. */
+async function assertOnDashboard(page: Page) {
+    if (!/\/dashboard(?:\?|$|\/)/.test(page.url())) {
+        await page.goto(`${BASE_URL}/dashboard`, {
+            waitUntil: 'domcontentloaded',
+        });
+        await waitForApp(page);
     }
+    const url = page.url();
+    if (url.includes('/onboarding')) {
+        throw new Error(
+            'Signed-in user has no company. Refusing to create one.',
+        );
+    }
+    if (url.includes('/subscribe')) {
+        throw new Error(
+            `Existing company is blocked at ${url}. It needs app access before capture.`,
+        );
+    }
+    if (!/\/dashboard(?:\?|$|\/)/.test(url)) {
+        throw new Error(`Expected the dashboard, landed on ${url}`);
+    }
+    console.log(`On dashboard → ${url}`);
 }
 
 async function captureStill(page: Page, name: string, path: string) {
@@ -340,6 +337,9 @@ function encodeWebmToMp4(webm: string, mp4: string) {
         'ffmpeg',
         [
             '-y',
+            // Drop the blank page Playwright records before the dashboard paints.
+            '-ss',
+            '0.6',
             '-i',
             webm,
             '-an',
@@ -371,20 +371,18 @@ async function provisionFounder(page: Page, email: string) {
     const wantsLive = isRemoteTarget;
 
     if (wantsLive && kind !== 'live') {
-        console.warn(
+        throw new Error(
             `Remote target ${BASE_URL} but Clerk key is ${kind}. ` +
-                `Attempting UI sign-up (no Backend API). For reliable capture, put sk_live in .env.production.local.`,
+                'Put sk_live in .env.production.local so the existing founder can sign in.',
         );
-        await signUpFounderViaUi(page, email);
-        return;
     }
 
     await createFounderInClerk(email);
-    // Give Clerk a moment to index the new user before ticket sign-in.
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(1500);
 
     if (kind === 'live' || wantsLive) {
         await signInFounderWithPassword(page, email);
+        await assertOnDashboard(page);
         return;
     }
 
@@ -393,12 +391,11 @@ async function provisionFounder(page: Page, email: string) {
     await clerk.loaded({ page });
     await clerk.signIn({ page, emailAddress: email });
     await page.waitForTimeout(1500);
-    await page.goto(`${BASE_URL}/onboarding`, {
+    await page.goto(`${BASE_URL}/dashboard`, {
         waitUntil: 'domcontentloaded',
     });
     await waitForApp(page);
     if (page.url().includes('/sign-in')) {
-        // Fallback: password strategy via testing helper
         await page.goto(`${BASE_URL}/`, { waitUntil: 'domcontentloaded' });
         await clerk.loaded({ page });
         await clerk.signIn({
@@ -409,7 +406,7 @@ async function provisionFounder(page: Page, email: string) {
                 password: DEMO.password,
             },
         });
-        await page.goto(`${BASE_URL}/onboarding`, {
+        await page.goto(`${BASE_URL}/dashboard`, {
             waitUntil: 'domcontentloaded',
         });
         await waitForApp(page);
@@ -417,6 +414,7 @@ async function provisionFounder(page: Page, email: string) {
     if (page.url().includes('/sign-in')) {
         throw new Error(`Sign-in failed; still on ${page.url()}`);
     }
+    await assertOnDashboard(page);
     console.log(`Signed in ${email} → ${page.url()}`);
 }
 
@@ -430,9 +428,10 @@ async function main() {
         .map((s) => s.trim().toLowerCase())
         .filter(Boolean);
 
-    const email = uniqueEmail();
+    const founder = await findExistingDemoFounder();
+    const email = founder.email;
     if (blocked.includes(email.toLowerCase())) {
-        throw new Error('Generated email collided with PLATFORM_ADMIN_EMAILS');
+        throw new Error('Demo founder email is in PLATFORM_ADMIN_EMAILS');
     }
 
     if (!isRemoteTarget) {
@@ -443,7 +442,7 @@ async function main() {
     mkdirSync(rawDir, { recursive: true });
 
     console.log(`Marketing capture against ${BASE_URL}`);
-    console.log(`Founder: ${email}`);
+    console.log(`Reusing ${founder.companyName} as ${email}`);
     console.log(`Clerk key: ${clerkKeyKind()}`);
     if (BASE_URL.includes('localhost') && !process.env.PROMO_BASE_URL) {
         console.log(
@@ -451,13 +450,38 @@ async function main() {
         );
     }
 
+    const viewport = { width: 1440, height: 900 };
+    const authBrowser = await chromium.launch({ headless: true });
+    const authContext = await authBrowser.newContext({
+        viewport,
+        deviceScaleFactor: 1,
+    });
+    if (!isRemoteTarget || clerkKeyKind() === 'test') {
+        await setupClerkTestingToken({ context: authContext }).catch(() => {
+            /* testing tokens are development-only */
+        });
+    }
+    const authPage = await authContext.newPage();
+
+    let routes: Awaited<ReturnType<typeof seedForActor>>;
+    let storageState: Awaited<ReturnType<typeof authContext.storageState>>;
+    try {
+        await provisionFounder(authPage, email);
+        routes = await seedForActor(email);
+        storageState = await authContext.storageState();
+    } finally {
+        await authContext.close();
+        await authBrowser.close();
+    }
+
     const browser = await chromium.launch({ headless: true });
     const context = await browser.newContext({
-        viewport: { width: 1440, height: 900 },
+        viewport,
         deviceScaleFactor: 1,
+        storageState,
         recordVideo: {
             dir: rawDir,
-            size: { width: 1440, height: 900 },
+            size: viewport,
         },
     });
     if (!isRemoteTarget || clerkKeyKind() === 'test') {
@@ -467,17 +491,12 @@ async function main() {
     }
     const page = await context.newPage();
 
-    let routes: Awaited<ReturnType<typeof seedForActor>>;
-
     try {
-        await provisionFounder(page, email);
-        await completeOnboarding(page, email);
-        routes = await seedForActor(email);
-
         await page.goto(`${BASE_URL}/dashboard`, {
             waitUntil: 'domcontentloaded',
         });
         await waitForApp(page);
+        await assertOnDashboard(page);
         await hideDevChrome(page);
         await page.waitForTimeout(1500);
 
@@ -525,7 +544,8 @@ async function main() {
                 email,
                 baseUrl: BASE_URL,
                 capturedAt: new Date().toISOString(),
-                note: 'Fictional demo user — safe to delete from Clerk dashboard',
+                company: founder.companyName,
+                note: 'Reused existing fictional demo company; video starts on the dashboard',
             },
             null,
             2,
@@ -533,9 +553,7 @@ async function main() {
     );
 
     console.log('Marketing assets written to public/marketing/');
-    console.log(
-        `Leftover Clerk user: ${email} (delete in Clerk dashboard if desired)`,
-    );
+    console.log(`Reused ${founder.companyName} (${email})`);
 }
 
 main().catch((err) => {
