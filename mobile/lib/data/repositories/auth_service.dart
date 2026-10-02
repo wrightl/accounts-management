@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:dio/dio.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/utils/json.dart';
 import '../api/api_client.dart';
 import '../models/user.dart';
 import '../models/api_response.dart';
@@ -55,25 +57,74 @@ class AuthService {
   }
   
   Future<ApiResponse<User>> validateToken() async {
+    Response<dynamic>? response;
     try {
-      final response = await _apiClient.post(AppConstants.authValidateEndpoint);
-      
+      response = await _apiClient.post(AppConstants.authValidateEndpoint);
+
       if (response.statusCode == 200) {
-        final user = User.fromJson(response.data['user']);
-        await setUserData(
-          userId: user.id,
-          companyId: user.companyId ?? '',
-          email: user.email,
+        final userJson = _stringKeyMap(
+          response.data is Map ? response.data['user'] : null,
         );
+        if (userJson['id'] == null) {
+          debugPrint(
+            'validateToken: missing user '
+            'status=${response.statusCode} body=${response.data}',
+          );
+          return ApiResponse.error('Could not read your account.');
+        }
+        final user = User.fromJson(userJson);
+        try {
+          await setUserData(
+            userId: user.id,
+            companyId: user.companyId ?? '',
+            email: user.email,
+          );
+        } catch (e, stack) {
+          // The live session token comes from Clerk, not this cache.
+          debugPrint(
+            'validateToken: failed to cache user locally: $e\n$stack',
+          );
+        }
         return ApiResponse.success(user);
-      } else {
-        return ApiResponse.error(_responseError(response.data, 'Invalid token'));
       }
-    } on DioException catch (e) {
+
+      debugPrint(
+        'validateToken failed: status=${response.statusCode} '
+        'body=${response.data}',
+      );
+      return ApiResponse.error(_responseError(response.data, 'Invalid token'));
+    } on DioException catch (e, stack) {
+      debugPrint(
+        'validateToken failed: $e\n$stack\n'
+        'status=${e.response?.statusCode} body=${e.response?.data}',
+      );
       return ApiResponse.error(_dioError(e, 'Network error'));
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint('validateToken failed: $e\n$stack');
+      if (response != null) {
+        debugPrint(
+          'validate status=${response.statusCode} body=${response.data}',
+        );
+      }
       return ApiResponse.error('Unexpected error: $e');
     }
+  }
+
+  /// Nested JSON maps from Dio are not always `Map<String, dynamic>`.
+  Map<String, dynamic> _stringKeyMap(dynamic value) {
+    final map = asMap(value);
+    return map.map((key, nested) {
+      if (nested is Map) return MapEntry(key, _stringKeyMap(nested));
+      if (nested is List) {
+        return MapEntry(
+          key,
+          nested
+              .map((item) => item is Map ? _stringKeyMap(item) : item)
+              .toList(),
+        );
+      }
+      return MapEntry(key, nested);
+    });
   }
 
   String _dioError(DioException error, String fallback) {
