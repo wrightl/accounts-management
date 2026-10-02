@@ -223,7 +223,7 @@ export async function sendInvoice(id: string): Promise<ActionResult> {
         return { ok: false, error: "Client has no email address" };
       }
 
-      const jobId = await enqueueSendJob("invoice_send", companyId, id);
+      const jobId = await enqueueSendJob("invoice_send", companyId, id, localUserId);
       const delivered = await processSendJob(jobId);
       if (!delivered.ok) {
         return {

@@ -12,6 +12,7 @@ import { loadOrRenderQuotePdf } from "@/lib/quotes/pdf-cache";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { parseVatRate, resolveLineVatRate } from "@/lib/vat";
 import { sendEmail } from "@/lib/email";
+import { resolveClientEmailSender } from "@/lib/email/resolve-client-sender";
 import {
   canEditQuote,
   canRollbackQuote,
@@ -490,8 +491,16 @@ export async function sendQuote(quoteId: string, formData: FormData): Promise<Ac
       }
       const publicUrl = publicQuoteUrl(rawToken);
 
+      const sender = await resolveClientEmailSender({
+        companyId,
+        companyName: company.name,
+        actorUserId: localUserId,
+      });
+
       await sendEmail({
         to: parsed.data.to,
+        from: sender.from,
+        replyTo: sender.replyTo,
         subject: `Quote ${formatQuoteReference(detail.quote.number, detail.quote.version)} from ${company.name}`,
         html: quoteEmailHtml({
           message: parsed.data.message,

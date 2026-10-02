@@ -3,6 +3,7 @@ import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { clients, companies, invoices, sendJobs } from "@/db/schema";
 import { sendEmail } from "@/lib/email";
+import { resolveClientEmailSender } from "@/lib/email/resolve-client-sender";
 import { escapeHtml } from "@/lib/html";
 import { formatGBP } from "@/lib/money";
 import { getStorage } from "@/lib/storage";
@@ -20,6 +21,7 @@ export async function enqueueSendJob(
   kind: SendJobKind,
   companyId: string,
   invoiceId: string,
+  actorUserId?: string | null,
 ): Promise<string> {
   const db = getDb();
   const pending = await db
@@ -37,7 +39,13 @@ export async function enqueueSendJob(
 
   const [created] = await db
     .insert(sendJobs)
-    .values({ companyId, kind, invoiceId, status: "pending" })
+    .values({
+      companyId,
+      kind,
+      invoiceId,
+      actorUserId: actorUserId ?? null,
+      status: "pending",
+    })
     .returning({ id: sendJobs.id });
   return created.id;
 }
@@ -76,9 +84,9 @@ export async function processSendJob(jobId: string): Promise<{ ok: boolean; erro
 
   try {
     if (job.kind === "invoice_send") {
-      await deliverInvoice(job.invoiceId);
+      await deliverInvoice(job.invoiceId, job.actorUserId);
     } else {
-      await deliverReminder(job.invoiceId);
+      await deliverReminder(job.invoiceId, job.actorUserId);
     }
     await db
       .update(sendJobs)
@@ -175,7 +183,7 @@ export async function enqueueOverdueReminders(): Promise<number> {
   return queued;
 }
 
-async function deliverInvoice(invoiceId: string) {
+async function deliverInvoice(invoiceId: string, actorUserId?: string | null) {
   const db = getDb();
   const [invRow] = await db
     .select({ companyId: invoices.companyId })
@@ -198,9 +206,16 @@ async function deliverInvoice(invoiceId: string) {
   const companyName = escapeHtml(company.name);
   const invoiceNumber = escapeHtml(detail.invoice.number);
   const amount = escapeHtml(detail.invoice.grossFormatted);
+  const sender = await resolveClientEmailSender({
+    companyId: invRow.companyId,
+    companyName: company.name,
+    actorUserId,
+  });
 
   await sendEmail({
     to: detail.client.email,
+    from: sender.from,
+    replyTo: sender.replyTo,
     subject: `Invoice ${detail.invoice.number} from ${company.name}`,
     html: `<p>Hi,</p><p>Please find attached invoice <strong>${invoiceNumber}</strong> for ${amount}.</p><p>Kind regards,<br/>${companyName}</p>`,
     text: `Please find attached invoice ${detail.invoice.number} for ${detail.invoice.grossFormatted}.`,
@@ -223,7 +238,7 @@ async function deliverInvoice(invoiceId: string) {
     .where(eq(invoices.id, invoiceId));
 }
 
-async function deliverReminder(invoiceId: string) {
+async function deliverReminder(invoiceId: string, actorUserId?: string | null) {
   const db = getDb();
   const [row] = await db
     .select({
@@ -246,9 +261,16 @@ async function deliverReminder(invoiceId: string) {
   const number = escapeHtml(row.invoice.number);
   const amount = escapeHtml(formatGBP(row.invoice.grossPence));
   const due = escapeHtml(row.invoice.dueDate ?? "");
+  const sender = await resolveClientEmailSender({
+    companyId: row.invoice.companyId,
+    companyName: company.name,
+    actorUserId,
+  });
 
   await sendEmail({
     to: row.clientEmail,
+    from: sender.from,
+    replyTo: sender.replyTo,
     subject: `Reminder: invoice ${row.invoice.number} is overdue`,
     html: `<p>Hi ${name},</p><p>Invoice <strong>${number}</strong> for ${amount} was due on ${due} and remains unpaid.</p><p>Kind regards,<br/>${escapeHtml(company.name)}</p>`,
     text: `Invoice ${row.invoice.number} for ${formatGBP(row.invoice.grossPence)} is overdue (due ${row.invoice.dueDate}).`,

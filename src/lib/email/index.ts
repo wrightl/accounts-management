@@ -13,6 +13,7 @@ export interface EmailMessage {
   html: string;
   text?: string;
   from?: string;
+  replyTo?: string;
   attachments?: EmailAttachment[];
 }
 
@@ -66,8 +67,9 @@ class ConsoleProvider implements EmailProvider {
         ?.map((a) => a.filename)
         .filter(Boolean)
         .join(", ") || "(none)";
+    const replyTo = message.replyTo ? ` replyTo=${message.replyTo}` : "";
     console.info(
-      `[email:console] to=${String(message.to)} subject="${message.subject}" attachments=[${attachments}]`,
+      `[email:console] to=${String(message.to)} subject="${message.subject}" from=${message.from ?? "(default)"}${replyTo} attachments=[${attachments}]`,
     );
     return { id: null };
   }
@@ -88,6 +90,7 @@ class ResendProvider implements EmailProvider {
       subject: message.subject,
       html: message.html,
       text: message.text ?? "",
+      ...(message.replyTo ? { replyTo: message.replyTo } : {}),
       attachments: message.attachments?.map((a) => ({
         filename: a.filename,
         content: a.content,
