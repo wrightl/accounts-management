@@ -164,6 +164,9 @@ export function SuggestMatchesDialog({
                       → {targetLabel(item.target)}
                       <span className="ml-2 text-xs text-muted">Score {item.score}</span>
                     </p>
+                    {item.note ? (
+                      <p className="mt-1 text-xs text-muted">{item.note}</p>
+                    ) : null}
                     <ScoreBreakdown breakdown={item.breakdown} />
                   </div>
                   <div className="flex shrink-0 gap-1">
@@ -678,13 +681,17 @@ export function MatchStatusLabel({
     suggested: boolean;
     matchType: string | null;
     matchLabel: string | null;
+    matchNote?: string | null;
   };
 }) {
   let label: ReactNode;
   if (row.reconciled) {
     label = row.matchLabel ? `Matched · ${row.matchLabel}` : `Matched (${row.matchType})`;
   } else if (row.suggested) {
-    label = row.matchLabel ? `Suggested · ${row.matchLabel}` : `Suggested (${row.matchType})`;
+    const base = row.matchLabel
+      ? `Suggested · ${row.matchLabel}`
+      : `Suggested (${row.matchType})`;
+    label = row.matchNote ? `${base} · ${row.matchNote}` : base;
   } else {
     label = "Unreconciled";
   }

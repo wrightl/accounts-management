@@ -48,6 +48,10 @@ import {
     scoreBankTxForInvoice,
     type MatchScoreBreakdown,
 } from '@/lib/bank/match';
+import {
+    findExpenseMatchForBankTx,
+    formatExpenseMatchTarget,
+} from '@/lib/bank/expense-match';
 import { upsertBankSpendingCategory } from '@/lib/bank/spending-categories';
 import {
     effectiveStatus,
@@ -198,6 +202,7 @@ export type BankTransactionListItem = {
     matchId: string | null;
     matchType: string | null;
     matchLabel: string | null;
+    matchNote: string | null;
     confirmed: boolean;
     reconciled: boolean;
     suggested: boolean;
@@ -237,6 +242,8 @@ export type SuggestedMatch = {
     matchType: 'invoice_payment' | 'expense' | 'reimbursement';
     score: number;
     breakdown: MatchScoreBreakdown;
+    /** FX rate explanation for foreign-currency expense suggestions. */
+    note: string | null;
     tx: {
         bookedAt: string;
         amountPence: number;
@@ -542,6 +549,7 @@ export async function listBankTransactions(
             matchId: match?.id ?? null,
             matchType: match?.matchType ?? null,
             matchLabel: match ? (labelByMatchId.get(match.id) ?? null) : null,
+            matchNote: match?.note ?? null,
             confirmed: match?.confirmed ?? false,
             reconciled: Boolean(match?.id && match.confirmed),
             suggested: Boolean(match?.id && !match.confirmed),
@@ -772,7 +780,9 @@ async function findIncomingMatch(
 }
 
 /**
- * Suggest matches: incoming tx → payment or unpaid invoice; outgoing tx → reimbursement or company-paid expense.
+ * Suggest matches: incoming tx → payment or unpaid invoice; outgoing tx →
+ * reimbursement or eligible expense (pending / recorded / company_paid).
+ * Foreign-currency expenses use BoE rates and a 3 working-day window.
  */
 export async function suggestMatches(
     companyId: string,
@@ -829,6 +839,7 @@ export async function suggestMatches(
                     matchType: 'invoice_payment',
                     score: incoming.score,
                     breakdown: incoming.breakdown,
+                    note: null,
                     tx: toSuggestedTx(tx),
                     target: incoming.target,
                 });
@@ -858,6 +869,7 @@ export async function suggestMatches(
                     matchType: 'invoice_payment',
                     score: incoming.score,
                     breakdown: incoming.breakdown,
+                    note: null,
                     tx: toSuggestedTx(tx),
                     target: incoming.target,
                 });
@@ -957,6 +969,7 @@ export async function suggestMatches(
                         matchType: 'reimbursement',
                         score: reimbMatch.breakdown.total,
                         breakdown: reimbMatch.breakdown,
+                        note: null,
                         tx: toSuggestedTx(tx),
                         target: {
                             kind: 'reimbursement',
@@ -969,47 +982,27 @@ export async function suggestMatches(
                 continue;
             }
 
-            const candidates = await db
-                .select()
+            const expenseMatch = await findExpenseMatchForBankTx(companyId, tx);
+            if (!expenseMatch) continue;
+
+            const [expense] = await db
+                .select({
+                    id: expenses.id,
+                    description: expenses.description,
+                })
                 .from(expenses)
-                .where(
-                    and(
-                        eq(expenses.companyId, companyId),
-                        eq(expenses.amountPence, amount),
-                        eq(expenses.status, 'company_paid'),
-                    ),
-                );
-
-            const match = pickBestMatch(
-                txLike,
-                candidates
-                    .filter((e) => e.spentAt)
-                    .map((e) => ({
-                        id: e.id,
-                        amountPence: e.amountPence,
-                        date: e.spentAt as string,
-                        reference: e.description,
-                    })),
-            );
-            if (!match) continue;
-
-            const existing = await db
-                .select()
-                .from(reconciliationMatches)
-                .where(eq(reconciliationMatches.expenseId, match.candidate.id))
+                .where(eq(expenses.id, expenseMatch.expenseId))
                 .limit(1);
-            if (existing[0]) continue;
+            if (!expense) continue;
 
-            const expense = candidates.find(
-                (e) => e.id === match.candidate.id,
-            )!;
             const [row] = await db
                 .insert(reconciliationMatches)
                 .values({
                     bankTransactionId: tx.id,
                     matchType: 'expense',
-                    expenseId: match.candidate.id,
+                    expenseId: expense.id,
                     confirmed: false,
+                    note: expenseMatch.note,
                 })
                 .returning();
 
@@ -1017,12 +1010,13 @@ export async function suggestMatches(
                 matchId: row.id,
                 bankTransactionId: tx.id,
                 matchType: 'expense',
-                score: match.breakdown.total,
-                breakdown: match.breakdown,
+                score: expenseMatch.score,
+                breakdown: expenseMatch.breakdown,
+                note: expenseMatch.note,
                 tx: toSuggestedTx(tx),
                 target: {
                     kind: 'expense',
-                    description: expense.description ?? 'Expense',
+                    description: formatExpenseMatchTarget(expense.description),
                     expenseId: expense.id,
                 },
             });

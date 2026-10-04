@@ -43,6 +43,7 @@ import { getReceiptOcrSettings } from "@/lib/platform-settings";
 import { getStorage } from "@/lib/storage";
 import { findUserByEmail, getUser, normalizeEmail } from "@/lib/users";
 import { isForeignCurrency } from "@/lib/expenses/receipt-parse";
+import { refreshExpenseBankSuggestion } from "@/lib/bank/expense-match";
 
 const MAX_ATTEMPTS = 8;
 
@@ -515,6 +516,12 @@ async function deliverInboundEmail(
       attachmentCount: storedAttachments.length,
     },
   });
+
+  try {
+    await refreshExpenseBankSuggestion(companyId, expenseId);
+  } catch (err) {
+    console.error("expense bank suggestion failed after inbound create", err);
+  }
 
   return expenseId;
 }

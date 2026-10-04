@@ -12,6 +12,7 @@ import {
   index,
   uniqueIndex,
   check,
+  doublePrecision,
 } from "drizzle-orm/pg-core";
 import type { GenericCsvMapping } from "@/lib/bank/types";
 
@@ -540,6 +541,27 @@ export const reconciliationMatches = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("idx_recon_tx").on(t.bankTransactionId)],
+);
+
+/**
+ * Cached Bank of England daily spot rates (foreign currency units per £1).
+ * Used when matching foreign-currency expenses to GBP bank debits.
+ */
+export const fxRates = pgTable(
+  "fx_rates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    currency: text("currency").notNull(),
+    observationDate: date("observation_date").notNull(),
+    /** Units of foreign currency per one pound sterling. */
+    foreignPerGbp: doublePrecision("foreign_per_gbp").notNull(),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    uniqueIndex("uniq_fx_rates_currency_date").on(t.currency, t.observationDate),
+  ],
 );
 
 /** Admin-defined other-income categories (in addition to built-ins). */
@@ -1239,6 +1261,7 @@ export const schema = {
   bankSpendingCategories,
   bankTransactions,
   reconciliationMatches,
+  fxRates,
   incomeCategories,
   shareholders,
   dividendDeclarations,

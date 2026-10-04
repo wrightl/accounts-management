@@ -28,9 +28,10 @@ function matchStatus(row: BankTransactionListItem): string {
             : `Matched (${row.matchType})`;
     }
     if (row.suggested) {
-        return row.matchLabel
+        const base = row.matchLabel
             ? `Suggested · ${row.matchLabel}`
             : `Suggested (${row.matchType})`;
+        return row.matchNote ? `${base} · ${row.matchNote}` : base;
     }
     return 'Unreconciled';
 }

@@ -39,6 +39,7 @@ import {
   vatFromInclusiveGross,
 } from "@/lib/vat";
 import type { ActionResult } from "@/actions/result";
+import { refreshExpenseBankSuggestion } from "@/lib/bank/expense-match";
 
 export type ExpenseImportPreviewResult =
   | { ok: true; rows: ParsedExpenseImportRow[] }
@@ -116,11 +117,13 @@ export async function createExpense(formData: FormData): Promise<ActionResult> {
         })
         .returning({ id: expenses.id });
 
+      await refreshExpenseBankSuggestion(companyId, row.id);
+
       return { ok: true, id: row.id };
     },
     {
       audit: { action: "expense.create", entityType: "expense" },
-      paths: ["/expenses", "/reimbursements", "/dashboard"],
+      paths: ["/expenses", "/reimbursements", "/dashboard", "/transactions"],
     },
   );
 }
@@ -230,11 +233,21 @@ export async function updateExpense(
         })
         .where(and(eq(expenses.id, id), eq(expenses.companyId, companyId)));
 
+      const matchFieldsChanged =
+        existing.amountPence !== amountPence ||
+        existing.spentAt !== (parsed.data.spentAt || null) ||
+        existing.description !== description ||
+        existing.status !== status;
+
+      if (matchFieldsChanged || status === "reimbursable") {
+        await refreshExpenseBankSuggestion(companyId, id);
+      }
+
       return { ok: true, id };
     },
     {
       audit: { action: "expense.update", entityType: "expense", entityId: id },
-      paths: ["/expenses", `/expenses/${id}`, "/reimbursements", "/dashboard"],
+      paths: ["/expenses", `/expenses/${id}`, "/reimbursements", "/dashboard", "/transactions"],
     },
   );
 }
@@ -345,9 +358,11 @@ export async function approveExpense(
         meta: { status: normalized.status },
       });
 
+      await refreshExpenseBankSuggestion(companyId, id);
+
       return { ok: true, id };
     },
-    { paths: ["/expenses", `/expenses/${id}`, "/reimbursements", "/dashboard"] },
+    { paths: ["/expenses", `/expenses/${id}`, "/reimbursements", "/dashboard", "/transactions"] },
   );
 }
 
@@ -619,24 +634,33 @@ export async function commitExpenseImport(
     "accounts:write",
     async ({ companyId, localUserId }) => {
       const db = getDb();
+      const insertedIds: string[] = [];
       await db.transaction(async (tx) => {
         for (const row of rows) {
-          await tx.insert(expenses).values({
-            companyId,
-            description: row.description,
-            category: row.category,
-            spentAt: row.spentAt,
-            amountPence: row.amountPence,
-            vatPence: 0,
-            status: row.status,
-            billable: false,
-            paidByUserId: row.status === "company_paid" ? null : row.paidByUserId,
-            mileageMiles: row.mileageMiles,
-            mileageRatePence: row.mileageRatePence,
-            createdByUserId: localUserId,
-          });
+          const [created] = await tx
+            .insert(expenses)
+            .values({
+              companyId,
+              description: row.description,
+              category: row.category,
+              spentAt: row.spentAt,
+              amountPence: row.amountPence,
+              vatPence: 0,
+              status: row.status,
+              billable: false,
+              paidByUserId: row.status === "company_paid" ? null : row.paidByUserId,
+              mileageMiles: row.mileageMiles,
+              mileageRatePence: row.mileageRatePence,
+              createdByUserId: localUserId,
+            })
+            .returning({ id: expenses.id });
+          insertedIds.push(created.id);
         }
       });
+
+      for (const id of insertedIds) {
+        await refreshExpenseBankSuggestion(companyId, id);
+      }
 
       await writeAudit({
         companyId,
@@ -649,6 +673,6 @@ export async function commitExpenseImport(
 
       return { ok: true, count: rows.length };
     },
-    { paths: ["/expenses", "/reimbursements", "/dashboard"] },
+    { paths: ["/expenses", "/reimbursements", "/dashboard", "/transactions"] },
   );
 }
