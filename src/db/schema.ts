@@ -72,7 +72,7 @@ export const companies = pgTable("companies", {
   legalName: text("legal_name").notNull(),
   /**
    * Stable slug for inbound expense plus-addresses
-   * (`expenses+{slug}.{user}@domain`). Generated once; not renamed.
+   * (`alfa.expenses+{slug}.{user}@inbound.dotanddashconsulting.com`). Generated once; not renamed.
    */
   slug: text("slug").notNull().unique(),
   companyNumber: text("company_number"),
@@ -152,7 +152,7 @@ export const users = pgTable(
     }),
     /**
      * Per-user inbound expense local-part tag
-     * (`expenses+{companySlug}.{expenseInboundSlug}@domain`). Stable once set.
+     * (`alfa.expenses+{companySlug}.{expenseInboundSlug}@inbound.dotanddashconsulting.com`). Stable once set.
      */
     expenseInboundSlug: text("expense_inbound_slug"),
     /**

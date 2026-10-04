@@ -89,15 +89,15 @@ outside the repo; once done, add the listed secrets to the Cursor agent
    In production, `EMAIL_PROVIDER=console` is **rejected** (sends throw) — do not
    leave the default console transport on the live project.
 2. Verify the sending domain (add the DNS records Resend provides for **outbound**).
-3. Enable **Receiving** on `dotanddashconsulting.com` (MX records — separate from sending DNS).
-4. Create a webhook → `https://alfa.dotanddashconsulting.com/api/webhooks/resend` with event `email.received`. Copy the signing secret → `RESEND_WEBHOOK_SECRET`.
+3. Enable **Receiving** on `inbound.dotanddashconsulting.com` (MX on the `inbound` host — separate from the `alfa` website CNAME and from apex mail). This domain is shared with other apps; each app uses its own local-part prefix.
+4. Create a webhook → `https://alfa.dotanddashconsulting.com/api/webhooks/resend` with event `email.received`. Copy the signing secret → `RESEND_WEBHOOK_SECRET`. Other apps on this domain get their own webhook for the same event and ignore addresses that are not theirs.
 5. Set inbound routing env:
 
-- `EXPENSE_INBOUND_DOMAIN=dotanddashconsulting.com` (the receiving domain)
-- `EXPENSE_INBOUND_PREFIX=expenses` (local-part prefix)
+- `EXPENSE_INBOUND_DOMAIN=inbound.dotanddashconsulting.com` (the receiving domain)
+- `EXPENSE_INBOUND_PREFIX=alfa.expenses` (local-part prefix)
   Each founder gets a personal address shown on **Expenses**:
-  `expenses+{companySlug}.{userSlug}@dotanddashconsulting.com`
-  (e.g. `expenses+dot-dash-consulting.lee@dotanddashconsulting.com`).
+  `alfa.expenses+{companySlug}.{userSlug}@inbound.dotanddashconsulting.com`
+  (e.g. `alfa.expenses+dot-dash-consulting.lee@inbound.dotanddashconsulting.com`).
   Forward or send receipt emails to that address; the app creates **pending**
   expenses for that user and company. Unrelated aliases (`info@`, `hello@`, …)
   are ignored.

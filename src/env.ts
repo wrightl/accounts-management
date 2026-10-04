@@ -31,9 +31,9 @@ const serverSchema = z.object({
         .string()
         .default(`${PRODUCT_LOCKUP} <accounts@dotanddashconsulting.com>`),
     /** Domain that receives inbound expense emails (Resend Receiving). */
-    EXPENSE_INBOUND_DOMAIN: z.string().default('dotanddashconsulting.com'),
-    /** Local-part prefix for per-user plus-addresses, e.g. expenses+company.user@domain. */
-    EXPENSE_INBOUND_PREFIX: z.string().default('expenses'),
+    EXPENSE_INBOUND_DOMAIN: z.string().default('inbound.dotanddashconsulting.com'),
+    /** Local-part prefix for per-user plus-addresses, e.g. alfa.expenses+company.user@inbound.dotanddashconsulting.com. */
+    EXPENSE_INBOUND_PREFIX: z.string().default('alfa.expenses'),
 
     // Stripe Billing (manual keys — not Vercel Marketplace).
     STRIPE_SECRET_KEY: z.string().optional(),

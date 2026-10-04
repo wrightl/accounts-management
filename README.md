@@ -55,8 +55,8 @@ trader) before they can open the books.
 **Expenses**
 
 - Manual entry, CSV import, or **inbound email**: each user gets
-  `expenses+{companySlug}.{userSlug}@domain`. Forward a receipt; the app
-  creates a pending expense for that person and company.
+  `alfa.expenses+{companySlug}.{userSlug}@inbound.dotanddashconsulting.com`.
+  Forward a receipt; the app creates a pending expense for that person and company.
 - Receipts stored as private blobs; streamed through authorised routes.
 - **OCR** on upload (Tesseract locally, or an AI Gateway model from Settings).
   Foreign currencies on receipts are flagged, not converted — amounts stay GBP.

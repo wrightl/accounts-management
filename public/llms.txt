@@ -130,7 +130,7 @@ Description: Complete guide to UK sole trader requirements, Self Assessment, Inc
 7. Export accountant pack at year-end
 
 ### Freelancer Expense Tracking
-1. Forward receipts to expenses+company.user@domain email
+1. Forward receipts to alfa.expenses+company.user@inbound.dotanddashconsulting.com
 2. System OCRs receipt and creates pending expense
 3. Review and categorise expense
 4. Mark as reimbursable
