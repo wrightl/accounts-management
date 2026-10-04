@@ -10,9 +10,10 @@ import {
 describe("flattenNavItems", () => {
   it("returns all items across groups in order", () => {
     const flat = flattenNavItems(NAV_GROUPS);
-    expect(flat).toHaveLength(17);
+    expect(flat).toHaveLength(19);
     expect(flat[0]?.label).toBe("Overview");
     expect(flat[flat.length - 1]?.label).toBe("Users");
+    expect(flat.map((item) => item.href)).toContain("/company");
     expect(flat.map((item) => item.href)).not.toContain(HELP_NAV_ITEM.href);
   });
 
@@ -31,21 +32,22 @@ describe("filterNavGroups", () => {
     const groups = filterNavGroups(NAV_GROUPS, (p) => can("user", p));
     const labels = groups.map((g) => g.label).filter(Boolean);
     expect(labels).not.toContain("Administration");
-    expect(flattenNavItems(groups)).toHaveLength(13);
+    expect(flattenNavItems(groups)).toHaveLength(14);
   });
 
   it("removes administration group for accountant role", () => {
     const groups = filterNavGroups(NAV_GROUPS, (p) => can("accountant", p));
     const labels = groups.map((g) => g.label).filter(Boolean);
     expect(labels).not.toContain("Administration");
-    expect(flattenNavItems(groups)).toHaveLength(13);
+    expect(flattenNavItems(groups)).toHaveLength(14);
+    expect(flattenNavItems(groups).map((i) => i.href)).toContain("/company");
   });
 
   it("includes administration group for admin role", () => {
     const groups = filterNavGroups(NAV_GROUPS, (p) => can("admin", p));
     const labels = groups.map((g) => g.label).filter(Boolean);
     expect(labels).toContain("Administration");
-    expect(flattenNavItems(groups)).toHaveLength(17);
+    expect(flattenNavItems(groups)).toHaveLength(19);
   });
 
   it("drops empty groups after filtering", () => {

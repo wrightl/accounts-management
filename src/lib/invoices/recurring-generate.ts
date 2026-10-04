@@ -54,6 +54,7 @@ export async function generateRecurringInvoices(
       id: recurringInvoices.id,
       companyId: recurringInvoices.companyId,
       clientId: recurringInvoices.clientId,
+      name: recurringInvoices.name,
       lineTemplate: recurringInvoices.lineTemplate,
       notes: recurringInvoices.notes,
       dayOfMonth: recurringInvoices.dayOfMonth,
@@ -99,6 +100,7 @@ type TemplateRow = {
   id: string;
   companyId: string;
   clientId: string;
+  name: string;
   lineTemplate: unknown;
   notes: string | null;
   dayOfMonth: number;
@@ -134,6 +136,7 @@ export async function generateRecurringInvoiceForTemplate(
       id: recurringInvoices.id,
       companyId: recurringInvoices.companyId,
       clientId: recurringInvoices.clientId,
+      name: recurringInvoices.name,
       lineTemplate: recurringInvoices.lineTemplate,
       notes: recurringInvoices.notes,
       dayOfMonth: recurringInvoices.dayOfMonth,
@@ -354,6 +357,18 @@ async function generateFromTemplateRow(
           jobId,
         },
       });
+
+      const { notify } = await import("@/lib/notifications");
+      await notify({
+        companyId: tmpl.companyId,
+        type: "recurring.sent",
+        title: `${tmpl.name} invoice sent`,
+        body: "A recurring invoice was generated and emailed.",
+        href: `/invoices/${invoiceId}`,
+        entityType: "invoice",
+        entityId: invoiceId,
+      });
+
       return "sent";
     } catch (e) {
       console.warn(

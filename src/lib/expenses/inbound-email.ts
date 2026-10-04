@@ -224,6 +224,31 @@ export async function processInboundEmailJob(
         lastError: null,
       })
       .where(eq(inboundEmailJobs.id, jobId));
+
+    try {
+      const { notify } = await import("@/lib/notifications");
+      const recipient = await resolveInboundRecipient(job.toEmail);
+      await notify({
+        companyId: job.companyId,
+        type: "expense.inbound.processed",
+        title: "Expense email processed",
+        body: "An expense submitted by email was processed successfully.",
+        href: `/expenses/${expenseId}`,
+        entityType: "expense",
+        entityId: expenseId,
+        extraUserIds: recipient?.userId ? [recipient.userId] : [],
+      });
+    } catch (notifyErr) {
+      console.warn(
+        JSON.stringify({
+          level: "warn",
+          msg: "notification.inbound_processed_failed",
+          error:
+            notifyErr instanceof Error ? notifyErr.message : String(notifyErr),
+        }),
+      );
+    }
+
     return { ok: true, expenseId };
   } catch (err) {
     const message = logInboundJobFailure(job, err);
@@ -242,6 +267,36 @@ export async function processInboundEmailJob(
         processedAt: rejected ? new Date() : null,
       })
       .where(eq(inboundEmailJobs.id, jobId));
+
+    if (rejected || attempts >= MAX_ATTEMPTS) {
+      try {
+        const { notify } = await import("@/lib/notifications");
+        await notify({
+          companyId: job.companyId,
+          type: "expense.inbound.failed",
+          title: "Expense email failed",
+          body: rejected
+            ? message.slice("REJECTED:".length).trim()
+            : message,
+          href: "/expenses",
+          entityType: "inbound_email_job",
+          entityId: jobId,
+          roles: ["admin"],
+          dedupeKey: `expense.inbound.failed:${jobId}`,
+        });
+      } catch (notifyErr) {
+        console.warn(
+          JSON.stringify({
+            level: "warn",
+            msg: "notification.inbound_failed_emit",
+            error:
+              notifyErr instanceof Error
+                ? notifyErr.message
+                : String(notifyErr),
+          }),
+        );
+      }
+    }
 
     return { ok: false, error: message };
   }

@@ -35,6 +35,18 @@ export default async function ProfilePage() {
           role={local.role}
         />
         <UiPrefsForm prefs={local.uiPrefs} />
+        <div className="rounded-2xl border border-border bg-surface p-5">
+          <h2 className="font-display text-lg font-semibold">Notifications</h2>
+          <p className="mt-1 text-sm text-muted">
+            Choose which events reach you in-app, by email, or as a push alert.
+          </p>
+          <a
+            href="/settings/notifications"
+            className="mt-3 inline-flex text-sm font-medium text-brand underline underline-offset-2"
+          >
+            Manage notification preferences
+          </a>
+        </div>
         <SignOutSection />
       </div>
     </div>

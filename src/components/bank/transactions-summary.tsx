@@ -166,6 +166,21 @@ export function TransactionsSummaryPanel({
               </dd>
             </div>
           )}
+          {summary.openingCashFormatted && (
+            <div className="flex justify-between gap-2 border-t border-border pt-2">
+              <dt className="text-muted">Cash at cutover</dt>
+              <dd className="text-right">
+                <CardValue className="mt-0 text-lg">
+                  {summary.openingCashFormatted}
+                </CardValue>
+                {summary.openingCashAsAt ? (
+                  <p className="text-xs text-muted">
+                    as at {summary.openingCashAsAt}
+                  </p>
+                ) : null}
+              </dd>
+            </div>
+          )}
           {summary.statementBalanceFormatted && (
             <div className="flex justify-between gap-2 border-t border-border pt-2">
               <dt className="text-muted">Balance (last import)</dt>

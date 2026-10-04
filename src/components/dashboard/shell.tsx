@@ -19,6 +19,7 @@ import {
   NavMobileMenuButton,
 } from "./nav-mobile-drawer";
 import { NavUserProfile } from "./nav-user-profile";
+import { NavNotificationsBell } from "@/components/notifications/nav-notifications-bell";
 
 function persistNavCollapsed(collapsed: boolean) {
   document.cookie = `${NAV_COLLAPSED_COOKIE}=${collapsed ? "1" : "0"}; Path=/; Max-Age=31536000; SameSite=Lax`;
@@ -135,19 +136,10 @@ export function DashboardShell({
             />
           </div>
           <div className={cn("shrink-0 pt-2", collapsed ? "px-1.5" : "px-0")}>
-            <div
-              className={cn(
-                "flex items-center",
-                collapsed ? "flex-col" : "mx-3 gap-0.5",
-              )}
-            >
-              <NavSearchTrigger
-                collapsed={collapsed}
-                onClick={() => setCommandOpen(true)}
-                className={collapsed ? undefined : "mx-0 w-auto flex-1"}
-              />
-              <NavHelpLink collapsed={collapsed} pathname={pathname} />
-            </div>
+            <NavSearchTrigger
+              collapsed={collapsed}
+              onClick={() => setCommandOpen(true)}
+            />
             {showPlatformLink ? (
               <Link
                 href="/platform"
@@ -160,13 +152,25 @@ export function DashboardShell({
                 {collapsed ? "P" : "Platform"}
               </Link>
             ) : null}
-            <NavUserProfile
-              collapsed={collapsed}
-              role={role}
-              userName={userName}
-              avatarUrl={avatarUrl}
-              active={pathname === "/profile"}
-            />
+            <div
+              className={cn(
+                "flex items-center",
+                collapsed ? "mt-1 flex-col gap-0.5" : "mx-3 mt-1 gap-1",
+              )}
+            >
+              <NavUserProfile
+                collapsed={collapsed}
+                role={role}
+                userName={userName}
+                avatarUrl={avatarUrl}
+                active={pathname === "/profile"}
+                className={
+                  collapsed ? "mt-0" : "mx-0 mt-0 min-w-0 flex-1"
+                }
+              />
+              <NavNotificationsBell collapsed={collapsed} />
+              <NavHelpLink collapsed={collapsed} pathname={pathname} />
+            </div>
           </div>
         </nav>
       </aside>

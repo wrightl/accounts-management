@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../features/auth/auth_provider.dart';
+import '../../../features/notifications/screens/inbox_screen.dart';
+import '../../../features/notifications/screens/notification_prefs_screen.dart';
 import 'record_list_screen.dart';
 
 class MoreScreen extends StatelessWidget {
@@ -81,6 +83,46 @@ class MoreScreen extends StatelessWidget {
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 16),
+          Card(
+            margin: const EdgeInsets.only(bottom: 10),
+            child: ListTile(
+              leading: CircleAvatar(
+                backgroundColor: BrandColors.wash,
+                foregroundColor: BrandColors.navy,
+                child: const Icon(Icons.notifications_outlined),
+              ),
+              title: const Text('Inbox'),
+              subtitle: const Text('Notifications and alerts'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const InboxScreen(),
+                  ),
+                );
+              },
+            ),
+          ),
+          Card(
+            margin: const EdgeInsets.only(bottom: 10),
+            child: ListTile(
+              leading: CircleAvatar(
+                backgroundColor: BrandColors.wash,
+                foregroundColor: BrandColors.navy,
+                child: const Icon(Icons.tune),
+              ),
+              title: const Text('Notification settings'),
+              subtitle: const Text('In-app, email, and push'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const NotificationPrefsScreen(),
+                  ),
+                );
+              },
+            ),
+          ),
           for (final item in items)
             Card(
               margin: const EdgeInsets.only(bottom: 10),

@@ -70,6 +70,9 @@ dependencies:
   app_links: ^7.2.1
   clerk_auth: ^0.0.18-beta
 
+  firebase_core: ^3.15.2
+  firebase_messaging: ^15.2.10
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { listInvoices } from "@/lib/invoices/queries";
+import { InvoiceImportButton } from "@/components/invoices/invoice-import-panel";
 import { buttonClasses } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -16,16 +17,19 @@ export default async function InvoicesPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl font-semibold">Invoices</h1>
           <p className="mt-1 text-muted">Create, send and track client invoices.</p>
         </div>
-        {canWrite && (
-          <Link href="/invoices/new" className={buttonClasses("primary")}>
-            New invoice
-          </Link>
-        )}
+        {canWrite ? (
+          <div className="flex flex-wrap gap-2">
+            <InvoiceImportButton canWrite={canWrite} />
+            <Link href="/invoices/new" className={buttonClasses("primary")}>
+              New invoice
+            </Link>
+          </div>
+        ) : null}
       </div>
 
       <div className="mt-6">

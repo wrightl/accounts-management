@@ -1,4 +1,5 @@
 import { guardTenantPage, hasPermission } from '@/lib/auth';
+import { monthName } from '@/lib/dates';
 import {
     defaultReportPeriod,
     getAgedReceivables,
@@ -7,6 +8,7 @@ import {
     getProfitAndLoss,
     getVatSummary,
 } from '@/lib/reports/queries';
+import { getCompanySettings } from '@/lib/settings/queries';
 import { buttonClasses } from '@/components/ui/button';
 import { Card, CardTitle, CardValue } from '@/components/ui/card';
 import { Input, Label } from '@/components/ui/form';
@@ -21,9 +23,13 @@ export default async function ReportsPage({
     const canExport = await hasPermission('reports:export');
     const sp = await searchParams;
 
-    const defaults = await defaultReportPeriod(companyId);
+    const [defaults, company] = await Promise.all([
+        defaultReportPeriod(companyId),
+        getCompanySettings(companyId),
+    ]);
     const from = sp.from ?? defaults.from;
     const to = sp.to ?? defaults.to;
+    const yearEndLabel = monthName(company.financialYearEndMonth);
 
     const [pnl, aged, byMonth, byCategory, vat] = await Promise.all([
         getProfitAndLoss(companyId, from, to),
@@ -82,11 +88,18 @@ export default async function ReportsPage({
                     Update period
                 </button>
             </form>
+            <p className="mt-2 text-sm text-muted">
+                Financial year ends in {yearEndLabel}.
+            </p>
 
-            <div className="mt-6 grid gap-4 sm:grid-cols-3">
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <Card>
                     <CardTitle>Income (invoiced, ex VAT)</CardTitle>
                     <CardValue>{pnl.incomeFormatted}</CardValue>
+                </Card>
+                <Card>
+                    <CardTitle>Other income</CardTitle>
+                    <CardValue>{pnl.otherIncomeFormatted}</CardValue>
                 </Card>
                 <Card>
                     <CardTitle>Expenses (ex VAT)</CardTitle>

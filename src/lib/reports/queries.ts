@@ -2,18 +2,54 @@ import "server-only";
 import { and, desc, eq, gte, inArray, lte, ne, sql, sum } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
+  bankAccounts,
+  bankTransactions,
   clients,
   dividendDeclarations,
   dividendPayouts,
   expenses,
   invoices,
   payments,
+  reconciliationMatches,
 } from "@/db/schema";
 import { clientDisplayNameSql } from "@/lib/clients/sql";
 import { defaultReportPeriod as fyDefaultReportPeriod } from "@/lib/dates";
 import { formatGBP } from "@/lib/money";
 import { todayIsoDate } from "@/lib/invoices/status";
 import { getCompanySettings } from "@/lib/settings/queries";
+
+async function sumOtherIncomePence(
+  companyId: string,
+  from: string,
+  to: string,
+): Promise<number> {
+  const db = getDb();
+  const [row] = await db
+    .select({
+      total: sql<number>`coalesce(sum(${bankTransactions.amountPence}), 0)`.mapWith(
+        Number,
+      ),
+    })
+    .from(reconciliationMatches)
+    .innerJoin(
+      bankTransactions,
+      eq(reconciliationMatches.bankTransactionId, bankTransactions.id),
+    )
+    .innerJoin(
+      bankAccounts,
+      eq(bankTransactions.bankAccountId, bankAccounts.id),
+    )
+    .where(
+      and(
+        eq(bankAccounts.companyId, companyId),
+        eq(reconciliationMatches.matchType, "other_income"),
+        eq(reconciliationMatches.confirmed, true),
+        gte(bankTransactions.bookedAt, from),
+        lte(bankTransactions.bookedAt, to),
+      ),
+    );
+  return row?.total ?? 0;
+}
 
 export async function getProfitAndLoss(
   companyId: string,
@@ -51,18 +87,123 @@ export async function getProfitAndLoss(
     );
 
   const incomePence = income?.total ?? 0;
+  const otherIncomePence = await sumOtherIncomePence(companyId, from, to);
   const expensePence = expenseTotal?.total ?? 0;
+  const profitPence = incomePence + otherIncomePence - expensePence;
   return {
     incomePence,
+    otherIncomePence,
     expensePence,
-    profitPence: incomePence - expensePence,
+    profitPence,
     incomeFormatted: formatGBP(incomePence),
+    otherIncomeFormatted: formatGBP(otherIncomePence),
     expenseFormatted: formatGBP(expensePence),
-    profitFormatted: formatGBP(incomePence - expensePence),
+    profitFormatted: formatGBP(profitPence),
     basis: "accrual" as const,
     basisNote:
-      "Accrual basis: income is invoiced net (ex-VAT) by issue date. Expenses are net of VAT by spend date. See VAT summary for output/input VAT.",
+      "Accrual basis: invoiced income is net (ex-VAT) by issue date. Other income is cash on the bank date (no VAT). Expenses are net of VAT by spend date. See VAT summary for output/input VAT.",
   };
+}
+
+/** Confirmed other-income credits grouped by calendar month (booked_at). */
+export async function getOtherIncomeByMonth(
+  companyId: string,
+  from: string,
+  to: string,
+) {
+  const db = getDb();
+  const rows = await db
+    .select({
+      month: sql<string>`to_char(${bankTransactions.bookedAt}::date, 'YYYY-MM')`,
+      totalPence: sql<number>`coalesce(sum(${bankTransactions.amountPence}), 0)`.mapWith(
+        Number,
+      ),
+    })
+    .from(reconciliationMatches)
+    .innerJoin(
+      bankTransactions,
+      eq(reconciliationMatches.bankTransactionId, bankTransactions.id),
+    )
+    .innerJoin(
+      bankAccounts,
+      eq(bankTransactions.bankAccountId, bankAccounts.id),
+    )
+    .where(
+      and(
+        eq(bankAccounts.companyId, companyId),
+        eq(reconciliationMatches.matchType, "other_income"),
+        eq(reconciliationMatches.confirmed, true),
+        gte(bankTransactions.bookedAt, from),
+        lte(bankTransactions.bookedAt, to),
+      ),
+    )
+    .groupBy(sql`to_char(${bankTransactions.bookedAt}::date, 'YYYY-MM')`)
+    .orderBy(sql`to_char(${bankTransactions.bookedAt}::date, 'YYYY-MM')`);
+
+  return rows.map((r) => ({
+    month: r.month,
+    totalPence: r.totalPence,
+    totalFormatted: formatGBP(r.totalPence),
+  }));
+}
+
+export type OtherIncomeRow = {
+  bankTransactionId: string;
+  bankAccountName: string;
+  bookedAt: string;
+  amountPence: number;
+  amountFormatted: string;
+  incomeCategory: string | null;
+  note: string | null;
+  counterparty: string | null;
+};
+
+export async function listOtherIncomeInPeriod(
+  companyId: string,
+  from: string,
+  to: string,
+): Promise<OtherIncomeRow[]> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      bankTransactionId: bankTransactions.id,
+      bankAccountName: bankAccounts.name,
+      bookedAt: bankTransactions.bookedAt,
+      amountPence: bankTransactions.amountPence,
+      incomeCategory: reconciliationMatches.incomeCategory,
+      note: reconciliationMatches.note,
+      counterparty: bankTransactions.counterparty,
+    })
+    .from(reconciliationMatches)
+    .innerJoin(
+      bankTransactions,
+      eq(reconciliationMatches.bankTransactionId, bankTransactions.id),
+    )
+    .innerJoin(
+      bankAccounts,
+      eq(bankTransactions.bankAccountId, bankAccounts.id),
+    )
+    .where(
+      and(
+        eq(bankAccounts.companyId, companyId),
+        eq(reconciliationMatches.matchType, "other_income"),
+        eq(reconciliationMatches.confirmed, true),
+        gte(bankTransactions.bookedAt, from),
+        lte(bankTransactions.bookedAt, to),
+      ),
+    )
+    .orderBy(desc(bankTransactions.bookedAt));
+
+  return rows.map((r) => ({
+    bankTransactionId: r.bankTransactionId,
+    bankAccountName: r.bankAccountName,
+    bookedAt: r.bookedAt,
+    amountPence: r.amountPence,
+    amountFormatted: formatGBP(r.amountPence),
+    incomeCategory: r.incomeCategory,
+    note: r.note,
+    counterparty: r.counterparty,
+  }));
 }
 
 export async function getAgedReceivables(companyId: string) {

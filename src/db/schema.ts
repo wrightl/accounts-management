@@ -117,6 +117,12 @@ export const companies = pgTable("companies", {
   invoicePaymentTermsDays: integer("invoice_payment_terms_days").notNull().default(14),
   /** Default HMRC mileage rate in pence per mile (e.g. 45 = 45p/mi). */
   defaultMileageRatePence: integer("default_mileage_rate_pence").notNull().default(45),
+  /**
+   * Optional cash at bank on the cutover date (spreadsheet migration).
+   * Context only — not used in P&L.
+   */
+  openingCashPence: integer("opening_cash_pence"),
+  openingCashAsAt: date("opening_cash_as_at"),
   /** Total issued ordinary shares (Ltd only; must match active shareholder sum). */
   totalShares: integer("total_shares"),
   /** When set, tenant writes and outbound cron for this company are blocked. */
@@ -157,6 +163,8 @@ export const users = pgTable(
       .$type<Record<string, unknown>>()
       .notNull()
       .default(sql`'{}'::jsonb`),
+    /** Set when an admin invites this user; used for invite-accepted notifications. */
+    invitedByUserId: uuid("invited_by_user_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
@@ -499,6 +507,9 @@ export const reconciliationMatchTypeEnum = pgEnum("reconciliation_match_type", [
   "invoice_payment",
   "expense",
   "reimbursement",
+  "other_income",
+  "transfer",
+  "tax_or_loan",
 ]);
 
 export const reconciliationMatches = pgTable(
@@ -521,10 +532,33 @@ export const reconciliationMatches = pgTable(
     reimbursementId: uuid("reimbursement_id").references(() => reimbursements.id, {
       onDelete: "set null",
     }),
+    /** Free-text note for credit explanations (other income / transfer / tax). */
+    note: text("note"),
+    /** Built-in or custom income category label; only for other_income. */
+    incomeCategory: text("income_category"),
     confirmed: boolean("confirmed").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("idx_recon_tx").on(t.bankTransactionId)],
+);
+
+/** Admin-defined other-income categories (in addition to built-ins). */
+export const incomeCategories = pgTable(
+  "income_categories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("uniq_income_category_company_name").on(
+      t.companyId,
+      sql`lower(${t.name})`,
+    ),
+  ],
 );
 
 // --- Phase 5: dividends & shareholders ---
@@ -572,6 +606,8 @@ export const dividendPayouts = pgTable(
     }),
     /** Snapshot of shareholder name at declare time (accountant export). */
     shareholderName: text("shareholder_name").notNull(),
+    /** Snapshot of share holding at declare time (null on older payouts). */
+    shareCount: integer("share_count"),
     amountPence: integer("amount_pence").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -1071,6 +1107,107 @@ export const dataMigrations = pgTable("data_migrations", {
   finishedAt: timestamp("finished_at", { withTimezone: true }),
 });
 
+export const pushPlatformEnum = pgEnum("push_platform", ["web", "fcm", "apns"]);
+
+/**
+ * Per-user in-app notification. Soft-deleted via `deletedAt`.
+ * `dedupeKey` prevents duplicate scheduled reminders for the same recipient.
+ */
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    href: text("href"),
+    entityType: text("entity_type"),
+    entityId: text("entity_id"),
+    dedupeKey: text("dedupe_key"),
+    meta: jsonb("meta").$type<Record<string, unknown>>(),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("idx_notifications_user_company_created").on(
+      t.userId,
+      t.companyId,
+      t.createdAt,
+    ),
+    index("idx_notifications_unread")
+      .on(t.userId, t.companyId)
+      .where(sql`${t.readAt} is null and ${t.deletedAt} is null`),
+    uniqueIndex("uniq_notifications_user_dedupe")
+      .on(t.userId, t.dedupeKey)
+      .where(sql`${t.dedupeKey} is not null`),
+  ],
+);
+
+/** Company-wide default channel matrix per notification event type. */
+export const notificationPreferences = pgTable("notification_preferences", {
+  companyId: uuid("company_id")
+    .primaryKey()
+    .references(() => companies.id, { onDelete: "cascade" }),
+  defaults: jsonb("defaults")
+    .$type<Record<string, unknown>>()
+    .notNull()
+    .default(sql`'{}'::jsonb`),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/** Sparse per-user channel overrides for a company. */
+export const userNotificationPreferences = pgTable(
+  "user_notification_preferences",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    overrides: jsonb("overrides")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("uniq_user_notification_prefs").on(t.userId, t.companyId),
+  ],
+);
+
+/** Browser Web Push and mobile FCM/APNs device subscriptions. */
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    companyId: uuid("company_id").references(() => companies.id, {
+      onDelete: "cascade",
+    }),
+    platform: pushPlatformEnum("platform").notNull(),
+    /** Web Push endpoint URL, or FCM/APNs device token. */
+    endpoint: text("endpoint").notNull(),
+    keys: jsonb("keys").$type<{ p256dh?: string; auth?: string }>(),
+    userAgent: text("user_agent"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("uniq_push_subscriptions_user_endpoint").on(t.userId, t.endpoint),
+    index("idx_push_subscriptions_user").on(t.userId),
+  ],
+);
+
 export type EntityType = (typeof entityTypeEnum.enumValues)[number];
 export type Company = typeof companies.$inferSelect;
 export type PlatformSettings = typeof platformSettings.$inferSelect;
@@ -1081,6 +1218,8 @@ export type BillingAccess = (typeof billingAccessEnum.enumValues)[number];
 export type BillingInterval = (typeof billingIntervalEnum.enumValues)[number];
 export type CompanyBilling = typeof companyBilling.$inferSelect;
 export type SubscriptionTier = typeof subscriptionTiers.$inferSelect;
+export type Notification = typeof notifications.$inferSelect;
+export type PushPlatform = (typeof pushPlatformEnum.enumValues)[number];
 
 export const schema = {
   users,
@@ -1100,6 +1239,7 @@ export const schema = {
   bankSpendingCategories,
   bankTransactions,
   reconciliationMatches,
+  incomeCategories,
   shareholders,
   dividendDeclarations,
   dividendPayouts,
@@ -1122,4 +1262,8 @@ export const schema = {
   platformLogs,
   companySupportNotes,
   dataMigrations,
+  notifications,
+  notificationPreferences,
+  userNotificationPreferences,
+  pushSubscriptions,
 };

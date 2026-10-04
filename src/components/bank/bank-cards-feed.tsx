@@ -15,7 +15,9 @@ export function BankCardsFeed({
   total,
   filters,
   customCategories,
+  incomeCategories,
   canWrite,
+  showAccount = false,
 }: {
   initialRows: BankTransactionListItem[];
   initialPage: number;
@@ -23,7 +25,9 @@ export function BankCardsFeed({
   total: number;
   filters: Pick<BankListParams, "q" | "type" | "category" | "reconciliation" | "from" | "to">;
   customCategories: readonly string[];
+  incomeCategories: readonly string[];
   canWrite: boolean;
+  showAccount?: boolean;
 }) {
   const [rows, setRows] = useState(initialRows);
   const [page, setPage] = useState(initialPage);
@@ -104,7 +108,9 @@ export function BankCardsFeed({
       <BankTransactionCardList
         rows={rows}
         customCategories={customCategories}
+        incomeCategories={incomeCategories}
         canWrite={canWrite}
+        showAccount={showAccount}
       />
 
       {hasMore ? (

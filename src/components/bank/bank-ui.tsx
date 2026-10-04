@@ -4,13 +4,15 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogActions } from "@/components/ui/dialog";
-import { FieldError, Input, Select } from "@/components/ui/form";
+import { FieldError, Input, Label, Select, Textarea } from "@/components/ui/form";
 import {
+  clearBankCreditExplanationAction,
   confirmBankMatch,
   confirmBankMatchesBatch,
   deleteBankSpendingCategory,
   dismissBankMatch,
   dismissBankMatchesBatch,
+  explainBankCreditAction,
   runSuggestMatches,
   updateBankCategory,
   type SuggestedMatch,
@@ -21,8 +23,17 @@ import {
   formatBankCategory,
   isSelectableBankCategory,
 } from "@/lib/bank/categories";
+import { incomeCategorySelectOptions } from "@/lib/bank/income-categories";
 import type { MatchScoreBreakdown } from "@/lib/bank/match";
 import type { BankSpendingCategoryRow } from "@/lib/bank/spending-categories";
+
+function isCreditExplainMatchType(value: string | null): boolean {
+  return (
+    value === "other_income" ||
+    value === "transfer" ||
+    value === "tax_or_loan"
+  );
+}
 
 function ScoreBreakdown({ breakdown }: { breakdown: MatchScoreBreakdown }) {
   const chips: string[] = [];
@@ -443,50 +454,219 @@ export function CustomCategoriesPanel({
   );
 }
 
-export function MatchActions({
-  matchId,
-  confirmed,
-  canWrite,
+export function ExplainCreditDialog({
+  open,
+  onClose,
+  transactionId,
+  incomeCategories,
 }: {
-  matchId: string | null;
-  confirmed: boolean;
-  canWrite: boolean;
+  open: boolean;
+  onClose: () => void;
+  transactionId: string;
+  incomeCategories: readonly string[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  if (!canWrite || !matchId) return null;
+  const [error, setError] = useState<string | null>(null);
+  const [matchType, setMatchType] = useState<string>("other_income");
+  const [incomeCategory, setIncomeCategory] = useState("Interest");
+  const [note, setNote] = useState("");
+  const categoryOptions = incomeCategorySelectOptions(incomeCategories);
+
+  const handleClose = () => {
+    if (!pending) onClose();
+  };
+
+  return (
+    <Dialog open={open} onClose={handleClose} title="Explain credit">
+      <p className="text-sm text-muted">
+        Mark this incoming payment as other income, a transfer, or tax or loan
+        so it leaves the unreconciled list. Client payments should be matched to
+        an invoice instead.
+      </p>
+      <div className="mt-4 space-y-3">
+        <div>
+          <Label htmlFor="explain-type">Type</Label>
+          <Select
+            id="explain-type"
+            value={matchType}
+            onChange={(e) => setMatchType(e.target.value)}
+            disabled={pending}
+          >
+            <option value="other_income">Other income</option>
+            <option value="transfer">Transfer</option>
+            <option value="tax_or_loan">Tax or loan</option>
+          </Select>
+        </div>
+        {matchType === "other_income" ? (
+          <div>
+            <Label htmlFor="explain-category">Category</Label>
+            <Select
+              id="explain-category"
+              value={incomeCategory}
+              onChange={(e) => setIncomeCategory(e.target.value)}
+              disabled={pending}
+            >
+              {categoryOptions.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+        ) : null}
+        <div>
+          <Label htmlFor="explain-note">
+            Note{matchType === "other_income" && incomeCategory === "Other" ? " (required)" : " (optional)"}
+          </Label>
+          <Textarea
+            id="explain-note"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            disabled={pending}
+            rows={3}
+            placeholder="e.g. bank interest for March"
+          />
+        </div>
+      </div>
+      <FieldError>{error}</FieldError>
+      <DialogActions>
+        <Button type="button" variant="ghost" disabled={pending} onClick={handleClose}>
+          Cancel
+        </Button>
+        <Button
+          type="button"
+          disabled={pending}
+          onClick={() => {
+            setError(null);
+            startTransition(async () => {
+              const result = await explainBankCreditAction({
+                transactionId,
+                matchType,
+                incomeCategory:
+                  matchType === "other_income" ? incomeCategory : null,
+                note: note.trim() || null,
+              });
+              if (!result.ok) {
+                setError(result.error ?? "Could not explain credit");
+                return;
+              }
+              router.refresh();
+              onClose();
+            });
+          }}
+        >
+          {pending ? "Saving…" : "Save"}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+export function MatchActions({
+  transactionId,
+  amountPence,
+  matchId,
+  matchType,
+  confirmed,
+  canWrite,
+  incomeCategories,
+}: {
+  transactionId: string;
+  amountPence: number;
+  matchId: string | null;
+  matchType: string | null;
+  confirmed: boolean;
+  canWrite: boolean;
+  incomeCategories: readonly string[];
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [explainOpen, setExplainOpen] = useState(false);
+  const isIncoming = amountPence > 0;
+  const isCreditExplanation =
+    confirmed && isCreditExplainMatchType(matchType);
+
+  if (!canWrite) return null;
+
+  if (isCreditExplanation && matchId) {
+    return (
+      <div className="flex gap-1">
+        <span className="self-center text-xs text-success">Explained</span>
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={pending}
+          onClick={() => {
+            startTransition(async () => {
+              await clearBankCreditExplanationAction(matchId);
+              router.refresh();
+            });
+          }}
+        >
+          Clear
+        </Button>
+      </div>
+    );
+  }
+
   if (confirmed) {
     return <span className="text-xs text-success">Confirmed</span>;
   }
+
   return (
-    <div className="flex gap-1">
-      <Button
-        type="button"
-        variant="secondary"
-        disabled={pending}
-        onClick={() => {
-          startTransition(async () => {
-            await confirmBankMatch(matchId);
-            router.refresh();
-          });
-        }}
-      >
-        Confirm
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        disabled={pending}
-        onClick={() => {
-          startTransition(async () => {
-            await dismissBankMatch(matchId);
-            router.refresh();
-          });
-        }}
-      >
-        Dismiss
-      </Button>
-    </div>
+    <>
+      <div className="flex flex-wrap gap-1">
+        {matchId ? (
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={pending}
+              onClick={() => {
+                startTransition(async () => {
+                  await confirmBankMatch(matchId);
+                  router.refresh();
+                });
+              }}
+            >
+              Confirm
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={pending}
+              onClick={() => {
+                startTransition(async () => {
+                  await dismissBankMatch(matchId);
+                  router.refresh();
+                });
+              }}
+            >
+              Dismiss
+            </Button>
+          </>
+        ) : null}
+        {isIncoming ? (
+          <Button
+            type="button"
+            variant={matchId ? "ghost" : "secondary"}
+            disabled={pending}
+            onClick={() => setExplainOpen(true)}
+          >
+            Explain
+          </Button>
+        ) : null}
+      </div>
+      {isIncoming && explainOpen ? (
+        <ExplainCreditDialog
+          open={explainOpen}
+          onClose={() => setExplainOpen(false)}
+          transactionId={transactionId}
+          incomeCategories={incomeCategories}
+        />
+      ) : null}
+    </>
   );
 }
 

@@ -189,7 +189,7 @@ export async function inviteUser(formData: FormData): Promise<ActionResult> {
 
   return mutate(
     "users:manage",
-    async ({ companyId }) => {
+    async ({ companyId, localUserId }) => {
       if (isPlatformAdminEmail(email)) {
         return {
           ok: false,
@@ -280,6 +280,7 @@ export async function inviteUser(formData: FormData): Promise<ActionResult> {
             name: name ?? existing.name,
             role,
             companyId,
+            invitedByUserId: localUserId,
             ...(inboundSlug && !existing.expenseInboundSlug
               ? { expenseInboundSlug: inboundSlug }
               : {}),
@@ -303,6 +304,7 @@ export async function inviteUser(formData: FormData): Promise<ActionResult> {
             clerkUserId: null,
             companyId,
             expenseInboundSlug: inboundSlug,
+            invitedByUserId: localUserId,
           })
           .returning({ id: users.id });
         userId = created.id;

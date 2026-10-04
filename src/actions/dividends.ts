@@ -69,6 +69,7 @@ export async function declareDividend(formData: FormData): Promise<ActionResult>
           declarationId: decl.id,
           shareholderId: s.id,
           shareholderName: s.name,
+          shareCount: s.shareCount,
           amountPence: s.amountPence,
         })),
       );

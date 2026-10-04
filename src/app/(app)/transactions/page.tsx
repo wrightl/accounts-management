@@ -1,5 +1,5 @@
 import { guardTenantPage, hasPermission } from "@/lib/auth";
-import { listBankTransactions } from "@/lib/bank/queries";
+import { countBankAccounts, listBankTransactions } from "@/lib/bank/queries";
 import { getBankTransactionSummary } from "@/lib/bank/summary";
 import { parseBankListParams, hasActiveBankFilters, BANK_PAGE_SIZE, resolveBankListDateRange } from "@/lib/bank/list-params";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
@@ -13,6 +13,7 @@ import {
 import { BankCardsFeed } from "@/components/bank/bank-cards-feed";
 import { TransactionsSummaryPanel } from "@/components/bank/transactions-summary";
 import { listBankSpendingCategoriesWithUsage } from "@/lib/bank/spending-categories";
+import { listIncomeCategoryNames } from "@/lib/bank/income-category-catalog";
 import { EmptyState } from "@/components/ui/empty-state";
 
 export default async function TransactionsPage({
@@ -59,14 +60,22 @@ export default async function TransactionsPage({
     to: dateRange.to,
   };
 
-  const [{ rows, total, page, pageSize, pageCount }, summary, customCategories] =
-    await Promise.all([
-      listBankTransactions(companyId, listFilters),
-      getBankTransactionSummary(companyId, summaryFilters),
-      listBankSpendingCategoriesWithUsage(companyId),
-    ]);
+  const [
+    { rows, total, page, pageSize, pageCount },
+    summary,
+    customCategories,
+    incomeCategories,
+    bankAccountCount,
+  ] = await Promise.all([
+    listBankTransactions(companyId, listFilters),
+    getBankTransactionSummary(companyId, summaryFilters),
+    listBankSpendingCategoriesWithUsage(companyId),
+    listIncomeCategoryNames(companyId),
+    countBankAccounts(companyId),
+  ]);
 
   const customCategoryNames = customCategories.map((c) => c.name);
+  const showAccount = bankAccountCount > 1;
 
   return (
     <div>
@@ -117,13 +126,17 @@ export default async function TransactionsPage({
                   to: dateRange.to,
                 }}
                 customCategories={customCategoryNames}
+                incomeCategories={incomeCategories}
                 canWrite={canWrite}
+                showAccount={showAccount}
               />
             ) : (
               <BankTransactionTable
                 rows={rows}
                 customCategories={customCategoryNames}
+                incomeCategories={incomeCategories}
                 canWrite={canWrite}
+                showAccount={showAccount}
               />
             )}
           </div>

@@ -6,6 +6,8 @@ import '../../features/expenses/screens/expense_list_screen.dart';
 import '../../features/books/screens/sales_hub_screen.dart';
 import '../../features/books/screens/more_screen.dart';
 import '../../features/auth/auth_provider.dart';
+import '../../features/notifications/notification_provider.dart';
+import '../../features/notifications/screens/inbox_screen.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/constants/app_constants.dart';
 import 'package:provider/provider.dart';
@@ -17,9 +19,31 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _selectedIndex = 0;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<NotificationProvider>().refreshUnread();
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      context.read<NotificationProvider>().refreshUnread();
+    }
+  }
 
   void _onItemTapped(int index) {
     setState(() => _selectedIndex = index);
@@ -28,6 +52,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    final notifications = context.watch<NotificationProvider>();
     final banner = auth.user?.billing?.bannerMessage;
 
     return Scaffold(
@@ -36,6 +61,24 @@ class _HomeScreenState extends State<HomeScreen> {
           ? AppBar(
               title: const Text('Alfa'),
               actions: [
+                IconButton(
+                  icon: Badge(
+                    isLabelVisible: notifications.unreadCount > 0,
+                    label: Text(
+                      notifications.unreadCount > 99
+                          ? '99+'
+                          : '${notifications.unreadCount}',
+                    ),
+                    child: const Icon(Icons.notifications_outlined),
+                  ),
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const InboxScreen(),
+                      ),
+                    );
+                  },
+                ),
                 IconButton(
                   icon: const Icon(Icons.account_circle_outlined),
                   onPressed: () => _scaffoldKey.currentState?.openDrawer(),

@@ -6,6 +6,7 @@ import {
   type ParseFail,
   type ParseOk,
 } from "@/lib/validation/field-errors";
+import { poundsToPence } from "@/lib/money";
 import { parseUkVatNumber } from "@/lib/vat";
 import type { BankProviderId } from "@/lib/bank/providers";
 
@@ -77,6 +78,9 @@ export const companySettingsFieldsSchema = z
       .max(1000, "Mileage rate must be between 1 and 1000 pence"),
     bankProvider: z.string().optional().or(z.literal("")),
     bankName: z.string().optional().or(z.literal("")),
+    /** Optional GBP string for spreadsheet cutover cash; empty clears. */
+    openingCashGbp: z.string().optional().or(z.literal("")),
+    openingCashAsAt: z.string().optional().or(z.literal("")),
   })
   .superRefine((data, ctx) => {
     if (data.vatRegistered) {
@@ -89,6 +93,40 @@ export const companySettingsFieldsSchema = z
         });
       }
     }
+    const cashRaw = (data.openingCashGbp ?? "").trim();
+    const asAtRaw = (data.openingCashAsAt ?? "").trim();
+    if (cashRaw && !asAtRaw) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Enter the cutover date for opening cash",
+        path: ["openingCashAsAt"],
+      });
+    }
+    if (asAtRaw && !cashRaw) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Enter the opening cash amount",
+        path: ["openingCashGbp"],
+      });
+    }
+    if (asAtRaw && !/^\d{4}-\d{2}-\d{2}$/.test(asAtRaw)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Enter a valid date",
+        path: ["openingCashAsAt"],
+      });
+    }
+    if (cashRaw) {
+      try {
+        poundsToPence(cashRaw);
+      } catch {
+        ctx.addIssue({
+          code: "custom",
+          message: "Enter a valid amount in pounds",
+          path: ["openingCashGbp"],
+        });
+      }
+    }
   })
   .transform((data) => {
     let vatNumber: string | null = null;
@@ -96,16 +134,23 @@ export const companySettingsFieldsSchema = z
       const vat = parseUkVatNumber(String(data.vatNumber ?? ""));
       vatNumber = vat.ok ? vat.value : null;
     }
-    return { ...data, vatNumber };
+    const cashRaw = (data.openingCashGbp ?? "").trim();
+    const asAtRaw = (data.openingCashAsAt ?? "").trim();
+    const openingCashPence = cashRaw ? poundsToPence(cashRaw) : null;
+    const openingCashAsAt = asAtRaw || null;
+    const { openingCashGbp: _g, openingCashAsAt: _a, ...rest } = data;
+    return { ...rest, vatNumber, openingCashPence, openingCashAsAt };
   });
 
 export type CompanySettingsParsed = Omit<
   z.infer<typeof companySettingsFieldsSchema>,
-  "bankProvider" | "bankName" | "vatNumber"
+  "bankProvider" | "bankName" | "vatNumber" | "openingCashGbp" | "openingCashAsAt"
 > & {
   vatNumber: string | null;
   bankProvider: BankProviderId | null;
   bankName: string | null;
+  openingCashPence: number | null;
+  openingCashAsAt: string | null;
 };
 
 export function companySettingsRawFromFormData(formData: FormData): Record<string, unknown> {
@@ -130,6 +175,8 @@ export function companySettingsRawFromFormData(formData: FormData): Record<strin
     defaultMileageRatePence: formData.get("defaultMileageRatePence") ?? "45",
     bankProvider: formData.get("bankProvider") ?? "",
     bankName: formData.get("bankName") ?? "",
+    openingCashGbp: formData.get("openingCashGbp") ?? "",
+    openingCashAsAt: formData.get("openingCashAsAt") ?? "",
   };
 }
 

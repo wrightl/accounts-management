@@ -37,6 +37,13 @@ import { formatGBP } from '@/lib/money';
 import { payReimbursementRun } from '@/lib/reimbursements/pay';
 import type { ParsedBankRow, GenericCsvMapping } from '@/lib/bank/types';
 import {
+    creditExplainLabel,
+    parseCreditExplainInput,
+    type CreditExplainInput,
+    type CreditExplainType,
+} from '@/lib/bank/credit-explain';
+import { resolveIncomeCategory } from '@/lib/bank/income-category-catalog';
+import {
     pickBestMatch,
     scoreBankTxForInvoice,
     type MatchScoreBreakdown,
@@ -185,6 +192,8 @@ export type BankTransactionListItem = {
     reference: string | null;
     description: string | null;
     spendingCategory: string | null;
+    bankAccountName: string;
+    tags: string[];
     amountFormatted: string;
     matchId: string | null;
     matchType: string | null;
@@ -426,8 +435,14 @@ async function buildMatchLabels(
                 match.id,
                 labels.get(match.reimbursementId) ?? 'Reimbursement',
             );
-        } else if (match.expenseId) {
-            matchLabels.set(match.id, labels.get(match.expenseId) ?? 'Expense');
+        } else if (match.matchType === 'expense' || match.expenseId) {
+            matchLabels.set(match.id, labels.get(match.expenseId!) ?? 'Expense');
+        } else if (
+            match.matchType === 'other_income' ||
+            match.matchType === 'transfer' ||
+            match.matchType === 'tax_or_loan'
+        ) {
+            matchLabels.set(match.id, creditExplainLabel(match));
         }
     }
     return matchLabels;
@@ -501,6 +516,16 @@ export async function listBankTransactions(
 
     const labelByMatchId = await buildMatchLabels(db, matches);
 
+    const accountIds = [...new Set(pageTx.map((tx) => tx.bankAccountId))];
+    const accounts =
+        accountIds.length === 0
+            ? []
+            : await db
+                  .select({ id: bankAccounts.id, name: bankAccounts.name })
+                  .from(bankAccounts)
+                  .where(inArray(bankAccounts.id, accountIds));
+    const accountNameById = new Map(accounts.map((a) => [a.id, a.name]));
+
     const rows: BankTransactionListItem[] = pageTx.map((tx) => {
         const match = matchByTx.get(tx.id);
         return {
@@ -511,6 +536,8 @@ export async function listBankTransactions(
             reference: tx.reference,
             description: tx.description,
             spendingCategory: tx.spendingCategory,
+            bankAccountName: accountNameById.get(tx.bankAccountId) ?? '',
+            tags: tx.tags ?? [],
             amountFormatted: formatGBP(tx.amountPence),
             matchId: match?.id ?? null,
             matchType: match?.matchType ?? null,
@@ -522,6 +549,16 @@ export async function listBankTransactions(
     });
 
     return { rows, total, page, pageSize, pageCount };
+}
+
+/** Count of bank accounts for a company (for multi-account UI). */
+export async function countBankAccounts(companyId: string): Promise<number> {
+    const db = getDb();
+    const [row] = await db
+        .select({ total: count() })
+        .from(bankAccounts)
+        .where(eq(bankAccounts.companyId, companyId));
+    return row?.total ?? 0;
 }
 
 /** Unreconciled count across the whole ledger (ignores list filters). */
@@ -1212,6 +1249,111 @@ export async function dismissMatchesBatch(
     for (const id of matchIds) {
         await dismissMatch(companyId, id);
     }
+}
+
+const CREDIT_EXPLAIN_TYPES: readonly CreditExplainType[] = [
+    'other_income',
+    'transfer',
+    'tax_or_loan',
+];
+
+async function getBankTransactionForCompany(
+    companyId: string,
+    transactionId: string,
+) {
+    const db = getDb();
+    const [row] = await db
+        .select({ tx: bankTransactions })
+        .from(bankTransactions)
+        .innerJoin(
+            bankAccounts,
+            eq(bankTransactions.bankAccountId, bankAccounts.id),
+        )
+        .where(
+            and(
+                eq(bankTransactions.id, transactionId),
+                eq(bankAccounts.companyId, companyId),
+            ),
+        )
+        .limit(1);
+    return row?.tx ?? null;
+}
+
+/** Explain an unmatched incoming credit (other income, transfer, tax/loan). */
+export async function explainBankCredit(
+    companyId: string,
+    transactionId: string,
+    input: CreditExplainInput,
+): Promise<{ matchId: string }> {
+    const tx = await getBankTransactionForCompany(companyId, transactionId);
+    if (!tx) throw new ReconciliationError('Bank transaction not found');
+    if (tx.amountPence <= 0) {
+        throw new ReconciliationError('Only incoming credits can be explained this way');
+    }
+
+    const resolvedCategory =
+        input.matchType === 'other_income'
+            ? await resolveIncomeCategory(companyId, input.incomeCategory)
+            : null;
+    const parsed = parseCreditExplainInput(input, resolvedCategory);
+    if (!parsed.ok) throw new ReconciliationError(parsed.error);
+
+    const db = getDb();
+    return db.transaction(async (dbTx) => {
+        const [confirmed] = await dbTx
+            .select({ id: reconciliationMatches.id })
+            .from(reconciliationMatches)
+            .where(
+                and(
+                    eq(reconciliationMatches.bankTransactionId, transactionId),
+                    eq(reconciliationMatches.confirmed, true),
+                ),
+            )
+            .limit(1);
+        if (confirmed) {
+            throw new ReconciliationError('This transaction is already reconciled');
+        }
+
+        await dbTx
+            .delete(reconciliationMatches)
+            .where(
+                and(
+                    eq(reconciliationMatches.bankTransactionId, transactionId),
+                    eq(reconciliationMatches.confirmed, false),
+                ),
+            );
+
+        const [created] = await dbTx
+            .insert(reconciliationMatches)
+            .values({
+                bankTransactionId: transactionId,
+                matchType: parsed.value.matchType,
+                incomeCategory: parsed.value.incomeCategory,
+                note: parsed.value.note,
+                confirmed: true,
+            })
+            .returning({ id: reconciliationMatches.id });
+
+        return { matchId: created.id };
+    });
+}
+
+/** Remove a credit explanation (other_income / transfer / tax_or_loan only). */
+export async function clearBankCreditExplanation(
+    companyId: string,
+    matchId: string,
+) {
+    const db = getDb();
+    const match = await getMatchForCompany(db, companyId, matchId);
+    if (!match) throw new ReconciliationError('Match not found');
+    if (!(CREDIT_EXPLAIN_TYPES as readonly string[]).includes(match.matchType)) {
+        throw new ReconciliationError(
+            'Only credit explanations can be cleared this way',
+        );
+    }
+    await db
+        .delete(reconciliationMatches)
+        .where(eq(reconciliationMatches.id, matchId));
 }
 
 /** Incoming bank transactions not linked to any reconciliation match. */

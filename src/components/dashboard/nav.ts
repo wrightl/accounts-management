@@ -153,6 +153,12 @@ export const NAV_GROUPS: NavGroup[] = [
                 icon: 'reports',
                 permission: 'reports:read',
             },
+            {
+                href: '/company',
+                label: 'Company',
+                icon: 'settings',
+                permission: 'accounts:read',
+            },
         ],
     },
     {

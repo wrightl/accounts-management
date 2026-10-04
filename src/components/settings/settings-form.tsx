@@ -58,6 +58,8 @@ export function SettingsForm({
     orderNumberPrefix: string;
     invoicePaymentTermsDays: number;
     defaultMileageRatePence: number;
+    openingCashPence: number | null;
+    openingCashAsAt: string | null;
     logoUrl: string | null;
   };
 }) {
@@ -522,6 +524,52 @@ export function SettingsForm({
           <FieldError id="invoicePaymentTermsDays-error">
             {fieldErrors.invoicePaymentTermsDays}
           </FieldError>
+        </div>
+
+        <h2 className="pt-4 font-display text-lg font-semibold">
+          Spreadsheet cutover
+        </h2>
+        <p className="text-sm text-muted">
+          Optional cash at bank on the day you start using Alfa. Shown on
+          Transactions for context — not included in profit and loss. Clear both
+          fields to remove.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="openingCashGbp">Opening cash (GBP)</Label>
+            <Input
+              id="openingCashGbp"
+              name="openingCashGbp"
+              inputMode="decimal"
+              placeholder="0.00"
+              defaultValue={
+                settings.openingCashPence != null
+                  ? (settings.openingCashPence / 100).toFixed(2)
+                  : ""
+              }
+              disabled={pending}
+              aria-invalid={Boolean(fieldErrors.openingCashGbp)}
+              onChange={() => clearField("openingCashGbp")}
+            />
+            <FieldError id="openingCashGbp-error">
+              {fieldErrors.openingCashGbp}
+            </FieldError>
+          </div>
+          <div>
+            <Label htmlFor="openingCashAsAt">As at</Label>
+            <Input
+              id="openingCashAsAt"
+              name="openingCashAsAt"
+              type="date"
+              defaultValue={settings.openingCashAsAt ?? ""}
+              disabled={pending}
+              aria-invalid={Boolean(fieldErrors.openingCashAsAt)}
+              onChange={() => clearField("openingCashAsAt")}
+            />
+            <FieldError id="openingCashAsAt-error">
+              {fieldErrors.openingCashAsAt}
+            </FieldError>
+          </div>
         </div>
 
         <h2 className="pt-4 font-display text-lg font-semibold">Expenses</h2>

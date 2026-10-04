@@ -331,15 +331,55 @@ export async function ensureLocalUser(identity: Identity): Promise<string> {
       .limit(1);
 
     if (seeded) {
-      await db
+      const [claimed] = await db
         .update(users)
         .set({
           clerkUserId: identity.userId,
           email: identity.email ?? normalisedEmail,
           name: resolveDisplayName(identity.name, seeded.name),
         })
-        .where(eq(users.id, seeded.id));
-      return seeded.id;
+        .where(eq(users.id, seeded.id))
+        .returning({
+          id: users.id,
+          companyId: users.companyId,
+          invitedByUserId: users.invitedByUserId,
+          name: users.name,
+          email: users.email,
+        });
+
+      if (claimed?.companyId) {
+        try {
+          const { notify } = await import("@/lib/notifications");
+          const display =
+            claimed.name?.trim() || claimed.email || "A new teammate";
+          await notify({
+            companyId: claimed.companyId,
+            type: "user.invite.accepted",
+            title: `${display} accepted their invite`,
+            body: "They can now sign in to the company workspace.",
+            href: "/users",
+            entityType: "user",
+            entityId: claimed.id,
+            roles: ["admin"],
+            extraUserIds: claimed.invitedByUserId
+              ? [claimed.invitedByUserId]
+              : [],
+          });
+        } catch (notifyErr) {
+          console.warn(
+            JSON.stringify({
+              level: "warn",
+              msg: "notification.invite_accepted_failed",
+              error:
+                notifyErr instanceof Error
+                  ? notifyErr.message
+                  : String(notifyErr),
+            }),
+          );
+        }
+      }
+
+      return claimed.id;
     }
   }
 

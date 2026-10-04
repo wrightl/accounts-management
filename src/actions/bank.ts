@@ -32,10 +32,12 @@ import {
   type BankListParams,
 } from "@/lib/bank/list-params";
 import {
+  clearBankCreditExplanation,
   confirmMatch,
   confirmMatchesBatch,
   dismissMatch,
   dismissMatchesBatch,
+  explainBankCredit,
   findBankTransactionsForInvoice,
   findReimbursementBankMatches,
   getOrCreateBankAccount,
@@ -50,6 +52,14 @@ import {
   type ReimbursementBankMatch,
   type SuggestedMatch,
 } from "@/lib/bank/queries";
+import {
+  isCreditExplainType,
+  type CreditExplainType,
+} from "@/lib/bank/credit-explain";
+import {
+  createIncomeCategory,
+  deleteUnusedIncomeCategory,
+} from "@/lib/bank/income-category-catalog";
 import { deleteUnusedBankSpendingCategory } from "@/lib/bank/spending-categories";
 import type { ActionResult } from "@/actions/result";
 
@@ -501,6 +511,114 @@ export async function deleteBankSpendingCategory(categoryId: string): Promise<Ac
         entityId: categoryId,
       },
       paths: ["/transactions"],
+    },
+  );
+}
+
+export async function explainBankCreditAction(input: {
+  transactionId: string;
+  matchType: string;
+  incomeCategory?: string | null;
+  note?: string | null;
+}): Promise<ActionResult> {
+  if (!isCreditExplainType(input.matchType)) {
+    return { ok: false, error: "Choose how to explain this credit" };
+  }
+  const matchType: CreditExplainType = input.matchType;
+
+  return mutate(
+    "accounts:write",
+    async ({ companyId }) => {
+      try {
+        const { matchId } = await explainBankCredit(companyId, input.transactionId, {
+          matchType,
+          incomeCategory: input.incomeCategory,
+          note: input.note,
+        });
+        return { ok: true, id: matchId };
+      } catch (e) {
+        if (e instanceof ReconciliationError) return { ok: false, error: e.message };
+        throw e;
+      }
+    },
+    {
+      audit: {
+        action: "bank.explain_credit",
+        entityType: "bank_transaction",
+        entityId: input.transactionId,
+        meta: {
+          matchType,
+          incomeCategory: input.incomeCategory ?? null,
+        },
+      },
+      paths: ["/transactions", "/reports", "/dashboard"],
+    },
+  );
+}
+
+export async function clearBankCreditExplanationAction(
+  matchId: string,
+): Promise<ActionResult> {
+  return mutate(
+    "accounts:write",
+    async ({ companyId }) => {
+      try {
+        await clearBankCreditExplanation(companyId, matchId);
+      } catch (e) {
+        if (e instanceof ReconciliationError) return { ok: false, error: e.message };
+        throw e;
+      }
+      return { ok: true, id: matchId };
+    },
+    {
+      audit: {
+        action: "bank.clear_credit_explanation",
+        entityType: "reconciliation_match",
+        entityId: matchId,
+      },
+      paths: ["/transactions", "/reports", "/dashboard"],
+    },
+  );
+}
+
+export async function createIncomeCategoryAction(
+  name: string,
+): Promise<ActionResult> {
+  return mutate(
+    "settings:manage",
+    async ({ companyId }) => {
+      const result = await createIncomeCategory(companyId, name);
+      if (!result.ok) return { ok: false, error: result.error };
+      return { ok: true };
+    },
+    {
+      audit: {
+        action: "income_category.create",
+        entityType: "income_category",
+        meta: { name },
+      },
+      paths: ["/settings", "/transactions"],
+    },
+  );
+}
+
+export async function deleteIncomeCategoryAction(
+  categoryId: string,
+): Promise<ActionResult> {
+  return mutate(
+    "settings:manage",
+    async ({ companyId }) => {
+      const result = await deleteUnusedIncomeCategory(companyId, categoryId);
+      if (!result.ok) return { ok: false, error: result.error };
+      return { ok: true, id: categoryId };
+    },
+    {
+      audit: {
+        action: "income_category.delete",
+        entityType: "income_category",
+        entityId: categoryId,
+      },
+      paths: ["/settings", "/transactions"],
     },
   );
 }

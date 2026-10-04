@@ -14,6 +14,8 @@ import 'features/books/books_provider.dart';
 import 'features/dashboard/dashboard_provider.dart';
 import 'features/expenses/expense_provider.dart';
 import 'features/expenses/screens/expense_capture_screen.dart';
+import 'features/notifications/notification_provider.dart';
+import 'core/push/push_notification_service.dart';
 import 'shared/widgets/home_screen.dart';
 import 'shared/widgets/product_lockup.dart';
 
@@ -52,6 +54,7 @@ class MyApp extends StatelessWidget {
           ChangeNotifierProvider(create: (_) => DashboardProvider()),
           ChangeNotifierProvider(create: (_) => ExpenseProvider()),
           ChangeNotifierProvider(create: (_) => BooksProvider()),
+          ChangeNotifierProvider(create: (_) => NotificationProvider()),
         ],
         child: MaterialApp(
           title: AppConstants.appName,
@@ -127,6 +130,8 @@ class _SignedInShellState extends State<SignedInShell> {
 
     if (!mounted) return;
     await context.read<AuthProvider>().syncWithBackend();
+    if (!mounted) return;
+    await PushNotificationService().start();
   }
 
   @override

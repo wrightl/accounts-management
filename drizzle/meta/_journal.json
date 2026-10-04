@@ -302,6 +302,34 @@
       "when": 1788000000000,
       "tag": "0042_send_jobs_actor_user",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1788100000000,
+      "tag": "0043_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1788200000000,
+      "tag": "0044_bank_credit_explanations",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1788300000000,
+      "tag": "0045_migration_cutover",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1788400000000,
+      "tag": "0046_dividend_payout_share_count",
+      "breakpoints": true
     }
   ]
 }

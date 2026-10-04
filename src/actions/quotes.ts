@@ -361,6 +361,17 @@ export async function updateQuoteStatus(
           entityId: quoteId,
           meta: { category },
         });
+
+        const { notify } = await import("@/lib/notifications");
+        await notify({
+          companyId,
+          type: "quote.declined",
+          title: `Quote ${existing.number} declined`,
+          body: `Reason: ${category}.`,
+          href: `/quotes/${quoteId}`,
+          entityType: "quote",
+          entityId: quoteId,
+        });
       } else if (targetStatus === "accepted") {
         const detail = await getQuoteDetail(companyId, quoteId);
         if (!detail) return { ok: false, error: "Quote not found" };
@@ -404,6 +415,17 @@ export async function updateQuoteStatus(
           entityType: "quote",
           entityId: quoteId,
           meta: { orderId },
+        });
+
+        const { notify } = await import("@/lib/notifications");
+        await notify({
+          companyId,
+          type: "quote.accepted",
+          title: `Quote ${detail.quote.number} accepted`,
+          body: "This quote was marked as accepted.",
+          href: `/quotes/${quoteId}`,
+          entityType: "quote",
+          entityId: quoteId,
         });
 
         return { ok: true, id: orderId };

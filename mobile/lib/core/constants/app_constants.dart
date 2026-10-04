@@ -45,6 +45,15 @@ class AppConstants {
   static const String expenseApproveEndpoint = '/api/mobile/expenses/:id/approve';
   static const String expenseRejectEndpoint = '/api/mobile/expenses/:id/reject';
   static const String uploadReceiptEndpoint = '/api/mobile/expenses/:id/receipts';
+  static const String notificationsEndpoint = '/api/mobile/notifications';
+  static const String notificationsUnreadEndpoint =
+      '/api/mobile/notifications/unread-count';
+  static const String notificationsActionsEndpoint =
+      '/api/mobile/notifications/actions';
+  static const String notificationsPrefsEndpoint =
+      '/api/mobile/notifications/prefs';
+  static const String notificationsPushTokenEndpoint =
+      '/api/mobile/notifications/push-token';
   
   // UI Constants
   static const double defaultPadding = 16.0;

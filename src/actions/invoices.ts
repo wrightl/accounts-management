@@ -3,11 +3,25 @@
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
-import { invoiceLineItems, invoices } from "@/db/schema";
+import {
+  clients,
+  companies,
+  invoiceLineItems,
+  invoices,
+  payments,
+} from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
-import { mutate } from "@/lib/mutate";
+import { mutate, mutateWide } from "@/lib/mutate";
 import { invoiceTotals, poundsToPence } from "@/lib/money";
 import { allocateInvoiceNumber } from "@/lib/invoices/allocate";
+import {
+  bumpInvoiceSeqAfterImport,
+  invoiceImportHasErrors,
+  parseInvoiceImportCsv,
+  parseInvoiceImportCsvFile,
+  type ParsedInvoiceImportRow,
+} from "@/lib/invoices/import-csv";
+import { parseIssueYear } from "@/lib/invoices/numbering";
 import {
   canEditInvoice,
   canTransition,
@@ -21,10 +35,15 @@ import {
   parseInvoiceInput,
   type InvoiceParsed,
 } from "@/lib/invoices/schema";
+import { financialYearStartDate, todayIsoDate } from "@/lib/dates";
 import { enqueueSendJob, processSendJob } from "@/lib/outbox";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { parseVatRate, resolveLineVatRate } from "@/lib/vat";
 import type { ActionResult } from "@/actions/result";
+
+export type InvoiceImportPreviewResult =
+  | { ok: true; rows: ParsedInvoiceImportRow[] }
+  | { ok: false; error: string; fieldErrors?: Record<string, string> };
 
 function buildLineValues(
   lines: InvoiceParsed["lines"],
@@ -306,5 +325,258 @@ export async function updateInvoiceStatus(
       return { ok: true, id };
     },
     { paths: ["/invoices", `/invoices/${id}`, "/dashboard"] },
+  );
+}
+
+export async function previewInvoiceImport(
+  formData: FormData,
+): Promise<InvoiceImportPreviewResult> {
+  const fileParsed = parseInvoiceImportCsvFile(formData);
+  if (!fileParsed.ok) {
+    return {
+      ok: false,
+      error: fileParsed.error,
+      fieldErrors: fileParsed.fieldErrors,
+    };
+  }
+
+  return mutateWide("accounts:write", async ({ companyId }) => {
+    const company = await getOrCreateCompanySettings(companyId);
+    const db = getDb();
+    const existing = await db
+      .select({ number: invoices.number })
+      .from(invoices)
+      .where(eq(invoices.companyId, companyId));
+    const text = await fileParsed.data.file.text();
+    const rows = parseInvoiceImportCsv(text, {
+      fyStart: financialYearStartDate(
+        company.financialYearEndMonth,
+        todayIsoDate(),
+      ),
+      vatRegistered: company.vatRegistered,
+      existingNumbers: new Set(existing.map((r) => r.number.toLowerCase())),
+      paymentTermsDays: company.invoicePaymentTermsDays,
+    });
+    if (rows.length === 0) {
+      return {
+        ok: false,
+        error: "No data rows found in CSV",
+        fieldErrors: { csv: "No data rows found in CSV" },
+      };
+    }
+    return { ok: true, rows };
+  });
+}
+
+export async function commitInvoiceImport(
+  rowsJson: string,
+): Promise<ActionResult & { count?: number }> {
+  let rows: ParsedInvoiceImportRow[];
+  try {
+    rows = JSON.parse(rowsJson) as ParsedInvoiceImportRow[];
+  } catch {
+    return {
+      ok: false,
+      error: "Invalid import payload",
+      fieldErrors: { commit: "Invalid import payload" },
+    };
+  }
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return {
+      ok: false,
+      error: "No rows to import",
+      fieldErrors: { commit: "No rows to import" },
+    };
+  }
+  if (invoiceImportHasErrors(rows)) {
+    return {
+      ok: false,
+      error: "Fix validation errors before importing",
+      fieldErrors: { commit: "Fix validation errors before importing" },
+    };
+  }
+
+  return mutateWide(
+    "accounts:write",
+    async ({ companyId, localUserId }) => {
+      const company = await getOrCreateCompanySettings(companyId);
+      const db = getDb();
+      const fyStart = financialYearStartDate(
+        company.financialYearEndMonth,
+        todayIsoDate(),
+      );
+
+      const existing = await db
+        .select({ number: invoices.number })
+        .from(invoices)
+        .where(eq(invoices.companyId, companyId));
+      const existingNumbers = new Set(
+        existing.map((r) => r.number.toLowerCase()),
+      );
+      const seenInBatch = new Set<string>();
+      for (const row of rows) {
+        if (
+          row.status === "paid" &&
+          row.issueDate &&
+          row.issueDate < fyStart
+        ) {
+          return {
+            ok: false,
+            error: `Row ${row.rowNumber}: fully paid before financial year start`,
+            fieldErrors: {
+              commit: `Row ${row.rowNumber}: fully paid before financial year start`,
+            },
+          };
+        }
+        if (row.number) {
+          const key = row.number.toLowerCase();
+          if (existingNumbers.has(key) || seenInBatch.has(key)) {
+            return {
+              ok: false,
+              error: `Invoice number already exists: ${row.number}`,
+              fieldErrors: {
+                commit: `Invoice number already exists: ${row.number}`,
+              },
+            };
+          }
+          seenInBatch.add(key);
+        }
+      }
+
+      const existingClients = await db
+        .select()
+        .from(clients)
+        .where(eq(clients.companyId, companyId));
+      const clientByEmail = new Map(
+        existingClients
+          .filter((c) => c.email)
+          .map((c) => [c.email!.toLowerCase(), c]),
+      );
+
+      const historicalNumbers = rows
+        .map((r) => r.number)
+        .filter((n): n is string => Boolean(n));
+
+      await db.transaction(async (tx) => {
+        // Bump sequence for historical numbers before allocating blanks
+        const year = parseIssueYear(todayIsoDate());
+        const bumped = bumpInvoiceSeqAfterImport(
+          {
+            invoiceNumberPrefix: company.invoiceNumberPrefix,
+            invoiceNextSeq: company.invoiceNextSeq,
+            invoiceSeqYear: company.invoiceSeqYear,
+          },
+          historicalNumbers,
+          year,
+        );
+        if (
+          bumped.invoiceNextSeq !== company.invoiceNextSeq ||
+          bumped.invoiceSeqYear !== company.invoiceSeqYear
+        ) {
+          await tx
+            .update(companies)
+            .set({
+              invoiceNextSeq: bumped.invoiceNextSeq,
+              invoiceSeqYear: bumped.invoiceSeqYear,
+              updatedAt: new Date(),
+            })
+            .where(eq(companies.id, companyId));
+        }
+
+        for (const row of rows) {
+          let clientId: string | null = null;
+          if (row.clientEmail && clientByEmail.has(row.clientEmail)) {
+            clientId = clientByEmail.get(row.clientEmail)!.id;
+          } else {
+            const [created] = await tx
+              .insert(clients)
+              .values({
+                companyId,
+                name: row.clientName || row.clientEmail || "Client",
+                companyName: row.clientCompany,
+                email: row.clientEmail,
+              })
+              .returning();
+            clientId = created.id;
+            if (row.clientEmail) {
+              clientByEmail.set(row.clientEmail, created);
+            }
+          }
+
+          let number = row.number;
+          if (!number) {
+            number = await allocateInvoiceNumber(tx, companyId, row.issueDate);
+          }
+
+          const status = row.status;
+          const paidAt =
+            status === "paid"
+              ? row.paidAt
+                ? new Date(`${row.paidAt}T12:00:00Z`)
+                : new Date()
+              : null;
+          const sentAt =
+            status === "sent" || status === "paid" ? new Date() : null;
+
+          const [inv] = await tx
+            .insert(invoices)
+            .values({
+              companyId,
+              number,
+              clientId,
+              status,
+              issueDate: row.issueDate,
+              dueDate:
+                row.dueDate ??
+                defaultDueDate(row.issueDate, company.invoicePaymentTermsDays),
+              netPence: row.netPence,
+              vatPence: row.vatPence,
+              grossPence: row.grossPence,
+              sentAt,
+              paidAt,
+              createdByUserId: localUserId,
+            })
+            .returning({ id: invoices.id });
+
+          const vatRate =
+            row.netPence > 0
+              ? Math.round((row.vatPence / row.netPence) * 100)
+              : 0;
+
+          await tx.insert(invoiceLineItems).values({
+            invoiceId: inv.id,
+            description: row.description,
+            quantity: 1,
+            unitPricePence: row.netPence,
+            vatRate,
+            position: 0,
+          });
+
+          if (row.amountPaidPence > 0) {
+            const receivedAt = row.paidAt
+              ? new Date(`${row.paidAt}T12:00:00Z`)
+              : new Date(`${row.issueDate}T12:00:00Z`);
+            await tx.insert(payments).values({
+              invoiceId: inv.id,
+              amountPence: Math.min(row.amountPaidPence, row.grossPence),
+              receivedAt,
+              reference: row.paymentReference,
+              method: "import",
+            });
+          }
+        }
+      });
+
+      await writeAudit({
+        companyId,
+        actorUserId: localUserId,
+        action: "invoice.import",
+        entityType: "invoice",
+        meta: { count: rows.length },
+      });
+
+      return { ok: true, count: rows.length };
+    },
+    { paths: ["/invoices", "/clients", "/dashboard", "/reports"] },
   );
 }

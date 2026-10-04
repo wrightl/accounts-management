@@ -13,6 +13,7 @@ import {
 import { NavHelpLink, NavLinks } from "./nav-links";
 import { NavSearchTrigger } from "./nav-command-palette";
 import { NavUserProfile } from "./nav-user-profile";
+import { NavNotificationsBell } from "@/components/notifications/nav-notifications-bell";
 
 export function NavMobileDrawer({
   open,
@@ -106,18 +107,7 @@ export function NavMobileDrawer({
             />
           </div>
           <div className="shrink-0 pt-2">
-            <div className="mx-3 flex items-center gap-0.5">
-              <NavSearchTrigger
-                collapsed={false}
-                onClick={onSearch}
-                className="mx-0 w-auto flex-1"
-              />
-              <NavHelpLink
-                collapsed={false}
-                pathname={pathname}
-                onNavigate={onClose}
-              />
-            </div>
+            <NavSearchTrigger collapsed={false} onClick={onSearch} />
             {showPlatformLink ? (
               <Link
                 href="/platform"
@@ -127,14 +117,23 @@ export function NavMobileDrawer({
                 Platform
               </Link>
             ) : null}
-            <NavUserProfile
-              collapsed={false}
-              role={role}
-              userName={userName}
-              avatarUrl={avatarUrl}
-              active={pathname === "/profile"}
-              onNavigate={onClose}
-            />
+            <div className="mx-3 mt-1 flex items-center gap-1">
+              <NavUserProfile
+                collapsed={false}
+                role={role}
+                userName={userName}
+                avatarUrl={avatarUrl}
+                active={pathname === "/profile"}
+                onNavigate={onClose}
+                className="mx-0 mt-0 min-w-0 flex-1"
+              />
+              <NavNotificationsBell collapsed={false} />
+              <NavHelpLink
+                collapsed={false}
+                pathname={pathname}
+                onNavigate={onClose}
+              />
+            </div>
           </div>
         </nav>
       </aside>

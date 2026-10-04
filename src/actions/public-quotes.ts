@@ -127,6 +127,17 @@ export async function acceptPublicQuote(
       meta: { orderId },
     });
 
+    const { notify } = await import("@/lib/notifications");
+    await notify({
+      companyId: loaded.companyId,
+      type: "quote.accepted",
+      title: `Quote ${detail.quote.number} accepted`,
+      body: "A client accepted this quote via the public link.",
+      href: `/quotes/${loaded.quoteId}`,
+      entityType: "quote",
+      entityId: loaded.quoteId,
+    });
+
     return { ok: true, id: orderId };
   } catch (e) {
     return {
@@ -186,6 +197,17 @@ export async function declinePublicQuote(
     companyId: loaded.companyId,
     actorUserId: null,
     action: "quote.public_decline",
+    entityType: "quote",
+    entityId: loaded.quoteId,
+  });
+
+  const { notify } = await import("@/lib/notifications");
+  await notify({
+    companyId: loaded.companyId,
+    type: "quote.declined",
+    title: "Quote declined",
+    body: "A client declined a quote via the public link.",
+    href: `/quotes/${loaded.quoteId}`,
     entityType: "quote",
     entityId: loaded.quoteId,
   });

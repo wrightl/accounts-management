@@ -46,6 +46,15 @@ const serverSchema = z.object({
     // Optional break-glass /platform emails (comma-separated). Unset = none.
     PLATFORM_ADMIN_EMAILS: z.string().optional(),
 
+    // Web Push (VAPID). Optional — push is no-op when unset.
+    VAPID_PUBLIC_KEY: z.string().optional(),
+    VAPID_PRIVATE_KEY: z.string().optional(),
+    VAPID_SUBJECT: z.string().default('mailto:support@dotanddashconsulting.com'),
+
+    // Firebase Cloud Messaging (optional — mobile push no-op when unset).
+    FCM_PROJECT_ID: z.string().optional(),
+    FCM_SERVICE_ACCOUNT_JSON: z.string().optional(),
+
     NODE_ENV: z
         .enum(['development', 'test', 'production'])
         .default('development'),
@@ -55,6 +64,7 @@ const clientSchema = z.object({
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().optional(),
     NEXT_PUBLIC_APP_URL: z.string().url().optional(),
     NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().optional(),
+    NEXT_PUBLIC_VAPID_PUBLIC_KEY: z.string().optional(),
 });
 
 type ServerEnv = z.infer<typeof serverSchema>;
@@ -85,6 +95,7 @@ export const clientEnv: ClientEnv = clientSchema.parse({
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:
         process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
+    NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
 });
 
 /** A required server value, throwing a clear error when absent. */

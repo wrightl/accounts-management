@@ -26,5 +26,9 @@ export interface BankTransactionSummaryData {
   statementBalancePence: number | null;
   statementBalanceFormatted: string | null;
   statementBalanceDate: string | null;
+  /** Spreadsheet cutover cash (context only). */
+  openingCashPence: number | null;
+  openingCashFormatted: string | null;
+  openingCashAsAt: string | null;
   pieSlices: BankSummaryPieSlice[];
 }

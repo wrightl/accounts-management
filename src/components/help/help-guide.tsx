@@ -14,6 +14,7 @@ type HelpSection = {
 const SECTIONS: HelpSection[] = [
   { id: "what-for", title: "What this app is for" },
   { id: "first-hour", title: "First hour" },
+  { id: "migration", title: "Migration from spreadsheets" },
   { id: "picture", title: "The picture of money" },
   { id: "getting-paid", title: "Getting paid" },
   { id: "spend", title: "Tracking spend" },
@@ -216,6 +217,55 @@ export function HelpGuide({
           </Card>
         </section>
 
+        <section aria-labelledby="migration">
+          <SectionHeading id="migration">
+            Migration from spreadsheets
+          </SectionHeading>
+          <p className="mt-3 text-sm text-muted">
+            Moving from a spreadsheet? Bring across open work and the current
+            financial year — not a full balance sheet. Pick a cutover date and
+            follow this order.
+          </p>
+          <StepList
+            items={[
+              <>
+                Import clients from CSV on{" "}
+                <HelpLink href="/clients">Clients</HelpLink> (use the template
+                on the Import CSV dialog). Matching email updates an existing
+                client.
+              </>,
+              <>
+                Import invoices from CSV on{" "}
+                <HelpLink href="/invoices">Invoices</HelpLink>: unpaid or partly
+                paid invoices (any issue date), plus fully paid invoices issued
+                in the <strong>current financial year</strong>. Older paid
+                history stays in your spreadsheet archive.
+              </>,
+              <>
+                Optionally set <strong>opening cash</strong> (bank balance
+                brought forward) and as-at date in{" "}
+                {isAdmin ? (
+                  <HelpLink href="/settings">Settings</HelpLink>
+                ) : (
+                  <span>Settings</span>
+                )}
+                . This is context for cutover only — it does not change P&amp;L.
+              </>,
+              <>
+                Import your bank CSV on{" "}
+                <HelpLink href="/transactions">Transactions</HelpLink>, then
+                match credits to imported invoices (or explain other income /
+                transfers).
+              </>,
+              <>
+                Import expenses from CSV on{" "}
+                <HelpLink href="/expenses">Expenses</HelpLink> if you still need
+                open reimbursable spend or current-year cost history.
+              </>,
+            ]}
+          />
+        </section>
+
         <section aria-labelledby="picture">
           <SectionHeading id="picture">The picture of money</SectionHeading>
           <div className="mt-4 space-y-4">
@@ -410,6 +460,12 @@ export function HelpGuide({
                 Accept suggested matches to invoice payments, expenses, or
                 reimbursements.
               </>,
+              <>
+                For credits that are not client payments, use{" "}
+                <strong>Explain</strong> — other income (counts in profit), a
+                transfer, or tax or loan. Administrators can add extra income
+                categories in <HelpLink href="/settings">Settings</HelpLink>.
+              </>,
             ]}
           />
           <p className="mt-4 text-sm text-foreground/90">
@@ -449,8 +505,14 @@ export function HelpGuide({
               </>,
               <>
                 Download the <strong>accountant pack</strong> for a date range:
-                CSVs, invoice PDFs, receipts, bank rows, dividends, and VAT
-                summary when registered.
+                company profile, CSVs, invoice PDFs, receipts, bank rows,
+                dividends, share register, recurring schedules, and VAT summary
+                when registered.
+              </>,
+              <>
+                Accountants can open the read-only{" "}
+                <HelpLink href="/company">Company</HelpLink> page for UTR, VAT,
+                year-end month, and invoice bank details without editing Settings.
               </>,
               <>
                 Invite them as an <strong>Accountant</strong> so they can read

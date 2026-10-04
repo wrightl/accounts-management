@@ -4,7 +4,7 @@ import type { BankListParams } from "@/lib/bank/list-params";
 import { bankListWhere } from "@/lib/bank/queries";
 import type { BankTransactionSummaryData } from "@/lib/bank/summary-types";
 import { getDb } from "@/db";
-import { bankTransactions, reconciliationMatches } from "@/db/schema";
+import { bankTransactions, companies, reconciliationMatches } from "@/db/schema";
 import { formatGBP, poundsToPence } from "@/lib/money";
 
 export type BankTransactionSummary = BankTransactionSummaryData;
@@ -126,6 +126,17 @@ export async function getBankTransactionSummary(
   const maxIncoming = totals?.maxIncoming ?? null;
   const maxOutgoing = totals?.maxOutgoing ?? null;
 
+  const [company] = await db
+    .select({
+      openingCashPence: companies.openingCashPence,
+      openingCashAsAt: companies.openingCashAsAt,
+    })
+    .from(companies)
+    .where(eq(companies.id, companyId))
+    .limit(1);
+  const openingCashPence = company?.openingCashPence ?? null;
+  const openingCashAsAt = company?.openingCashAsAt ?? null;
+
   return {
     periodLabel: formatSummaryPeriod(filters.from ?? "", filters.to ?? ""),
     incomingPence,
@@ -149,6 +160,10 @@ export async function getBankTransactionSummary(
     statementBalanceFormatted:
       statementBalancePence != null ? formatGBP(statementBalancePence) : null,
     statementBalanceDate: latest?.bookedAt ?? null,
+    openingCashPence,
+    openingCashFormatted:
+      openingCashPence != null ? formatGBP(openingCashPence) : null,
+    openingCashAsAt,
     pieSlices,
   };
 }

@@ -55,6 +55,8 @@ export async function updateCompany(formData: FormData): Promise<ActionResult> {
         defaultMileageRatePence: rest.defaultMileageRatePence,
         bankProvider: rest.bankProvider,
         bankName: rest.bankName,
+        openingCashPence: rest.openingCashPence,
+        openingCashAsAt: rest.openingCashAsAt,
         companyNumber:
           current.entityType === "limited_company" ? rest.companyNumber : null,
         utr: current.entityType === "sole_trader" ? rest.utr : null,

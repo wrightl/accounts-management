@@ -16,20 +16,25 @@ import {
   reconciliationMatches,
   reimbursementItems,
   reimbursements,
+  recurringInvoices,
   users,
 } from "@/db/schema";
 import { clientDisplayNameSql } from "@/lib/clients/sql";
+import { monthName } from "@/lib/dates";
 import { safeFilename } from "@/lib/files";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
 import { renderInvoicePdfV2 } from "@/lib/invoices/pdf-v2";
+import { listRecurringInvoices } from "@/lib/invoices/recurring-queries";
 import { lineNetPence } from "@/lib/money";
 import {
   getAgedReceivables,
   getProfitAndLoss,
   getVatSummary,
+  listOtherIncomeInPeriod,
 } from "@/lib/reports/queries";
 import { renderVatSummaryPdf } from "@/lib/reports/vat-pdf";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
+import { listShareholders } from "@/lib/shareholders/queries";
 import { getStorage } from "@/lib/storage";
 
 export type ZipEntry = string | Uint8Array;
@@ -55,11 +60,16 @@ export async function buildAccountantPack({
   const warnings: string[] = [];
   const binaryFiles: Record<string, Uint8Array> = {};
 
-  const [pnl, vat, aged] = await Promise.all([
-    getProfitAndLoss(companyId, from, to),
-    getVatSummary(companyId, from, to),
-    getAgedReceivables(companyId),
-  ]);
+  const [pnl, vat, aged, otherIncomeRows, company, shareRegister, recurringRows] =
+    await Promise.all([
+      getProfitAndLoss(companyId, from, to),
+      getVatSummary(companyId, from, to),
+      getAgedReceivables(companyId),
+      listOtherIncomeInPeriod(companyId, from, to),
+      getOrCreateCompanySettings(companyId),
+      listShareholders(companyId, { includeArchived: true }),
+      listRecurringInvoices(companyId),
+    ]);
 
   const invRows = await db
     .select({
@@ -76,10 +86,15 @@ export async function buildAccountantPack({
       pdfBlobPath: invoices.pdfBlobPath,
       clientName: clientDisplayNameSql.as("client_name"),
       orderNumber: orders.number,
+      recurringSchedule: recurringInvoices.name,
     })
     .from(invoices)
     .innerJoin(clients, eq(invoices.clientId, clients.id))
     .leftJoin(orders, eq(invoices.orderId, orders.id))
+    .leftJoin(
+      recurringInvoices,
+      eq(invoices.recurringInvoiceId, recurringInvoices.id),
+    )
     .where(
       and(
         eq(invoices.companyId, companyId),
@@ -197,6 +212,7 @@ export async function buildAccountantPack({
       id: dividendPayouts.id,
       declaredAt: dividendDeclarations.declaredAt,
       shareholderName: dividendPayouts.shareholderName,
+      shareCount: dividendPayouts.shareCount,
       amountPence: dividendPayouts.amountPence,
       notes: dividendDeclarations.notes,
     })
@@ -217,6 +233,7 @@ export async function buildAccountantPack({
     .select({
       id: bankTransactions.id,
       bankAccountId: bankTransactions.bankAccountId,
+      bankAccountName: bankAccounts.name,
       externalId: bankTransactions.externalId,
       bookedAt: bankTransactions.bookedAt,
       amountPence: bankTransactions.amountPence,
@@ -294,9 +311,53 @@ export async function buildAccountantPack({
       ["metric", "value_gbp", "note"],
       [
         ["income_invoiced", gbp(pnl.incomePence), "accrual — issue date in period"],
+        [
+          "other_income",
+          gbp(pnl.otherIncomePence),
+          "cash — bank date; explained credits only",
+        ],
         ["expenses", gbp(pnl.expensePence), "spend date in period, excl. pending"],
-        ["profit", gbp(pnl.profitPence), ""],
+        ["profit", gbp(pnl.profitPence), "invoiced + other income − expenses"],
         ["basis", "", pnl.basisNote],
+      ],
+    ),
+    "other-income.csv": toCsv(
+      [
+        "bank_transaction_id",
+        "bank_account",
+        "booked_at",
+        "amount_gbp",
+        "category",
+        "note",
+        "counterparty",
+      ],
+      otherIncomeRows.map((r) => [
+        r.bankTransactionId,
+        r.bankAccountName,
+        r.bookedAt,
+        gbp(r.amountPence),
+        r.incomeCategory ?? "",
+        r.note ?? "",
+        r.counterparty ?? "",
+      ]),
+    ),
+    "summary/company.csv": toCsv(
+      ["metric", "value"],
+      buildCompanyCsvRows(company),
+    ),
+    "summary/cutover.csv": toCsv(
+      ["metric", "value", "note"],
+      [
+        [
+          "opening_cash_gbp",
+          company.openingCashPence != null ? gbp(company.openingCashPence) : "",
+          "context only — not in P&L",
+        ],
+        [
+          "opening_cash_as_at",
+          company.openingCashAsAt ?? "",
+          "spreadsheet migration cutover date",
+        ],
       ],
     ),
     "summary/vat.csv": toCsv(
@@ -325,6 +386,7 @@ export async function buildAccountantPack({
         "issue_date",
         "due_date",
         "order_number",
+        "recurring_schedule",
         "sent_at",
         "paid_at",
         "net_gbp",
@@ -339,6 +401,7 @@ export async function buildAccountantPack({
         r.issueDate ?? "",
         r.dueDate ?? "",
         r.orderNumber ?? "",
+        r.recurringSchedule ?? "",
         r.sentAt?.toISOString() ?? "",
         r.paidAt?.toISOString() ?? "",
         gbp(r.netPence),
@@ -462,33 +525,91 @@ export async function buildAccountantPack({
       receiptIndexRows,
     ),
     "dividends.csv": toCsv(
-      ["id", "declared_at", "shareholder_name", "amount_gbp", "notes"],
+      [
+        "id",
+        "declared_at",
+        "shareholder_name",
+        "share_count",
+        "amount_gbp",
+        "notes",
+      ],
       dividendRows.map((d) => [
         d.id,
         d.declaredAt,
         d.shareholderName,
+        d.shareCount != null ? String(d.shareCount) : "",
         gbp(d.amountPence),
         d.notes ?? "",
+      ]),
+    ),
+    "shareholders.csv": toCsv(
+      [
+        "id",
+        "name",
+        "share_count",
+        "percent",
+        "status",
+        "linked_user_email",
+      ],
+      shareRegister.shareholders.map((s) => [
+        s.id,
+        s.name,
+        String(s.shareCount),
+        s.percent != null ? s.percent.toFixed(2) : "",
+        s.archivedAt ? "archived" : "active",
+        s.userEmail ?? "",
+      ]),
+    ),
+    "recurring-invoices.csv": toCsv(
+      [
+        "id",
+        "name",
+        "client",
+        "day_of_month",
+        "enabled",
+        "on_generate",
+        "ends_on",
+        "occurrence_count",
+        "max_occurrences",
+        "next_run_on",
+        "gross_gbp",
+      ],
+      recurringRows.map((r) => [
+        r.id,
+        r.name,
+        r.clientName,
+        String(r.dayOfMonth),
+        r.enabled ? "yes" : "no",
+        r.onGenerate,
+        r.endsOn ?? "",
+        String(r.occurrenceCount),
+        r.maxOccurrences != null ? String(r.maxOccurrences) : "",
+        r.nextRunOn ?? "",
+        gbp(r.grossPence),
       ]),
     ),
     "bank-transactions.csv": toCsv(
       [
         "id",
+        "bank_account",
         "booked_at",
         "amount_gbp",
         "counterparty",
         "reference",
         "description",
         "spending_category",
+        "tags",
       ],
       bankTxRows.map((t) => [
         t.id,
+        t.bankAccountName,
         t.bookedAt,
         gbp(t.amountPence),
         t.counterparty ?? "",
         t.reference ?? "",
         t.description ?? "",
         t.spendingCategory ?? "",
+        (t.tags ?? []).join("; "),
       ]),
     ),
     "reconciliation-matches.csv": toCsv(
@@ -500,6 +621,8 @@ export async function buildAccountantPack({
         "invoice_id",
         "expense_id",
         "reimbursement_id",
+        "income_category",
+        "note",
         "confirmed",
         "created_at",
       ],
@@ -511,6 +634,8 @@ export async function buildAccountantPack({
         m.invoiceId ?? "",
         m.expenseId ?? "",
         m.reimbursementId ?? "",
+        m.incomeCategory ?? "",
+        m.note ?? "",
         m.confirmed ? "yes" : "no",
         m.createdAt.toISOString(),
       ]),
@@ -519,7 +644,6 @@ export async function buildAccountantPack({
   };
 
   try {
-    const company = await getOrCreateCompanySettings(companyId);
     binaryFiles["summary/vat.pdf"] = await renderVatSummaryPdf({
       companyName: company.name,
       vatNumber: vat.vatNumber,
@@ -545,6 +669,32 @@ export async function buildAccountantPack({
   };
 }
 
+function buildCompanyCsvRows(company: Awaited<ReturnType<typeof getOrCreateCompanySettings>>) {
+  const rows: string[][] = [
+    ["entity_type", company.entityType],
+    ["trading_name", company.name],
+    ["legal_name", company.legalName],
+    ["company_number", company.companyNumber ?? ""],
+    ["utr", company.utr ?? ""],
+    ["vat_registered", company.vatRegistered ? "yes" : "no"],
+    ["vat_number", company.vatNumber ?? ""],
+    ["email", company.email ?? ""],
+    ["address", company.addressLines ?? ""],
+    ["financial_year_end_month", monthName(company.financialYearEndMonth)],
+    ["invoice_bank_name", company.bankName ?? ""],
+    ["invoice_bank_account_name", company.bankAccountName ?? ""],
+    ["invoice_sort_code", company.sortCode ?? ""],
+    ["invoice_account_number", company.accountNumber ?? ""],
+  ];
+  if (company.entityType === "limited_company") {
+    rows.push([
+      "total_shares",
+      company.totalShares != null ? String(company.totalShares) : "",
+    ]);
+  }
+  return rows;
+}
+
 function buildReadme({
   from,
   to,
@@ -560,7 +710,7 @@ function buildReadme({
     `Generated: ${new Date().toISOString()}`,
     "",
     "Contents:",
-    "  summary/          — P&L, VAT, aged receivables",
+    "  summary/          — company profile, P&L, VAT, aged receivables, cutover",
     "  invoices.csv      — invoice headers (excl. draft & void, by issue date)",
     "  invoice-line-items.csv",
     "  invoices/         — invoice PDFs",
@@ -569,11 +719,15 @@ function buildReadme({
     "  receipts-index.csv + receipts/ — expense attachments",
     "  reimbursements.csv + reimbursement-items.csv",
     "  dividends.csv     — dividend declarations in period",
+    "  shareholders.csv  — share register at export time (not period-filtered)",
+    "  recurring-invoices.csv — current schedules (not period-filtered)",
     "  bank-transactions.csv + reconciliation-matches.csv",
+    "  other-income.csv   — explained bank credits (cash, by bank date)",
     "",
     "Basis notes:",
-    "  Income is accrual (invoiced by issue date). Payments CSV is cash received.",
-    "  Expenses exclude pending email submissions.",
+    "  Invoiced income is accrual (by issue date). Other income is cash on the bank date.",
+    "  Payments CSV is cash received. Expenses exclude pending email submissions.",
+    "  Invoices link to recurring schedules via recurring_schedule when generated from one.",
   ];
   if (warnings.length > 0) {
     lines.push("", "Warnings:", ...warnings.map((w) => `  - ${w}`));

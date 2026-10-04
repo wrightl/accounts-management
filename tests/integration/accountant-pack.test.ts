@@ -178,8 +178,11 @@ describe("accountant pack integration", () => {
     expect(entries).toContain("expenses.csv");
     expect(entries).toContain("receipts-index.csv");
     expect(entries).toContain("dividends.csv");
+    expect(entries).toContain("shareholders.csv");
+    expect(entries).toContain("recurring-invoices.csv");
     expect(entries).toContain("bank-transactions.csv");
     expect(entries).toContain("reconciliation-matches.csv");
+    expect(entries).toContain("summary/company.csv");
     expect(entries).toContain("summary/pnl.csv");
     expect(entries).toContain("summary/vat.csv");
     expect(entries).toContain("summary/aged-receivables.csv");
@@ -190,6 +193,16 @@ describe("accountant pack integration", () => {
     const invoicesCsv = extractZipText(zip, "invoices.csv");
     expect(invoicesCsv).toContain("DD-2026-0100");
     expect(invoicesCsv).toContain("Acme Ltd");
+    expect(invoicesCsv.split("\n")[0]).toContain("recurring_schedule");
+
+    const companyCsv = extractZipText(zip, "summary/company.csv");
+    expect(companyCsv).toContain("trading_name");
+    expect(companyCsv).toContain("financial_year_end_month");
+
+    const bankCsv = extractZipText(zip, "bank-transactions.csv");
+    expect(bankCsv.split("\n")[0]).toContain("bank_account");
+    expect(bankCsv.split("\n")[0]).toContain("tags");
+    expect(bankCsv).toContain("Starling Business");
 
     const lineItemsCsv = extractZipText(zip, "invoice-line-items.csv");
     expect(lineItemsCsv).toContain("Consulting");
@@ -199,6 +212,9 @@ describe("accountant pack integration", () => {
 
     const paymentsCsv = extractZipText(zip, "payments.csv");
     expect(paymentsCsv).toContain("DD-2026-0100");
+
+    const dividendsCsv = extractZipText(zip, "dividends.csv");
+    expect(dividendsCsv.split("\n")[0]).toContain("share_count");
   });
 
   it("excludes void and draft invoices, pending expenses, and out-of-period payments", async () => {

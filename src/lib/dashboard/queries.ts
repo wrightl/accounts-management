@@ -35,6 +35,7 @@ import {
   getExpenseByCategory,
   getExpenseByMonth,
   getIncomeByMonth,
+  getOtherIncomeByMonth,
   getProfitAndLoss,
 } from "@/lib/reports/queries";
 import { getCompanySettings } from "@/lib/settings/queries";
@@ -480,18 +481,21 @@ function mergeCashSeries(
   collected: Array<{ month: string; totalPence: number }>,
   expenses: Array<{ month: string; totalPence: number }>,
   incomeNet: Array<{ month: string; totalPence: number }>,
+  otherIncome: Array<{ month: string; totalPence: number }> = [],
 ): MonthlyCashPoint[] {
   const invoicedMap = new Map(invoiced.map((r) => [r.month, r.totalPence]));
   const collectedMap = new Map(collected.map((r) => [r.month, r.totalPence]));
   const expenseMap = new Map(expenses.map((r) => [r.month, r.totalPence]));
   const incomeMap = new Map(incomeNet.map((r) => [r.month, r.totalPence]));
+  const otherIncomeMap = new Map(otherIncome.map((r) => [r.month, r.totalPence]));
 
   return months.map((month) => {
     const invoicedPence = invoicedMap.get(month) ?? 0;
     const collectedPence = collectedMap.get(month) ?? 0;
     const expensePence = expenseMap.get(month) ?? 0;
     const incomePence = incomeMap.get(month) ?? 0;
-    const profitPence = incomePence - expensePence;
+    const otherIncomePence = otherIncomeMap.get(month) ?? 0;
+    const profitPence = incomePence + otherIncomePence - expensePence;
     return {
       month,
       label: formatMonthLabel(month),
@@ -559,6 +563,7 @@ export async function getDashboardOverview(
     priorCollectedPence,
     invoicedGrossPence,
     incomeByMonth,
+    otherIncomeByMonth,
     expenseByMonth,
     collectedByMonth,
     invoicedGrossByMonth,
@@ -590,6 +595,7 @@ export async function getDashboardOverview(
     getCollectedInPeriod(companyId, period.compareFrom, period.compareTo),
     getInvoicedGrossInPeriod(companyId, period.from, period.to),
     getIncomeByMonth(companyId, chartWindow.from, chartWindow.to),
+    getOtherIncomeByMonth(companyId, chartWindow.from, chartWindow.to),
     getExpenseByMonth(companyId, chartWindow.from, chartWindow.to),
     getCollectedByMonth(companyId, chartWindow.from, chartWindow.to),
     getInvoicedGrossByMonth(companyId, chartWindow.from, chartWindow.to),
@@ -627,6 +633,7 @@ export async function getDashboardOverview(
     collectedByMonth,
     expenseByMonth,
     incomeByMonth,
+    otherIncomeByMonth,
   );
 
   const collectedDelta = formatDeltaPercent(collectedPence, priorCollectedPence);

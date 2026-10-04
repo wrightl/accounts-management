@@ -27,6 +27,7 @@ export async function GET(request: Request) {
   let reminders: Record<string, unknown> = { skipped: "no database" };
   let purged = 0;
   let billingEmails: Record<string, unknown> = { skipped: "no database" };
+  let notifications: Record<string, unknown> = { skipped: "no database" };
 
   if (process.env.DATABASE_URL) {
     const queued = await enqueueOverdueReminders();
@@ -37,6 +38,8 @@ export async function GET(request: Request) {
       "@/lib/billing/emails"
     );
     billingEmails = await processBillingLifecycleEmails();
+    const { runNotificationScanners } = await import("@/lib/notifications");
+    notifications = await runNotificationScanners();
     await updatePlatformSettings({ lastCronDailyAt: new Date() });
   }
 
@@ -48,6 +51,7 @@ export async function GET(request: Request) {
       reminders,
       purged,
       billingEmails,
+      notifications,
     }),
   );
 
@@ -55,7 +59,7 @@ export async function GET(request: Request) {
     level: "info",
     source: "cron.daily",
     message: "Daily cron completed",
-    meta: { recurring, reminders, purged, billingEmails },
+    meta: { recurring, reminders, purged, billingEmails, notifications },
   });
 
   return NextResponse.json({
@@ -64,5 +68,6 @@ export async function GET(request: Request) {
     reminders,
     purged,
     billingEmails,
+    notifications,
   });
 }

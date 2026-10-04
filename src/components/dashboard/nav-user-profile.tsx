@@ -18,6 +18,7 @@ export function NavUserProfile({
   avatarUrl,
   active = false,
   onNavigate,
+  className,
 }: {
   collapsed: boolean;
   role: Role;
@@ -25,6 +26,7 @@ export function NavUserProfile({
   avatarUrl: string | null;
   active?: boolean;
   onNavigate?: () => void;
+  className?: string;
 }) {
   return (
     <Link
@@ -36,6 +38,7 @@ export function NavUserProfile({
         "mt-1 flex items-center overflow-hidden rounded-full transition-colors hover:bg-white/5",
         active && "bg-white/10",
         collapsed ? "justify-center py-2" : "mx-3 gap-3 px-3 py-2",
+        className,
       )}
     >
       {avatarUrl ? (

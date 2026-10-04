@@ -254,14 +254,25 @@ export function BankPagination({
     );
 }
 
+function TagsLine({ tags }: { tags: string[] }) {
+    if (tags.length === 0) return null;
+    return (
+        <p className="mt-0.5 text-xs text-muted">{tags.join(', ')}</p>
+    );
+}
+
 export function BankTransactionTable({
     rows,
     customCategories,
+    incomeCategories,
     canWrite,
+    showAccount = false,
 }: {
     rows: BankTransactionListItem[];
     customCategories: readonly string[];
+    incomeCategories: readonly string[];
     canWrite: boolean;
+    showAccount?: boolean;
 }) {
     return (
         <Table>
@@ -269,6 +280,7 @@ export function BankTransactionTable({
                 <TR>
                     <TH>Date</TH>
                     <TH>Counterparty</TH>
+                    {showAccount ? <TH>Account</TH> : null}
                     <TH>Reference</TH>
                     <TH>Category</TH>
                     <TH>Status</TH>
@@ -280,7 +292,13 @@ export function BankTransactionTable({
                 {rows.map((r) => (
                     <TR key={r.id}>
                         <TD className="text-muted">{r.bookedAt}</TD>
-                        <TD>{r.counterparty ?? r.description ?? '—'}</TD>
+                        <TD>
+                            {r.counterparty ?? r.description ?? '—'}
+                            <TagsLine tags={r.tags} />
+                        </TD>
+                        {showAccount ? (
+                            <TD className="text-muted">{r.bankAccountName || '—'}</TD>
+                        ) : null}
                         <TD className="text-muted">{r.reference ?? '—'}</TD>
                         <TD>
                             <CategoryDisplay
@@ -295,9 +313,13 @@ export function BankTransactionTable({
                         </TD>
                         <TD>
                             <MatchActions
+                                transactionId={r.id}
+                                amountPence={r.amountPence}
                                 matchId={r.matchId}
+                                matchType={r.matchType}
                                 confirmed={r.confirmed}
                                 canWrite={canWrite}
+                                incomeCategories={incomeCategories}
                             />
                         </TD>
                     </TR>
@@ -310,11 +332,15 @@ export function BankTransactionTable({
 function BankTransactionCard({
     row,
     customCategories,
+    incomeCategories,
     canWrite,
+    showAccount = false,
 }: {
     row: BankTransactionListItem;
     customCategories: readonly string[];
+    incomeCategories: readonly string[];
     canWrite: boolean;
+    showAccount?: boolean;
 }) {
     return (
         <Card className="p-4">
@@ -330,9 +356,14 @@ function BankTransactionCard({
                             canWrite={canWrite}
                         />
                     </div>
+                    <TagsLine tags={row.tags} />
                     <p className="mt-0.5 text-sm text-muted">
                         {row.reference ?? '—'}
+                        {showAccount && row.bankAccountName
+                            ? ` · ${row.bankAccountName}`
+                            : ''}
                     </p>
+                    <p className="mt-1 text-sm text-muted">{matchStatus(row)}</p>
                 </div>
                 <p
                     className={cn(
@@ -347,9 +378,13 @@ function BankTransactionCard({
             </div>
             <div className="mt-3 flex justify-end">
                 <MatchActions
+                    transactionId={row.id}
+                    amountPence={row.amountPence}
                     matchId={row.matchId}
+                    matchType={row.matchType}
                     confirmed={row.confirmed}
                     canWrite={canWrite}
+                    incomeCategories={incomeCategories}
                 />
             </div>
         </Card>
@@ -359,11 +394,15 @@ function BankTransactionCard({
 export function BankTransactionCardList({
     rows,
     customCategories,
+    incomeCategories,
     canWrite,
+    showAccount = false,
 }: {
     rows: BankTransactionListItem[];
     customCategories: readonly string[];
+    incomeCategories: readonly string[];
     canWrite: boolean;
+    showAccount?: boolean;
 }) {
     const groups = groupByBookedAt(rows, (iso) => friendlyDayLabel(iso));
     return (
@@ -379,7 +418,9 @@ export function BankTransactionCardList({
                                 key={r.id}
                                 row={r}
                                 customCategories={customCategories}
+                                incomeCategories={incomeCategories}
                                 canWrite={canWrite}
+                                showAccount={showAccount}
                             />
                         ))}
                     </div>
@@ -392,17 +433,23 @@ export function BankTransactionCardList({
 export function BankTransactionCards({
     rows,
     customCategories,
+    incomeCategories,
     canWrite,
+    showAccount = false,
 }: {
     rows: BankTransactionListItem[];
     customCategories: readonly string[];
+    incomeCategories: readonly string[];
     canWrite: boolean;
+    showAccount?: boolean;
 }) {
     return (
         <BankTransactionCardList
             rows={rows}
             customCategories={customCategories}
+            incomeCategories={incomeCategories}
             canWrite={canWrite}
+            showAccount={showAccount}
         />
     );
 }

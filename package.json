@@ -50,6 +50,7 @@
         "stripe": "^22.6.2",
         "tailwind-merge": "^3.6.0",
         "tesseract.js": "^7.0.0",
+        "web-push": "^3.6.7",
         "ws": "^8.21.3",
         "zod": "^4.4.3"
     },
@@ -62,6 +63,7 @@
         "@types/pg": "^8.23.1",
         "@types/react": "^19",
         "@types/react-dom": "^19",
+        "@types/web-push": "^3.6.4",
         "@types/ws": "^8.18.1",
         "dotenv": "^17.4.2",
         "drizzle-kit": "^0.31.10",
