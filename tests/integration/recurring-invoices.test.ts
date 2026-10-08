@@ -127,6 +127,16 @@ describe("generateRecurringInvoices (PGlite)", () => {
     expect(all).toHaveLength(1);
   });
 
+  it("overlapping runs generate one invoice", async () => {
+    await insertTemplate({ dayOfMonth: 15 });
+    await Promise.all([
+      generateRecurringInvoices({ today: "2026-03-15" }),
+      generateRecurringInvoices({ today: "2026-03-15" }),
+    ]);
+    const all = await db.select().from(invoices);
+    expect(all).toHaveLength(1);
+  });
+
   it("skips templates past endsOn", async () => {
     await insertTemplate({
       dayOfMonth: 15,

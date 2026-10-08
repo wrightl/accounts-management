@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
-import { companies, expenses, users } from "@/db/schema";
+import { auditLog, companies, expenseReceipts, expenses, users } from "@/db/schema";
 import { seedCompany } from "@/lib/test/seed-company";
 import {
   GET as listExpenses,
@@ -10,6 +10,8 @@ import {
 } from "@/app/api/mobile/expenses/route";
 import { GET as getExpense } from "@/app/api/mobile/expenses/[id]/route";
 import { POST as approveExpense } from "@/app/api/mobile/expenses/[id]/approve/route";
+import { POST as rejectExpense } from "@/app/api/mobile/expenses/[id]/reject/route";
+import { POST as uploadReceipt } from "@/app/api/mobile/expenses/[id]/receipts/route";
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -245,5 +247,104 @@ describe("mobile API authz and tenant isolation", () => {
       .from(expenses)
       .where(eq(expenses.companyId, company.id));
     expect(rows).toHaveLength(1);
+  });
+});
+
+describe("mobile expense review matches web rules", () => {
+  async function seedPending(companyId: string, amountPence = 1200) {
+    const [row] = await db
+      .insert(expenses)
+      .values({
+        companyId,
+        description: "Lunch",
+        category: "Meals",
+        spentAt: "2026-03-01",
+        amountPence,
+        status: "pending",
+      })
+      .returning();
+    return row;
+  }
+
+  function post(body: unknown) {
+    return new Request("http://localhost/api/mobile/expenses/x", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }) as never;
+  }
+
+  it("approving as reimbursable sets a payer and writes an audit entry", async () => {
+    const company = await seedCompany(db, { name: "Review Co" });
+    const admin = await seedAdmin(company.id);
+    const pending = await seedPending(company.id);
+
+    const res = await approveExpense(post({ approvalType: "reimbursable" }), {
+      params: Promise.resolve({ id: pending.id }),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data.status).toBe("reimbursable");
+
+    const [row] = await db.select().from(expenses).where(eq(expenses.id, pending.id));
+    expect(row.paidByUserId).toBe(admin.id);
+    const audits = await db.select().from(auditLog).where(eq(auditLog.entityId, pending.id));
+    expect(audits.map((a) => a.action)).toContain("expense.approve");
+  });
+
+  it("refuses to approve a zero-amount expense", async () => {
+    const company = await seedCompany(db, { name: "Zero Co" });
+    await seedAdmin(company.id);
+    const pending = await seedPending(company.id, 0);
+
+    const res = await approveExpense(post({ approvalType: "recorded" }), {
+      params: Promise.resolve({ id: pending.id }),
+    });
+    expect(res.status).toBe(400);
+    const [row] = await db.select().from(expenses).where(eq(expenses.id, pending.id));
+    expect(row.status).toBe("pending");
+  });
+
+  it("rejecting discards the expense instead of recording it", async () => {
+    const company = await seedCompany(db, { name: "Reject Co" });
+    await seedAdmin(company.id);
+    const pending = await seedPending(company.id);
+
+    const res = await rejectExpense(post({ reason: "dupe" }), {
+      params: Promise.resolve({ id: pending.id }),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data.status).toBe("rejected");
+    expect(await db.select().from(expenses).where(eq(expenses.id, pending.id))).toHaveLength(0);
+  });
+
+  it("validates receipt uploads like the web path", async () => {
+    const company = await seedCompany(db, { name: "Upload Co" });
+    await seedAdmin(company.id);
+    const pending = await seedPending(company.id);
+
+    function upload(bytes: Uint8Array, name: string) {
+      const form = new FormData();
+      form.set("file", new File([bytes], name, { type: "application/octet-stream" }));
+      return uploadReceipt(
+        new Request("http://localhost/api/mobile/expenses/x/receipts", {
+          method: "POST",
+          body: form,
+        }) as never,
+        { params: Promise.resolve({ id: pending.id }) },
+      );
+    }
+
+    const html = await upload(new TextEncoder().encode("<html><script>x</script></html>"), "r.html");
+    expect(html.status).toBe(400);
+
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0, 0, 0]);
+    const ok = await upload(png, "r.png");
+    expect(ok.status).toBe(200);
+    const receipts = await db
+      .select()
+      .from(expenseReceipts)
+      .where(eq(expenseReceipts.expenseId, pending.id));
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0].contentType).toBe("image/png");
   });
 });

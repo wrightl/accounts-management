@@ -446,7 +446,6 @@ export async function assignUserCompany(
       "@/lib/expenses/inbound-mailbox"
     );
     patch.expenseInboundSlug = await uniquifyUserInboundSlug(
-      companyId,
       userInboundSlugSeed(name, current.email),
       localUserId,
     );

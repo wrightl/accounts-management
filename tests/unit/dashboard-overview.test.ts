@@ -19,6 +19,10 @@ let db: TestDatabase;
 let companyId: string;
 
 beforeEach(async () => {
+  // Fixtures use fixed September 2026 dates and assert on "this-month";
+  // pin the clock (Date only — PGlite needs real timers).
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-09-20T12:00:00Z"));
   ctx = await createTestDb();
   db = ctx.db;
   setTestDb(db as unknown as Database);
@@ -34,6 +38,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.useRealTimers();
   setTestDb(null);
   await ctx.client.close();
 });

@@ -29,10 +29,8 @@ import {
   adminRetryInboundEmailJob,
 } from "@/lib/expenses/inbound-email";
 import { processSendJob, drainSendJobs, enqueueOverdueReminders } from "@/lib/outbox";
-import {
-  getPlatformSettings,
-  updatePlatformSettings,
-} from "@/lib/platform-settings";
+import { updatePlatformSettings } from "@/lib/platform-settings";
+import { getCurrentUser } from "@/lib/auth";
 import { generateRecurringInvoices } from "@/lib/invoices/recurring-generate";
 import { purgeOldPlatformLogs, logPlatformEvent } from "@/lib/platform-log";
 import { sendClerkInvitation } from "@/lib/clerk-invite";
@@ -277,7 +275,6 @@ export async function platformInviteCompanyAdmin(
 
       if (existing) {
         const inboundSlug = await uniquifyUserInboundSlug(
-          companyId,
           userInboundSlugSeed(name, email),
           existing.id,
         );
@@ -294,7 +291,6 @@ export async function platformInviteCompanyAdmin(
         userId = existing.id;
       } else {
         const inboundSlug = await uniquifyUserInboundSlug(
-          companyId,
           userInboundSlugSeed(name, email),
         );
         const [created] = await db
@@ -621,17 +617,25 @@ export async function reportClientError(params: {
 }): Promise<ActionResult> {
   const message = String(params.message ?? "").slice(0, 2000) || "Unknown client error";
   const digest = params.digest ? String(params.digest).slice(0, 200) : null;
+  // Callable by anyone (error boundaries render on public pages too). Only
+  // signed-in users may write to platform_logs; anonymous reports go to
+  // stdout so they cannot be used to flood the database.
+  const session = await getCurrentUser();
+  if (!session) {
+    console.error(
+      JSON.stringify({ level: "error", msg: "client.error", message, digest, anonymous: true }),
+    );
+    return { ok: true };
+  }
   await logPlatformEvent({
     level: "error",
     source: "client.error",
     message,
     digest,
+    companyId: session.companyId,
+    actorUserId: session.localUserId,
   });
   return { ok: true };
-}
-
-export async function getPlatformSettingsForForm() {
-  return getPlatformSettings();
 }
 
 export async function grantComplimentaryAccess(

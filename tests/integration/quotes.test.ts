@@ -19,6 +19,7 @@ import {
   updateQuote,
   updateQuoteStatus,
 } from "@/actions/quotes";
+import { acceptPublicQuote, declinePublicQuote } from "@/actions/public-quotes";
 import { getQuoteVersionDetail } from "@/lib/quotes/queries";
 import { getQuotesSummary } from "@/lib/quotes/summary";
 import { listDeclineReasonCategories } from "@/lib/quotes/decline-reasons";
@@ -320,6 +321,42 @@ describe("quote status workflow", () => {
       .where(eq(orderPaymentMilestones.orderId, order.id));
     expect(milestones).toHaveLength(1);
     expect(milestones[0].label).toBe("Net 30");
+  }, 15000);
+
+  it("concurrent public accept and decline: exactly one wins", async () => {
+    const { quoteId } = await seedQuote();
+    await db.update(quotes).set({ publicToken: "tok-race" }).where(eq(quotes.id, quoteId));
+
+    const results = await Promise.all([
+      acceptPublicQuote("tok-race"),
+      declinePublicQuote("tok-race", new FormData()),
+    ]);
+
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    const [quote] = await db.select().from(quotes).where(eq(quotes.id, quoteId));
+    const orderRows = await db.select().from(orders);
+    // Never a declined quote with an order attached.
+    expect(quote.status === "accepted" ? 1 : 0).toBe(orderRows.length);
+  }, 15000);
+
+  it("public decline loses to an accept that landed first", async () => {
+    const { quoteId } = await seedQuote();
+    await db.update(quotes).set({ publicToken: "tok-late" }).where(eq(quotes.id, quoteId));
+
+    // Simulate the decline having read status "draft" just before an accept.
+    const accepted = await updateQuoteStatus(quoteId, "accepted");
+    expect(accepted.ok).toBe(true);
+    const { writeQuoteStatus } = await import("@/lib/quotes/status-write");
+    const won = await writeQuoteStatus(db as unknown as Database, {
+      companyId,
+      quoteId,
+      from: "draft",
+      set: { status: "declined", declinedAt: new Date() },
+    });
+
+    expect(won).toBe(false);
+    const [quote] = await db.select().from(quotes).where(eq(quotes.id, quoteId));
+    expect(quote.status).toBe("accepted");
   }, 15000);
 
   it("declining stores reusable custom category", async () => {

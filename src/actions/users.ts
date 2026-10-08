@@ -145,7 +145,6 @@ export async function updateUserRole(
           !target.expenseInboundSlug
         ) {
           patch.expenseInboundSlug = await uniquifyUserInboundSlug(
-            companyId,
             userInboundSlugSeed(target.name, target.email),
             parsed.data.userId,
           );
@@ -269,7 +268,6 @@ export async function inviteUser(formData: FormData): Promise<ActionResult> {
         // First membership for a pending invite (or re-invite before sign-in).
         const inboundSlug = shouldHaveInbound
           ? await uniquifyUserInboundSlug(
-              companyId,
               userInboundSlugSeed(name, email),
               existing.id,
             )
@@ -291,7 +289,6 @@ export async function inviteUser(formData: FormData): Promise<ActionResult> {
       } else {
         const inboundSlug = shouldHaveInbound
           ? await uniquifyUserInboundSlug(
-              companyId,
               userInboundSlugSeed(name, email),
             )
           : null;
@@ -534,7 +531,6 @@ export async function updateUser(userId: string, formData: FormData): Promise<Ac
         !target.expenseInboundSlug
       ) {
         userPatch.expenseInboundSlug = await uniquifyUserInboundSlug(
-          companyId,
           userInboundSlugSeed(name, email),
           parsed.data.userId,
         );

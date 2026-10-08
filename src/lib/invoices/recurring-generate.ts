@@ -202,6 +202,9 @@ export async function generateRecurringInvoiceForTemplate(
   };
 }
 
+/** Another run generated this template's invoice for the month first. */
+class AlreadyGeneratedError extends Error {}
+
 type GenerateOutcome =
   | "generated"
   | "sent"
@@ -252,6 +255,24 @@ async function generateFromTemplateRow(
 
   try {
     invoiceId = await db.transaction(async (tx) => {
+      // Re-check under a row lock: overlapping runs (duplicate cron delivery,
+      // manual /api/cron/recurring) both passed the unlocked check above.
+      const [locked] = await tx
+        .select({
+          enabled: recurringInvoices.enabled,
+          lastGeneratedAt: recurringInvoices.lastGeneratedAt,
+        })
+        .from(recurringInvoices)
+        .where(eq(recurringInvoices.id, tmpl.id))
+        .for("update");
+      if (
+        !locked?.enabled ||
+        (locked.lastGeneratedAt &&
+          todayIsoDate(locked.lastGeneratedAt).slice(0, 7) === today.slice(0, 7))
+      ) {
+        throw new AlreadyGeneratedError();
+      }
+
       const number = await allocateInvoiceNumber(tx, tmpl.companyId, today);
       const [inv] = await tx
         .insert(invoices)
@@ -302,6 +323,7 @@ async function generateFromTemplateRow(
       return inv.id;
     });
   } catch (e) {
+    if (e instanceof AlreadyGeneratedError) return "skipped_month";
     console.error(
       JSON.stringify({
         level: "error",

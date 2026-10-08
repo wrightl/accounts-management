@@ -1,5 +1,5 @@
 import "server-only";
-import { and, count, desc, eq, isNotNull, lt, or } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   companies,
@@ -46,6 +46,8 @@ import { isForeignCurrency } from "@/lib/expenses/receipt-parse";
 import { refreshExpenseBankSuggestion } from "@/lib/bank/expense-match";
 
 const MAX_ATTEMPTS = 8;
+/** How long a worker owns a claimed job (OCR can be slow) before another may retry. */
+const JOB_LEASE_MS = 10 * 60 * 1000;
 
 function logInboundJobFailure(
   job: typeof inboundEmailJobs.$inferSelect,
@@ -183,7 +185,7 @@ export async function enqueueInboundEmailJob(
 
 export async function processInboundEmailJob(
   jobId: string,
-): Promise<{ ok: boolean; error?: string; expenseId?: string }> {
+): Promise<{ ok: boolean; busy?: boolean; error?: string; expenseId?: string }> {
   const db = getDb();
   const [job] = await db
     .select()
@@ -209,10 +211,30 @@ export async function processInboundEmailJob(
     return { ok: false, error: "Max attempts reached" };
   }
 
-  await db
+  // Atomic claim: concurrent webhooks each drain pending jobs, so without a
+  // lease two workers could turn one email into two expenses.
+  const now = new Date();
+  const [claimed] = await db
     .update(inboundEmailJobs)
-    .set({ attempts: job.attempts + 1 })
-    .where(eq(inboundEmailJobs.id, jobId));
+    .set({
+      attempts: sql`${inboundEmailJobs.attempts} + 1`,
+      lockedUntil: new Date(now.getTime() + JOB_LEASE_MS),
+    })
+    .where(
+      and(
+        eq(inboundEmailJobs.id, jobId),
+        inArray(inboundEmailJobs.status, ["pending", "failed"]),
+        lt(inboundEmailJobs.attempts, MAX_ATTEMPTS),
+        or(
+          isNull(inboundEmailJobs.lockedUntil),
+          lt(inboundEmailJobs.lockedUntil, now),
+        ),
+      ),
+    )
+    .returning({ attempts: inboundEmailJobs.attempts });
+  if (!claimed) {
+    return { ok: false, busy: true, error: "Inbound email job is already being processed" };
+  }
 
   try {
     const expenseId = await deliverInboundEmail(job);
@@ -223,6 +245,7 @@ export async function processInboundEmailJob(
         expenseId,
         processedAt: new Date(),
         lastError: null,
+        lockedUntil: null,
       })
       .where(eq(inboundEmailJobs.id, jobId));
 
@@ -254,7 +277,7 @@ export async function processInboundEmailJob(
   } catch (err) {
     const message = logInboundJobFailure(job, err);
     const rejected = message.startsWith("REJECTED:");
-    const attempts = job.attempts + 1;
+    const attempts = claimed.attempts;
 
     await db
       .update(inboundEmailJobs)
@@ -266,6 +289,7 @@ export async function processInboundEmailJob(
             : "pending",
         lastError: rejected ? message.slice("REJECTED:".length).trim() : message,
         processedAt: rejected ? new Date() : null,
+        lockedUntil: null,
       })
       .where(eq(inboundEmailJobs.id, jobId));
 
@@ -313,9 +337,12 @@ export async function drainInboundEmailJobs(limit = 20): Promise<{
     .select({ id: inboundEmailJobs.id })
     .from(inboundEmailJobs)
     .where(
-      or(
-        eq(inboundEmailJobs.status, "pending"),
-        and(eq(inboundEmailJobs.status, "failed"), lt(inboundEmailJobs.attempts, MAX_ATTEMPTS)),
+      and(
+        or(
+          eq(inboundEmailJobs.status, "pending"),
+          and(eq(inboundEmailJobs.status, "failed"), lt(inboundEmailJobs.attempts, MAX_ATTEMPTS)),
+        ),
+        or(isNull(inboundEmailJobs.lockedUntil), lt(inboundEmailJobs.lockedUntil, new Date())),
       ),
     )
     .orderBy(inboundEmailJobs.createdAt)
@@ -342,8 +369,10 @@ async function deliverInboundEmail(
     throw new Error("REJECTED: Inbound mailbox company mismatch");
   }
 
+  // `recipient.role` is the membership role for this company; `users.role`
+  // tracks whichever company is active, so it is not checked here.
   const sender = await getUser(recipient.userId);
-  if (!sender || !isFounderRole(sender.role)) {
+  if (!sender) {
     throw new Error("REJECTED: Inbound mailbox is not an authorised founder");
   }
 

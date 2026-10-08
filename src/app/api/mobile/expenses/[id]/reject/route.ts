@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { expenses } from "@/db/schema";
-import { and, eq } from "drizzle-orm";
 import { requireMobileAuth } from "@/lib/mobile-auth";
+import { toMobileExpense } from "@/lib/mobile/expense-payload";
+import { rejectPendingExpense } from "@/lib/expenses/review";
+import { ensureLocalUser } from "@/lib/users";
 
 type Params = Promise<{ id: string }>;
 
 export async function POST(
-  request: NextRequest,
+  _request: NextRequest,
   segmentData: { params: Params }
 ) {
   const params = await segmentData.params;
@@ -16,47 +19,32 @@ export async function POST(
     if (!authz.ok) return authz.response;
     const { user } = authz;
 
-    const db = getDb();
-
-    // Mark as recorded but add a note that it was rejected
-    const [expense] = await db
-      .update(expenses)
-      .set({
-        status: "recorded",
-      })
-      .where(
-        and(
-          eq(expenses.id, params.id),
-          eq(expenses.companyId, user.companyId),
-          eq(expenses.status, "pending")
-        )
-      )
-      .returning();
+    const [expense] = await getDb()
+      .select()
+      .from(expenses)
+      .where(and(eq(expenses.id, params.id), eq(expenses.companyId, user.companyId)))
+      .limit(1);
 
     if (!expense) {
       return NextResponse.json(
-        { ok: false, error: "Expense not found or already processed" },
+        { ok: false, error: "Expense not found" },
         { status: 404 }
       );
     }
 
+    // Reject discards the pending expense, matching the web review.
+    const localUserId = await ensureLocalUser(user);
+    const result = await rejectPendingExpense(
+      { companyId: user.companyId, localUserId },
+      params.id,
+    );
+    if (!result.ok) {
+      return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
+    }
+
     return NextResponse.json({
       success: true,
-      data: {
-        id: expense.id,
-        companyId: expense.companyId,
-        description: expense.description,
-        amountPence: expense.amountPence,
-        category: expense.category,
-        expenseDate: expense.spentAt,
-        status: expense.status,
-        notes: null,
-        billable: expense.billable,
-        source: expense.source,
-        receipts: [],
-        createdAt: expense.createdAt.toISOString(),
-        updatedAt: expense.createdAt.toISOString(),
-      },
+      data: toMobileExpense({ ...expense, status: "rejected" }),
     });
   } catch (error) {
     console.error("Reject expense error:", error);

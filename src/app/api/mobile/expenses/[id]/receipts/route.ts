@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/db";
-import { expenses, expenseReceipts } from "@/db/schema";
-import { and, eq } from "drizzle-orm";
-import { getStorage } from "@/lib/storage";
-import { safeFilename } from "@/lib/files";
-import { nanoid } from "nanoid";
 import { requireMobileAuth } from "@/lib/mobile-auth";
+import { storeExpenseReceipt } from "@/lib/expenses/review";
+import { ensureLocalUser } from "@/lib/users";
 
 type Params = Promise<{ id: string }>;
 
@@ -19,59 +15,22 @@ export async function POST(
     if (!authz.ok) return authz.response;
     const { user } = authz;
 
-    const db = getDb();
-    const [expense] = await db
-      .select()
-      .from(expenses)
-      .where(
-        and(
-          eq(expenses.id, params.id),
-          eq(expenses.companyId, user.companyId)
-        )
-      )
-      .limit(1);
-
-    if (!expense) {
-      return NextResponse.json(
-        { ok: false, error: "Expense not found" },
-        { status: 404 }
-      );
+    // Same validation as web uploads: 8 MB cap and sniffed image/PDF type.
+    const localUserId = await ensureLocalUser(user);
+    const result = await storeExpenseReceipt(
+      { companyId: user.companyId, localUserId },
+      params.id,
+      await request.formData(),
+      "file",
+    );
+    if (!result.ok) {
+      const status = result.error === "Expense not found" ? 404 : 400;
+      return NextResponse.json({ ok: false, error: result.error }, { status });
     }
-
-    const formData = await request.formData();
-    const file = formData.get("file") as File;
-
-    if (!file) {
-      return NextResponse.json(
-        { ok: false, error: "No file provided" },
-        { status: 400 }
-      );
-    }
-
-    const storage = getStorage();
-    const safeFileName = safeFilename(file.name);
-    const receiptId = nanoid();
-    const blobKey = `receipts/${user.companyId}/${params.id}/${receiptId}-${safeFileName}`;
-
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-
-    const storedObject = await storage.put(blobKey, buffer, file.type);
-
-    const [receipt] = await db
-      .insert(expenseReceipts)
-      .values({
-        expenseId: params.id,
-        blobPath: storedObject.path,
-        filename: safeFileName,
-        sizeBytes: buffer.length,
-        contentType: file.type,
-      })
-      .returning();
 
     return NextResponse.json({
       success: true,
-      receiptId: receipt.id,
+      receiptId: result.id,
       message: "Receipt uploaded successfully",
     });
   } catch (error) {

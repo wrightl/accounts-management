@@ -1,5 +1,6 @@
 import "server-only";
 import type Stripe from "stripe";
+import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { stripeWebhookEvents } from "@/db/schema";
 import { getStripe } from "@/lib/billing/stripe";
@@ -10,17 +11,26 @@ import {
   markSubscriptionCanceled,
 } from "@/lib/billing/sync";
 
+/**
+ * Record the event as handled. Only a duplicate id counts as "already
+ * handled"; any other DB error throws so the webhook 500s and Stripe retries.
+ */
 async function claimEvent(event: Stripe.Event): Promise<boolean> {
   const db = getDb();
-  try {
-    await db.insert(stripeWebhookEvents).values({
-      eventId: event.id,
-      type: event.type,
-    });
-    return true;
-  } catch {
-    return false;
-  }
+  const inserted = await db
+    .insert(stripeWebhookEvents)
+    .values({ eventId: event.id, type: event.type })
+    .onConflictDoNothing()
+    .returning({ eventId: stripeWebhookEvents.eventId });
+  return inserted.length > 0;
+}
+
+/** Undo a claim so Stripe's retry of a failed event is processed again. */
+async function releaseEvent(eventId: string): Promise<void> {
+  const db = getDb();
+  await db
+    .delete(stripeWebhookEvents)
+    .where(eq(stripeWebhookEvents.eventId, eventId));
 }
 
 async function resolveCompanyIdFromSubscription(
@@ -40,6 +50,15 @@ export async function processStripeEvent(event: Stripe.Event): Promise<void> {
   const claimed = await claimEvent(event);
   if (!claimed) return;
 
+  try {
+    await applyStripeEvent(event);
+  } catch (err) {
+    await releaseEvent(event.id);
+    throw err;
+  }
+}
+
+async function applyStripeEvent(event: Stripe.Event): Promise<void> {
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
@@ -129,9 +148,8 @@ export async function processStripeEvent(event: Stripe.Event): Promise<void> {
     }
     case "invoice.paid": {
       const invoice = event.data.object as Stripe.Invoice;
-      const subRef = (
-        invoice as { subscription?: string | { id: string } | null }
-      ).subscription;
+      // Since API 2025-03-31.basil the subscription lives under `parent`.
+      const subRef = invoice.parent?.subscription_details?.subscription;
       const subId =
         typeof subRef === "string" ? subRef : subRef?.id ?? null;
       if (!subId) break;

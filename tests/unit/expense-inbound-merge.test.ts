@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   buildInboundExpenseDescription,
   formatExpenseInboundAddress,
+  isValidInboundSlug,
   matchesInboundMailboxPattern,
   mergeReceiptExtractions,
   parseEmailAddressHeader,
   parseEmailBodyText,
   parseInboundMailbox,
   slugifyInbound,
+  tokenizedInboundSlug,
 } from "@/lib/expenses/inbound-merge";
 
 const config = {
@@ -154,5 +156,23 @@ describe("parseEmailBodyText / buildInboundExpenseDescription", () => {
     expect(
       buildInboundExpenseDescription({ confidence: "none" }, "Lunch receipt"),
     ).toBe("Lunch receipt");
+  });
+});
+
+describe("tokenizedInboundSlug", () => {
+  it("appends an unguessable token to a readable, valid slug", () => {
+    const slug = tokenizedInboundSlug("Lee Wright");
+    expect(slug).toMatch(/^lee-wright-[a-z0-9]{10}$/);
+    expect(isValidInboundSlug(slug)).toBe(true);
+  });
+
+  it("stays within the slug budget for long names", () => {
+    const slug = tokenizedInboundSlug("a".repeat(80));
+    expect(slug.length).toBeLessThanOrEqual(48);
+    expect(isValidInboundSlug(slug)).toBe(true);
+  });
+
+  it("produces a different token each time", () => {
+    expect(tokenizedInboundSlug("pat")).not.toBe(tokenizedInboundSlug("pat"));
   });
 });

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
-import { inboundEmailJobs, expenses, users } from "@/db/schema";
+import { companyMemberships, inboundEmailJobs, expenses, users } from "@/db/schema";
 import {
   adminDismissInboundEmailJob,
   adminRetryInboundEmailJob,
@@ -93,9 +93,23 @@ function mailbox(userSlug: string, slug = companySlug) {
   return `expenses+${slug}.${userSlug}@dotanddashconsulting.com`;
 }
 
+/** Mailbox users resolve through company_memberships, not users.companyId. */
+async function insertMailboxUser(values: typeof users.$inferInsert) {
+  const rows = await db.insert(users).values(values).returning();
+  const [row] = rows;
+  if (row.companyId && row.role !== "platform_admin") {
+    await db.insert(companyMemberships).values({
+      userId: row.id,
+      companyId: row.companyId,
+      role: row.role,
+    });
+  }
+  return rows;
+}
+
 describe("inbound email jobs", () => {
   it("dedupes enqueue on resend email id", async () => {
-    await db.insert(users).values({
+    await insertMailboxUser({
       companyId,
       email: "founder@example.com",
       role: "user",
@@ -142,7 +156,7 @@ describe("inbound email jobs", () => {
       name: "Other Co",
       slug: "other-co",
     });
-    await db.insert(users).values({
+    await insertMailboxUser({
       companyId: other.id,
       email: "other@example.com",
       role: "admin",
@@ -166,6 +180,70 @@ describe("inbound email jobs", () => {
     expect(job.companyId).toBe(other.id);
   });
 
+  it("routes by membership, not the user's active company", async () => {
+    const other = await seedCompany(db as unknown as Database, {
+      name: "Other Co",
+      slug: "other-co",
+    });
+    const [founder] = await insertMailboxUser({
+      companyId,
+      email: "founder@example.com",
+      role: "admin",
+      expenseInboundSlug: "founder-k3f9x2m8q1",
+    });
+    await db.insert(companyMemberships).values({
+      userId: founder.id,
+      companyId: other.id,
+      role: "user",
+    });
+    // Founder switches to Other Co; their mailbox for the first company must keep working.
+    await db
+      .update(users)
+      .set({ companyId: other.id, role: "user" })
+      .where(eq(users.id, founder.id));
+
+    const result = await enqueueInboundEmailJob({
+      email_id: "email-multi-company",
+      from: "vendor@shop.com",
+      to: [mailbox("founder-k3f9x2m8q1")],
+      subject: "Receipt",
+    });
+
+    const [job] = await db
+      .select()
+      .from(inboundEmailJobs)
+      .where(eq(inboundEmailJobs.id, result.jobId!));
+    expect(job.companyId).toBe(companyId);
+    expect(job.status).toBe("pending");
+  });
+
+  it("rejects a mailbox addressed to a company the user is not a member of", async () => {
+    const other = await seedCompany(db as unknown as Database, {
+      name: "Other Co",
+      slug: "other-co",
+    });
+    await insertMailboxUser({
+      companyId,
+      email: "founder@example.com",
+      role: "admin",
+      expenseInboundSlug: "founder-k3f9x2m8q1",
+    });
+
+    const result = await enqueueInboundEmailJob({
+      email_id: "email-wrong-company",
+      from: "vendor@shop.com",
+      to: [mailbox("founder-k3f9x2m8q1", "other-co")],
+      subject: "Receipt",
+    });
+
+    const [job] = await db
+      .select()
+      .from(inboundEmailJobs)
+      .where(eq(inboundEmailJobs.id, result.jobId!));
+    expect(job.companyId).toBe(other.id);
+    expect(job.status).toBe("rejected");
+  });
+
   it("rejects unknown user slugs on a known company", async () => {
     const result = await enqueueInboundEmailJob({
       email_id: "email-unknown-user",
@@ -185,17 +263,14 @@ describe("inbound email jobs", () => {
   });
 
   it("creates pending expense for mailbox user even when From is a vendor", async () => {
-    const [founder] = await db
-      .insert(users)
-      .values({
+    const [founder] = await insertMailboxUser({
         companyId,
         email: "founder@example.com",
         role: "user",
         clerkUserId: "clerk-founder",
         name: "Founder",
         expenseInboundSlug: "founder",
-      })
-      .returning();
+      });
 
     mockReceivingGet.mockResolvedValue({
       data: {
@@ -235,8 +310,43 @@ describe("inbound email jobs", () => {
     expect(expense.detectedCurrency).toBeNull();
   });
 
+  it("creates one expense when two workers process the same job concurrently", async () => {
+    await insertMailboxUser({
+      companyId,
+      email: "founder@example.com",
+      role: "user",
+      expenseInboundSlug: "founder",
+    });
+    mockReceivingGet.mockResolvedValue({
+      data: { subject: "Lunch receipt", text: "Total £24.00", html: null },
+      error: null,
+    });
+    mockAttachmentsList.mockResolvedValue({ data: { data: [] }, error: null });
+
+    const { jobId } = await enqueueInboundEmailJob({
+      email_id: "email-race",
+      from: "receipts@amazon.co.uk",
+      to: [mailbox("founder")],
+      subject: "Lunch receipt",
+    });
+    if (!jobId) throw new Error("expected job");
+
+    const results = await Promise.all([
+      processInboundEmailJob(jobId),
+      processInboundEmailJob(jobId),
+    ]);
+
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect(results.filter((r) => r.busy)).toHaveLength(1);
+    const rows = await db.select().from(expenses).where(eq(expenses.companyId, companyId));
+    expect(rows).toHaveLength(1);
+    const [job] = await db.select().from(inboundEmailJobs).where(eq(inboundEmailJobs.id, jobId));
+    expect(job.attempts).toBe(1);
+    expect(job.lockedUntil).toBeNull();
+  });
+
   it("stores detected foreign currency for pending review", async () => {
-    await db.insert(users).values({
+    await insertMailboxUser({
       companyId,
       email: "founder@example.com",
       role: "user",
@@ -273,7 +383,7 @@ describe("inbound email jobs", () => {
   });
 
   it("rejects accountant mailboxes", async () => {
-    await db.insert(users).values({
+    await insertMailboxUser({
       companyId,
       email: "books@example.com",
       role: "accountant",
@@ -297,7 +407,7 @@ describe("inbound email jobs", () => {
   });
 
   it("allows admin retry after a failed job", async () => {
-    await db.insert(users).values({
+    await insertMailboxUser({
       companyId,
       email: "founder@example.com",
       role: "user",
@@ -334,7 +444,7 @@ describe("inbound email jobs", () => {
   });
 
   it("allows admin to dismiss a stuck job", async () => {
-    await db.insert(users).values({
+    await insertMailboxUser({
       companyId,
       email: "founder@example.com",
       role: "user",

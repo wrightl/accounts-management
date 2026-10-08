@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { clients, companies, invoices, sendJobs } from "@/db/schema";
 import { sendEmail } from "@/lib/email";
@@ -14,6 +14,8 @@ import { storedStatus, todayIsoDate } from "@/lib/invoices/status";
 
 const MAX_ATTEMPTS = 8;
 const REMIND_COOLDOWN_DAYS = 7;
+/** How long a worker owns a claimed job before another may retry it. */
+const JOB_LEASE_MS = 10 * 60 * 1000;
 
 export type SendJobKind = "invoice_send" | "invoice_remind";
 
@@ -77,10 +79,27 @@ export async function processSendJob(jobId: string): Promise<{ ok: boolean; erro
     return { ok: false, error: "Max attempts reached" };
   }
 
-  await db
+  // Atomic claim: exactly one worker (inline send, cron drain, platform retry)
+  // wins the lease, so a client is never emailed twice for one job.
+  const now = new Date();
+  const [claimed] = await db
     .update(sendJobs)
-    .set({ attempts: job.attempts + 1 })
-    .where(eq(sendJobs.id, jobId));
+    .set({
+      attempts: sql`${sendJobs.attempts} + 1`,
+      lockedUntil: new Date(now.getTime() + JOB_LEASE_MS),
+    })
+    .where(
+      and(
+        eq(sendJobs.id, jobId),
+        inArray(sendJobs.status, ["pending", "failed"]),
+        lt(sendJobs.attempts, MAX_ATTEMPTS),
+        or(isNull(sendJobs.lockedUntil), lt(sendJobs.lockedUntil, now)),
+      ),
+    )
+    .returning({ attempts: sendJobs.attempts });
+  if (!claimed) {
+    return { ok: false, error: "Send job is already being processed" };
+  }
 
   try {
     if (job.kind === "invoice_send") {
@@ -90,17 +109,17 @@ export async function processSendJob(jobId: string): Promise<{ ok: boolean; erro
     }
     await db
       .update(sendJobs)
-      .set({ status: "sent", sentAt: new Date(), lastError: null })
+      .set({ status: "sent", sentAt: new Date(), lastError: null, lockedUntil: null })
       .where(eq(sendJobs.id, jobId));
     return { ok: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    const attempts = job.attempts + 1;
     await db
       .update(sendJobs)
       .set({
-        status: attempts >= MAX_ATTEMPTS ? "failed" : "pending",
+        status: claimed.attempts >= MAX_ATTEMPTS ? "failed" : "pending",
         lastError: message,
+        lockedUntil: null,
       })
       .where(eq(sendJobs.id, jobId));
     return { ok: false, error: message };
@@ -113,9 +132,12 @@ export async function drainSendJobs(limit = 20): Promise<{ processed: number; se
     .select({ id: sendJobs.id })
     .from(sendJobs)
     .where(
-      or(
-        eq(sendJobs.status, "pending"),
-        and(eq(sendJobs.status, "failed"), lt(sendJobs.attempts, MAX_ATTEMPTS)),
+      and(
+        or(
+          eq(sendJobs.status, "pending"),
+          and(eq(sendJobs.status, "failed"), lt(sendJobs.attempts, MAX_ATTEMPTS)),
+        ),
+        or(isNull(sendJobs.lockedUntil), lt(sendJobs.lockedUntil, new Date())),
       ),
     )
     .orderBy(sendJobs.createdAt)

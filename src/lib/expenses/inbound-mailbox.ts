@@ -1,13 +1,14 @@
 import "server-only";
 import { and, eq, isNotNull, ne } from "drizzle-orm";
 import { getDb } from "@/db";
-import { companies, users } from "@/db/schema";
+import { companies, companyMemberships, users } from "@/db/schema";
 import { serverEnv } from "@/env";
 import {
   formatExpenseInboundAddress,
   isValidInboundSlug,
   parseInboundMailbox,
   slugifyInbound,
+  tokenizedInboundSlug,
   type InboundMailboxConfig,
   type ParsedInboundMailbox,
 } from "@/lib/expenses/inbound-merge";
@@ -65,19 +66,18 @@ export async function uniquifyCompanySlug(
 }
 
 /** Ensure a user inbound slug is unique within a company. */
+/**
+ * New unguessable user mailbox slug (`{seed}-{random token}`), unique across
+ * all users so one slug serves every company the user belongs to.
+ */
 export async function uniquifyUserInboundSlug(
-  companyId: string,
   base: string,
   excludeUserId?: string,
 ): Promise<string> {
   const db = getDb();
-  const candidate = slugifyInbound(base, "user");
-  for (let n = 1; n < 1000; n++) {
-    const trySlug = n === 1 ? candidate : `${candidate.slice(0, 40)}-${n}`;
-    const conditions = [
-      eq(users.companyId, companyId),
-      eq(users.expenseInboundSlug, trySlug),
-    ];
+  for (let n = 0; n < 5; n++) {
+    const trySlug = tokenizedInboundSlug(base);
+    const conditions = [eq(users.expenseInboundSlug, trySlug)];
     if (excludeUserId) {
       conditions.push(ne(users.id, excludeUserId));
     }
@@ -88,10 +88,14 @@ export async function uniquifyUserInboundSlug(
       .limit(1);
     if (!hit) return trySlug;
   }
-  return `${candidate}-${Date.now().toString(36)}`;
+  throw new Error("Could not allocate a unique inbound mailbox slug");
 }
 
-/** Resolve a To address to company + user via slugs. */
+/**
+ * Resolve a To address to company + user via slugs. The user must be a
+ * member of the addressed company; `role` is their membership role there
+ * (not the role for whichever company is currently active).
+ */
 export async function resolveInboundRecipient(
   toHeader: string,
   config: InboundMailboxConfig = inboundMailboxConfig(),
@@ -100,36 +104,33 @@ export async function resolveInboundRecipient(
   if (!parsed) return null;
 
   const db = getDb();
-  const [company] = await db
-    .select({ id: companies.id, slug: companies.slug })
-    .from(companies)
-    .where(eq(companies.slug, parsed.companySlug))
-    .limit(1);
-  if (!company) return null;
-
-  const [user] = await db
+  const [row] = await db
     .select({
-      id: users.id,
-      role: users.role,
-      expenseInboundSlug: users.expenseInboundSlug,
+      companyId: companies.id,
+      companySlug: companies.slug,
+      userId: users.id,
+      userSlug: users.expenseInboundSlug,
+      role: companyMemberships.role,
     })
     .from(users)
+    .innerJoin(companyMemberships, eq(companyMemberships.userId, users.id))
+    .innerJoin(companies, eq(companies.id, companyMemberships.companyId))
     .where(
       and(
-        eq(users.companyId, company.id),
+        eq(companies.slug, parsed.companySlug),
         eq(users.expenseInboundSlug, parsed.userSlug),
         isNotNull(users.expenseInboundSlug),
       ),
     )
     .limit(1);
-  if (!user || !user.expenseInboundSlug) return null;
+  if (!row?.userSlug) return null;
 
   return {
-    companyId: company.id,
-    companySlug: company.slug,
-    userId: user.id,
-    userSlug: user.expenseInboundSlug,
-    role: user.role,
+    companyId: row.companyId,
+    companySlug: row.companySlug,
+    userId: row.userId,
+    userSlug: row.userSlug,
+    role: row.role,
     address: parsed.address,
   };
 }

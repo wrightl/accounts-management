@@ -58,7 +58,8 @@ export async function POST(request: Request) {
   }
 
   const result = await processInboundEmailJob(jobId);
-  if (!result.ok) {
+  // `busy`: another worker holds the job's lease and will finish it.
+  if (!result.ok && !result.busy) {
     console.error(
       JSON.stringify({
         level: "error",

@@ -51,6 +51,32 @@ export function slugifyInbound(raw: string, fallback = "user"): string {
   return base && isValidInboundSlug(base) ? base : fallback;
 }
 
+const INBOUND_TOKEN_LENGTH = 10;
+const INBOUND_TOKEN_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
+
+/**
+ * Random suffix that makes a user's inbound mailbox unguessable (~51 bits).
+ * The mailbox accepts mail from any sender (suppliers email receipts
+ * directly), so the address itself is the credential.
+ */
+export function inboundSlugToken(): string {
+  const bytes = new Uint8Array(INBOUND_TOKEN_LENGTH);
+  globalThis.crypto.getRandomValues(bytes);
+  let out = "";
+  for (const b of bytes) {
+    // 252 = 36 * 7: reject the tail to avoid modulo bias.
+    if (b >= 252) return inboundSlugToken();
+    out += INBOUND_TOKEN_ALPHABET[b % 36];
+  }
+  return out;
+}
+
+/** `{readable-seed}-{token}`, kept within the 48-char slug budget. */
+export function tokenizedInboundSlug(seed: string): string {
+  const readable = slugifyInbound(seed, "user").slice(0, 36).replace(/-+$/, "");
+  return `${readable || "user"}-${inboundSlugToken()}`;
+}
+
 /**
  * Parse `{prefix}+{companySlug}.{userSlug}@{domain}` from a To header.
  * Returns null when the address is not an inbound expense mailbox.

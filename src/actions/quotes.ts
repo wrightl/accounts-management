@@ -29,6 +29,10 @@ import {
   type PaymentMilestoneInput,
 } from "@/lib/quotes/payment-schedule";
 import { canTransitionQuote } from "@/lib/quotes/transitions";
+import {
+  QuoteStatusConflictError,
+  writeQuoteStatus,
+} from "@/lib/quotes/status-write";
 import { quoteEmailHtml } from "@/lib/quotes/email";
 import {
   generatePublicQuoteToken,
@@ -343,15 +347,18 @@ export async function updateQuoteStatus(
         const category = await upsertDeclineReasonCategory(companyId, parsed.data.category);
         if (!category) return { ok: false, error: "Choose a reason category" };
 
-        await db
-          .update(quotes)
-          .set({
+        const won = await writeQuoteStatus(db, {
+          companyId,
+          quoteId,
+          from: fromStatus,
+          set: {
             status: "declined",
             declinedReasonCategory: category,
             declinedReasonNarrative: parsed.data.narrative,
             declinedAt: new Date(),
-          })
-          .where(and(eq(quotes.id, quoteId), eq(quotes.companyId, companyId)));
+          },
+        });
+        if (!won) return { ok: false, error: new QuoteStatusConflictError().message };
 
         await writeAudit({
           companyId,
@@ -388,18 +395,20 @@ export async function updateQuoteStatus(
         let orderId: string;
         try {
           orderId = await db.transaction(async (tx) => {
-            const id = await createOrderFromQuote(
+            const won = await writeQuoteStatus(tx, {
+              companyId,
+              quoteId,
+              from: fromStatus,
+              set: { status: "accepted", acceptedAt: new Date() },
+            });
+            if (!won) throw new QuoteStatusConflictError();
+            return createOrderFromQuote(
               tx,
               companyId,
               { quote: detail.quote, lines: detail.lines },
               milestones,
               localUserId,
             );
-            await tx
-              .update(quotes)
-              .set({ status: "accepted", acceptedAt: new Date() })
-              .where(and(eq(quotes.id, quoteId), eq(quotes.companyId, companyId)));
-            return id;
           });
         } catch (e) {
           return {
@@ -431,13 +440,13 @@ export async function updateQuoteStatus(
         return { ok: true, id: orderId };
       } else if (targetStatus === "sent") {
         const now = new Date();
-        await db
-          .update(quotes)
-          .set({
-            status: "sent",
-            sentAt: existing.sentAt ?? now,
-          })
-          .where(and(eq(quotes.id, quoteId), eq(quotes.companyId, companyId)));
+        const won = await writeQuoteStatus(db, {
+          companyId,
+          quoteId,
+          from: fromStatus,
+          set: { status: "sent", sentAt: existing.sentAt ?? now },
+        });
+        if (!won) return { ok: false, error: new QuoteStatusConflictError().message };
 
         await writeAudit({
           companyId,
@@ -447,15 +456,18 @@ export async function updateQuoteStatus(
           entityId: quoteId,
         });
       } else if (targetStatus === "draft" && fromStatus === "declined") {
-        await db
-          .update(quotes)
-          .set({
+        const won = await writeQuoteStatus(db, {
+          companyId,
+          quoteId,
+          from: fromStatus,
+          set: {
             status: "draft",
             declinedReasonCategory: null,
             declinedReasonNarrative: null,
             declinedAt: null,
-          })
-          .where(and(eq(quotes.id, quoteId), eq(quotes.companyId, companyId)));
+          },
+        });
+        if (!won) return { ok: false, error: new QuoteStatusConflictError().message };
 
         await writeAudit({
           companyId,

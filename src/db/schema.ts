@@ -869,6 +869,8 @@ export const sendJobs = pgTable(
     lastError: text("last_error"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     sentAt: timestamp("sent_at", { withTimezone: true }),
+    /** Processing lease: a worker owns the job until this time (crash recovery). */
+    lockedUntil: timestamp("locked_until", { withTimezone: true }),
   },
   (t) => [
     index("idx_send_jobs_company").on(t.companyId),
@@ -899,6 +901,8 @@ export const inboundEmailJobs = pgTable(
     lastError: text("last_error"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     processedAt: timestamp("processed_at", { withTimezone: true }),
+    /** Processing lease: a worker owns the job until this time (crash recovery). */
+    lockedUntil: timestamp("locked_until", { withTimezone: true }),
   },
   (t) => [
     index("idx_inbound_email_jobs_company").on(t.companyId),

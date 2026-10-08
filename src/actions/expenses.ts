@@ -7,7 +7,6 @@ import { expenseReceipts, expenses, reimbursementItems } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
 import { mutate, mutateWide } from "@/lib/mutate";
 import { getStorage } from "@/lib/storage";
-import { safeFilename } from "@/lib/files";
 import {
   appendMileageDescription,
   DEFAULT_MILEAGE_RATE_PENCE,
@@ -40,6 +39,11 @@ import {
 } from "@/lib/vat";
 import type { ActionResult } from "@/actions/result";
 import { refreshExpenseBankSuggestion } from "@/lib/bank/expense-match";
+import {
+  approvePendingExpense,
+  rejectPendingExpense,
+  storeExpenseReceipt,
+} from "@/lib/expenses/review";
 
 export type ExpenseImportPreviewResult =
   | { ok: true; rows: ParsedExpenseImportRow[] }
@@ -295,113 +299,28 @@ export async function approveExpense(
 
   return mutate(
     "accounts:write",
-    async ({ companyId, localUserId }) => {
-      const db = getDb();
-      const [existing] = await db
-        .select()
-        .from(expenses)
-        .where(and(eq(expenses.id, id), eq(expenses.companyId, companyId)))
-        .limit(1);
-      if (!existing) return { ok: false, error: "Expense not found" };
-      if (existing.status !== "pending") {
-        return { ok: false, error: "Only pending expenses can be approved" };
-      }
-
-      const paidByDefault =
-        targetStatus === "reimbursable"
-          ? (parsed.data.paidByUserId ?? existing.submittedByUserId ?? localUserId)
-          : parsed.data.paidByUserId;
-
-      const normalized = normalizeExpensePaymentFields({
+    (ctx) =>
+      approvePendingExpense(ctx, id, {
         status: targetStatus,
-        paidByUserId: paidByDefault,
-      });
-      if (!normalized.ok) {
-        return {
-          ok: false,
-          error: normalized.error,
-          fieldErrors: normalized.fieldErrors,
-        };
-      }
-
-      const company = await getOrCreateCompanySettings(companyId);
-      const vatRate = resolveLineVatRate(
-        company,
-        parseVatRate(parsed.data.vatRate),
-      );
-      const vatPence = vatFromInclusiveGross(parsed.data.amountPence, vatRate);
-
-      await db
-        .update(expenses)
-        .set({
+        paidByUserId: parsed.data.paidByUserId,
+        fields: {
           description: parsed.data.description,
           category: parsed.data.category || null,
           spentAt: parsed.data.spentAt || null,
           amountPence: parsed.data.amountPence,
-          vatRate,
-          vatPence,
-          status: normalized.status,
+          vatRate: parseVatRate(parsed.data.vatRate),
           billable: parsed.data.billable,
-          billableClientId: parsed.data.billable ? parsed.data.billableClientId : null,
-          paidByUserId: normalized.paidByUserId,
-          mileageMiles: null,
-          mileageRatePence: null,
-        })
-        .where(and(eq(expenses.id, id), eq(expenses.companyId, companyId)));
-
-      await writeAudit({
-        companyId,
-        actorUserId: localUserId,
-        action: "expense.approve",
-        entityType: "expense",
-        entityId: id,
-        meta: { status: normalized.status },
-      });
-
-      await refreshExpenseBankSuggestion(companyId, id);
-
-      return { ok: true, id };
-    },
+          billableClientId: parsed.data.billableClientId,
+        },
+      }),
     { paths: ["/expenses", `/expenses/${id}`, "/reimbursements", "/dashboard", "/transactions"] },
   );
 }
 
 export async function rejectExpense(id: string): Promise<ActionResult> {
-  return mutate(
-    "accounts:write",
-    async ({ companyId }) => {
-      const db = getDb();
-      const [existing] = await db
-        .select()
-        .from(expenses)
-        .where(and(eq(expenses.id, id), eq(expenses.companyId, companyId)))
-        .limit(1);
-      if (!existing) return { ok: false, error: "Expense not found" };
-      if (existing.status !== "pending") {
-        return { ok: false, error: "Only pending expenses can be rejected" };
-      }
-
-      const receipts = await db
-        .select()
-        .from(expenseReceipts)
-        .where(eq(expenseReceipts.expenseId, id));
-      const storage = getStorage();
-      for (const r of receipts) {
-        try {
-          await storage.delete(r.blobPath);
-        } catch {
-          /* ignore missing blob */
-        }
-      }
-
-      await db.delete(expenses).where(and(eq(expenses.id, id), eq(expenses.companyId, companyId)));
-      return { ok: true };
-    },
-    {
-      audit: { action: "expense.reject", entityType: "expense", entityId: id },
-      paths: ["/expenses", "/dashboard"],
-    },
-  );
+  return mutate("accounts:write", (ctx) => rejectPendingExpense(ctx, id), {
+    paths: ["/expenses", "/dashboard"],
+  });
 }
 
 export async function deleteExpense(id: string): Promise<ActionResult> {
@@ -457,48 +376,7 @@ export async function uploadReceipt(
 ): Promise<ActionResult> {
   return mutate(
     "accounts:write",
-    async ({ companyId, localUserId }) => {
-      const db = getDb();
-      const [expense] = await db
-        .select()
-        .from(expenses)
-        .where(and(eq(expenses.id, expenseId), eq(expenses.companyId, companyId)))
-        .limit(1);
-      if (!expense) return { ok: false, error: "Expense not found" };
-
-      const parsed = await parseReceiptFileAsync(formData);
-      if (!parsed.ok) return parsed;
-      const { file, bytes, contentType } = parsed.data;
-
-      const storage = getStorage();
-      const stored = await storage.put(
-        `receipts/${expenseId}/${Date.now()}-${safeFilename(file.name)}`,
-        bytes,
-        contentType,
-      );
-
-      const [row] = await db
-        .insert(expenseReceipts)
-        .values({
-          expenseId,
-          blobPath: stored.path,
-          filename: safeFilename(file.name),
-          contentType,
-          sizeBytes: stored.size,
-        })
-        .returning({ id: expenseReceipts.id });
-
-      await writeAudit({
-        companyId,
-        actorUserId: localUserId,
-        action: "expense.receipt_upload",
-        entityType: "expense_receipt",
-        entityId: row.id,
-        meta: { expenseId, filename: file.name },
-      });
-
-      return { ok: true, id: row.id };
-    },
+    (ctx) => storeExpenseReceipt(ctx, expenseId, formData),
     { paths: [`/expenses/${expenseId}`] },
   );
 }

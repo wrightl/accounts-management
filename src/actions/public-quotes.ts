@@ -8,6 +8,10 @@ import { createOrderFromQuote } from "@/lib/orders/copy-from-quote";
 import type { PaymentMilestoneInput } from "@/lib/quotes/payment-schedule";
 import { getQuoteDetail } from "@/lib/quotes/queries";
 import { canTransitionQuote } from "@/lib/quotes/transitions";
+import {
+  QuoteStatusConflictError,
+  writeQuoteStatus,
+} from "@/lib/quotes/status-write";
 import { todayIsoDate } from "@/lib/invoices/status";
 import type { QuoteStatus } from "@/lib/quotes/status";
 import type { ActionResult } from "@/actions/result";
@@ -95,27 +99,26 @@ export async function acceptPublicQuote(
   const db = getDb();
   try {
     const orderId = await db.transaction(async (tx) => {
-      const id = await createOrderFromQuote(
+      // Status first: a concurrent accept/decline makes this throw and the
+      // transaction roll back before an order exists.
+      const won = await writeQuoteStatus(tx, {
+        companyId: loaded.companyId,
+        quoteId: loaded.quoteId,
+        from: status,
+        set: {
+          status: "accepted",
+          acceptedAt: new Date(),
+          viewedAt: loaded.viewedAt ?? new Date(),
+        },
+      });
+      if (!won) throw new QuoteStatusConflictError();
+      return createOrderFromQuote(
         tx,
         loaded.companyId,
         { quote: detail.quote, lines: detail.lines },
         milestones,
         loaded.createdByUserId,
       );
-      await tx
-        .update(quotes)
-        .set({
-          status: "accepted",
-          acceptedAt: new Date(),
-          viewedAt: loaded.viewedAt ?? new Date(),
-        })
-        .where(
-          and(
-            eq(quotes.id, loaded.quoteId),
-            eq(quotes.companyId, loaded.companyId),
-          ),
-        );
-      return id;
     });
 
     await writeAudit({
@@ -140,6 +143,9 @@ export async function acceptPublicQuote(
 
     return { ok: true, id: orderId };
   } catch (e) {
+    if (e instanceof QuoteStatusConflictError) {
+      return { ok: false, error: "This quote has already been responded to" };
+    }
     return {
       ok: false,
       error: e instanceof Error ? e.message : "Could not accept quote",
@@ -179,19 +185,21 @@ export async function declinePublicQuote(
   const narrative =
     parsed.data.narrative?.trim() || "Declined by client via public link";
 
-  const db = getDb();
-  await db
-    .update(quotes)
-    .set({
+  const won = await writeQuoteStatus(getDb(), {
+    companyId: loaded.companyId,
+    quoteId: loaded.quoteId,
+    from: status,
+    set: {
       status: "declined",
       declinedReasonCategory: "Client declined",
       declinedReasonNarrative: narrative,
       declinedAt: new Date(),
       viewedAt: loaded.viewedAt ?? new Date(),
-    })
-    .where(
-      and(eq(quotes.id, loaded.quoteId), eq(quotes.companyId, loaded.companyId)),
-    );
+    },
+  });
+  if (!won) {
+    return { ok: false, error: "This quote has already been responded to" };
+  }
 
   await writeAudit({
     companyId: loaded.companyId,
