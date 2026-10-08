@@ -19,7 +19,7 @@ import {
   approveExpense,
   rejectExpense,
 } from "@/actions/expenses";
-import { formatGBP, penceToPounds } from "@/lib/money";
+import { expenseCurrencySymbol, formatGBP, penceToPounds } from "@/lib/money";
 import { clientDisplayName } from "@/lib/clients/display";
 import { ReceiptUploadField } from "@/components/expenses/receipt-upload-field";
 import type { ReceiptExtraction } from "@/lib/expenses/receipt-parse";
@@ -57,6 +57,7 @@ export function ExpenseForm({
     category: string | null;
     spentAt: string | null;
     amountPence: number;
+    detectedCurrency?: string | null;
     vatRate?: number;
     vatPence?: number;
     status: string;
@@ -117,6 +118,7 @@ export function ExpenseForm({
   const [paidByUserId, setPaidByUserId] = useState(initialPaidBy);
   const isPending = expense?.status === "pending";
   const isEmailSubmission = expense?.source === "email";
+  const currencySymbol = expenseCurrencySymbol(expense?.detectedCurrency);
   const [approveStatus, setApproveStatus] = useState<ExpenseStatusOption>(() => {
     if (expense?.submittedByUserId) return "reimbursable";
     return "recorded";
@@ -501,7 +503,7 @@ export function ExpenseForm({
         {!useMileage && (
           <div>
             <Label htmlFor="amountPounds" required={!isPending}>
-              Amount (£){vatRegistered ? " (inc. VAT)" : ""}
+              Amount ({currencySymbol}){vatRegistered ? " (inc. VAT)" : ""}
             </Label>
             <Input
               id="amountPounds"

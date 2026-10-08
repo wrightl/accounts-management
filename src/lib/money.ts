@@ -18,6 +18,37 @@ export function formatGBP(pence: number): string {
   return gbpFormatter.format(pence / 100);
 }
 
+/**
+ * Format an expense amount in its own currency. Foreign-currency expenses
+ * store minor units of `currency` (e.g. 1200 + "USD" = $12.00), not GBP pence.
+ */
+export function formatExpenseAmount(
+  minorUnits: number,
+  currency: string | null | undefined,
+): string {
+  const code = currency?.trim().toUpperCase();
+  if (!code || code === DEFAULT_CURRENCY) return formatGBP(minorUnits);
+  try {
+    return new Intl.NumberFormat("en-GB", { style: "currency", currency: code }).format(
+      minorUnits / 100,
+    );
+  } catch {
+    return `${(minorUnits / 100).toFixed(2)} ${code}`;
+  }
+}
+
+/** Symbol for an expense's currency, e.g. "£", "US$", "€". */
+export function expenseCurrencySymbol(currency: string | null | undefined): string {
+  const code = currency?.trim().toUpperCase() || DEFAULT_CURRENCY;
+  try {
+    const parts = new Intl.NumberFormat("en-GB", { style: "currency", currency: code })
+      .formatToParts(0);
+    return parts.find((p) => p.type === "currency")?.value ?? code;
+  } catch {
+    return code;
+  }
+}
+
 /** Parse a user-entered pounds value (e.g. "123.45" or 123.45) into pence. */
 export function poundsToPence(input: string | number): number {
   const value = typeof input === "number" ? input : Number(input.replace(/[£,\s]/g, ""));

@@ -37,7 +37,7 @@ import {
   pickInboundToAddress,
   resolveInboundRecipient,
 } from "@/lib/expenses/inbound-mailbox";
-import { formatGBP, poundsToPence } from "@/lib/money";
+import { formatExpenseAmount, formatGBP, poundsToPence } from "@/lib/money";
 import { getResendClient } from "@/lib/resend/client";
 import { getReceiptOcrSettings } from "@/lib/platform-settings";
 import { getStorage } from "@/lib/storage";
@@ -548,6 +548,7 @@ export async function listPendingExpenses(companyId: string, limit = 5) {
       id: expenses.id,
       description: expenses.description,
       amountPence: expenses.amountPence,
+      detectedCurrency: expenses.detectedCurrency,
       createdAt: expenses.createdAt,
       submitterName: users.name,
       submitterEmail: users.email,
@@ -560,7 +561,7 @@ export async function listPendingExpenses(companyId: string, limit = 5) {
 
   return rows.map((r) => ({
     ...r,
-    amountFormatted: formatGBP(r.amountPence),
+    amountFormatted: formatExpenseAmount(r.amountPence, r.detectedCurrency),
     submitterLabel: r.submitterName || r.submitterEmail || "Unknown",
   }));
 }

@@ -9,7 +9,7 @@ import {
   users,
 } from "@/db/schema";
 import { clientDisplayNameSql } from "@/lib/clients/sql";
-import { formatGBP } from "@/lib/money";
+import { formatExpenseAmount, formatGBP } from "@/lib/money";
 import type { ExpenseStatus } from "@/lib/expenses/categories";
 
 export interface ExpenseFilters {
@@ -60,6 +60,7 @@ export async function listExpenses(companyId: string, filters: ExpenseFilters = 
       category: expenses.category,
       spentAt: expenses.spentAt,
       amountPence: expenses.amountPence,
+      detectedCurrency: expenses.detectedCurrency,
       status: expenses.status,
       billable: expenses.billable,
       paidByName: paidBy.name,
@@ -90,12 +91,13 @@ export async function listExpenses(companyId: string, filters: ExpenseFilters = 
       category: r.category,
       spentAt: r.spentAt,
       amountPence: r.amountPence,
+      detectedCurrency: r.detectedCurrency,
       status: r.status,
       billable: r.billable,
       paidByName: r.paidByName,
       createdByName: createdByDisplay,
       clientName: r.clientName,
-      amountFormatted: formatGBP(r.amountPence),
+      amountFormatted: formatExpenseAmount(r.amountPence, r.detectedCurrency),
     };
   });
 }
@@ -129,7 +131,7 @@ export async function getExpenseDetail(companyId: string, id: string) {
   return {
     expense: {
       ...e,
-      amountFormatted: formatGBP(e.amountPence),
+      amountFormatted: formatExpenseAmount(e.amountPence, e.detectedCurrency),
     },
     paidBy: rows[0].paidBy,
     client: rows[0].client,

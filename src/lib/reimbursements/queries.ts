@@ -7,7 +7,7 @@ import {
   reimbursements,
   users,
 } from "@/db/schema";
-import { formatGBP } from "@/lib/money";
+import { formatExpenseAmount, formatGBP } from "@/lib/money";
 import { findLocalUserId } from "@/lib/users";
 import type { SessionUser } from "@/lib/auth";
 
@@ -88,7 +88,7 @@ export async function getReimbursementDetail(companyId: string, id: string) {
       itemId: i.itemId,
       expense: {
         ...i.expense,
-        amountFormatted: formatGBP(i.expense.amountPence),
+        amountFormatted: formatExpenseAmount(i.expense.amountPence, i.expense.detectedCurrency),
       },
     })),
   };

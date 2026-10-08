@@ -29,7 +29,6 @@ import {
 } from "@/lib/bank/match";
 import { fuzzyIncludes } from "@/lib/bank/fuzzy";
 import { withinWorkingDayWindow } from "@/lib/bank/working-days";
-import { formatGBP } from "@/lib/money";
 
 export const EXPENSE_MATCH_STATUSES = [
   "pending",
@@ -525,14 +524,4 @@ export async function refreshExpenseBankSuggestion(
 
 export function formatExpenseMatchTarget(description: string | null): string {
   return description?.trim() || "Expense";
-}
-
-export function suggestedExpenseAmountLabel(
-  amountPence: number,
-  currency: string | null,
-): string {
-  if (isForeignCurrency(currency)) {
-    return `${(amountPence / 100).toFixed(2)} ${currency!.toUpperCase()}`;
-  }
-  return formatGBP(amountPence);
 }
