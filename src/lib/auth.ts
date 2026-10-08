@@ -96,7 +96,16 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
           entityType = company?.entityType ?? null;
         }
       }
-    } catch {
+    } catch (error) {
+      // Fail safe (no permissions), but make the outage visible: otherwise a
+      // DB blip just looks like every user lost access.
+      console.error(
+        JSON.stringify({
+          level: "error",
+          msg: "auth.local_user_lookup_failed",
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
       role = DEFAULT_ROLE;
     }
   }

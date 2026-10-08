@@ -37,7 +37,7 @@ import {
   pickInboundToAddress,
   resolveInboundRecipient,
 } from "@/lib/expenses/inbound-mailbox";
-import { formatExpenseAmount, formatGBP, poundsToPence } from "@/lib/money";
+import { formatExpenseAmount, poundsToPence } from "@/lib/money";
 import { getResendClient } from "@/lib/resend/client";
 import { getReceiptOcrSettings } from "@/lib/platform-settings";
 import { getStorage } from "@/lib/storage";

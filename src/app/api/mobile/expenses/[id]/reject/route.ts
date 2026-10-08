@@ -27,7 +27,7 @@ export async function POST(
 
     if (!expense) {
       return NextResponse.json(
-        { ok: false, error: "Expense not found" },
+        { success: false, error: "Expense not found" },
         { status: 404 }
       );
     }
@@ -39,7 +39,7 @@ export async function POST(
       params.id,
     );
     if (!result.ok) {
-      return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
+      return NextResponse.json({ success: false, error: result.error }, { status: 400 });
     }
 
     return NextResponse.json({
@@ -49,7 +49,7 @@ export async function POST(
   } catch (error) {
     console.error("Reject expense error:", error);
     return NextResponse.json(
-      { ok: false, error: "Internal server error" },
+      { success: false, error: "Internal server error" },
       { status: 500 }
     );
   }

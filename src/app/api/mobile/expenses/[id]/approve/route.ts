@@ -29,7 +29,7 @@ export async function POST(
     const approvalType = body?.approvalType || "recorded";
     if (!APPROVE_STATUSES.includes(approvalType)) {
       return NextResponse.json(
-        { ok: false, error: "Invalid approval type" },
+        { success: false, error: "Invalid approval type" },
         { status: 400 }
       );
     }
@@ -44,7 +44,7 @@ export async function POST(
     );
     if (!result.ok) {
       const status = result.error === "Expense not found" ? 404 : 400;
-      return NextResponse.json({ ok: false, error: result.error }, { status });
+      return NextResponse.json({ success: false, error: result.error }, { status });
     }
 
     const [expense] = await getDb()
@@ -57,7 +57,7 @@ export async function POST(
   } catch (error) {
     console.error("Approve expense error:", error);
     return NextResponse.json(
-      { ok: false, error: "Internal server error" },
+      { success: false, error: "Internal server error" },
       { status: 500 }
     );
   }

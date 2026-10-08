@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Expenses list error:", error);
     return NextResponse.json(
-      { ok: false, error: "Internal server error" },
+      { success: false, error: "Internal server error" },
       { status: 500 }
     );
   }
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
 
     if (!description || !amountPence || !category || !expenseDate) {
       return NextResponse.json(
-        { ok: false, error: "Missing required fields" },
+        { success: false, error: "Missing required fields" },
         { status: 400 }
       );
     }
@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Create expense error:", error);
     return NextResponse.json(
-      { ok: false, error: "Internal server error" },
+      { success: false, error: "Internal server error" },
       { status: 500 }
     );
   }

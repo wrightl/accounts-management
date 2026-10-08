@@ -31,7 +31,7 @@ export async function requireMobileAuth(
     return {
       ok: false,
       response: NextResponse.json(
-        { ok: false, success: false, error: "Unauthorized" },
+        { success: false, error: "Unauthorized" },
         { status: 401 },
       ),
     };
@@ -42,7 +42,6 @@ export async function requireMobileAuth(
       ok: false,
       response: NextResponse.json(
         {
-          ok: false,
           success: false,
           error: "You do not have permission to do that.",
           code: "no_permission",
@@ -57,7 +56,6 @@ export async function requireMobileAuth(
       ok: false,
       response: NextResponse.json(
         {
-          ok: false,
           success: false,
           error: "Complete onboarding before using the mobile app.",
           code: "no_company",
@@ -82,7 +80,6 @@ export async function requireMobileAuth(
         ok: false,
         response: NextResponse.json(
           {
-            ok: false,
             success: false,
             error: company.suspendedReason?.trim()
               ? `This company is suspended: ${company.suspendedReason.trim()}`
@@ -105,7 +102,6 @@ export async function requireMobileAuth(
           ok: false,
           response: NextResponse.json(
             {
-              ok: false,
               success: false,
               error: readOnlyMessage(entitlements.reason),
               code,

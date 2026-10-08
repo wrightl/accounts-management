@@ -12,7 +12,7 @@ export async function POST() {
 
         if (!user) {
             return NextResponse.json(
-                { ok: false, error: 'Unauthorized' },
+                { success: false, error: 'Unauthorized' },
                 { status: 401 },
             );
         }
@@ -20,7 +20,7 @@ export async function POST() {
         if (!user.companyId) {
             return NextResponse.json(
                 {
-                    ok: false,
+                    success: false,
                     error: 'No company associated with this user',
                     code: 'no_company',
                 },
@@ -70,7 +70,7 @@ export async function POST() {
     } catch (error) {
         console.error('Auth validation error:', error);
         return NextResponse.json(
-            { ok: false, error: 'Internal server error' },
+            { success: false, error: 'Internal server error' },
             { status: 500 },
         );
     }

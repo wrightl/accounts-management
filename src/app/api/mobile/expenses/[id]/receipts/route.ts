@@ -25,7 +25,7 @@ export async function POST(
     );
     if (!result.ok) {
       const status = result.error === "Expense not found" ? 404 : 400;
-      return NextResponse.json({ ok: false, error: result.error }, { status });
+      return NextResponse.json({ success: false, error: result.error }, { status });
     }
 
     return NextResponse.json({
@@ -36,7 +36,7 @@ export async function POST(
   } catch (error) {
     console.error("Upload receipt error:", error);
     return NextResponse.json(
-      { ok: false, error: "Internal server error" },
+      { success: false, error: "Internal server error" },
       { status: 500 }
     );
   }

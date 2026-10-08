@@ -17,6 +17,11 @@ const eslintConfig = defineConfig([
     rules: {
       // Disable refs check - preventResetSubmit pattern accesses refs in callbacks, not during render
       "react-hooks/refs": "off",
+      // Allow `const { omitted: _x, ...rest } = obj` to drop keys.
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        { ignoreRestSiblings: true, varsIgnorePattern: "^_", argsIgnorePattern: "^_" },
+      ],
     },
   },
 ]);

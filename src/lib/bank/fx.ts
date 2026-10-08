@@ -194,23 +194,22 @@ async function upsertRate(
   observationDate: string,
   foreignPerGbp: number,
 ): Promise<void> {
-  const db = getDb();
-  const existing = await db
-    .select({ id: fxRates.id })
-    .from(fxRates)
-    .where(
-      and(
-        eq(fxRates.currency, currency),
-        eq(fxRates.observationDate, observationDate),
-      ),
-    )
-    .limit(1);
-  if (existing[0]) return;
-  await db.insert(fxRates).values({
-    currency,
-    observationDate,
-    foreignPerGbp,
-  });
+  // Concurrent matchers fetch the same window; the unique index decides.
+  await getDb()
+    .insert(fxRates)
+    .values({ currency, observationDate, foreignPerGbp })
+    .onConflictDoNothing({
+      target: [fxRates.currency, fxRates.observationDate],
+    });
+}
+
+/** Back off from BoE after an empty/failed fetch (per series + date window). */
+const FAILED_FETCH_TTL_MS = 10 * 60 * 1000;
+const failedFetches = new Map<string, number>();
+
+/** Test helper — forget remembered BoE fetch failures. */
+export function resetFxFetchBackoff(): void {
+  failedFetches.clear();
 }
 
 /**
@@ -247,7 +246,12 @@ export async function resolveFxRate(
     (cached.observationDate < onDate &&
       cached.observationDate < addCalendarDays(onDate, -5));
 
-  if (needsFetch) {
+  const backoffKey = `${series}:${onDate}`;
+  const failedAt = failedFetches.get(backoffKey);
+  const backingOff =
+    failedAt !== undefined && Date.now() - failedAt < FAILED_FETCH_TTL_MS;
+
+  if (needsFetch && !backingOff) {
     const fromIso = addCalendarDays(onDate, -21);
     const observations = await fetchBoeSeriesObservations(
       series,
@@ -255,6 +259,12 @@ export async function resolveFxRate(
       onDate,
       fetchImpl,
     );
+    if (observations.length === 0) {
+      // Outage or no data: don't make every matcher wait on the 10s timeout.
+      failedFetches.set(backoffKey, Date.now());
+    } else {
+      failedFetches.delete(backoffKey);
+    }
     for (const obs of observations) {
       await upsertRate(code, obs.observationDate, obs.foreignPerGbp);
     }
@@ -279,6 +289,8 @@ export async function resolveFxRate(
     };
   }
 
+  // Backing off after a failed fetch: use a stale rate if we have one.
+  if (!cached) return null;
   return {
     currency: code,
     observationDate: cached.observationDate,

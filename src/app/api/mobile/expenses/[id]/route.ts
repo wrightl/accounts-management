@@ -30,7 +30,7 @@ export async function GET(
 
     if (!expense) {
       return NextResponse.json(
-        { ok: false, error: "Expense not found" },
+        { success: false, error: "Expense not found" },
         { status: 404 }
       );
     }
@@ -56,7 +56,7 @@ export async function GET(
   } catch (error) {
     console.error("Get expense error:", error);
     return NextResponse.json(
-      { ok: false, error: "Internal server error" },
+      { success: false, error: "Internal server error" },
       { status: 500 }
     );
   }
