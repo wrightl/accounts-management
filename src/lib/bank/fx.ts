@@ -107,7 +107,7 @@ function formatBoeDate(iso: string): string {
 
 function parseBoeCsvDate(raw: string): string | null {
   // "02 Jan 2024" or "02-Jan-2024"
-  const m = raw.trim().match(/^(\d{1,2})[\s-]([A-Za-z]{3})[\s-](\d{4})$/);
+  const m = raw.trim().match(/^(\d{1,2})[\s\-/]([A-Za-z]{3})[\s\-/](\d{4})$/);
   if (!m) return null;
   const months: Record<string, string> = {
     Jan: "01",
@@ -144,16 +144,18 @@ export async function fetchBoeSeriesObservations(
   toIso: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<Array<{ observationDate: string; foreignPerGbp: number }>> {
-  const params = new URLSearchParams({
-    "csv.x": "yes",
-    Datefrom: formatBoeDate(fromIso),
-    Dateto: formatBoeDate(toIso),
-    SeriesCodes: seriesCode,
-    UsingCodes: "Y",
-    CSVF: "TN",
-    VPD: "Y",
-  });
-  const url = `https://www.bankofengland.co.uk/boeapps/iadb/fromshowcolumns.asp?${params.toString()}`;
+  // URLSearchParams would percent-encode the slashes in DD/Mon/YYYY dates
+  // (→ %2F), which the BoE IADB legacy server does not decode — it would
+  // receive an unrecognisable date string and return no data.
+  const url =
+    `https://www.bankofengland.co.uk/boeapps/iadb/fromshowcolumns.asp` +
+    `?csv.x=yes` +
+    `&Datefrom=${formatBoeDate(fromIso)}` +
+    `&Dateto=${formatBoeDate(toIso)}` +
+    `&SeriesCodes=${seriesCode}` +
+    `&UsingCodes=Y` +
+    `&CSVF=TN` +
+    `&VPD=Y`;
 
   let text: string;
   try {
