@@ -158,6 +158,7 @@ export type OrderLineValue = {
   quantity: number;
   unitPricePence: number;
   vatRate: number;
+  discountPercent: number;
   position: number;
 };
 

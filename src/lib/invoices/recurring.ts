@@ -8,6 +8,8 @@ export type RecurringLineTemplate = {
   unitPricePence: number;
   /** Percent 0–100; missing on older templates → treat as 0. */
   vatRate: number;
+  /** Line discount percent 0–100; missing on older templates → 0. */
+  discountPercent?: number;
 };
 
 /**

@@ -75,6 +75,7 @@ export async function createQuote(formData: FormData): Promise<ActionResult> {
           quantity: l.quantity,
           unitPricePence: poundsToPence(l.unitPricePounds),
           vatRate: resolveLineVatRate(company, parseVatRate(l.vatRate)),
+          discountPercent: l.discountPercent ?? 0,
           position: i,
         }));
       } catch {
@@ -157,6 +158,7 @@ export async function updateQuote(id: string, formData: FormData): Promise<Actio
           quantity: l.quantity,
           unitPricePence: poundsToPence(l.unitPricePounds),
           vatRate: resolveLineVatRate(company, parseVatRate(l.vatRate)),
+          discountPercent: l.discountPercent ?? 0,
           position: i,
         }));
       } catch {
@@ -263,6 +265,7 @@ export async function rollbackQuote(
         quantity: l.quantity,
         unitPricePence: l.unitPricePence,
         vatRate: l.vatRate,
+        discountPercent: l.discountPercent ?? 0,
         position: i,
       }));
 

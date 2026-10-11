@@ -15,7 +15,7 @@ import { resolvePdfCompanyEmail } from "@/lib/pdf/company-email";
 import { PdfHeaderLogo } from "@/lib/pdf/header-logo";
 import { resolvePdfLogoSrc } from "@/lib/pdf/logo";
 import { formatQuoteVersion } from "@/lib/quotes/status";
-import { formatGBP, lineNetPence } from "@/lib/money";
+import { formatDiscountPercent, formatGBP, formatQuantity, lineNetPence } from "@/lib/money";
 import { clientBillToLines } from "@/lib/clients/display";
 
 export interface PdfQuote {
@@ -203,7 +203,17 @@ function QuoteDocument({
           </View>
           {lines.map((line, i) => (
             <View key={i} style={styles.tableRow}>
-              <Text style={styles.colDesc}>{line.description}</Text>
+              <View style={styles.colDesc}>
+                <Text>{line.description}</Text>
+                {line.quantity !== 1 || (line.discountPercent ?? 0) > 0 ? (
+                  <Text style={styles.muted}>
+                    {formatQuantity(line.quantity)} × {formatGBP(line.unitPricePence)}
+                    {(line.discountPercent ?? 0) > 0
+                      ? ` less ${formatDiscountPercent(line.discountPercent)} discount`
+                      : ""}
+                  </Text>
+                ) : null}
+              </View>
               <Text style={styles.colTotal}>{formatGBP(lineNetPence(line))}</Text>
             </View>
           ))}

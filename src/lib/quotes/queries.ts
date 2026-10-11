@@ -231,6 +231,7 @@ export async function getQuoteVersionDetail(
       quantity: l.quantity,
       unitPricePence: l.unitPricePence,
       vatRate: l.vatRate,
+      discountPercent: l.discountPercent ?? 0,
       position: l.position,
     })),
     viewingVersion: version,

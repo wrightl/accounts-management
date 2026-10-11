@@ -7,7 +7,7 @@ import {
   type orderLineItems,
 } from "@/db/schema";
 import { defaultDueDate, todayIsoDate } from "@/lib/invoices/status";
-import { invoiceTotals, type LineItem } from "@/lib/money";
+import { invoiceTotals, lineNetPence, lineVatPence, type LineItem } from "@/lib/money";
 
 export type InvoiceFromOrderMode = "milestone" | "remaining" | "part";
 
@@ -73,6 +73,7 @@ export function buildInvoiceLineValues(params: {
   quantity: number;
   unitPricePence: number;
   vatRate: number;
+  discountPercent: number;
   position: number;
 }> {
   const { mode, amountPence, orderNumber, milestoneLabel, orderLines, priorInvoicedPence } =
@@ -88,6 +89,7 @@ export function buildInvoiceLineValues(params: {
       quantity: l.quantity,
       unitPricePence: l.unitPricePence,
       vatRate: l.vatRate,
+      discountPercent: l.discountPercent,
       position: l.position,
     }));
   }
@@ -113,6 +115,7 @@ export function buildInvoiceLineValues(params: {
         quantity: 1,
         unitPricePence: net,
         vatRate: rate,
+        discountPercent: 0,
         position: 0,
       },
     ];
@@ -120,9 +123,7 @@ export function buildInvoiceLineValues(params: {
 
   // Mixed rates: split gross by each line's gross weight, preserve rates.
   const lineGrosses = orderLines.map((l) => {
-    const net = Math.round(l.quantity * l.unitPricePence);
-    const vat = Math.round((net * l.vatRate) / 100);
-    return { line: l, gross: net + vat };
+    return { line: l, gross: lineNetPence(l) + lineVatPence(l) };
   });
   const totalGross = lineGrosses.reduce((s, x) => s + x.gross, 0) || 1;
 
@@ -134,6 +135,7 @@ export function buildInvoiceLineValues(params: {
       quantity: 1,
       unitPricePence: net,
       vatRate: line.vatRate,
+      discountPercent: 0,
       position: i,
     };
   });

@@ -3,7 +3,7 @@ import { and, count, desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { clients, invoices, recurringInvoices } from "@/db/schema";
 import { clientDisplayNameSql } from "@/lib/clients/sql";
-import { formatGBP } from "@/lib/money";
+import { formatGBP, lineNetPence } from "@/lib/money";
 import {
   effectiveStatus,
   todayIsoDate,
@@ -38,7 +38,7 @@ export async function listRecurringInvoices(companyId: string) {
   return rows.map((r) => {
     const lines = (r.lineTemplate as RecurringLineTemplate[]) ?? [];
     const grossPence = lines.reduce(
-      (acc, l) => acc + Math.round(l.quantity * l.unitPricePence),
+      (acc, l) => acc + lineNetPence(l),
       0,
     );
     return {
@@ -106,7 +106,7 @@ export async function getRecurringInvoiceDetail(
   const lines =
     (rows[0].template.lineTemplate as RecurringLineTemplate[]) ?? [];
   const grossPence = lines.reduce(
-    (acc, l) => acc + Math.round(l.quantity * l.unitPricePence),
+    (acc, l) => acc + lineNetPence(l),
     0,
   );
 

@@ -56,6 +56,7 @@ function buildLineValues(
       quantity: l.quantity,
       unitPricePence,
       vatRate: resolveLineVatRate(company, parseVatRate(l.vatRate)),
+      discountPercent: l.discountPercent ?? 0,
       position: i,
     };
   });

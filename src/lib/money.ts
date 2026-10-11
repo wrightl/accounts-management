@@ -64,10 +64,13 @@ export function penceToPounds(pence: number): number {
 }
 
 export interface LineItem {
+  /** May be fractional (up to 3 dp), e.g. 1.5 days or 7.25 hours. */
   quantity: number;
   unitPricePence: number;
   /** VAT rate as a percentage, e.g. 20 for 20%. Defaults to 0. */
   vatRate?: number;
+  /** Line discount as a percentage (0–100, up to 2 dp). Defaults to 0. */
+  discountPercent?: number;
 }
 
 export interface InvoiceTotals {
@@ -76,15 +79,39 @@ export interface InvoiceTotals {
   grossPence: number;
 }
 
-/** Net (ex-VAT) total for a single line. */
+/**
+ * Net (ex-VAT) total for a single line, after any line discount. VAT is
+ * charged on this discounted amount.
+ */
 export function lineNetPence(line: LineItem): number {
-  return Math.round(line.quantity * line.unitPricePence);
+  const discount = line.discountPercent ?? 0;
+  return Math.round((line.quantity * line.unitPricePence * (100 - discount)) / 100);
 }
 
 /** VAT amount for a single line, rounded to the nearest penny. */
 export function lineVatPence(line: LineItem): number {
   const rate = line.vatRate ?? 0;
   return Math.round(lineNetPence(line) * (rate / 100));
+}
+
+const quantityFormatter = new Intl.NumberFormat("en-GB", {
+  maximumFractionDigits: 3,
+});
+
+/** Format a line quantity without trailing zeros, e.g. 1.5 -> "1.5", 2 -> "2". */
+export function formatQuantity(quantity: number): string {
+  return quantityFormatter.format(quantity);
+}
+
+/** Format a line discount, e.g. 12.5 -> "12.5%". Empty for no discount. */
+export function formatDiscountPercent(discountPercent: number | null | undefined): string {
+  if (!discountPercent) return "";
+  return `${new Intl.NumberFormat("en-GB", { maximumFractionDigits: 2 }).format(discountPercent)}%`;
+}
+
+/** Whether any line carries a discount (show a Discount column only then). */
+export function hasLineDiscount(lines: { discountPercent?: number | null }[]): boolean {
+  return lines.some((l) => (l.discountPercent ?? 0) > 0);
 }
 
 /** Sum a set of line items into net / VAT / gross totals. */

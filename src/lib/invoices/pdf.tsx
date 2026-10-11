@@ -12,7 +12,7 @@ import { brand as palette } from "@/lib/brand";
 import { PdfHeaderLogo } from "@/lib/pdf/header-logo";
 import { resolvePdfCompanyEmail } from "@/lib/pdf/company-email";
 import { resolvePdfLogoSrc } from "@/lib/pdf/logo";
-import { formatGBP, lineNetPence } from "@/lib/money";
+import { formatGBP, formatQuantity, lineNetPence } from "@/lib/money";
 import { clientBillToLines } from "@/lib/clients/display";
 
 export interface PdfCompany {
@@ -51,6 +51,8 @@ export interface PdfLine {
   description: string;
   quantity: number;
   unitPricePence: number;
+  /** Line discount percent (0–100); omitted or 0 for none. */
+  discountPercent?: number;
 }
 
 const ink = palette.navy;
@@ -222,7 +224,7 @@ function InvoiceDocument({
           {lines.map((line, i) => (
             <View key={i} style={styles.tableRow}>
               <Text style={styles.colDesc}>{line.description}</Text>
-              <Text style={styles.colQty}>{line.quantity}</Text>
+              <Text style={styles.colQty}>{formatQuantity(line.quantity)}</Text>
               <Text style={styles.colPrice}>{formatGBP(line.unitPricePence)}</Text>
               <Text style={styles.colTotal}>
                 {formatGBP(lineNetPence(line))}

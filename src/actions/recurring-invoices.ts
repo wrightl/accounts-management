@@ -34,6 +34,7 @@ function buildLineTemplate(
     quantity: l.quantity,
     unitPricePence: poundsToPence(l.unitPricePounds),
     vatRate: resolveLineVatRate(company, parseVatRate(l.vatRate)),
+    discountPercent: l.discountPercent ?? 0,
   }));
 }
 

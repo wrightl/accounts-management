@@ -46,7 +46,7 @@ import {
 } from "@/lib/spending/queries";
 import type { SpendingSeriesPoint } from "@/lib/spending/series";
 import { clientDisplayNameSql } from "@/lib/clients/sql";
-import { formatGBP } from "@/lib/money";
+import { formatGBP, lineNetPence } from "@/lib/money";
 import {
   formatDeltaPercent,
   formatMonthLabel,
@@ -390,7 +390,7 @@ async function getRecurringUpcoming(companyId: string): Promise<number> {
   for (const row of rows) {
     const lines = (row.lineTemplate as RecurringLineTemplate[]) ?? [];
     total += lines.reduce(
-      (acc, l) => acc + Math.round(l.quantity * l.unitPricePence),
+      (acc, l) => acc + lineNetPence(l),
       0,
     );
   }

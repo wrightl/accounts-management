@@ -30,6 +30,7 @@ export default async function EditQuotePage({
     key: l.id,
     description: l.description,
     quantity: String(l.quantity),
+    discountPercent: l.discountPercent ? String(l.discountPercent) : "",
     unitPricePounds: String(penceToPounds(l.unitPricePence)),
     vatRate: l.vatRate,
   }));

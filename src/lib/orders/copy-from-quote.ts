@@ -32,6 +32,7 @@ type QuoteOrderSource = {
     quantity: number;
     unitPricePence: number;
     vatRate: number;
+    discountPercent: number;
     position: number;
   }>;
 };
@@ -70,6 +71,7 @@ export async function createOrderFromQuote(
     quantity: l.quantity,
     unitPricePence: l.unitPricePence,
     vatRate: l.vatRate,
+    discountPercent: l.discountPercent,
     position: l.position,
   }));
 

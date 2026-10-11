@@ -13,6 +13,7 @@ import {
   uniqueIndex,
   check,
   doublePrecision,
+  numeric,
 } from "drizzle-orm/pg-core";
 import type { GenericCsvMapping } from "@/lib/bank/types";
 
@@ -287,9 +288,16 @@ export const invoiceLineItems = pgTable(
       .notNull()
       .references(() => invoices.id, { onDelete: "cascade" }),
     description: text("description").notNull(),
-    quantity: integer("quantity").notNull().default(1),
+    /** Fractional quantities allowed (e.g. 1.5 days). */
+    quantity: numeric("quantity", { precision: 12, scale: 3, mode: "number" })
+      .notNull()
+      .default(1),
     unitPricePence: integer("unit_price_pence").notNull().default(0),
     vatRate: integer("vat_rate").notNull().default(0),
+    /** Line discount percentage (0–100), applied before VAT. */
+    discountPercent: numeric("discount_percent", { precision: 5, scale: 2, mode: "number" })
+      .notNull()
+      .default(0),
     position: integer("position").notNull().default(0),
   },
   (t) => [index("idx_line_items_invoice").on(t.invoiceId)],
@@ -715,9 +723,16 @@ export const orderLineItems = pgTable(
       .notNull()
       .references(() => orders.id, { onDelete: "cascade" }),
     description: text("description").notNull(),
-    quantity: integer("quantity").notNull().default(1),
+    /** Fractional quantities allowed (e.g. 1.5 days). */
+    quantity: numeric("quantity", { precision: 12, scale: 3, mode: "number" })
+      .notNull()
+      .default(1),
     unitPricePence: integer("unit_price_pence").notNull().default(0),
     vatRate: integer("vat_rate").notNull().default(0),
+    /** Line discount percentage (0–100), applied before VAT. */
+    discountPercent: numeric("discount_percent", { precision: 5, scale: 2, mode: "number" })
+      .notNull()
+      .default(0),
     position: integer("position").notNull().default(0),
   },
   (t) => [index("idx_order_lines_order").on(t.orderId)],
@@ -801,7 +816,7 @@ export const quoteVersions = pgTable(
     netPence: integer("net_pence").notNull().default(0),
     vatPence: integer("vat_pence").notNull().default(0),
     grossPence: integer("gross_pence").notNull().default(0),
-    /** [{ description, quantity, unitPricePence, vatRate, position }] */
+    /** [{ description, quantity, unitPricePence, vatRate, discountPercent?, position }] */
     lines: jsonb("lines").notNull(),
     source: quoteVersionSourceEnum("source").notNull(),
     rolledBackFromVersion: integer("rolled_back_from_version"),
@@ -824,9 +839,16 @@ export const quoteLineItems = pgTable(
       .notNull()
       .references(() => quotes.id, { onDelete: "cascade" }),
     description: text("description").notNull(),
-    quantity: integer("quantity").notNull().default(1),
+    /** Fractional quantities allowed (e.g. 1.5 days). */
+    quantity: numeric("quantity", { precision: 12, scale: 3, mode: "number" })
+      .notNull()
+      .default(1),
     unitPricePence: integer("unit_price_pence").notNull().default(0),
     vatRate: integer("vat_rate").notNull().default(0),
+    /** Line discount percentage (0–100), applied before VAT. */
+    discountPercent: numeric("discount_percent", { precision: 5, scale: 2, mode: "number" })
+      .notNull()
+      .default(0),
     position: integer("position").notNull().default(0),
   },
   (t) => [index("idx_quote_lines_quote").on(t.quoteId)],
@@ -923,7 +945,7 @@ export const recurringInvoices = pgTable(
       .references(() => clients.id, { onDelete: "restrict" }),
     /** Display name for the schedule (e.g. "Acme retainer"). */
     name: text("name").notNull(),
-    /** JSON line template: [{description, quantity, unitPricePence}] */
+    /** JSON line template: [{description, quantity, unitPricePence, vatRate, discountPercent?}] */
     lineTemplate: jsonb("line_template").notNull(),
     notes: text("notes"),
     /** Day of month to generate (1–28). */

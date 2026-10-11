@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { parseDocumentLinesJson } from "@/lib/documents/schema";
+import {
+  lineDiscountPercentSchema,
+  lineQuantitySchema,
+  parseDocumentLinesJson,
+} from "@/lib/documents/schema";
 import { parseWithFieldErrors } from "@/lib/validation/field-errors";
 
 const recurringLineSchema = z.object({
@@ -8,12 +12,10 @@ const recurringLineSchema = z.object({
     .trim()
     .min(1, "Enter a description")
     .max(500, "Description must be 500 characters or fewer"),
-  quantity: z.coerce
-    .number({ error: "Enter a valid quantity" })
-    .positive("Quantity must be greater than 0")
-    .max(1_000_000, "Quantity is too large"),
+  quantity: lineQuantitySchema,
   unitPricePounds: z.string().trim().min(1, "Enter a unit price"),
   vatRate: z.coerce.number().int().min(0).max(100).optional(),
+  discountPercent: lineDiscountPercentSchema,
 });
 
 export const recurringInvoiceSchema = z.object({

@@ -242,6 +242,7 @@ async function generateFromTemplateRow(
       quantity: l.quantity,
       unitPricePence: l.unitPricePence,
       vatRate: l.vatRate ?? 0,
+      discountPercent: l.discountPercent ?? 0,
     })),
   );
 
@@ -296,6 +297,7 @@ async function generateFromTemplateRow(
           quantity: l.quantity,
           unitPricePence: l.unitPricePence,
           vatRate: l.vatRate ?? 0,
+          discountPercent: l.discountPercent ?? 0,
           position: i,
         })),
       );

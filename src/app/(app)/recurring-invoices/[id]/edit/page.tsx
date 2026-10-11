@@ -55,6 +55,7 @@ export default async function EditRecurringInvoicePage({
           key: crypto.randomUUID(),
           description: l.description,
           quantity: String(l.quantity),
+          discountPercent: l.discountPercent ? String(l.discountPercent) : "",
           unitPricePounds: String(penceToPounds(l.unitPricePence)),
           vatRate: l.vatRate ?? 0,
         }))}

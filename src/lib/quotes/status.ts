@@ -3,6 +3,8 @@ export type QuoteVersionLine = {
   quantity: number;
   unitPricePence: number;
   vatRate: number;
+  /** Missing on versions saved before line discounts existed → 0. */
+  discountPercent?: number;
   position: number;
 };
 

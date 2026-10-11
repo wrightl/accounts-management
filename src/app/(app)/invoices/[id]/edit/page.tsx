@@ -32,6 +32,7 @@ export default async function EditInvoicePage({
     key: l.id,
     description: l.description,
     quantity: String(l.quantity),
+    discountPercent: l.discountPercent ? String(l.discountPercent) : "",
     unitPricePounds: String(penceToPounds(l.unitPricePence)),
     vatRate: l.vatRate,
   }));

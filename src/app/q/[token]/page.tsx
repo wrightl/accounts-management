@@ -5,7 +5,13 @@ import { buttonClasses } from "@/components/ui/button";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { clientDisplayName } from "@/lib/clients/display";
-import { formatGBP, lineNetPence } from "@/lib/money";
+import {
+  formatDiscountPercent,
+  formatGBP,
+  formatQuantity,
+  hasLineDiscount,
+  lineNetPence,
+} from "@/lib/money";
 import { getPublicQuoteByToken } from "@/lib/quotes/public-queries";
 import { quoteStatusLabel, type QuoteStatus } from "@/lib/quotes/status";
 import { todayIsoDate } from "@/lib/invoices/status";
@@ -70,6 +76,9 @@ export default async function PublicQuotePage({
             <TH>Description</TH>
             <TH className="text-right">Qty</TH>
             <TH className="text-right">Unit</TH>
+            {hasLineDiscount(detail.lines) ? (
+              <TH className="text-right">Discount</TH>
+            ) : null}
             {company.vatRegistered ? (
               <TH className="text-right">VAT</TH>
             ) : null}
@@ -80,8 +89,13 @@ export default async function PublicQuotePage({
           {detail.lines.map((l) => (
             <TR key={l.id}>
               <TD>{l.description}</TD>
-              <TD className="text-right">{l.quantity}</TD>
+              <TD className="text-right">{formatQuantity(l.quantity)}</TD>
               <TD className="text-right">{formatGBP(l.unitPricePence)}</TD>
+              {hasLineDiscount(detail.lines) ? (
+                <TD className="text-right">
+                  {formatDiscountPercent(l.discountPercent)}
+                </TD>
+              ) : null}
               {company.vatRegistered ? (
                 <TD className="text-right">{l.vatRate}%</TD>
               ) : null}

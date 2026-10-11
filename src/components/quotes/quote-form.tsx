@@ -26,6 +26,8 @@ export type QuoteLineDraft = {
   description: string;
   quantity: string;
   unitPricePounds: string;
+  /** Percent off the line; blank for no discount. */
+  discountPercent: string;
   vatRate: number;
 };
 
@@ -35,6 +37,7 @@ function newLine(defaultVatRate: number): QuoteLineDraft {
     description: "",
     quantity: "1",
     unitPricePounds: "",
+    discountPercent: "",
     vatRate: defaultVatRate,
   };
 }
@@ -49,6 +52,7 @@ function lineTotalPence(line: QuoteLineDraft): number | null {
     return lineNetPence({
       quantity: Number(line.quantity) || 0,
       unitPricePence: poundsToPence(line.unitPricePounds),
+      discountPercent: Number(line.discountPercent) || 0,
     });
   } catch {
     return null;
@@ -113,6 +117,7 @@ export function QuoteForm({
           .map((l) => ({
             quantity: Number(l.quantity) || 0,
             unitPricePence: poundsToPence(l.unitPricePounds),
+            discountPercent: Number(l.discountPercent) || 0,
             vatRate: vatRegistered ? l.vatRate : 0,
           })),
       );
@@ -142,6 +147,8 @@ export function QuoteForm({
           description: l.description,
           quantity: Number(l.quantity),
           unitPricePounds: l.unitPricePounds,
+          discountPercent:
+            l.discountPercent.trim() === "" ? 0 : Number(l.discountPercent),
           vatRate: vatRegistered ? l.vatRate : 0,
         })),
       ),
@@ -167,8 +174,8 @@ export function QuoteForm({
   }
 
   const lineGrid = vatRegistered
-    ? "sm:grid-cols-[1fr_70px_100px_110px_90px_2.5rem]"
-    : "sm:grid-cols-[1fr_70px_100px_90px_2.5rem]";
+    ? "sm:grid-cols-[1fr_70px_100px_80px_110px_90px_2.5rem]"
+    : "sm:grid-cols-[1fr_70px_100px_80px_90px_2.5rem]";
 
   return (
     <form ref={formRef} noValidate className="space-y-4" onSubmit={preventResetSubmit(onSubmit)}>
@@ -233,6 +240,7 @@ export function QuoteForm({
           <span>Description</span>
           <span>Qty</span>
           <span>Unit £ (ex VAT)</span>
+          <span>Disc %</span>
           {vatRegistered ? <span>VAT</span> : null}
           <span className="text-right">Total</span>
           <span className="sr-only">Remove</span>
@@ -242,6 +250,7 @@ export function QuoteForm({
           const descKey = `lines.${index}.description`;
           const qtyKey = `lines.${index}.quantity`;
           const priceKey = `lines.${index}.unitPricePounds`;
+          const discountKey = `lines.${index}.discountPercent`;
           return (
             <div key={line.key} className={`grid gap-2 ${lineGrid}`}>
               <div className="min-w-0">
@@ -269,7 +278,9 @@ export function QuoteForm({
               <div className="min-w-0">
                 <Input
                   type="number"
-                  min={1}
+                  min={0}
+                  step="any"
+                  inputMode="decimal"
                   value={line.quantity}
                   disabled={pending}
                   aria-invalid={Boolean(fieldErrors[qtyKey])}
@@ -309,6 +320,34 @@ export function QuoteForm({
                 />
                 <FieldError id={`line-${index}-unitPrice-error`}>
                   {fieldErrors[priceKey]}
+                </FieldError>
+              </div>
+              <div className="min-w-0">
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="any"
+                  inputMode="decimal"
+                  placeholder="0"
+                  aria-label="Discount %"
+                  value={line.discountPercent}
+                  disabled={pending}
+                  aria-invalid={Boolean(fieldErrors[discountKey])}
+                  aria-describedby={
+                    fieldErrors[discountKey] ? `line-${index}-discount-error` : undefined
+                  }
+                  onChange={(e) => {
+                    clearLineField(index, "discountPercent");
+                    setLines((prev) =>
+                      prev.map((l, i) =>
+                        i === index ? { ...l, discountPercent: e.target.value } : l,
+                      ),
+                    );
+                  }}
+                />
+                <FieldError id={`line-${index}-discount-error`}>
+                  {fieldErrors[discountKey]}
                 </FieldError>
               </div>
               {vatRegistered ? (

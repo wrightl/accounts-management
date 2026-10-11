@@ -14,7 +14,12 @@ import { formatIsoDateUk } from "@/lib/dates";
 import { registerPdfFonts } from "@/lib/pdf/fonts";
 import { resolvePdfCompanyEmail } from "@/lib/pdf/company-email";
 import { resolveCompanyPdfLogoSrc } from "@/lib/pdf/logo";
-import { formatGBP, lineNetPence } from "@/lib/money";
+import {
+  formatDiscountPercent,
+  formatGBP,
+  formatQuantity,
+  lineNetPence,
+} from "@/lib/money";
 import { clientBillToLines } from "@/lib/clients/display";
 import type { PdfClient, PdfCompany, PdfInvoice, PdfLine } from "@/lib/invoices/pdf";
 
@@ -143,6 +148,7 @@ function buildStyles(fontFamily: string) {
     colDesc: { flex: 3, paddingRight: 8 },
     colQty: { flex: 0.8, textAlign: "right" },
     colPrice: { flex: 1.2, textAlign: "right" },
+    colDiscount: { flex: 0.8, textAlign: "right" },
     colTotal: { flex: 1.2, textAlign: "right" },
     totalsWrap: {
       alignSelf: "flex-end",
@@ -232,6 +238,7 @@ function InvoiceDocumentV2({
 
   const vatPence = invoice.vatPence ?? 0;
   const showVat = vatPence > 0 || Boolean(company.vatNumber);
+  const showDiscount = lines.some((l) => (l.discountPercent ?? 0) > 0);
 
   return (
     <Document>
@@ -281,13 +288,21 @@ function InvoiceDocumentV2({
             <Text style={[styles.tableHeaderCell, styles.colDesc]}>Description</Text>
             <Text style={[styles.tableHeaderCell, styles.colQty]}>Qty</Text>
             <Text style={[styles.tableHeaderCell, styles.colPrice]}>Unit</Text>
+            {showDiscount ? (
+              <Text style={[styles.tableHeaderCell, styles.colDiscount]}>Discount</Text>
+            ) : null}
             <Text style={[styles.tableHeaderCell, styles.colTotal]}>Amount</Text>
           </View>
           {lines.map((line, i) => (
             <View key={i} style={styles.tableRow} wrap={false}>
               <Text style={styles.colDesc}>{line.description}</Text>
-              <Text style={styles.colQty}>{line.quantity}</Text>
+              <Text style={styles.colQty}>{formatQuantity(line.quantity)}</Text>
               <Text style={styles.colPrice}>{formatGBP(line.unitPricePence)}</Text>
+              {showDiscount ? (
+                <Text style={styles.colDiscount}>
+                  {formatDiscountPercent(line.discountPercent)}
+                </Text>
+              ) : null}
               <Text style={styles.colTotal}>{formatGBP(lineNetPence(line))}</Text>
             </View>
           ))}

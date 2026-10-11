@@ -88,6 +88,55 @@ describe("invoicing integration (PGlite)", () => {
     expect(inv.number).toBe("DD-2026-0001");
   });
 
+  it("stores fractional quantities and line discounts as numbers", async () => {
+    const [client] = await db
+      .insert(clients)
+      .values({ companyId, name: "Acme", email: "ap@acme.test" })
+      .returning();
+
+    const lines = [
+      {
+        description: "Discovery days",
+        quantity: 2.5,
+        unitPricePence: 65000,
+        vatRate: 20,
+        discountPercent: 12.5,
+      },
+      { description: "Support hours", quantity: 7.25, unitPricePence: 8000, vatRate: 20 },
+    ];
+    const totals = invoiceTotals(lines);
+    const number = await allocateNumber(2026);
+
+    const [inv] = await db
+      .insert(invoices)
+      .values({
+        companyId,
+        number,
+        clientId: client.id,
+        status: "draft",
+        issueDate: "2026-03-01",
+        dueDate: "2026-03-15",
+        ...totals,
+      })
+      .returning();
+
+    await db.insert(invoiceLineItems).values(
+      lines.map((l, i) => ({ ...l, invoiceId: inv.id, position: i })),
+    );
+
+    const stored = await db
+      .select()
+      .from(invoiceLineItems)
+      .where(eq(invoiceLineItems.invoiceId, inv.id))
+      .orderBy(invoiceLineItems.position);
+
+    expect(stored.map((l) => l.quantity)).toEqual([2.5, 7.25]);
+    expect(stored.map((l) => l.discountPercent)).toEqual([12.5, 0]);
+    // 2.5 × £650 less 12.5% = £1,421.88; 7.25 × £80 = £580
+    expect(invoiceTotals(stored)).toEqual(totals);
+    expect(inv.netPence).toBe(142188 + 58000);
+  });
+
   it("flips to paid when payments cover the gross", async () => {
     const [client] = await db
       .insert(clients)

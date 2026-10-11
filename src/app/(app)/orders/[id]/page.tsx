@@ -9,7 +9,13 @@ import { StatusBadge } from "@/components/ui/badge";
 import { buttonClasses } from "@/components/ui/button";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
-import { formatGBP, lineNetPence } from "@/lib/money";
+import {
+  formatDiscountPercent,
+  formatGBP,
+  formatQuantity,
+  hasLineDiscount,
+  lineNetPence,
+} from "@/lib/money";
 import { clientDisplayName } from "@/lib/clients/display";
 import { defaultDueDate, todayIsoDate } from "@/lib/invoices/status";
 import type { InvoiceStatus } from "@/lib/invoices/status";
@@ -98,6 +104,9 @@ export default async function OrderDetailPage({
               <TH>Description</TH>
               <TH className="text-right">Qty</TH>
               <TH className="text-right">Unit</TH>
+              {hasLineDiscount(detail.lines) ? (
+                <TH className="text-right">Discount</TH>
+              ) : null}
               <TH className="text-right">Amount</TH>
             </TR>
           </THead>
@@ -105,8 +114,13 @@ export default async function OrderDetailPage({
             {detail.lines.map((l) => (
               <TR key={l.id}>
                 <TD>{l.description}</TD>
-                <TD className="text-right">{l.quantity}</TD>
+                <TD className="text-right">{formatQuantity(l.quantity)}</TD>
                 <TD className="text-right">{formatGBP(l.unitPricePence)}</TD>
+                {hasLineDiscount(detail.lines) ? (
+                  <TD className="text-right">
+                    {formatDiscountPercent(l.discountPercent)}
+                  </TD>
+                ) : null}
                 <TD className="text-right">{formatGBP(lineNetPence(l))}</TD>
               </TR>
             ))}

@@ -116,6 +116,7 @@ export async function buildAccountantPack({
             quantity: invoiceLineItems.quantity,
             unitPricePence: invoiceLineItems.unitPricePence,
             vatRate: invoiceLineItems.vatRate,
+            discountPercent: invoiceLineItems.discountPercent,
             position: invoiceLineItems.position,
           })
           .from(invoiceLineItems)
@@ -417,6 +418,7 @@ export async function buildAccountantPack({
         "quantity",
         "unit_price_gbp",
         "vat_rate",
+        "discount_percent",
         "line_net_gbp",
       ],
       lineRows.map((r) => [
@@ -426,6 +428,7 @@ export async function buildAccountantPack({
         String(r.quantity),
         gbp(r.unitPricePence),
         String(r.vatRate),
+        String(r.discountPercent),
         gbp(lineNetPence(r)),
       ]),
     ),

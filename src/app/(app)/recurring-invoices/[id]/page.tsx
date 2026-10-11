@@ -9,7 +9,13 @@ import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
 import { buttonClasses } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/badge';
 import { clientDisplayName } from '@/lib/clients/display';
-import { formatGBP } from '@/lib/money';
+import {
+    formatDiscountPercent,
+    formatGBP,
+    formatQuantity,
+    hasLineDiscount,
+    lineNetPence,
+} from '@/lib/money';
 import type { InvoiceStatus } from '@/lib/invoices/status';
 
 export default async function RecurringInvoiceDetailPage({
@@ -101,6 +107,9 @@ export default async function RecurringInvoiceDetailPage({
                             <TH>Description</TH>
                             <TH className="text-right">Qty</TH>
                             <TH className="text-right">Unit</TH>
+                            {hasLineDiscount(template.lineTemplate) ? (
+                                <TH className="text-right">Discount</TH>
+                            ) : null}
                             <TH className="text-right">Amount</TH>
                         </TR>
                     </THead>
@@ -108,16 +117,21 @@ export default async function RecurringInvoiceDetailPage({
                         {template.lineTemplate.map((line, i) => (
                             <TR key={i}>
                                 <TD>{line.description}</TD>
-                                <TD className="text-right">{line.quantity}</TD>
+                                <TD className="text-right">
+                                    {formatQuantity(line.quantity)}
+                                </TD>
                                 <TD className="text-right">
                                     {formatGBP(line.unitPricePence)}
                                 </TD>
+                                {hasLineDiscount(template.lineTemplate) ? (
+                                    <TD className="text-right">
+                                        {formatDiscountPercent(
+                                            line.discountPercent,
+                                        )}
+                                    </TD>
+                                ) : null}
                                 <TD className="text-right">
-                                    {formatGBP(
-                                        Math.round(
-                                            line.quantity * line.unitPricePence,
-                                        ),
-                                    )}
+                                    {formatGBP(lineNetPence(line))}
                                 </TD>
                             </TR>
                         ))}

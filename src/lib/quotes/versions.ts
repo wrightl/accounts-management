@@ -50,6 +50,7 @@ export function linesToSnapshot(
     quantity: number;
     unitPricePence: number;
     vatRate?: number;
+    discountPercent?: number;
     position: number;
   }[],
 ): QuoteVersionLine[] {
@@ -58,6 +59,7 @@ export function linesToSnapshot(
     quantity: l.quantity,
     unitPricePence: l.unitPricePence,
     vatRate: l.vatRate ?? 0,
+    discountPercent: l.discountPercent ?? 0,
     position: l.position,
   }));
 }

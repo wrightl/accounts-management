@@ -60,6 +60,7 @@ async function renderFromSnapshot(
       description: l.description,
       quantity: l.quantity,
       unitPricePence: l.unitPricePence,
+      discountPercent: l.discountPercent ?? 0,
     })),
     company,
   });
@@ -126,6 +127,7 @@ export async function loadOrRenderQuotePdf(
       description: l.description,
       quantity: l.quantity,
       unitPricePence: l.unitPricePence,
+      discountPercent: l.discountPercent ?? 0,
     })),
     company,
   });

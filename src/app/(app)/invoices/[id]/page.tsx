@@ -13,7 +13,13 @@ import { buttonClasses } from "@/components/ui/button";
 import { InvoiceActions } from "@/components/invoices/invoice-actions";
 import { InvoiceDueDate } from "@/components/invoices/invoice-due-date";
 import { InvoiceStatusSelect } from "@/components/invoices/invoice-status-select";
-import { formatGBP, lineNetPence } from "@/lib/money";
+import {
+  formatDiscountPercent,
+  formatGBP,
+  formatQuantity,
+  hasLineDiscount,
+  lineNetPence,
+} from "@/lib/money";
 import { clientDisplayName } from "@/lib/clients/display";
 
 export default async function InvoiceDetailPage({
@@ -131,6 +137,9 @@ export default async function InvoiceDetailPage({
               <TH>Description</TH>
               <TH className="text-right">Qty</TH>
               <TH className="text-right">Unit</TH>
+              {hasLineDiscount(lines) ? (
+                <TH className="text-right">Discount</TH>
+              ) : null}
               <TH className="text-right">Amount</TH>
             </TR>
           </THead>
@@ -138,8 +147,13 @@ export default async function InvoiceDetailPage({
             {lines.map((line) => (
               <TR key={line.id}>
                 <TD>{line.description}</TD>
-                <TD className="text-right">{line.quantity}</TD>
+                <TD className="text-right">{formatQuantity(line.quantity)}</TD>
                 <TD className="text-right">{formatGBP(line.unitPricePence)}</TD>
+                {hasLineDiscount(lines) ? (
+                  <TD className="text-right">
+                    {formatDiscountPercent(line.discountPercent)}
+                  </TD>
+                ) : null}
                 <TD className="text-right">{formatGBP(lineNetPence(line))}</TD>
               </TR>
             ))}
