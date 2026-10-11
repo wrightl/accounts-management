@@ -351,6 +351,13 @@
       "when": 1788700000000,
       "tag": "0049_fractional_quantity_line_discount",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1788800000000,
+      "tag": "0050_credit_notes",
+      "breakpoints": true
     }
   ]
 }

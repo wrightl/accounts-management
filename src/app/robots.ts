@@ -35,6 +35,7 @@ export default function robots(): MetadataRoute.Robots {
           "/help",
           "/inbound-email",
           "/recurring-invoices",
+          "/credit-notes",
           "/q/*",
         ],
       },

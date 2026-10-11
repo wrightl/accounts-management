@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   formatInvoiceNumber,
+  nextCreditNoteNumber,
   nextInvoiceNumber,
   nextQuoteNumber,
   parseIssueYear,
@@ -67,5 +68,17 @@ describe("quote numbering", () => {
       2026,
     );
     expect(result.number).toBe("QT-2026-0001");
+  });
+});
+
+describe("credit note numbering", () => {
+  it("defaults to CN and resets each calendar year", () => {
+    const state = { creditNoteNumberPrefix: "", creditNoteNextSeq: 7, creditNoteSeqYear: 2026 };
+    expect(nextCreditNoteNumber(state, 2026)).toEqual({
+      number: "CN-2026-0007",
+      nextSeq: 8,
+      seqYear: 2026,
+    });
+    expect(nextCreditNoteNumber(state, 2027).number).toBe("CN-2027-0001");
   });
 });

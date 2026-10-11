@@ -5,6 +5,8 @@ import {
   bankAccounts,
   bankTransactions,
   clients,
+  creditNoteLineItems,
+  creditNotes,
   dividendDeclarations,
   dividendPayouts,
   expenseReceipts,
@@ -23,7 +25,8 @@ import { clientDisplayNameSql } from "@/lib/clients/sql";
 import { monthName } from "@/lib/dates";
 import { safeFilename } from "@/lib/files";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
-import { renderInvoicePdfV2 } from "@/lib/invoices/pdf-v2";
+import { renderCreditNotePdf, renderInvoicePdfV2 } from "@/lib/invoices/pdf-v2";
+import { getCreditNoteDetail } from "@/lib/credit-notes/queries";
 import { listRecurringInvoices } from "@/lib/invoices/recurring-queries";
 import { lineNetPence } from "@/lib/money";
 import {
@@ -264,6 +267,68 @@ export async function buildAccountantPack({
           .from(reconciliationMatches)
           .where(inArray(reconciliationMatches.bankTransactionId, bankTxIds));
 
+  const creditNoteRows = await db
+    .select({
+      id: creditNotes.id,
+      number: creditNotes.number,
+      status: creditNotes.status,
+      issueDate: creditNotes.issueDate,
+      invoiceNumber: invoices.number,
+      clientName: clientDisplayNameSql.as("client_name"),
+      reason: creditNotes.reason,
+      netPence: creditNotes.netPence,
+      vatPence: creditNotes.vatPence,
+      grossPence: creditNotes.grossPence,
+      refundedPence: creditNotes.refundedPence,
+      refundedAt: creditNotes.refundedAt,
+      refundReference: creditNotes.refundReference,
+    })
+    .from(creditNotes)
+    .innerJoin(invoices, eq(creditNotes.invoiceId, invoices.id))
+    .innerJoin(clients, eq(creditNotes.clientId, clients.id))
+    .where(
+      and(
+        eq(creditNotes.companyId, companyId),
+        gte(creditNotes.issueDate, from),
+        lte(creditNotes.issueDate, to),
+      ),
+    )
+    .orderBy(creditNotes.issueDate, creditNotes.number);
+
+  const creditNoteIds = creditNoteRows.map((r) => r.id);
+  const creditNoteLineRows =
+    creditNoteIds.length === 0
+      ? []
+      : await db
+          .select()
+          .from(creditNoteLineItems)
+          .where(inArray(creditNoteLineItems.creditNoteId, creditNoteIds))
+          .orderBy(creditNoteLineItems.position);
+  const creditNoteNumberById = new Map(creditNoteRows.map((r) => [r.id, r.number]));
+
+  await mapWithConcurrency(
+    creditNoteRows.filter((r) => r.status === "issued"),
+    FETCH_CONCURRENCY,
+    async (note) => {
+      const pdfPath = `credit-notes/${safeFilename(`${note.number}.pdf`)}`;
+      try {
+        const detail = await getCreditNoteDetail(companyId, note.id);
+        if (!detail) throw new Error("not found");
+        binaryFiles[pdfPath] = await renderCreditNotePdf({
+          creditNote: detail.creditNote,
+          invoiceNumber: detail.invoice.number,
+          client: detail.client,
+          lines: detail.lines,
+          company,
+        });
+      } catch (err) {
+        warnings.push(
+          `Credit note PDF missing: ${note.number} (${note.id}) — ${formatError(err)}`,
+        );
+      }
+    },
+  );
+
   await mapWithConcurrency(invRows, FETCH_CONCURRENCY, async (inv) => {
     const pdfPath = `invoices/${safeFilename(`${inv.number}.pdf`)}`;
     try {
@@ -311,7 +376,16 @@ export async function buildAccountantPack({
     "summary/pnl.csv": toCsv(
       ["metric", "value_gbp", "note"],
       [
-        ["income_invoiced", gbp(pnl.incomePence), "accrual — issue date in period"],
+        [
+          "income_invoiced",
+          gbp(pnl.incomePence),
+          "accrual — issue date in period, net of credit notes",
+        ],
+        [
+          "credit_notes",
+          gbp(pnl.creditNotePence),
+          "already deducted from income_invoiced — credit note issue date in period",
+        ],
         [
           "other_income",
           gbp(pnl.otherIncomePence),
@@ -364,7 +438,8 @@ export async function buildAccountantPack({
     "summary/vat.csv": toCsv(
       ["metric", "value_gbp", "note"],
       [
-        ["vat_on_sales", gbp(vat.vatOnSalesPence), ""],
+        ["vat_on_sales", gbp(vat.vatOnSalesPence), "net of credit notes"],
+        ["credit_note_vat", gbp(vat.creditNoteVatPence), "already deducted from vat_on_sales"],
         ["vat_on_purchases", gbp(vat.vatOnPurchasesPence), ""],
         ["net_vat", gbp(vat.netVatPence), vat.note],
       ],
@@ -424,6 +499,60 @@ export async function buildAccountantPack({
       lineRows.map((r) => [
         r.invoiceId,
         invNumberById.get(r.invoiceId) ?? "",
+        r.description,
+        String(r.quantity),
+        gbp(r.unitPricePence),
+        String(r.vatRate),
+        String(r.discountPercent),
+        gbp(lineNetPence(r)),
+      ]),
+    ),
+    "credit-notes.csv": toCsv(
+      [
+        "id",
+        "number",
+        "status",
+        "issue_date",
+        "invoice_number",
+        "client",
+        "reason",
+        "net_gbp",
+        "vat_gbp",
+        "gross_gbp",
+        "refunded_gbp",
+        "refunded_at",
+        "refund_reference",
+      ],
+      creditNoteRows.map((r) => [
+        r.id,
+        r.number,
+        r.status,
+        r.issueDate,
+        r.invoiceNumber,
+        r.clientName,
+        r.reason,
+        gbp(r.netPence),
+        gbp(r.vatPence),
+        gbp(r.grossPence),
+        gbp(r.refundedPence),
+        r.refundedAt ?? "",
+        r.refundReference ?? "",
+      ]),
+    ),
+    "credit-note-line-items.csv": toCsv(
+      [
+        "credit_note_id",
+        "credit_note_number",
+        "description",
+        "quantity",
+        "unit_price_gbp",
+        "vat_rate",
+        "discount_percent",
+        "line_net_gbp",
+      ],
+      creditNoteLineRows.map((r) => [
+        r.creditNoteId,
+        creditNoteNumberById.get(r.creditNoteId) ?? "",
         r.description,
         String(r.quantity),
         gbp(r.unitPricePence),
@@ -717,6 +846,8 @@ function buildReadme({
     "  invoices.csv      — invoice headers (excl. draft & void, by issue date)",
     "  invoice-line-items.csv",
     "  invoices/         — invoice PDFs",
+    "  credit-notes.csv + credit-note-line-items.csv — by credit note issue date (incl. void)",
+    "  credit-notes/     — PDFs for issued credit notes",
     "  payments.csv      — cash received (by received_at in period)",
     "  expenses.csv      — spend (excl. pending, by spent_at)",
     "  receipts-index.csv + receipts/ — expense attachments",
@@ -728,7 +859,8 @@ function buildReadme({
     "  other-income.csv   — explained bank credits (cash, by bank date)",
     "",
     "Basis notes:",
-    "  Invoiced income is accrual (by issue date). Other income is cash on the bank date.",
+    "  Invoiced income is accrual (by issue date), less credit notes by their issue date.",
+    "  Other income is cash on the bank date.",
     "  Payments CSV is cash received. Expenses exclude pending email submissions.",
     "  Invoices link to recurring schedules via recurring_schedule when generated from one.",
   ];

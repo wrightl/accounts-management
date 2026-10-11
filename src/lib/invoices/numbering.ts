@@ -92,3 +92,24 @@ export function nextOrderNumber(
     seqYear: year,
   };
 }
+
+export interface CreditNoteNumberingState {
+  creditNoteNumberPrefix: string;
+  creditNoteNextSeq: number;
+  creditNoteSeqYear: number | null;
+}
+
+/** Credit note numbers: {prefix}-{YYYY}-{NNNN}. */
+export function nextCreditNoteNumber(
+  state: CreditNoteNumberingState,
+  year: number,
+): { number: string; nextSeq: number; seqYear: number } {
+  const prefix = state.creditNoteNumberPrefix || "CN";
+  const sameYear = state.creditNoteSeqYear === year;
+  const seq = sameYear ? state.creditNoteNextSeq : 1;
+  return {
+    number: formatInvoiceNumber(prefix, year, seq),
+    nextSeq: seq + 1,
+    seqYear: year,
+  };
+}

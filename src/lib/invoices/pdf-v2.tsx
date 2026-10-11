@@ -209,6 +209,12 @@ function buildStyles(fontFamily: string) {
   });
 }
 
+/** Set when rendering a credit note with the invoice layout. */
+export interface PdfCreditNoteDetails {
+  invoiceNumber: string;
+  reason: string;
+}
+
 function InvoiceDocumentV2({
   invoice,
   client,
@@ -216,6 +222,7 @@ function InvoiceDocumentV2({
   company,
   logoSrc,
   fontFamily,
+  creditNote,
 }: {
   invoice: PdfInvoice;
   client: PdfClient;
@@ -223,6 +230,7 @@ function InvoiceDocumentV2({
   company: PdfCompany;
   logoSrc: string | null;
   fontFamily: string;
+  creditNote?: PdfCreditNoteDetails;
 }) {
   const styles = buildStyles(fontFamily);
   const contactEmail = resolvePdfCompanyEmail(company.email);
@@ -253,7 +261,7 @@ function InvoiceDocumentV2({
             <Text style={styles.companyName}>{company.name}</Text>
           </View>
           <View style={styles.titleBlock}>
-            <Text style={styles.invoiceLabel}>Invoice</Text>
+            <Text style={styles.invoiceLabel}>{creditNote ? "Credit note" : "Invoice"}</Text>
             <Text style={styles.invoiceNumber}>{invoice.number}</Text>
           </View>
         </View>
@@ -280,6 +288,9 @@ function InvoiceDocumentV2({
               <Text style={styles.metaLine}>Issued {issueDate}</Text>
             ) : null}
             {dueDate ? <Text style={styles.metaLine}>Due {dueDate}</Text> : null}
+            {creditNote ? (
+              <Text style={styles.metaLine}>Credits invoice {creditNote.invoiceNumber}</Text>
+            ) : null}
           </View>
         </View>
 
@@ -320,7 +331,9 @@ function InvoiceDocumentV2({
             </View>
           ) : null}
           <View style={styles.totalCard}>
-            <Text style={styles.totalCardLabel}>Total due</Text>
+            <Text style={styles.totalCardLabel}>
+              {creditNote ? "Total credited" : "Total due"}
+            </Text>
             <Text style={styles.totalCardValue}>{formatGBP(invoice.grossPence)}</Text>
           </View>
         </View>
@@ -332,24 +345,31 @@ function InvoiceDocumentV2({
           </View>
         ) : null}
 
-        <View style={styles.bank} wrap={false}>
-          <Text style={styles.sectionLabel}>Payment details</Text>
-          {company.bankName ? (
-            <Text style={styles.bankLine}>{company.bankName}</Text>
-          ) : null}
-          {company.bankAccountName ? (
-            <Text style={styles.bankLine}>Account name: {company.bankAccountName}</Text>
-          ) : null}
-          {company.sortCode ? (
-            <Text style={styles.bankLine}>Sort code: {company.sortCode}</Text>
-          ) : null}
-          {company.accountNumber ? (
-            <Text style={styles.bankLine}>Account number: {company.accountNumber}</Text>
-          ) : null}
-          <Text style={[styles.mutedText, { marginTop: 6 }]}>
-            Please quote {invoice.number} as the payment reference.
-          </Text>
-        </View>
+        {creditNote ? (
+          <View style={styles.notes}>
+            <Text style={styles.sectionLabel}>Reason for credit</Text>
+            <Text style={styles.notesBody}>{creditNote.reason}</Text>
+          </View>
+        ) : (
+          <View style={styles.bank} wrap={false}>
+            <Text style={styles.sectionLabel}>Payment details</Text>
+            {company.bankName ? (
+              <Text style={styles.bankLine}>{company.bankName}</Text>
+            ) : null}
+            {company.bankAccountName ? (
+              <Text style={styles.bankLine}>Account name: {company.bankAccountName}</Text>
+            ) : null}
+            {company.sortCode ? (
+              <Text style={styles.bankLine}>Sort code: {company.sortCode}</Text>
+            ) : null}
+            {company.accountNumber ? (
+              <Text style={styles.bankLine}>Account number: {company.accountNumber}</Text>
+            ) : null}
+            <Text style={[styles.mutedText, { marginTop: 6 }]}>
+              Please quote {invoice.number} as the payment reference.
+            </Text>
+          </View>
+        )}
 
         <View style={styles.footer} fixed>
           <Text style={styles.footerText}>{footerParts.join(" · ")}</Text>
@@ -375,6 +395,48 @@ export async function renderInvoicePdfV2(params: {
   const logoSrc = await resolveCompanyPdfLogoSrc(params.company.logoUrl);
   const element = (
     <InvoiceDocumentV2 {...params} logoSrc={logoSrc} fontFamily={fontFamily} />
+  ) as React.ReactElement<React.ComponentProps<typeof Document>>;
+  const buffer = await renderToBuffer(element);
+  return new Uint8Array(buffer);
+}
+
+/** Credit note PDF: the invoice layout with credit wording and the reason. */
+export async function renderCreditNotePdf(params: {
+  creditNote: {
+    number: string;
+    issueDate: string;
+    netPence: number;
+    vatPence: number;
+    grossPence: number;
+    reason: string;
+  };
+  invoiceNumber: string;
+  client: PdfClient;
+  lines: PdfLine[];
+  company: PdfCompany;
+}): Promise<Uint8Array> {
+  const fontFamily = registerPdfFonts();
+  const logoSrc = await resolveCompanyPdfLogoSrc(params.company.logoUrl);
+  const { creditNote } = params;
+  const element = (
+    <InvoiceDocumentV2
+      invoice={{
+        number: creditNote.number,
+        issueDate: creditNote.issueDate,
+        dueDate: null,
+        notes: null,
+        netPence: creditNote.netPence,
+        vatPence: creditNote.vatPence,
+        grossPence: creditNote.grossPence,
+        currency: "GBP",
+      }}
+      client={params.client}
+      lines={params.lines}
+      company={params.company}
+      logoSrc={logoSrc}
+      fontFamily={fontFamily}
+      creditNote={{ invoiceNumber: params.invoiceNumber, reason: creditNote.reason }}
+    />
   ) as React.ReactElement<React.ComponentProps<typeof Document>>;
   const buffer = await renderToBuffer(element);
   return new Uint8Array(buffer);

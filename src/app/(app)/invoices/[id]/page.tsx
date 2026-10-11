@@ -4,7 +4,11 @@ import { Pencil } from "lucide-react";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
 import { getRecurringTemplateForInvoice } from "@/lib/invoices/recurring-queries";
-import { canEditInvoice, type InvoiceStatus } from "@/lib/invoices/status";
+import {
+  canEditInvoice,
+  storedStatus,
+  type InvoiceStatus,
+} from "@/lib/invoices/status";
 import { listBankSettlements } from "@/lib/bank/settlements";
 import { BankSettlements } from "@/components/bank/bank-settlements";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
@@ -13,6 +17,7 @@ import { buttonClasses } from "@/components/ui/button";
 import { InvoiceActions } from "@/components/invoices/invoice-actions";
 import { InvoiceDueDate } from "@/components/invoices/invoice-due-date";
 import { InvoiceStatusSelect } from "@/components/invoices/invoice-status-select";
+import { CreditNoteStatusBadge } from "@/components/credit-notes/credit-note-status-badge";
 import {
   formatDiscountPercent,
   formatGBP,
@@ -34,10 +39,25 @@ export default async function InvoiceDetailPage({
   const detail = await getInvoiceDetail(companyId, id);
   if (!detail) notFound();
 
-  const { invoice, client, lines, payments, paidFormatted, balanceFormatted } =
-    detail;
+  const {
+    invoice,
+    client,
+    lines,
+    payments,
+    paidFormatted,
+    balanceFormatted,
+    creditNotes,
+    creditedPence,
+    creditedFormatted,
+    creditablePence,
+    refundDuePence,
+    refundDueFormatted,
+  } = detail;
 
   const status = invoice.status as InvoiceStatus;
+  const stored = storedStatus(invoice.status);
+  const canCredit =
+    canWrite && (stored === "sent" || stored === "paid") && creditablePence > 0;
   const [recurring, settlements] = await Promise.all([
     getRecurringTemplateForInvoice(companyId, invoice.recurringInvoiceId),
     listBankSettlements(companyId, { invoiceId: invoice.id }),
@@ -112,6 +132,14 @@ export default async function InvoiceDetailPage({
                 clientName={client.name}
                 companyName={client.companyName}
               />
+              {canCredit ? (
+                <Link
+                  href={`/invoices/${invoice.id}/credit-notes/new`}
+                  className={buttonClasses("secondary")}
+                >
+                  Raise credit note
+                </Link>
+              ) : null}
             </div>
           ) : (
             <div className="mt-3">
@@ -168,6 +196,46 @@ export default async function InvoiceDetailPage({
         </div>
       )}
 
+      {creditNotes.length > 0 ? (
+        <div className="mt-8">
+          <h2 className="mb-3 font-display text-lg font-semibold">Credit notes</h2>
+          <Table>
+            <THead>
+              <TR>
+                <TH>Number</TH>
+                <TH>Issued</TH>
+                <TH>Reason</TH>
+                <TH>Status</TH>
+                <TH className="text-right">Amount</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {creditNotes.map((cn) => (
+                <TR key={cn.id}>
+                  <TD>
+                    <Link href={`/credit-notes/${cn.id}`} className="font-medium hover:underline">
+                      {cn.number}
+                    </Link>
+                  </TD>
+                  <TD>{cn.issueDate}</TD>
+                  <TD className="max-w-xs truncate text-muted">{cn.reason}</TD>
+                  <TD>
+                    <CreditNoteStatusBadge status={cn.status} />
+                  </TD>
+                  <TD className="text-right">{cn.grossFormatted}</TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+          <p className="mt-3 text-sm text-muted">
+            Credited {creditedFormatted}
+            {refundDuePence > 0
+              ? ` · Refund due to client ${refundDueFormatted}`
+              : ` · Balance ${balanceFormatted}`}
+          </p>
+        </div>
+      ) : null}
+
       <div className="mt-8">
         <h2 className="mb-3 font-display text-lg font-semibold">Payments</h2>
         {payments.length === 0 ? (
@@ -195,7 +263,11 @@ export default async function InvoiceDetailPage({
               </TBody>
             </Table>
             <p className="mt-3 text-sm text-muted">
-              Paid {paidFormatted} · Balance {balanceFormatted}
+              Paid {paidFormatted}
+              {creditedPence > 0 ? ` · Credited ${creditedFormatted}` : null}
+              {refundDuePence > 0
+                ? ` · Refund due to client ${refundDueFormatted}`
+                : ` · Balance ${balanceFormatted}`}
             </p>
             <BankSettlements settlements={settlements} className="mt-4" />
           </>

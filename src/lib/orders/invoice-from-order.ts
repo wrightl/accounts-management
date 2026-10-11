@@ -2,6 +2,7 @@ import "server-only";
 import { and, eq, ne, sum } from "drizzle-orm";
 import type { Database } from "@/db";
 import {
+  creditNotes,
   invoices,
   orderPaymentMilestones,
   type orderLineItems,
@@ -37,6 +38,11 @@ export function resolveMilestoneDueDate(
   throw new Error("Milestone has no due date");
 }
 
+/**
+ * Gross invoiced against an order, net of issued credit notes on those
+ * invoices. A credited amount counts as not yet invoiced, so it can be billed
+ * again (or cleared by completing the order).
+ */
 export async function sumInvoicedPenceForOrder(
   db: Database,
   orderId: string,
@@ -45,7 +51,12 @@ export async function sumInvoicedPenceForOrder(
     .select({ total: sum(invoices.grossPence).mapWith(Number) })
     .from(invoices)
     .where(and(eq(invoices.orderId, orderId), ne(invoices.status, "void")));
-  return row?.total ?? 0;
+  const [credited] = await db
+    .select({ total: sum(creditNotes.grossPence).mapWith(Number) })
+    .from(creditNotes)
+    .innerJoin(invoices, eq(creditNotes.invoiceId, invoices.id))
+    .where(and(eq(invoices.orderId, orderId), eq(creditNotes.status, "issued")));
+  return (row?.total ?? 0) - (credited?.total ?? 0);
 }
 
 export async function getUsedMilestoneIds(

@@ -56,6 +56,7 @@ export function SettingsForm({
     invoiceNumberPrefix: string;
     quoteNumberPrefix: string;
     orderNumberPrefix: string;
+    creditNoteNumberPrefix: string;
     invoicePaymentTermsDays: number;
     defaultMileageRatePence: number;
     openingCashPence: number | null;
@@ -494,6 +495,29 @@ export function SettingsForm({
           <p className="mt-1 text-xs text-muted">e.g. O → O-2026-0001</p>
           <FieldError id="orderNumberPrefix-error">
             {fieldErrors.orderNumberPrefix}
+          </FieldError>
+        </div>
+        <div>
+          <Label htmlFor="creditNoteNumberPrefix" required>
+            Credit note number prefix
+          </Label>
+          <Input
+            id="creditNoteNumberPrefix"
+            name="creditNoteNumberPrefix"
+            required
+            defaultValue={settings.creditNoteNumberPrefix}
+            disabled={pending}
+            aria-invalid={Boolean(fieldErrors.creditNoteNumberPrefix)}
+            aria-describedby={
+              fieldErrors.creditNoteNumberPrefix
+                ? "creditNoteNumberPrefix-error"
+                : undefined
+            }
+            onChange={() => clearField("creditNoteNumberPrefix")}
+          />
+          <p className="mt-1 text-xs text-muted">e.g. CN → CN-2026-0001</p>
+          <FieldError id="creditNoteNumberPrefix-error">
+            {fieldErrors.creditNoteNumberPrefix}
           </FieldError>
         </div>
         <div>

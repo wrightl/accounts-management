@@ -22,14 +22,19 @@ export default async function InvoicesPage() {
           <h1 className="font-display text-2xl font-semibold">Invoices</h1>
           <p className="mt-1 text-muted">Create, send and track client invoices.</p>
         </div>
-        {canWrite ? (
-          <div className="flex flex-wrap gap-2">
-            <InvoiceImportButton canWrite={canWrite} />
-            <Link href="/invoices/new" className={buttonClasses("primary")}>
-              New invoice
-            </Link>
-          </div>
-        ) : null}
+        <div className="flex flex-wrap gap-2">
+          <Link href="/credit-notes" className={buttonClasses("ghost")}>
+            Credit notes
+          </Link>
+          {canWrite ? (
+            <>
+              <InvoiceImportButton canWrite={canWrite} />
+              <Link href="/invoices/new" className={buttonClasses("primary")}>
+                New invoice
+              </Link>
+            </>
+          ) : null}
+        </div>
       </div>
 
       <div className="mt-6">

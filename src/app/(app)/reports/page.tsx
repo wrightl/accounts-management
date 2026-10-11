@@ -96,6 +96,11 @@ export default async function ReportsPage({
                 <Card>
                     <CardTitle>Income (invoiced, ex VAT)</CardTitle>
                     <CardValue>{pnl.incomeFormatted}</CardValue>
+                    {pnl.creditNotePence > 0 ? (
+                        <p className="mt-1 text-xs text-muted">
+                            After {pnl.creditNoteFormatted} of credit notes
+                        </p>
+                    ) : null}
                 </Card>
                 <Card>
                     <CardTitle>Other income</CardTitle>
@@ -127,6 +132,12 @@ export default async function ReportsPage({
                         <CardValue className="text-xl">
                             {vat.vatOnSalesFormatted}
                         </CardValue>
+                        {vat.creditNoteVatPence > 0 ? (
+                            <p className="mt-1 text-xs text-muted">
+                                After {vat.creditNoteVatFormatted} on credit
+                                notes
+                            </p>
+                        ) : null}
                     </Card>
                     <Card>
                         <CardTitle>VAT on purchases</CardTitle>

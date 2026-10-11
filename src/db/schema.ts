@@ -115,6 +115,10 @@ export const companies = pgTable("companies", {
   /** Next order sequence for the current orderSeqYear. */
   orderNextSeq: integer("order_next_seq").notNull().default(1),
   orderSeqYear: integer("order_seq_year"),
+  /** Credit note number prefix, e.g. "CN" → CN-2026-0001. */
+  creditNoteNumberPrefix: text("credit_note_number_prefix").notNull().default("CN"),
+  creditNoteNextSeq: integer("credit_note_next_seq").notNull().default(1),
+  creditNoteSeqYear: integer("credit_note_seq_year"),
   /** Default days from issue date until invoice due date. */
   invoicePaymentTermsDays: integer("invoice_payment_terms_days").notNull().default(14),
   /** Default HMRC mileage rate in pence per mile (e.g. 45 = 45p/mi). */
@@ -316,6 +320,74 @@ export const payments = pgTable(
     receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("idx_payments_invoice").on(t.invoiceId)],
+);
+
+export const creditNoteStatusEnum = pgEnum("credit_note_status", ["issued", "void"]);
+
+/**
+ * Credit note raised against a sent or paid invoice (full or partial). Reduces
+ * the invoice's amount due; any excess over what was still owed is a refund
+ * due to the client, settled with `refundedPence`. Void is allowed only before
+ * the note is sent and while nothing has been refunded.
+ */
+export const creditNotes = pgTable(
+  "credit_notes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    invoiceId: uuid("invoice_id")
+      .notNull()
+      .references(() => invoices.id, { onDelete: "restrict" }),
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "restrict" }),
+    number: text("number").notNull(),
+    status: creditNoteStatusEnum("status").notNull().default("issued"),
+    issueDate: date("issue_date").notNull(),
+    reason: text("reason").notNull(),
+    netPence: integer("net_pence").notNull().default(0),
+    vatPence: integer("vat_pence").notNull().default(0),
+    grossPence: integer("gross_pence").notNull().default(0),
+    /** Money returned to the client against this credit note. */
+    refundedPence: integer("refunded_pence").notNull().default(0),
+    refundedAt: date("refunded_at"),
+    refundReference: text("refund_reference"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("uniq_credit_notes_company_number").on(t.companyId, t.number),
+    index("idx_credit_notes_company").on(t.companyId),
+    index("idx_credit_notes_invoice").on(t.invoiceId),
+    index("idx_credit_notes_issue_date").on(t.issueDate),
+  ],
+);
+
+export const creditNoteLineItems = pgTable(
+  "credit_note_line_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    creditNoteId: uuid("credit_note_id")
+      .notNull()
+      .references(() => creditNotes.id, { onDelete: "cascade" }),
+    description: text("description").notNull(),
+    quantity: numeric("quantity", { precision: 12, scale: 3, mode: "number" })
+      .notNull()
+      .default(1),
+    unitPricePence: integer("unit_price_pence").notNull().default(0),
+    vatRate: integer("vat_rate").notNull().default(0),
+    discountPercent: numeric("discount_percent", { precision: 5, scale: 2, mode: "number" })
+      .notNull()
+      .default(0),
+    position: integer("position").notNull().default(0),
+  },
+  (t) => [index("idx_credit_note_lines_credit_note").on(t.creditNoteId)],
 );
 
 export const expenses = pgTable(

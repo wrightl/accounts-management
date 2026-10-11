@@ -46,7 +46,8 @@ export async function GET(request: Request) {
   const vat = await getVatSummary(user.companyId, from, to);
   const lines = [
     ["metric", "value_gbp", "note"],
-    ["vat_on_sales", gbp(vat.vatOnSalesPence), ""],
+    ["vat_on_sales", gbp(vat.vatOnSalesPence), "Net of credit notes"],
+    ["credit_note_vat", gbp(vat.creditNoteVatPence), "Already deducted from vat_on_sales"],
     ["vat_on_purchases", gbp(vat.vatOnPurchasesPence), ""],
     ["net_vat", gbp(vat.netVatPence), vat.note],
     ["period_from", from, ""],

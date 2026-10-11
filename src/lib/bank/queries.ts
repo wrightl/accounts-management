@@ -55,11 +55,16 @@ import {
 import { upsertBankSpendingCategory } from '@/lib/bank/spending-categories';
 import {
     effectiveStatus,
-    isFullySettled,
     todayIsoDate,
     type InvoiceStatus,
 } from '@/lib/invoices/status';
 import { clientDisplayName } from '@/lib/clients/display';
+import { creditAdjustmentForInvoice } from '@/lib/credit-notes/adjustments';
+import {
+    invoiceAmountDuePence,
+    invoiceBalancePence,
+    isInvoiceSettled,
+} from '@/lib/invoices/balance';
 import {
     resolveBankDisplayName,
     type BankProviderId,
@@ -721,8 +726,11 @@ async function findIncomingMatch(
 
     const invoiceCandidates = [];
     for (const inv of invoiceRows) {
-        const paid = await paidTotalForInvoice(db, inv.id);
-        const balance = Math.max(0, inv.grossPence - paid);
+        const balance = invoiceAmountDuePence({
+            grossPence: inv.grossPence,
+            paidPence: await paidTotalForInvoice(db, inv.id),
+            ...(await creditAdjustmentForInvoice(db, inv.id)),
+        });
         if (balance !== tx.amountPence) continue;
         const referenceDate = inv.dueDate ?? inv.issueDate ?? tx.bookedAt;
         invoiceCandidates.push({
@@ -1116,7 +1124,12 @@ async function createPaymentFromBankMatch(
     }
 
     const alreadyPaid = await paidTotalForInvoice(tx, inv.id);
-    const remaining = inv.grossPence - alreadyPaid;
+    const credits = await creditAdjustmentForInvoice(tx, inv.id);
+    const remaining = invoiceBalancePence({
+        grossPence: inv.grossPence,
+        paidPence: alreadyPaid,
+        ...credits,
+    });
     if (bankTx.amountPence > remaining) {
         throw new ReconciliationError(
             `Payment exceeds remaining balance of ${formatGBP(remaining)}`,
@@ -1136,7 +1149,7 @@ async function createPaymentFromBankMatch(
         .returning({ id: payments.id });
 
     const paidTotal = alreadyPaid + bankTx.amountPence;
-    if (isFullySettled(inv.grossPence, paidTotal)) {
+    if (isInvoiceSettled({ grossPence: inv.grossPence, paidPence: paidTotal, ...credits })) {
         await tx
             .update(invoices)
             .set({ status: 'paid', paidAt: receivedAt })
@@ -1428,8 +1441,11 @@ export async function findBankTransactionsForInvoice(
     if (!rows[0]) return [];
 
     const { invoice, client } = rows[0];
-    const paid = await paidTotalForInvoice(db, invoiceId);
-    const balancePence = Math.max(0, invoice.grossPence - paid);
+    const balancePence = invoiceAmountDuePence({
+        grossPence: invoice.grossPence,
+        paidPence: await paidTotalForInvoice(db, invoiceId),
+        ...(await creditAdjustmentForInvoice(db, invoiceId)),
+    });
     if (balancePence <= 0) return [];
 
     const referenceDate =

@@ -66,6 +66,7 @@ export const companySettingsFieldsSchema = z
     invoiceNumberPrefix: prefixSchema,
     quoteNumberPrefix: prefixSchema,
     orderNumberPrefix: prefixSchema,
+    creditNoteNumberPrefix: prefixSchema,
     invoicePaymentTermsDays: z.coerce
       .number({ error: "Enter payment terms in days" })
       .int()
@@ -171,6 +172,7 @@ export function companySettingsRawFromFormData(formData: FormData): Record<strin
     invoiceNumberPrefix: formData.get("invoiceNumberPrefix") ?? "DD",
     quoteNumberPrefix: formData.get("quoteNumberPrefix") ?? "Q",
     orderNumberPrefix: formData.get("orderNumberPrefix") ?? "O",
+    creditNoteNumberPrefix: formData.get("creditNoteNumberPrefix") ?? "CN",
     invoicePaymentTermsDays: formData.get("invoicePaymentTermsDays") ?? "14",
     defaultMileageRatePence: formData.get("defaultMileageRatePence") ?? "45",
     bankProvider: formData.get("bankProvider") ?? "",

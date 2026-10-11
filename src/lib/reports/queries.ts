@@ -15,6 +15,13 @@ import {
 import { clientDisplayNameSql } from "@/lib/clients/sql";
 import { defaultReportPeriod as fyDefaultReportPeriod } from "@/lib/dates";
 import { formatGBP } from "@/lib/money";
+import { creditAdjustmentsByInvoice } from "@/lib/credit-notes/adjustments";
+import {
+  creditNotesByMonth,
+  subtractByMonth,
+  sumCreditNotesInPeriod,
+} from "@/lib/credit-notes/period";
+import { invoiceAmountDuePence } from "@/lib/invoices/balance";
 import { todayIsoDate } from "@/lib/invoices/status";
 import { getCompanySettings } from "@/lib/settings/queries";
 
@@ -86,22 +93,26 @@ export async function getProfitAndLoss(
       ),
     );
 
-  const incomePence = income?.total ?? 0;
+  const credits = await sumCreditNotesInPeriod(companyId, from, to);
+  const creditNotePence = credits.netPence;
+  const incomePence = (income?.total ?? 0) - creditNotePence;
   const otherIncomePence = await sumOtherIncomePence(companyId, from, to);
   const expensePence = expenseTotal?.total ?? 0;
   const profitPence = incomePence + otherIncomePence - expensePence;
   return {
     incomePence,
+    creditNotePence,
     otherIncomePence,
     expensePence,
     profitPence,
     incomeFormatted: formatGBP(incomePence),
+    creditNoteFormatted: formatGBP(creditNotePence),
     otherIncomeFormatted: formatGBP(otherIncomePence),
     expenseFormatted: formatGBP(expensePence),
     profitFormatted: formatGBP(profitPence),
     basis: "accrual" as const,
     basisNote:
-      "Accrual basis: invoiced income is net (ex-VAT) by issue date. Other income is cash on the bank date (no VAT). Expenses are net of VAT by spend date. See VAT summary for output/input VAT.",
+      "Accrual basis: invoiced income is net (ex-VAT) by issue date, less credit notes by their issue date. Other income is cash on the bank date (no VAT). Expenses are net of VAT by spend date. See VAT summary for output/input VAT.",
   };
 }
 
@@ -251,8 +262,16 @@ export async function getAgedReceivables(companyId: string) {
     }
   }
 
+  const credits = await creditAdjustmentsByInvoice(
+    db,
+    rows.map((r) => r.id),
+  );
   for (const inv of rows) {
-    const balance = Math.max(0, inv.grossPence - (paidMap.get(inv.id) ?? 0));
+    const balance = invoiceAmountDuePence({
+      grossPence: inv.grossPence,
+      paidPence: paidMap.get(inv.id) ?? 0,
+      ...credits.get(inv.id),
+    });
     if (balance === 0) continue;
     const due = inv.dueDate ?? today;
     const days = Math.max(
@@ -302,10 +321,14 @@ export async function getIncomeByMonth(
     .groupBy(sql`to_char(${invoices.issueDate}, 'YYYY-MM')`)
     .orderBy(sql`to_char(${invoices.issueDate}, 'YYYY-MM')`);
 
-  return rows.map((r) => ({
-    month: r.month,
-    totalPence: r.total ?? 0,
-    totalFormatted: formatGBP(r.total ?? 0),
+  const credits = await creditNotesByMonth(companyId, from, to);
+  const series = subtractByMonth(
+    rows.map((r) => ({ month: r.month, totalPence: r.total ?? 0 })),
+    new Map([...credits].map(([month, c]) => [month, c.netPence])),
+  );
+  return series.map((r) => ({
+    ...r,
+    totalFormatted: formatGBP(r.totalPence),
   }));
 }
 
@@ -404,7 +427,9 @@ export async function getVatSummary(
       ),
     );
 
-  const vatOnSalesPence = sales?.total ?? 0;
+  const credits = await sumCreditNotesInPeriod(companyId, from, to);
+  const creditNoteVatPence = credits.vatPence;
+  const vatOnSalesPence = (sales?.total ?? 0) - creditNoteVatPence;
   const vatOnPurchasesPence = purchases?.total ?? 0;
   const netVatPence = vatOnSalesPence - vatOnPurchasesPence;
 
@@ -414,9 +439,11 @@ export async function getVatSummary(
 
   return {
     vatOnSalesPence,
+    creditNoteVatPence,
     vatOnPurchasesPence,
     netVatPence,
     vatOnSalesFormatted: formatGBP(vatOnSalesPence),
+    creditNoteVatFormatted: formatGBP(creditNoteVatPence),
     vatOnPurchasesFormatted: formatGBP(vatOnPurchasesPence),
     netVatFormatted: formatGBP(netVatPence),
     vatRegistered: company.vatRegistered,

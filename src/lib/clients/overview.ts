@@ -3,6 +3,8 @@ import { and, desc, eq, inArray, ne, sum } from "drizzle-orm";
 import { getDb } from "@/db";
 import { clients, invoices, orders, payments, quotes } from "@/db/schema";
 import { formatGBP } from "@/lib/money";
+import { creditAdjustmentsByInvoice } from "@/lib/credit-notes/adjustments";
+import { invoiceAmountDuePence } from "@/lib/invoices/balance";
 import {
   effectiveStatus,
   todayIsoDate,
@@ -142,10 +144,14 @@ export async function getClientOverview(
       .groupBy(payments.invoiceId);
 
     const paidMap = new Map(paidByInvoice.map((r) => [r.invoiceId, r.total ?? 0]));
+    const credits = await creditAdjustmentsByInvoice(db, openIds);
 
     for (const inv of openInvoices) {
-      const paid = paidMap.get(inv.id) ?? 0;
-      const balance = Math.max(0, inv.grossPence - paid);
+      const balance = invoiceAmountDuePence({
+        grossPence: inv.grossPence,
+        paidPence: paidMap.get(inv.id) ?? 0,
+        ...credits.get(inv.id),
+      });
       if (balance === 0) continue;
       outstandingPence += balance;
       const eff = effectiveStatus(inv.status as InvoiceStatus, inv.dueDate, today);

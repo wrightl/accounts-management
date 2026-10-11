@@ -4,6 +4,7 @@ import type { SessionUser } from "@/lib/auth";
 import { getDb } from "@/db";
 import {
   clients,
+  creditNotes,
   invoices,
   orders,
   payments,
@@ -47,6 +48,13 @@ import {
 import type { SpendingSeriesPoint } from "@/lib/spending/series";
 import { clientDisplayNameSql } from "@/lib/clients/sql";
 import { formatGBP, lineNetPence } from "@/lib/money";
+import {
+  creditNotesByMonth,
+  refundsByMonth,
+  subtractByMonth,
+  sumCreditNotesInPeriod,
+  sumRefundsInPeriod,
+} from "@/lib/credit-notes/period";
 import {
   formatDeltaPercent,
   formatMonthLabel,
@@ -188,7 +196,8 @@ async function getCollectedInPeriod(
         lte(sql`(${payments.receivedAt} AT TIME ZONE 'Europe/London')::date`, to),
       ),
     );
-  return row?.total ?? 0;
+  const refunds = await sumRefundsInPeriod(companyId, from, to);
+  return (row?.total ?? 0) - refunds;
 }
 
 async function getCollectedByMonth(
@@ -218,10 +227,10 @@ async function getCollectedByMonth(
       sql`to_char((${payments.receivedAt} AT TIME ZONE 'Europe/London')::date, 'YYYY-MM')`,
     );
 
-  return rows.map((r) => ({
-    month: r.month,
-    totalPence: r.total ?? 0,
-  }));
+  return subtractByMonth(
+    rows.map((r) => ({ month: r.month, totalPence: r.total ?? 0 })),
+    await refundsByMonth(companyId, from, to),
+  );
 }
 
 async function getInvoicedGrossInPeriod(
@@ -242,7 +251,8 @@ async function getInvoicedGrossInPeriod(
         lte(invoices.issueDate, to),
       ),
     );
-  return row?.total ?? 0;
+  const credits = await sumCreditNotesInPeriod(companyId, from, to);
+  return (row?.total ?? 0) - credits.grossPence;
 }
 
 async function getInvoicedGrossByMonth(
@@ -269,10 +279,15 @@ async function getInvoicedGrossByMonth(
     .groupBy(sql`to_char(${invoices.issueDate}, 'YYYY-MM')`)
     .orderBy(sql`to_char(${invoices.issueDate}, 'YYYY-MM')`);
 
-  return rows.map((r) => ({
-    month: r.month,
-    totalPence: r.total ?? 0,
-  }));
+  return subtractByMonth(
+    rows.map((r) => ({ month: r.month, totalPence: r.total ?? 0 })),
+    new Map(
+      [...(await creditNotesByMonth(companyId, from, to))].map(([month, c]) => [
+        month,
+        c.grossPence,
+      ]),
+    ),
+  );
 }
 
 async function getTopClientsByRevenue(
@@ -282,7 +297,7 @@ async function getTopClientsByRevenue(
   limit = 5,
 ): Promise<ClientRevenueSlice[]> {
   const db = getDb();
-  const rows = await db
+  const invoicedRows = await db
     .select({
       clientId: invoices.clientId,
       name: clientDisplayNameSql.as("client_name"),
@@ -299,8 +314,31 @@ async function getTopClientsByRevenue(
         lte(invoices.issueDate, to),
       ),
     )
-    .groupBy(invoices.clientId, clientDisplayNameSql)
-    .orderBy(sql`sum(${invoices.grossPence}) desc`);
+    .groupBy(invoices.clientId, clientDisplayNameSql);
+
+  // Net of credit notes issued in the period (by credit note issue date).
+  const creditedRows = await db
+    .select({
+      clientId: creditNotes.clientId,
+      total: sum(creditNotes.grossPence).mapWith(Number),
+    })
+    .from(creditNotes)
+    .where(
+      and(
+        eq(creditNotes.companyId, companyId),
+        eq(creditNotes.status, "issued"),
+        gte(creditNotes.issueDate, from),
+        lte(creditNotes.issueDate, to),
+      ),
+    )
+    .groupBy(creditNotes.clientId);
+  const creditedByClient = new Map(creditedRows.map((r) => [r.clientId, r.total ?? 0]));
+
+  // A share chart can't show a negative slice, so fully credited clients drop out.
+  const rows = invoicedRows
+    .map((r) => ({ ...r, total: (r.total ?? 0) - (creditedByClient.get(r.clientId) ?? 0) }))
+    .filter((r) => r.total > 0)
+    .sort((a, b) => b.total - a.total);
 
   const total = rows.reduce((acc, r) => acc + (r.total ?? 0), 0);
   if (total === 0) return [];
@@ -363,6 +401,21 @@ async function getUnbilledOnActiveOrders(companyId: string): Promise<number> {
       .filter((r): r is { orderId: string; total: number } => r.orderId != null)
       .map((r) => [r.orderId, r.total ?? 0]),
   );
+
+  // Credited amounts count as unbilled again.
+  const creditedRows = await db
+    .select({
+      orderId: invoices.orderId,
+      total: sum(creditNotes.grossPence).mapWith(Number),
+    })
+    .from(creditNotes)
+    .innerJoin(invoices, eq(creditNotes.invoiceId, invoices.id))
+    .where(and(inArray(invoices.orderId, ids), eq(creditNotes.status, "issued")))
+    .groupBy(invoices.orderId);
+  for (const r of creditedRows) {
+    if (r.orderId == null) continue;
+    billedMap.set(r.orderId, (billedMap.get(r.orderId) ?? 0) - (r.total ?? 0));
+  }
 
   let unbilled = 0;
   for (const order of active) {

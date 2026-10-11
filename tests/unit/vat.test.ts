@@ -88,6 +88,7 @@ describe("parseCompanySettingsInput", () => {
     invoiceNumberPrefix: "DD",
     quoteNumberPrefix: "Q",
     orderNumberPrefix: "O",
+    creditNoteNumberPrefix: "CN",
     invoicePaymentTermsDays: "14",
     defaultMileageRatePence: "45",
     bankProvider: "starling",

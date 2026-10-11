@@ -3,6 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import type { Database } from "@/db";
 import { companies } from "@/db/schema";
 import {
+  nextCreditNoteNumber,
   nextInvoiceNumber,
   nextOrderNumber,
   nextQuoteNumber,
@@ -111,6 +112,35 @@ export async function allocateOrderNumber(
     .set({
       orderNextSeq: allocated.nextSeq,
       orderSeqYear: allocated.seqYear,
+      updatedAt: new Date(),
+    })
+    .where(eq(companies.id, current.id));
+
+  return allocated.number;
+}
+
+/** Atomically allocate the next credit note number under the same lock. */
+export async function allocateCreditNoteNumber(
+  tx: Tx,
+  companyId: string,
+  issueDate: string | null | undefined,
+): Promise<string> {
+  const year = parseIssueYear(issueDate);
+  const current = await lockCompany(tx, companyId);
+  const allocated = nextCreditNoteNumber(
+    {
+      creditNoteNumberPrefix: current.creditNoteNumberPrefix,
+      creditNoteNextSeq: current.creditNoteNextSeq,
+      creditNoteSeqYear: current.creditNoteSeqYear,
+    },
+    year,
+  );
+
+  await tx
+    .update(companies)
+    .set({
+      creditNoteNextSeq: allocated.nextSeq,
+      creditNoteSeqYear: allocated.seqYear,
       updatedAt: new Date(),
     })
     .where(eq(companies.id, current.id));

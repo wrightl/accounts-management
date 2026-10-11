@@ -51,6 +51,7 @@ export async function updateCompany(formData: FormData): Promise<ActionResult> {
         invoiceNumberPrefix: rest.invoiceNumberPrefix,
         quoteNumberPrefix: rest.quoteNumberPrefix,
         orderNumberPrefix: rest.orderNumberPrefix,
+        creditNoteNumberPrefix: rest.creditNoteNumberPrefix,
         invoicePaymentTermsDays: rest.invoicePaymentTermsDays,
         defaultMileageRatePence: rest.defaultMileageRatePence,
         bankProvider: rest.bankProvider,

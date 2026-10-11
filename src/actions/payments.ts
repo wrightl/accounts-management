@@ -11,9 +11,10 @@ import {
   isBankTransactionAvailable,
   ReconciliationError,
 } from "@/lib/bank/queries";
+import { creditAdjustmentForInvoice } from "@/lib/credit-notes/adjustments";
+import { invoiceBalancePence, isInvoiceSettled } from "@/lib/invoices/balance";
 import {
   effectiveStatus,
-  isFullySettled,
   todayIsoDate,
   type InvoiceStatus,
 } from "@/lib/invoices/status";
@@ -119,7 +120,12 @@ export async function recordPayment(
             .from(payments)
             .where(eq(payments.invoiceId, invoiceId));
           const alreadyPaid = paidRow?.total ?? 0;
-          const remaining = inv.grossPence - alreadyPaid;
+          const credits = await creditAdjustmentForInvoice(tx, invoiceId);
+          const remaining = invoiceBalancePence({
+            grossPence: inv.grossPence,
+            paidPence: alreadyPaid,
+            ...credits,
+          });
           if (amountPence > remaining) {
             throw new PaymentError(
               `Payment exceeds remaining balance of ${(remaining / 100).toFixed(2)}`,
@@ -159,7 +165,7 @@ export async function recordPayment(
           }
 
           const paidTotal = alreadyPaid + amountPence;
-          if (isFullySettled(inv.grossPence, paidTotal)) {
+          if (isInvoiceSettled({ grossPence: inv.grossPence, paidPence: paidTotal, ...credits })) {
             await tx
               .update(invoices)
               .set({ status: "paid", paidAt: receivedAt })

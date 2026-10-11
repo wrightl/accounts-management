@@ -1,9 +1,21 @@
 import "server-only";
 import { and, desc, eq, gte, inArray, lte, ne, sum } from "drizzle-orm";
 import { getDb } from "@/db";
-import { clients, invoiceLineItems, invoices, orders, payments } from "@/db/schema";
+import {
+  clients,
+  creditNotes,
+  invoiceLineItems,
+  invoices,
+  orders,
+  payments,
+} from "@/db/schema";
 import { clientDisplayNameSql } from "@/lib/clients/sql";
 import { formatGBP } from "@/lib/money";
+import { creditAdjustmentsByInvoice } from "@/lib/credit-notes/adjustments";
+import {
+  invoiceAmountDuePence,
+  invoiceRefundDuePence,
+} from "@/lib/invoices/balance";
 import {
   effectiveStatus,
   todayIsoDate,
@@ -67,8 +79,33 @@ export async function getInvoiceDetail(companyId: string, id: string) {
     .where(eq(payments.invoiceId, id))
     .orderBy(desc(payments.receivedAt));
 
+  const creditNoteRows = await db
+    .select({
+      id: creditNotes.id,
+      number: creditNotes.number,
+      status: creditNotes.status,
+      issueDate: creditNotes.issueDate,
+      reason: creditNotes.reason,
+      grossPence: creditNotes.grossPence,
+      refundedPence: creditNotes.refundedPence,
+    })
+    .from(creditNotes)
+    .where(and(eq(creditNotes.invoiceId, id), eq(creditNotes.companyId, companyId)))
+    .orderBy(desc(creditNotes.createdAt));
+
   const paidPence = paymentRows.reduce((acc, p) => acc + p.amountPence, 0);
+  const issuedCredits = creditNoteRows.filter((c) => c.status === "issued");
+  const creditedPence = issuedCredits.reduce((acc, c) => acc + c.grossPence, 0);
+  const refundedPence = issuedCredits.reduce((acc, c) => acc + c.refundedPence, 0);
   const inv = rows[0].invoice;
+  const settlement = {
+    grossPence: inv.grossPence,
+    paidPence,
+    creditedPence,
+    refundedPence,
+  };
+  const balancePence = invoiceAmountDuePence(settlement);
+  const refundDuePence = invoiceRefundDuePence(settlement);
   const today = todayIsoDate();
   const status = effectiveStatus(inv.status as InvoiceStatus, inv.dueDate, today);
 
@@ -85,10 +122,21 @@ export async function getInvoiceDetail(companyId: string, id: string) {
       ...p,
       amountFormatted: formatGBP(p.amountPence),
     })),
+    creditNotes: creditNoteRows.map((c) => ({
+      ...c,
+      grossFormatted: formatGBP(c.grossPence),
+    })),
     paidPence,
     paidFormatted: formatGBP(paidPence),
-    balancePence: Math.max(0, inv.grossPence - paidPence),
-    balanceFormatted: formatGBP(Math.max(0, inv.grossPence - paidPence)),
+    creditedPence,
+    creditedFormatted: formatGBP(creditedPence),
+    /** Gross still available to credit (gross less issued credit notes). */
+    creditablePence: Math.max(0, inv.grossPence - creditedPence),
+    refundedPence,
+    balancePence,
+    balanceFormatted: formatGBP(balancePence),
+    refundDuePence,
+    refundDueFormatted: formatGBP(refundDuePence),
   };
 }
 
@@ -138,10 +186,14 @@ export async function getDashboardKpis(companyId: string): Promise<DashboardKpis
       .groupBy(payments.invoiceId);
 
     const paidMap = new Map(paidByInvoice.map((r) => [r.invoiceId, r.total ?? 0]));
+    const credits = await creditAdjustmentsByInvoice(db, ids);
 
     for (const inv of open) {
-      const paid = paidMap.get(inv.id) ?? 0;
-      const balance = Math.max(0, inv.grossPence - paid);
+      const balance = invoiceAmountDuePence({
+        grossPence: inv.grossPence,
+        paidPence: paidMap.get(inv.id) ?? 0,
+        ...credits.get(inv.id),
+      });
       if (balance === 0) continue;
       outstandingPence += balance;
       const eff = effectiveStatus(inv.status as InvoiceStatus, inv.dueDate, today);
@@ -211,11 +263,15 @@ export async function countOverdueInvoices(companyId: string): Promise<number> {
     .groupBy(payments.invoiceId);
 
   const paidMap = new Map(paidByInvoice.map((r) => [r.invoiceId, r.total ?? 0]));
+  const credits = await creditAdjustmentsByInvoice(db, ids);
 
   let count = 0;
   for (const inv of open) {
-    const paid = paidMap.get(inv.id) ?? 0;
-    const balance = Math.max(0, inv.grossPence - paid);
+    const balance = invoiceAmountDuePence({
+      grossPence: inv.grossPence,
+      paidPence: paidMap.get(inv.id) ?? 0,
+      ...credits.get(inv.id),
+    });
     if (balance === 0) continue;
     const eff = effectiveStatus(inv.status as InvoiceStatus, inv.dueDate, today);
     if (eff === "overdue") count += 1;
@@ -274,11 +330,15 @@ export async function listOverdueInvoices(
     .groupBy(payments.invoiceId);
 
   const paidMap = new Map(paidByInvoice.map((r) => [r.invoiceId, r.total ?? 0]));
+  const credits = await creditAdjustmentsByInvoice(db, ids);
 
   return open
     .map((inv) => {
-      const paid = paidMap.get(inv.id) ?? 0;
-      const balancePence = Math.max(0, inv.grossPence - paid);
+      const balancePence = invoiceAmountDuePence({
+        grossPence: inv.grossPence,
+        paidPence: paidMap.get(inv.id) ?? 0,
+        ...credits.get(inv.id),
+      });
       const eff = effectiveStatus(inv.status as InvoiceStatus, inv.dueDate, today);
       return {
         id: inv.id,

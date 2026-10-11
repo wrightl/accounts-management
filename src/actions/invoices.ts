@@ -37,6 +37,7 @@ import {
 } from "@/lib/invoices/schema";
 import { financialYearStartDate, todayIsoDate } from "@/lib/dates";
 import { enqueueSendJob, processSendJob } from "@/lib/outbox";
+import { creditAdjustmentForInvoice } from "@/lib/credit-notes/adjustments";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { parseVatRate, resolveLineVatRate } from "@/lib/vat";
 import type { ActionResult } from "@/actions/result";
@@ -197,6 +198,9 @@ export async function updateInvoice(
   );
 }
 
+const CREDITED_INVOICE_VOID_ERROR =
+  "This invoice has credit notes, so it can't be voided. Raise a credit note for the rest instead.";
+
 export async function voidInvoice(id: string): Promise<ActionResult> {
   return mutate(
     "accounts:write",
@@ -212,6 +216,9 @@ export async function voidInvoice(id: string): Promise<ActionResult> {
       const from = storedStatus(existing.status);
       if (!canTransition(from, "void")) {
         return { ok: false, error: `Cannot void an invoice in status "${from}"` };
+      }
+      if ((await creditAdjustmentForInvoice(db, id)).creditedPence > 0) {
+        return { ok: false, error: CREDITED_INVOICE_VOID_ERROR };
       }
 
       await db
@@ -303,6 +310,12 @@ export async function updateInvoiceStatus(
         .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)))
         .limit(1);
       if (!existing) return { ok: false, error: "Invoice not found" };
+      if (
+        target === "void" &&
+        (await creditAdjustmentForInvoice(db, id)).creditedPence > 0
+      ) {
+        return { ok: false, error: CREDITED_INVOICE_VOID_ERROR };
+      }
 
       const now = new Date();
       await db
