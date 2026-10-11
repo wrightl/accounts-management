@@ -1,5 +1,6 @@
 import { guardTenantPage, hasPermission } from '@/lib/auth';
-import { monthName } from '@/lib/dates';
+import { financialYearStartDate, monthName, todayIsoDate } from '@/lib/dates';
+import { PeriodLockCard } from '@/components/reports/period-lock-card';
 import {
     defaultReportPeriod,
     getAgedReceivables,
@@ -21,6 +22,7 @@ export default async function ReportsPage({
 }) {
     const { companyId } = await guardTenantPage('reports:read');
     const canExport = await hasPermission('reports:export');
+    const canLock = await hasPermission('books:lock');
     const sp = await searchParams;
 
     const [defaults, company] = await Promise.all([
@@ -30,6 +32,15 @@ export default async function ReportsPage({
     const from = sp.from ?? defaults.from;
     const to = sp.to ?? defaults.to;
     const yearEndLabel = monthName(company.financialYearEndMonth);
+    const today = todayIsoDate();
+    const dayBefore = (iso: string) => {
+        const d = new Date(`${iso}T12:00:00Z`);
+        d.setUTCDate(d.getUTCDate() - 1);
+        return d.toISOString().slice(0, 10);
+    };
+    const lastYearEnd = dayBefore(
+        financialYearStartDate(company.financialYearEndMonth, today),
+    );
 
     const [pnl, aged, byMonth, byCategory, vat] = await Promise.all([
         getProfitAndLoss(companyId, from, to),
@@ -154,6 +165,13 @@ export default async function ReportsPage({
                 </div>
                 <p className="mt-3 text-sm text-muted">{vat.note}</p>
             </section>
+
+            <PeriodLockCard
+                lockedThrough={company.booksLockedThrough}
+                suggestedDate={lastYearEnd}
+                maxDate={dayBefore(today)}
+                canLock={canLock}
+            />
 
             <section className="mt-10">
                 <h2 className="font-display text-lg font-semibold">

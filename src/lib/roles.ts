@@ -3,7 +3,8 @@
  *
  *  - admin:          full access, incl. user & settings management.
  *  - user:           co-founder access to all day-to-day accounting.
- *  - accountant:     external accountant — read-only plus export.
+ *  - accountant:     external accountant — read-only plus export, and can
+ *                    lock the books after filing.
  *  - pending:        signed in, no permissions until an admin assigns a role.
  *  - platform_admin: platform operator — `/platform` only, no tenant.
  */
@@ -34,7 +35,9 @@ export type Permission =
   | "reports:read"
   | "reports:export"
   | "settings:manage"
-  | "users:manage";
+  | "users:manage"
+  /** Set or move the "books locked up to" date. */
+  | "books:lock";
 
 const PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
   admin: new Set<Permission>([
@@ -44,6 +47,7 @@ const PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     "reports:export",
     "settings:manage",
     "users:manage",
+    "books:lock",
   ]),
   user: new Set<Permission>([
     "accounts:read",
@@ -55,6 +59,7 @@ const PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     "accounts:read",
     "reports:read",
     "reports:export",
+    "books:lock",
   ]),
   pending: new Set<Permission>(),
   platform_admin: new Set<Permission>(),

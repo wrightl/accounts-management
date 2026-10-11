@@ -33,6 +33,8 @@ import { resolveClientEmailSender } from "@/lib/email/resolve-client-sender";
 import { escapeHtml } from "@/lib/html";
 import { getCompanySettings } from "@/lib/settings/queries";
 import { FORM_FIELD_ERROR_SUMMARY } from "@/lib/validation/field-errors";
+import { getBooksLockedThrough } from "@/lib/period-lock-queries";
+import { periodLockError } from "@/lib/period-lock";
 import type { ActionResult } from "@/actions/result";
 
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -127,6 +129,11 @@ export async function createCreditNote(
           if (inv.issueDate && parsed.data.issueDate < inv.issueDate) {
             throw new CreditNoteError("A credit note can't be dated before its invoice");
           }
+          const locked = periodLockError(
+            await getBooksLockedThrough(companyId, tx),
+            parsed.data.issueDate,
+          );
+          if (locked) throw new CreditNoteError(locked);
 
           let lineValues;
           try {
@@ -216,6 +223,11 @@ export async function voidCreditNote(id: string): Promise<ActionResult> {
                 : "A credit note can only be voided before it's sent and before any refund",
             );
           }
+          const locked = periodLockError(
+            await getBooksLockedThrough(companyId, tx),
+            note.issueDate,
+          );
+          if (locked) throw new CreditNoteError(locked);
           const inv = await lockInvoice(tx, companyId, note.invoiceId);
           await tx
             .update(creditNotes)
@@ -292,6 +304,11 @@ export async function recordCreditNoteRefund(
           if (parsed.data.refundedAt < note.issueDate) {
             throw new CreditNoteError("The refund can't be dated before the credit note");
           }
+          const locked = periodLockError(
+            await getBooksLockedThrough(companyId, tx),
+            parsed.data.refundedAt,
+          );
+          if (locked) throw new CreditNoteError(locked);
           const inv = await lockInvoice(tx, companyId, note.invoiceId);
           const refundDue = invoiceRefundDuePence({
             grossPence: inv.grossPence,

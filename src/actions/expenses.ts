@@ -38,6 +38,8 @@ import {
   vatFromInclusiveGross,
 } from "@/lib/vat";
 import type { ActionResult } from "@/actions/result";
+import { periodLockError } from "@/lib/period-lock";
+import { checkPeriodOpen, getBooksLockedThrough } from "@/lib/period-lock-queries";
 import { refreshExpenseBankSuggestion } from "@/lib/bank/expense-match";
 import {
   approvePendingExpense,
@@ -78,6 +80,8 @@ export async function createExpense(formData: FormData): Promise<ActionResult> {
     "accounts:write",
     async ({ companyId, localUserId }) => {
       const company = await getOrCreateCompanySettings(companyId);
+      const locked = periodLockError(company.booksLockedThrough, parsed.data.spentAt);
+      if (locked) return { ok: false, error: locked };
       const paidByDefault =
         parsed.data.status === "reimbursable"
           ? (parsed.data.paidByUserId ?? localUserId)
@@ -209,6 +213,15 @@ export async function updateExpense(
       }
 
       const company = await getOrCreateCompanySettings(companyId);
+      // Pending submissions aren't in the books yet, so they stay editable.
+      if (existing.status !== "pending") {
+        const locked = periodLockError(
+          company.booksLockedThrough,
+          existing.spentAt,
+          parsed.data.spentAt || null,
+        );
+        if (locked) return { ok: false, error: locked };
+      }
       const vatRate = parsed.data.useMileage
         ? 0
         : resolveLineVatRate(company, parseVatRate(parsed.data.vatRate));
@@ -336,6 +349,10 @@ export async function deleteExpense(id: string): Promise<ActionResult> {
       if (!existing) return { ok: false, error: "Expense not found" };
       if (existing.status === "reimbursed") {
         return { ok: false, error: "Cannot delete a reimbursed expense" };
+      }
+      if (existing.status !== "pending") {
+        const locked = await checkPeriodOpen(companyId, existing.spentAt);
+        if (locked) return { ok: false, error: locked };
       }
 
       const linked = await db
@@ -511,6 +528,14 @@ export async function commitExpenseImport(
   return mutateWide(
     "accounts:write",
     async ({ companyId, localUserId }) => {
+      const lockedThrough = await getBooksLockedThrough(companyId);
+      for (const row of rows) {
+        const locked = periodLockError(lockedThrough, row.spentAt);
+        if (locked) {
+          const error = `Row ${row.rowNumber}: ${locked}`;
+          return { ok: false, error, fieldErrors: { commit: error } };
+        }
+      }
       const db = getDb();
       const insertedIds: string[] = [];
       await db.transaction(async (tx) => {

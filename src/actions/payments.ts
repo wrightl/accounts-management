@@ -24,6 +24,7 @@ import {
   paymentRawFromFormData,
 } from "@/lib/payments/schema";
 import { FORM_FIELD_ERROR_SUMMARY } from "@/lib/validation/field-errors";
+import { checkPeriodOpen } from "@/lib/period-lock-queries";
 
 class PaymentError extends Error {
   constructor(message: string) {
@@ -90,6 +91,8 @@ export async function recordPayment(
               `${(await getBankTransactionById(companyId, bankTransactionId))!.bookedAt}T12:00:00Z`,
             )
           : new Date();
+      const locked = await checkPeriodOpen(companyId, receivedAt);
+      if (locked) return { ok: false, error: locked };
 
       const db = getDb();
       let paymentId: string;

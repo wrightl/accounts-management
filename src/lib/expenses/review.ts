@@ -10,6 +10,7 @@ import { normalizeExpensePaymentFields } from "@/lib/expenses/schema";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { getStorage } from "@/lib/storage";
 import { resolveLineVatRate, vatFromInclusiveGross } from "@/lib/vat";
+import { periodLockError } from "@/lib/period-lock";
 import type { ActionResult } from "@/actions/result";
 
 /**
@@ -79,6 +80,10 @@ export async function approvePendingExpense(
   }
 
   const company = await getOrCreateCompanySettings(companyId);
+  // Approving brings the expense into the books on its spend date.
+  const spentAt = input.fields ? input.fields.spentAt : existing.spentAt;
+  const locked = periodLockError(company.booksLockedThrough, spentAt);
+  if (locked) return { ok: false, error: locked };
   const vatRate = resolveLineVatRate(
     company,
     input.fields?.vatRate ?? existing.vatRate,

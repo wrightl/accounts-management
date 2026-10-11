@@ -15,6 +15,7 @@ import {
   getActiveShareholdersForSplit,
 } from "@/lib/shareholders/queries";
 import type { ActionResult } from "@/actions/result";
+import { checkPeriodOpen } from "@/lib/period-lock-queries";
 
 export async function declareDividend(formData: FormData): Promise<ActionResult> {
   const parsed = parseDeclareDividendInput(dividendRawFromFormData(formData));
@@ -34,6 +35,8 @@ export async function declareDividend(formData: FormData): Promise<ActionResult>
       if (entityType !== "limited_company") {
         return { ok: false, error: "Dividends are only available for limited companies." };
       }
+      const locked = await checkPeriodOpen(companyId, parsed.data.declaredAt);
+      if (locked) return { ok: false, error: locked };
 
       const balanced = await assertRegisterBalanced(companyId);
       if (!balanced.ok) return balanced;
@@ -95,13 +98,15 @@ export async function deleteDividendDeclaration(id: string): Promise<ActionResul
     async ({ companyId }) => {
       const db = getDb();
       const [existing] = await db
-        .select({ id: dividendDeclarations.id })
+        .select({ id: dividendDeclarations.id, declaredAt: dividendDeclarations.declaredAt })
         .from(dividendDeclarations)
         .where(
           and(eq(dividendDeclarations.id, id), eq(dividendDeclarations.companyId, companyId)),
         )
         .limit(1);
       if (!existing) return { ok: false, error: "Dividend declaration not found" };
+      const locked = await checkPeriodOpen(companyId, existing.declaredAt);
+      if (locked) return { ok: false, error: locked };
 
       await db
         .delete(dividendDeclarations)

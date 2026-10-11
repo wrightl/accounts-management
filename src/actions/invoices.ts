@@ -38,6 +38,8 @@ import {
 import { financialYearStartDate, todayIsoDate } from "@/lib/dates";
 import { enqueueSendJob, processSendJob } from "@/lib/outbox";
 import { creditAdjustmentForInvoice } from "@/lib/credit-notes/adjustments";
+import { periodLockError } from "@/lib/period-lock";
+import { checkPeriodOpen } from "@/lib/period-lock-queries";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { parseVatRate, resolveLineVatRate } from "@/lib/vat";
 import type { ActionResult } from "@/actions/result";
@@ -83,6 +85,8 @@ export async function createInvoice(formData: FormData): Promise<ActionResult> {
     "accounts:write",
     async ({ companyId, localUserId }) => {
       const company = await getOrCreateCompanySettings(companyId);
+      const locked = periodLockError(company.booksLockedThrough, issueDate);
+      if (locked) return { ok: false, error: locked };
       let lineValues;
       try {
         lineValues = buildLineValues(parsed.data.lines, company);
@@ -167,6 +171,8 @@ export async function updateInvoice(
       if (!canEditInvoice(existing.status as InvoiceStatus)) {
         return { ok: false, error: "Only draft invoices can be edited" };
       }
+      const locked = periodLockError(company.booksLockedThrough, existing.issueDate, issueDate);
+      if (locked) return { ok: false, error: locked };
 
       await db.transaction(async (tx) => {
         await tx
@@ -220,6 +226,8 @@ export async function voidInvoice(id: string): Promise<ActionResult> {
       if ((await creditAdjustmentForInvoice(db, id)).creditedPence > 0) {
         return { ok: false, error: CREDITED_INVOICE_VOID_ERROR };
       }
+      const locked = await checkPeriodOpen(companyId, existing.issueDate);
+      if (locked) return { ok: false, error: locked };
 
       await db
         .update(invoices)
@@ -248,6 +256,10 @@ export async function sendInvoice(id: string): Promise<ActionResult> {
       }
       if (!detail.client.email) {
         return { ok: false, error: "Client has no email address" };
+      }
+      if (from === "draft") {
+        const locked = await checkPeriodOpen(companyId, detail.invoice.issueDate);
+        if (locked) return { ok: false, error: locked };
       }
 
       const jobId = await enqueueSendJob("invoice_send", companyId, id, localUserId);
@@ -315,6 +327,11 @@ export async function updateInvoiceStatus(
         (await creditAdjustmentForInvoice(db, id)).creditedPence > 0
       ) {
         return { ok: false, error: CREDITED_INVOICE_VOID_ERROR };
+      }
+      // Sending or voiding moves the invoice into or out of the books.
+      if (target === "void" || (target === "sent" && storedStatus(current) === "draft")) {
+        const locked = await checkPeriodOpen(companyId, existing.issueDate);
+        if (locked) return { ok: false, error: locked };
       }
 
       const now = new Date();
@@ -429,6 +446,11 @@ export async function commitInvoiceImport(
       );
       const seenInBatch = new Set<string>();
       for (const row of rows) {
+        const locked = periodLockError(company.booksLockedThrough, row.issueDate);
+        if (locked) {
+          const error = `Row ${row.rowNumber}: ${locked}`;
+          return { ok: false, error, fieldErrors: { commit: error } };
+        }
         if (
           row.status === "paid" &&
           row.issueDate &&

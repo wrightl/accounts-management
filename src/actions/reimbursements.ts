@@ -25,6 +25,7 @@ import {
   reimbursementUpdateRawFromFormData,
 } from "@/lib/reimbursements/schema";
 import type { ActionResult } from "@/actions/result";
+import { checkPeriodOpen } from "@/lib/period-lock-queries";
 
 class ReimburseError extends Error {
   constructor(message: string) {
@@ -299,6 +300,8 @@ export async function markReimbursementPaid(
             `${(await getBankTransactionById(companyId, bankTransactionId))!.bookedAt}T12:00:00Z`,
           )
         : new Date();
+      const locked = await checkPeriodOpen(companyId, paidAt);
+      if (locked) return { ok: false, error: locked };
 
       try {
         await db.transaction(async (tx) => {

@@ -140,6 +140,11 @@ export const companies = pgTable("companies", {
   openingCashAsAt: date("opening_cash_as_at"),
   /** Total issued ordinary shares (Ltd only; must match active shareholder sum). */
   totalShares: integer("total_shares"),
+  /**
+   * Books are closed up to and including this date: nothing dated on or before
+   * it can be created, changed or removed. Set by an admin or accountant.
+   */
+  booksLockedThrough: date("books_locked_through"),
   /** When set, tenant writes and outbound cron for this company are blocked. */
   suspendedAt: timestamp("suspended_at", { withTimezone: true }),
   suspendedReason: text("suspended_reason"),

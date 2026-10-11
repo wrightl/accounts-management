@@ -60,6 +60,8 @@ import {
 } from '@/lib/invoices/status';
 import { clientDisplayName } from '@/lib/clients/display';
 import { creditAdjustmentForInvoice } from '@/lib/credit-notes/adjustments';
+import { periodLockError } from '@/lib/period-lock';
+import { getBooksLockedThrough } from '@/lib/period-lock-queries';
 import {
     invoiceAmountDuePence,
     invoiceBalancePence,
@@ -1188,12 +1190,31 @@ async function getMatchForCompany(
     return row?.match ?? null;
 }
 
+/** Refuse reconciliation changes to bank rows booked in the locked period. */
+async function assertBankRowOpen(
+    db: Parameters<typeof getMatchForCompany>[0],
+    companyId: string,
+    bankTransactionId: string,
+): Promise<void> {
+    const [row] = await db
+        .select({ bookedAt: bankTransactions.bookedAt })
+        .from(bankTransactions)
+        .where(eq(bankTransactions.id, bankTransactionId))
+        .limit(1);
+    const locked = periodLockError(
+        await getBooksLockedThrough(companyId, db),
+        row?.bookedAt,
+    );
+    if (locked) throw new ReconciliationError(locked);
+}
+
 export async function confirmMatch(companyId: string, matchId: string) {
     const db = getDb();
     await db.transaction(async (tx) => {
         const match = await getMatchForCompany(tx, companyId, matchId);
         if (!match) throw new ReconciliationError('Match not found');
         if (match.confirmed) return;
+        await assertBankRowOpen(tx, companyId, match.bankTransactionId);
 
         if (
             match.matchType === 'invoice_payment' &&
@@ -1336,6 +1357,8 @@ export async function explainBankCredit(
     if (tx.amountPence <= 0) {
         throw new ReconciliationError('Only incoming credits can be explained this way');
     }
+    const locked = periodLockError(await getBooksLockedThrough(companyId), tx.bookedAt);
+    if (locked) throw new ReconciliationError(locked);
 
     const resolvedCategory =
         input.matchType === 'other_income'
@@ -1397,6 +1420,7 @@ export async function clearBankCreditExplanation(
             'Only credit explanations can be cleared this way',
         );
     }
+    await assertBankRowOpen(db, companyId, match.bankTransactionId);
     await db
         .delete(reconciliationMatches)
         .where(eq(reconciliationMatches.id, matchId));
