@@ -16,6 +16,7 @@ import {
   getProfitAndLoss,
   getVatSummary,
 } from "@/lib/reports/queries";
+import { listClientProfitability, listOrderProfitability } from "@/lib/profitability/queries";
 import { getSafeToPay } from "@/lib/safe-to-pay/queries";
 import { getTopSpending } from "@/lib/spending/queries";
 
@@ -187,6 +188,43 @@ function buildTools(companyId: string, isLtd: boolean, sources: string[]) {
           netVat: v.netVatFormatted,
           vatRegistered: v.vatRegistered,
         };
+      },
+    }),
+    client_profitability: tool({
+      description:
+        "Margin per client for a period: invoiced revenue less credit notes, against expenses tagged to the client.",
+      inputSchema: period,
+      execute: async ({ from, to }) => {
+        sources.push(`Profitability by client, ${periodLabel(from, to)}`);
+        const rows = await listClientProfitability(companyId, { from, to });
+        return rows.slice(0, 25).map((c) => ({
+          client: c.clientName,
+          revenue: formatGBP(c.revenuePence),
+          costs: formatGBP(c.costPence),
+          margin: formatGBP(c.marginPence),
+          marginPercent: c.marginPercent,
+          rebillableNotInvoiced: formatGBP(c.unbilledRebillablePence),
+        }));
+      },
+    }),
+    order_profitability: tool({
+      description:
+        "Margin per order (project) to date and projected once fully invoiced, with costs tagged to each order.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        sources.push("Profitability by order");
+        const rows = await listOrderProfitability(companyId);
+        return rows.slice(0, 30).map((o) => ({
+          order: o.number,
+          client: o.clientName,
+          status: o.status,
+          quoted: formatGBP(o.quotedPence),
+          revenueSoFar: formatGBP(o.current.revenuePence),
+          costs: formatGBP(o.current.costPence),
+          margin: formatGBP(o.current.marginPence),
+          marginPercent: o.current.marginPercent,
+          projectedMargin: formatGBP(o.projected.marginPence),
+        }));
       },
     }),
     money_owed_by_clients: tool({

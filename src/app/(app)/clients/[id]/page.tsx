@@ -10,6 +10,9 @@ import { StatusBadge } from "@/components/ui/badge";
 import { buttonClasses } from "@/components/ui/button";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import type { InvoiceStatus } from "@/lib/invoices/status";
+import { formatGBP } from "@/lib/money";
+import { listClientProfitability, listProjectExpenses } from "@/lib/profitability/queries";
+import { MarginCards, ProjectExpenses } from "@/components/profitability/project-costs";
 
 export default async function ClientDetailPage({
   params,
@@ -20,8 +23,13 @@ export default async function ClientDetailPage({
   const canWrite = await hasPermission("accounts:write");
   const { id } = await params;
 
-  const overview = await getClientOverview(companyId, id);
+  const [overview, profitRows, costs] = await Promise.all([
+    getClientOverview(companyId, id),
+    listClientProfitability(companyId, { from: null, to: null }, id),
+    listProjectExpenses(companyId, { clientId: id }),
+  ]);
   if (!overview) notFound();
+  const profit = profitRows[0];
 
   const { client, quotes, orders, invoiceRows, metrics, quoteStatusBreakdown } = overview;
 
@@ -167,6 +175,35 @@ export default async function ClientDetailPage({
               </Table>
             )}
           </section>
+
+          {profit ? (
+            <section>
+              <h2 className="mb-3 font-display text-lg font-semibold">Profitability</h2>
+              <MarginCards
+                revenueLabel="Invoiced (all time)"
+                margin={profit}
+                extra={
+                  profit.unbilledRebillablePence > 0
+                    ? {
+                        title: "Rebillable, not invoiced",
+                        value: formatGBP(profit.unbilledRebillablePence),
+                        note: "Add it from the client's next invoice",
+                      }
+                    : undefined
+                }
+              />
+              <p className="mt-2 text-xs text-muted">
+                Net of VAT and credit notes. Costs are expenses tagged to this client or their orders.
+              </p>
+            </section>
+          ) : null}
+
+          <ProjectExpenses
+            expenses={costs}
+            addHref={`/expenses/new?clientId=${id}`}
+            canWrite={canWrite}
+            showOrder
+          />
         </div>
 
         <aside className="lg:sticky lg:top-6 lg:self-start">

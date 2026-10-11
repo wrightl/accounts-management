@@ -42,6 +42,7 @@ import { periodLockError } from "@/lib/period-lock";
 import { checkPeriodOpen } from "@/lib/period-lock-queries";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { parseVatRate, resolveLineVatRate } from "@/lib/vat";
+import { checkRebillExpenses } from "@/lib/profitability/queries";
 import type { ActionResult } from "@/actions/result";
 
 export type InvoiceImportPreviewResult =
@@ -61,8 +62,13 @@ function buildLineValues(
       vatRate: resolveLineVatRate(company, parseVatRate(l.vatRate)),
       discountPercent: l.discountPercent ?? 0,
       position: i,
+      expenseId: l.expenseId ?? null,
     };
   });
+}
+
+function rebilledExpenseIds(lines: Array<{ expenseId: string | null }>): string[] {
+  return lines.flatMap((l) => (l.expenseId ? [l.expenseId] : []));
 }
 
 export async function createInvoice(formData: FormData): Promise<ActionResult> {
@@ -94,6 +100,13 @@ export async function createInvoice(formData: FormData): Promise<ActionResult> {
         return { ok: false, error: e instanceof Error ? e.message : "Invalid amount" };
       }
       const totals = invoiceTotals(lineValues);
+      const rebillError = await checkRebillExpenses(
+        companyId,
+        parsed.data.clientId,
+        rebilledExpenseIds(lineValues),
+        null,
+      );
+      if (rebillError) return { ok: false, error: rebillError };
 
       const db = getDb();
       const invoiceId = await db.transaction(async (tx) => {
@@ -173,6 +186,13 @@ export async function updateInvoice(
       }
       const locked = periodLockError(company.booksLockedThrough, existing.issueDate, issueDate);
       if (locked) return { ok: false, error: locked };
+      const rebillError = await checkRebillExpenses(
+        companyId,
+        parsed.data.clientId,
+        rebilledExpenseIds(lineValues),
+        id,
+      );
+      if (rebillError) return { ok: false, error: rebillError };
 
       await db.transaction(async (tx) => {
         await tx

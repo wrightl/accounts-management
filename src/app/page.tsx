@@ -8,6 +8,7 @@ import { AudienceStrip } from "@/components/marketing/audience-strip";
 import { ProblemSection } from "@/components/marketing/problem-section";
 import { ProductVideo } from "@/components/marketing/product-video";
 import { FeatureSplits } from "@/components/marketing/feature-splits";
+import { InsightFeatures } from "@/components/marketing/insight-features";
 import { HowItWorks } from "@/components/marketing/how-it-works";
 import {
   DifferentiatorSection,
@@ -27,7 +28,7 @@ import {
 export const metadata: Metadata = {
   title: "UK Accounting Software for Limited Companies & Sole Traders",
   description:
-    "Alfa is accounting software for UK consultancies, studios, small agencies, and neurodiverse founders. Quotes, invoices, expenses, bank reconciliation, VAT, and reporting — plus display and focus controls (motion, text size, contrast, readable font). Free 30-day trial.",
+    "Alfa is accounting software for UK consultancies, studios, small agencies, and neurodiverse founders. Quotes, invoices, expenses, bank reconciliation, VAT, cash forecasts, project margins and an AI bookkeeper — plus display and focus controls (motion, text size, contrast, readable font). Free 30-day trial.",
   keywords: [
     "UK accounting software",
     "UK bookkeeping software",
@@ -78,7 +79,7 @@ export const metadata: Metadata = {
 const FAQ_DATA = [
   {
     q: "Is this full accounting software?",
-    a: "It replaces the spreadsheets and folders you use day to day — quotes, invoices, expenses, bank CSV matching, and reports. Your accountant still files returns and handles Companies House.",
+    a: "It replaces the spreadsheets and folders you use day to day: quotes, invoices, credit notes, expenses, bank CSV matching and reports. It also forecasts cash, shows project margins and, for limited companies, tracks director's loans and what's safe to pay yourself. Your accountant still files returns and handles Companies House.",
   },
   {
     q: "Do you support VAT or Making Tax Digital?",
@@ -94,7 +95,11 @@ const FAQ_DATA = [
   },
   {
     q: "Limited company or sole trader?",
-    a: "Both. Day-to-day books are the same. Limited companies also get shareholders and dividends. See our UK Financial Guides for obligations by structure.",
+    a: "Both. Day-to-day books are the same. Limited companies also get shareholders, dividends, director's loans, a corporation tax estimate and a reserves check. See our UK Financial Guides for obligations by structure.",
+  },
+  {
+    q: "How does Alfa use AI?",
+    a: "The AI bookkeeper suggests categories for bank payments, pairs receipts with card payments, and answers questions about your figures. It can only read your books, and nothing changes until someone accepts a suggestion. Questions are limited to 40 a day per company.",
   },
   {
     q: "What currency do you support?",
@@ -126,6 +131,7 @@ export default async function Home() {
         <ProblemSection />
         <ProductVideo />
         <FeatureSplits />
+        <InsightFeatures />
         <HowItWorks />
         <DifferentiatorSection />
         <CalmFocusSection />

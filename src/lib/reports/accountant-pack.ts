@@ -156,7 +156,7 @@ export async function buildAccountantPack({
     })
     .from(expenses)
     .leftJoin(users, eq(expenses.paidByUserId, users.id))
-    .leftJoin(clients, eq(expenses.billableClientId, clients.id))
+    .leftJoin(clients, eq(expenses.clientId, clients.id))
     .where(
       and(
         eq(expenses.companyId, companyId),

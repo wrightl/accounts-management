@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
@@ -49,6 +50,10 @@ export function ExpenseForm({
   receiptOcrProvider = "local",
   receiptOcrModel,
   vatRegistered = false,
+  orders = [],
+  defaultClientId,
+  defaultOrderId,
+  rebilledOn,
   defaultVatRate = 0,
 }: {
   mode: "create" | "edit";
@@ -64,7 +69,8 @@ export function ExpenseForm({
     status: string;
     source?: string;
     billable: boolean;
-    billableClientId: string | null;
+    clientId: string | null;
+    orderId?: string | null;
     paidByUserId: string | null;
     submittedByUserId?: string | null;
     mileageMiles?: number | null;
@@ -72,6 +78,13 @@ export function ExpenseForm({
   };
   founders: { id: string; name: string | null; email: string }[];
   clients: { id: string; name: string; companyName?: string | null }[];
+  /** Orders the expense can be tagged to. */
+  orders?: { id: string; number: string; clientId: string; clientName: string }[];
+  /** Pre-selected tags for a new expense, e.g. from an order page. */
+  defaultClientId?: string | null;
+  defaultOrderId?: string | null;
+  /** The invoice that recharges this expense, if any. */
+  rebilledOn?: { invoiceId: string; number: string } | null;
   canWrite: boolean;
   defaultPaidByUserId?: string | null;
   /** Pre-selected status for a new expense, e.g. "reimbursable" when a founder paid. */
@@ -98,6 +111,15 @@ export function ExpenseForm({
   const [spentAt, setSpentAt] = useState(expense?.spentAt ?? today);
   const [pendingReceipt, setPendingReceipt] = useState<File | null>(null);
   const [billable, setBillable] = useState(expense?.billable ?? false);
+  const [projectClientId, setProjectClientId] = useState(
+    expense?.clientId ?? defaultClientId ?? "",
+  );
+  const [projectOrderId, setProjectOrderId] = useState(
+    expense?.orderId ?? defaultOrderId ?? "",
+  );
+  const orderChoices = projectClientId
+    ? orders.filter((o) => o.clientId === projectClientId)
+    : orders;
   const [category, setCategory] = useState(expense?.category ?? "");
   const [useMileage, setUseMileage] = useState(Boolean(expense?.mileageMiles));
   const [mileageMiles, setMileageMiles] = useState(
@@ -182,11 +204,9 @@ export function ExpenseForm({
       "paidByUserId",
       targetStatus === "company_paid" ? "" : paidByUserId,
     );
-    if (billable) {
-      formData.set("billable", "true");
-      const clientEl = document.getElementById("billableClientId") as HTMLSelectElement | null;
-      if (clientEl?.value) formData.set("billableClientId", clientEl.value);
-    }
+    if (billable) formData.set("billable", "true");
+    formData.set("clientId", projectClientId);
+    formData.set("orderId", projectOrderId);
     if (useMileage && !isEmailSubmission) {
       formData.set("useMileage", "true");
       formData.set("mileageMiles", mileageMiles);
@@ -668,6 +688,61 @@ export function ExpenseForm({
           </FieldError>
         </div>
       )}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <Label htmlFor="clientId">Client</Label>
+          <Select
+            id="clientId"
+            name="clientId"
+            value={projectClientId}
+            disabled={!canWrite || pending}
+            aria-invalid={Boolean(fieldErrors.clientId)}
+            aria-describedby={fieldErrors.clientId ? "clientId-error" : undefined}
+            onChange={(e) => {
+              clearField("clientId");
+              setProjectClientId(e.target.value);
+              const order = orders.find((o) => o.id === projectOrderId);
+              if (order && order.clientId !== e.target.value) setProjectOrderId("");
+            }}
+          >
+            <option value="">No client</option>
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>
+                {clientDisplayName(c)}
+              </option>
+            ))}
+          </Select>
+          <FieldError id="clientId-error">{fieldErrors.clientId}</FieldError>
+        </div>
+        <div>
+          <Label htmlFor="orderId">Order</Label>
+          <Select
+            id="orderId"
+            name="orderId"
+            value={projectOrderId}
+            disabled={!canWrite || pending || orders.length === 0}
+            aria-invalid={Boolean(fieldErrors.orderId)}
+            aria-describedby={fieldErrors.orderId ? "orderId-error" : undefined}
+            onChange={(e) => {
+              clearField("orderId");
+              setProjectOrderId(e.target.value);
+              const order = orders.find((o) => o.id === e.target.value);
+              if (order) setProjectClientId(order.clientId);
+            }}
+          >
+            <option value="">No order</option>
+            {orderChoices.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.number} · {o.clientName}
+              </option>
+            ))}
+          </Select>
+          <FieldError id="orderId-error">{fieldErrors.orderId}</FieldError>
+        </div>
+        <p className="text-xs text-muted sm:col-span-2">
+          Tag a cost to a client or order to see the margin on that work.
+        </p>
+      </div>
       <div className="flex items-center gap-2">
         <input
           id="billable"
@@ -676,39 +751,25 @@ export function ExpenseForm({
           value="true"
           checked={billable}
           onChange={(e) => setBillable(e.target.checked)}
-          disabled={!canWrite || pending}
+          disabled={!canWrite || pending || Boolean(rebilledOn)}
           className="h-4 w-4"
         />
         <Label htmlFor="billable" className="mb-0">
-          Billable to client
+          Rebillable: recharge this to the client on their next invoice
         </Label>
       </div>
-      {billable && (
-        <div>
-          <Label htmlFor="billableClientId">Client (optional)</Label>
-          <Select
-            id="billableClientId"
-            name="billableClientId"
-            defaultValue={expense?.billableClientId ?? ""}
-            disabled={!canWrite || pending}
-            aria-invalid={Boolean(fieldErrors.billableClientId)}
-            aria-describedby={
-              fieldErrors.billableClientId ? "billableClientId-error" : undefined
-            }
-            onChange={() => clearField("billableClientId")}
+      {rebilledOn ? (
+        <p className="text-sm text-muted">
+          Recharged on{" "}
+          <Link
+            href={`/invoices/${rebilledOn.invoiceId}`}
+            className="font-medium text-foreground underline-offset-2 hover:underline"
           >
-            <option value="">Select client…</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {clientDisplayName(c)}
-              </option>
-            ))}
-          </Select>
-          <FieldError id="billableClientId-error">
-            {fieldErrors.billableClientId}
-          </FieldError>
-        </div>
-      )}
+            invoice {rebilledOn.number}
+          </Link>
+          . Remove it from that invoice to change the amount or client.
+        </p>
+      ) : null}
       {canWrite && (
         <FormStickyActions error={error}>
           {isPending ? (

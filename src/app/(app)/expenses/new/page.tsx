@@ -7,20 +7,22 @@ import { buttonClasses } from "@/components/ui/button";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { getReceiptOcrSettings } from "@/lib/platform-settings";
 import { findLocalUserId } from "@/lib/users";
+import { listOrderOptions } from "@/lib/profitability/queries";
 
 export default async function NewExpensePage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const { status } = await searchParams;
+  const { status, clientId, orderId } = await searchParams;
   const { companyId } = await guardTenantPage("accounts:write");
   const canWrite = await hasPermission("accounts:write");
   const user = await requireUser();
 
-  const [founders, clients, localUserId, settings, ocr] = await Promise.all([
+  const [founders, clients, orders, localUserId, settings, ocr] = await Promise.all([
     listFounders(companyId),
     listClients(companyId),
+    listOrderOptions(companyId),
     findLocalUserId(user.userId),
     getOrCreateCompanySettings(companyId),
     getReceiptOcrSettings(),
@@ -38,6 +40,12 @@ export default async function NewExpensePage({
         mode="create"
         founders={founders}
         clients={clients}
+        orders={orders}
+        defaultOrderId={orders.some((o) => o.id === orderId) ? orderId : null}
+        defaultClientId={
+          orders.find((o) => o.id === orderId)?.clientId ??
+          (clients.some((c) => c.id === clientId) ? clientId : null)
+        }
         canWrite={canWrite}
         defaultPaidByUserId={localUserId}
         defaultStatus={status === "reimbursable" ? "reimbursable" : ""}

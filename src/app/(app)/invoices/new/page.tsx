@@ -4,14 +4,22 @@ import { listClients } from "@/lib/clients/queries";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { defaultLineVatRate } from "@/lib/vat";
 import { InvoiceForm } from "@/components/invoices/invoice-form";
+import { listRebillableExpenses } from "@/lib/profitability/queries";
+import { toRebillOptions } from "@/lib/profitability/rebill";
 import { buttonClasses } from "@/components/ui/button";
 
-export default async function NewInvoicePage() {
+export default async function NewInvoicePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ clientId?: string; orderId?: string }>;
+}) {
   const { companyId } = await guardTenantPage("accounts:write");
+  const { clientId, orderId } = await searchParams;
 
-  const [clients, company] = await Promise.all([
+  const [clients, company, rebillable] = await Promise.all([
     listClients(companyId),
     getOrCreateCompanySettings(companyId),
+    listRebillableExpenses(companyId),
   ]);
 
   return (
@@ -36,6 +44,11 @@ export default async function NewInvoicePage() {
           clients={clients}
           vatRegistered={company.vatRegistered}
           defaultVatRate={defaultLineVatRate(company)}
+          rebillable={toRebillOptions(rebillable)}
+          defaultClientId={clients.some((c) => c.id === clientId) ? clientId : undefined}
+          initialRebillIds={
+            orderId ? rebillable.filter((r) => r.orderId === orderId).map((r) => r.id) : []
+          }
         />
       )}
     </div>

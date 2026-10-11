@@ -13,6 +13,7 @@ import { buttonClasses } from "@/components/ui/button";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { isForeignCurrency } from "@/lib/expenses/receipt-parse";
+import { getExpenseRebill, listOrderOptions } from "@/lib/profitability/queries";
 
 export default async function ExpenseDetailPage({
   params,
@@ -29,9 +30,11 @@ export default async function ExpenseDetailPage({
   const detail = await getExpenseDetail(companyId, id);
   if (!detail) notFound();
 
-  const [founders, clients, linkedRun, settings, settlements] = await Promise.all([
+  const [founders, clients, orders, rebill, linkedRun, settings, settlements] = await Promise.all([
     listFounders(companyId),
     listClients(companyId),
+    listOrderOptions(companyId),
+    getExpenseRebill(companyId, id),
     getReimbursementForExpense(companyId, id),
     getOrCreateCompanySettings(companyId),
     listBankSettlements(companyId, { expenseId: id }),
@@ -129,6 +132,8 @@ export default async function ExpenseDetailPage({
           expense={detail.expense}
           founders={founders}
           clients={clients}
+          orders={orders}
+          rebilledOn={rebill}
           canWrite={canWrite}
           defaultMileageRatePence={settings.defaultMileageRatePence}
           vatRegistered={settings.vatRegistered}

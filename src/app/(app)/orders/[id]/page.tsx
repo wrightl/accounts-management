@@ -19,6 +19,8 @@ import {
 import { clientDisplayName } from "@/lib/clients/display";
 import { defaultDueDate, todayIsoDate } from "@/lib/invoices/status";
 import type { InvoiceStatus } from "@/lib/invoices/status";
+import { getOrderProfitability, listProjectExpenses } from "@/lib/profitability/queries";
+import { MarginCards, ProjectExpenses, marginLabel } from "@/components/profitability/project-costs";
 
 export default async function OrderDetailPage({
   params,
@@ -29,11 +31,13 @@ export default async function OrderDetailPage({
   const canWrite = await hasPermission("accounts:write");
   const { id } = await params;
 
-  const [detail, company] = await Promise.all([
+  const [detail, company, profit, costs] = await Promise.all([
     getOrderDetail(companyId, id),
     getOrCreateCompanySettings(companyId),
+    getOrderProfitability(companyId, id),
+    listProjectExpenses(companyId, { orderId: id }),
   ]);
-  if (!detail) notFound();
+  if (!detail || !profit) notFound();
 
   const issueDate = todayIsoDate();
   const defaultDue = defaultDueDate(issueDate, company.invoicePaymentTermsDays);
@@ -126,6 +130,48 @@ export default async function OrderDetailPage({
             ))}
           </TBody>
         </Table>
+      </div>
+
+      <section className="mt-8">
+        <h2 className="mb-3 font-display text-lg font-semibold">Profitability</h2>
+        <MarginCards
+          revenueLabel="Revenue so far"
+          margin={profit.current}
+          extra={{
+            title: "Projected margin",
+            value: formatGBP(profit.projected.marginPence),
+            note:
+              profit.stillToInvoicePence > 0
+                ? `${marginLabel(profit.projected)} once the last ${formatGBP(profit.stillToInvoicePence)} is invoiced`
+                : `${marginLabel(profit.projected)}: everything is invoiced`,
+          }}
+        />
+        <p className="mt-2 text-xs text-muted">
+          Net of VAT. Revenue is invoiced on this order, less credit notes
+          {profit.rebilledElsewherePence > 0
+            ? `, plus ${formatGBP(profit.rebilledElsewherePence)} of its costs recharged on other invoices`
+            : ""}
+          .
+        </p>
+        {canWrite && profit.unbilledRebillablePence > 0 ? (
+          <p className="mt-3 text-sm">
+            {formatGBP(profit.unbilledRebillablePence)} of rebillable costs aren&apos;t invoiced yet.{" "}
+            <Link
+              href={`/invoices/new?clientId=${detail.client.id}&orderId=${detail.order.id}`}
+              className="font-medium text-foreground underline-offset-2 hover:underline"
+            >
+              Invoice them →
+            </Link>
+          </p>
+        ) : null}
+      </section>
+
+      <div className="mt-8">
+        <ProjectExpenses
+          expenses={costs}
+          addHref={`/expenses/new?orderId=${detail.order.id}`}
+          canWrite={canWrite}
+        />
       </div>
 
       {detail.milestones.length > 0 ? (

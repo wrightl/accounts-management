@@ -33,7 +33,8 @@ export type ApproveExpenseInput = {
     amountPence: number;
     vatRate: number;
     billable: boolean;
-    billableClientId: string | null;
+    clientId: string | null;
+    orderId: string | null;
   };
 };
 
@@ -99,9 +100,8 @@ export async function approvePendingExpense(
             category: input.fields.category || null,
             spentAt: input.fields.spentAt || null,
             billable: input.fields.billable,
-            billableClientId: input.fields.billable
-              ? input.fields.billableClientId
-              : null,
+            clientId: input.fields.clientId,
+            orderId: input.fields.orderId,
             mileageMiles: null,
             mileageRatePence: null,
           }
