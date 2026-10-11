@@ -175,7 +175,11 @@ export default async function SafeToPayPage() {
           An estimate to help you decide, not advice. It assumes last quarter&apos;s VAT and last
           year&apos;s corporation tax are unpaid until their deadlines, and doesn&apos;t include
           PAYE, supplier bills not yet in Alfa, or money the company owes directors. Check with
-          your accountant before paying a large dividend.
+          your accountant before paying a large dividend. See the{" "}
+          <Link href="/forecast" className="underline">
+            cash forecast
+          </Link>{" "}
+          for how cash moves over the next 13 weeks.
         </p>
       </section>
 

@@ -24,6 +24,7 @@ import {
   PiggyBank,
   ListChecks,
   Banknote,
+  TrendingUp,
   HandCoins,
   type LucideIcon,
 } from "lucide-react";
@@ -45,6 +46,7 @@ export const NAV_ICONS: Record<NavIcon, LucideIcon> = {
   shareholders: BadgePercent,
   reserves: PiggyBank,
   safeToPay: Banknote,
+  forecast: TrendingUp,
   directorLoans: HandCoins,
   quotes: ScrollText,
   orders: Package,

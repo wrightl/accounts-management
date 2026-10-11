@@ -35,6 +35,7 @@ export type CloseItem = {
 
 export type ReadyMilestone = {
   orderId: string;
+  clientId: string;
   orderNumber: string;
   label: string;
   dueDate: string;
@@ -93,6 +94,7 @@ export async function listMilestonesReadyToBill(
     .select({
       orderId: orders.id,
       orderNumber: orders.number,
+      clientId: orders.clientId,
       orderIssueDate: orders.issueDate,
       orderGrossPence: orders.grossPence,
       milestone: orderPaymentMilestones,
@@ -121,7 +123,16 @@ export async function listMilestonesReadyToBill(
     } catch {
       return [];
     }
-    return [{ orderId: r.orderId, orderNumber: r.orderNumber, label: m.label, dueDate, amountPence }];
+    return [
+      {
+        orderId: r.orderId,
+        clientId: r.clientId,
+        orderNumber: r.orderNumber,
+        label: m.label,
+        dueDate,
+        amountPence,
+      },
+    ];
   });
 }
 
