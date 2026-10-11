@@ -29,6 +29,10 @@ import {
   lineNetPence,
 } from "@/lib/money";
 import { clientDisplayName } from "@/lib/clients/display";
+import { RaiseLatePaymentButton } from "@/components/invoices/raise-late-payment-button";
+import { getLatePaymentClaims } from "@/lib/invoices/late-payment-queries";
+import { latePaymentCharge } from "@/lib/late-payment";
+import { formatIsoDateUk, todayIsoDate } from "@/lib/dates";
 
 export default async function InvoiceDetailPage({
   params,
@@ -62,11 +66,20 @@ export default async function InvoiceDetailPage({
   const stored = storedStatus(invoice.status);
   const canCredit =
     canWrite && (stored === "sent" || stored === "paid") && creditablePence > 0;
-  const [recurring, settlements, company] = await Promise.all([
+  const [recurring, settlements, company, latePayment] = await Promise.all([
     getRecurringTemplateForInvoice(companyId, invoice.recurringInvoiceId),
     listBankSettlements(companyId, { invoiceId: invoice.id }),
     getOrCreateCompanySettings(companyId),
+    getLatePaymentClaims(companyId, invoice.id, invoice.latePaymentForInvoiceId),
   ]);
+  const lateCharge =
+    stored === "sent" && invoice.dueDate && !invoice.latePaymentForInvoiceId
+      ? latePaymentCharge({
+          amountDuePence: detail.balancePence,
+          dueDate: invoice.dueDate,
+          asOf: todayIsoDate(),
+        })
+      : null;
   const clientLink = stored === "draft" ? null : publicInvoiceUrl(invoice.publicToken);
   const takesCardPayments = onlinePaymentsStatus(company) === "enabled";
 
@@ -221,6 +234,56 @@ export default async function InvoiceDetailPage({
           </TBody>
         </Table>
       </div>
+
+      {latePayment.claimFor ? (
+        <p className="mt-6 text-sm text-muted">
+          Claims late payment charges on{" "}
+          <Link href={`/invoices/${latePayment.claimFor.id}`} className="text-foreground underline">
+            {latePayment.claimFor.number}
+          </Link>
+          .
+        </p>
+      ) : null}
+
+      {lateCharge ? (
+        <section className="mt-8 rounded-2xl border border-border bg-surface p-5">
+          <h2 className="font-display text-lg font-semibold">Late payment charges</h2>
+          <p className="mt-1 max-w-2xl text-sm text-muted">
+            If {clientDisplayName(client)} is a business, you can claim statutory interest and
+            fixed compensation under the Late Payment of Commercial Debts (Interest) Act 1998.
+          </p>
+          <dl className="mt-3 grid max-w-md grid-cols-[1fr_auto] gap-x-6 gap-y-1 text-sm">
+            <dt className="text-muted">
+              Interest at {lateCharge.ratePercent}% for {lateCharge.daysLate} days
+            </dt>
+            <dd className="text-right tabular-nums">{formatGBP(lateCharge.interestPence)}</dd>
+            <dt className="text-muted">Fixed compensation</dt>
+            <dd className="text-right tabular-nums">{formatGBP(lateCharge.compensationPence)}</dd>
+            <dt className="font-medium">Claimable today</dt>
+            <dd className="text-right font-medium tabular-nums">
+              {formatGBP(lateCharge.totalPence)}
+            </dd>
+          </dl>
+          <p className="mt-2 text-xs text-muted">
+            {lateCharge.ratePercent}% is the Bank of England base rate of {lateCharge.basePercent}%
+            {lateCharge.rateKnown ? "" : " (latest known)"} plus 8%. Interest adds{" "}
+            {formatGBP(lateCharge.dailyInterestPence)} a day from {formatIsoDateUk(invoice.dueDate)}.
+          </p>
+          <div className="mt-4">
+            {latePayment.claim ? (
+              <p className="text-sm">
+                Claimed on{" "}
+                <Link href={`/invoices/${latePayment.claim.id}`} className="underline">
+                  {latePayment.claim.number}
+                </Link>
+                .
+              </p>
+            ) : canWrite ? (
+              <RaiseLatePaymentButton invoiceId={invoice.id} />
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
       {invoice.notes && (
         <div className="mt-6">

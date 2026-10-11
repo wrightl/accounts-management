@@ -386,6 +386,13 @@
       "when": 1789200000000,
       "tag": "0054_light_ledger",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1789300000000,
+      "tag": "0055_weekly_close_and_chasing",
+      "breakpoints": true
     }
   ]
 }

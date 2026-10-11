@@ -46,7 +46,7 @@ export async function sendNotificationEmail(opts: {
   const html = `
     <p>${escapeHtml(greeting)}</p>
     <p><strong>${escapeHtml(opts.title)}</strong></p>
-    <p>${escapeHtml(opts.body)}</p>
+    <p>${escapeHtml(opts.body).replace(/\n/g, "<br/>")}</p>
     <p><a href="${escapeHtml(link)}">View in ${escapeHtml(PRODUCT_LOCKUP)}</a></p>
   `.trim();
 

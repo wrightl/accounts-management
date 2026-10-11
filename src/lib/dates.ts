@@ -415,3 +415,8 @@ export function formatIsoDateUk(iso: string | null | undefined): string | null {
     timeZone: "UTC",
   });
 }
+
+/** Whether an ISO calendar date falls on a Monday. */
+export function isMonday(isoDate: string): boolean {
+  return new Date(`${isoDate}T12:00:00Z`).getUTCDay() === 1;
+}

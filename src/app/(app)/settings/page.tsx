@@ -26,6 +26,10 @@ export default async function SettingsPage() {
           Online payments
         </a>
         {" · "}
+        <a href="/settings/reminders" className="text-brand underline underline-offset-2">
+          Payment reminders
+        </a>
+        {" · "}
         <a
           href="/settings/notifications"
           className="text-brand underline underline-offset-2"

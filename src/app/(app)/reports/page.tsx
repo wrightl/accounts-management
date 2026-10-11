@@ -1,6 +1,8 @@
 import { guardTenantPage, hasPermission } from '@/lib/auth';
-import { financialYearStartDate, monthName, todayIsoDate } from '@/lib/dates';
+import { financialYearStartDate, formatIsoDateUk, monthName, todayIsoDate } from '@/lib/dates';
 import { PeriodLockCard } from '@/components/reports/period-lock-card';
+import Link from 'next/link';
+import { getBankReconciledThrough, getLastWeeklyClose } from '@/lib/close/checklist';
 import {
     defaultReportPeriod,
     getAgedReceivables,
@@ -42,12 +44,14 @@ export default async function ReportsPage({
         financialYearStartDate(company.financialYearEndMonth, today),
     );
 
-    const [pnl, aged, byMonth, byCategory, vat] = await Promise.all([
+    const [pnl, aged, byMonth, byCategory, vat, bank, lastClose] = await Promise.all([
         getProfitAndLoss(companyId, from, to),
         getAgedReceivables(companyId),
         getIncomeByMonth(companyId, from, to),
         getExpenseByCategory(companyId, from, to),
         getVatSummary(companyId, from, to),
+        getBankReconciledThrough(companyId),
+        getLastWeeklyClose(companyId),
     ]);
 
     return (
@@ -61,6 +65,18 @@ export default async function ReportsPage({
                         Accrual P&amp;L (invoiced income net of VAT), VAT summary,
                         receivables, and accountant export (CSVs, invoice PDFs,
                         receipt files, bank, and dividends from the Dividends page).
+                    </p>
+                    <p className="mt-2 text-sm">
+                        {bank.reconciledThrough
+                            ? `Books up to date to ${formatIsoDateUk(bank.reconciledThrough)} (bank reconciled)`
+                            : 'No bank transactions imported yet'}
+                        {lastClose
+                            ? ` · last weekly close ${formatIsoDateUk(lastClose.closedAt.toISOString().slice(0, 10))}${lastClose.closedByName ? ` by ${lastClose.closedByName}` : ''}`
+                            : ''}
+                        {' · '}
+                        <Link href="/close" className="underline">
+                            Weekly close
+                        </Link>
                     </p>
                 </div>
                 {canExport && (

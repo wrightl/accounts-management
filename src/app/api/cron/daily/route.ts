@@ -9,8 +9,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Vercel Cron (Hobby-safe, once daily): recurring invoice generation + overdue
- * reminder enqueue/drain. Individual `/api/cron/reminders` and `/api/cron/recurring`
+ * Vercel Cron (Hobby-safe, once daily): recurring invoice generation, scheduled
+ * payment reminders, and the Monday weekly close digest. Individual `/api/cron/reminders` and `/api/cron/recurring`
  * routes remain for manual triggers.
  */
 export async function GET(request: Request) {
@@ -28,6 +28,7 @@ export async function GET(request: Request) {
   let purged = 0;
   let billingEmails: Record<string, unknown> = { skipped: "no database" };
   let notifications: Record<string, unknown> = { skipped: "no database" };
+  let weeklyClose: Record<string, unknown> = { skipped: "no database" };
 
   if (process.env.DATABASE_URL) {
     const queued = await enqueueOverdueReminders();
@@ -40,6 +41,8 @@ export async function GET(request: Request) {
     billingEmails = await processBillingLifecycleEmails();
     const { runNotificationScanners } = await import("@/lib/notifications");
     notifications = await runNotificationScanners();
+    const { sendWeeklyCloseDigests } = await import("@/lib/close/digest");
+    weeklyClose = await sendWeeklyCloseDigests();
     await updatePlatformSettings({ lastCronDailyAt: new Date() });
   }
 
@@ -52,6 +55,7 @@ export async function GET(request: Request) {
       purged,
       billingEmails,
       notifications,
+      weeklyClose,
     }),
   );
 
@@ -59,7 +63,7 @@ export async function GET(request: Request) {
     level: "info",
     source: "cron.daily",
     message: "Daily cron completed",
-    meta: { recurring, reminders, purged, billingEmails, notifications },
+    meta: { recurring, reminders, purged, billingEmails, notifications, weeklyClose },
   });
 
   return NextResponse.json({
@@ -69,5 +73,6 @@ export async function GET(request: Request) {
     purged,
     billingEmails,
     notifications,
+    weeklyClose,
   });
 }

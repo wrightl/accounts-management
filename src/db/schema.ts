@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   pgTable,
   pgEnum,
   uuid,
@@ -155,6 +156,21 @@ export const companies = pgTable("companies", {
   openingReservesPence: integer("opening_reserves_pence"),
   /** Associated companies for corporation tax limits (Ltd only). */
   associatedCompanies: integer("associated_companies").notNull().default(0),
+  /** Automatic payment reminders for sent invoices. */
+  remindersEnabled: boolean("reminders_enabled").notNull().default(true),
+  /**
+   * When to remind, in days relative to the due date: negative before it,
+   * positive after. Each step is sent once per invoice.
+   */
+  reminderScheduleDays: integer("reminder_schedule_days")
+    .array()
+    .notNull()
+    .default(sql`'{-3,1,7,14}'::integer[]`),
+  /**
+   * Add statutory interest and fixed compensation (Late Payment of
+   * Commercial Debts (Interest) Act 1998) to overdue reminders.
+   */
+  latePaymentCharges: boolean("late_payment_charges").notNull().default(false),
   /** When set, tenant writes and outbound cron for this company are blocked. */
   suspendedAt: timestamp("suspended_at", { withTimezone: true }),
   suspendedReason: text("suspended_reason"),
@@ -284,6 +300,11 @@ export const invoices = pgTable(
     orderId: uuid("order_id").references(() => orders.id, { onDelete: "set null" }),
     paymentMilestoneId: uuid("payment_milestone_id").references(
       () => orderPaymentMilestones.id,
+      { onDelete: "set null" },
+    ),
+    /** Set on an invoice that claims statutory late payment interest on another. */
+    latePaymentForInvoiceId: uuid("late_payment_for_invoice_id").references(
+      (): AnyPgColumn => invoices.id,
       { onDelete: "set null" },
     ),
     /** Blob pathname for the generated PDF (served via authorised route). */
@@ -1039,6 +1060,8 @@ export const sendJobs = pgTable(
     sentAt: timestamp("sent_at", { withTimezone: true }),
     /** Processing lease: a worker owns the job until this time (crash recovery). */
     lockedUntil: timestamp("locked_until", { withTimezone: true }),
+    /** Reminder schedule step (days from due date) this reminder is for. */
+    reminderStep: integer("reminder_step"),
   },
   (t) => [
     index("idx_send_jobs_company").on(t.companyId),
@@ -1462,3 +1485,23 @@ export const schema = {
   userNotificationPreferences,
   pushSubscriptions,
 };
+
+/** A weekly close: someone worked through the checklist and signed off the week. */
+export const weeklyCloses = pgTable(
+  "weekly_closes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    closedByUserId: uuid("closed_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    closedAt: timestamp("closed_at", { withTimezone: true }).defaultNow().notNull(),
+    /** Latest bank date with every transaction on or before it reconciled. */
+    bankReconciledThrough: date("bank_reconciled_through"),
+    /** Checklist counts at the time of closing. */
+    snapshot: jsonb("snapshot").notNull(),
+  },
+  (t) => [index("idx_weekly_closes_company").on(t.companyId, t.closedAt)],
+);

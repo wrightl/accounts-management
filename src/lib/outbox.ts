@@ -1,7 +1,7 @@
 import "server-only";
-import { and, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, lt, or, sql, sum } from "drizzle-orm";
 import { getDb } from "@/db";
-import { clients, companies, invoices, sendJobs } from "@/db/schema";
+import { clients, companies, invoices, payments, sendJobs } from "@/db/schema";
 import { sendEmail } from "@/lib/email";
 import { resolveClientEmailSender } from "@/lib/email/resolve-client-sender";
 import { escapeHtml } from "@/lib/html";
@@ -12,6 +12,11 @@ import { getCompanySettings } from "@/lib/settings/queries";
 import { renderInvoicePdfV2 } from "@/lib/invoices/pdf-v2";
 import { storedStatus, todayIsoDate } from "@/lib/invoices/status";
 import { onlinePaymentsStatus, publicInvoiceUrl } from "@/lib/payments/online-status";
+import { invoiceAmountDuePence } from "@/lib/invoices/balance";
+import { creditAdjustmentsByInvoice } from "@/lib/credit-notes/adjustments";
+import { formatIsoDateUk } from "@/lib/dates";
+import { latePaymentCharge } from "@/lib/late-payment";
+import { dueReminderStep } from "@/lib/reminders/schedule";
 
 /** "View and pay online" when the company takes card payments, else "View online". */
 function invoiceLink(
@@ -28,7 +33,6 @@ function invoiceLink(
 }
 
 const MAX_ATTEMPTS = 8;
-const REMIND_COOLDOWN_DAYS = 7;
 /** How long a worker owns a claimed job before another may retry it. */
 const JOB_LEASE_MS = 10 * 60 * 1000;
 
@@ -39,6 +43,7 @@ export async function enqueueSendJob(
   companyId: string,
   invoiceId: string,
   actorUserId?: string | null,
+  reminderStep?: number | null,
 ): Promise<string> {
   const db = getDb();
   const pending = await db
@@ -62,6 +67,7 @@ export async function enqueueSendJob(
       invoiceId,
       actorUserId: actorUserId ?? null,
       status: "pending",
+      reminderStep: reminderStep ?? null,
     })
     .returning({ id: sendJobs.id });
   return created.id;
@@ -119,13 +125,23 @@ export async function processSendJob(jobId: string): Promise<{ ok: boolean; erro
   try {
     if (job.kind === "invoice_send") {
       await deliverInvoice(job.invoiceId, job.actorUserId);
+      await db
+        .update(sendJobs)
+        .set({ status: "sent", sentAt: new Date(), lastError: null, lockedUntil: null })
+        .where(eq(sendJobs.id, jobId));
     } else {
-      await deliverReminder(job.invoiceId, job.actorUserId);
+      const delivered = await deliverReminder(job.invoiceId, job.actorUserId, job.reminderStep);
+      // Paid or cancelled since it was queued: nothing to chase, so close the job.
+      await db
+        .update(sendJobs)
+        .set({
+          status: "sent",
+          sentAt: new Date(),
+          lastError: delivered ? null : "Skipped: invoice no longer outstanding",
+          lockedUntil: null,
+        })
+        .where(eq(sendJobs.id, jobId));
     }
-    await db
-      .update(sendJobs)
-      .set({ status: "sent", sentAt: new Date(), lastError: null, lockedUntil: null })
-      .where(eq(sendJobs.id, jobId));
     return { ok: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -169,51 +185,79 @@ export async function drainSendJobs(limit = 20): Promise<{ processed: number; se
 }
 
 /**
- * Queue a reminder for each sent invoice whose due date has passed, unless a
- * reminder is already pending or was sent within the cooldown window.
+ * Queue payment reminders on each company's schedule (days before or after the
+ * due date). Each step is sent at most once per invoice, and only the latest
+ * step reached is queued, so a missed run never sends a burst of reminders.
  */
 export async function enqueueOverdueReminders(): Promise<number> {
   const db = getDb();
   const today = todayIsoDate();
-  const overdue = await db
+  const open = await db
     .select({
       id: invoices.id,
       companyId: invoices.companyId,
       status: invoices.status,
+      issueDate: invoices.issueDate,
       dueDate: invoices.dueDate,
+      grossPence: invoices.grossPence,
+      schedule: companies.reminderScheduleDays,
     })
     .from(invoices)
     .innerJoin(companies, eq(companies.id, invoices.companyId))
+    .innerJoin(clients, eq(clients.id, invoices.clientId))
     .where(
       and(
         eq(invoices.status, "sent"),
-        lt(invoices.dueDate, today),
+        isNotNull(invoices.dueDate),
+        isNotNull(clients.email),
+        eq(companies.remindersEnabled, true),
         isNull(companies.suspendedAt),
       ),
     );
 
-  const cooldown = new Date(Date.now() - REMIND_COOLDOWN_DAYS * 24 * 60 * 60 * 1000);
-  let queued = 0;
+  const due = open.flatMap((inv) => {
+    const step = dueReminderStep({
+      schedule: inv.schedule,
+      dueDate: inv.dueDate!,
+      issueDate: inv.issueDate,
+      today,
+    });
+    return step == null ? [] : [{ ...inv, step }];
+  });
+  if (due.length === 0) return 0;
 
-  for (const inv of overdue) {
-    if (storedStatus(inv.status) !== "sent") continue;
-    const recent = await db
-      .select({ id: sendJobs.id, status: sendJobs.status })
+  const ids = due.map((i) => i.id);
+  const [paidRows, credits, existing] = await Promise.all([
+    db
+      .select({ invoiceId: payments.invoiceId, total: sum(payments.amountPence).mapWith(Number) })
+      .from(payments)
+      .where(inArray(payments.invoiceId, ids))
+      .groupBy(payments.invoiceId),
+    creditAdjustmentsByInvoice(db, ids),
+    db
+      .select({ invoiceId: sendJobs.invoiceId, step: sendJobs.reminderStep })
       .from(sendJobs)
       .where(
         and(
           eq(sendJobs.kind, "invoice_remind"),
-          eq(sendJobs.invoiceId, inv.id),
-          or(
-            eq(sendJobs.status, "pending"),
-            and(eq(sendJobs.status, "failed"), lt(sendJobs.attempts, MAX_ATTEMPTS)),
-            and(eq(sendJobs.status, "sent"), sql`${sendJobs.sentAt} > ${cooldown}`),
-          ),
+          inArray(sendJobs.invoiceId, ids),
+          isNotNull(sendJobs.reminderStep),
         ),
-      )
-      .limit(1);
-    if (recent[0]) continue;
-    await enqueueSendJob("invoice_remind", inv.companyId, inv.id);
+      ),
+  ]);
+  const paid = new Map(paidRows.map((r) => [r.invoiceId, r.total ?? 0]));
+  const done = new Set(existing.map((r) => `${r.invoiceId}:${r.step}`));
+
+  let queued = 0;
+  for (const inv of due) {
+    if (done.has(`${inv.id}:${inv.step}`)) continue;
+    const balance = invoiceAmountDuePence({
+      grossPence: inv.grossPence,
+      paidPence: paid.get(inv.id) ?? 0,
+      ...credits.get(inv.id),
+    });
+    if (balance <= 0) continue;
+    await enqueueSendJob("invoice_remind", inv.companyId, inv.id, null, inv.step);
     queued++;
   }
 
@@ -276,7 +320,17 @@ async function deliverInvoice(invoiceId: string, actorUserId?: string | null) {
     .where(eq(invoices.id, invoiceId));
 }
 
-async function deliverReminder(invoiceId: string, actorUserId?: string | null) {
+/**
+ * Email a payment reminder. Wording follows the schedule step: a friendly
+ * nudge before the due date, then overdue reminders that can include
+ * statutory late payment charges. Returns false when there is nothing to
+ * chase any more.
+ */
+async function deliverReminder(
+  invoiceId: string,
+  actorUserId?: string | null,
+  step?: number | null,
+): Promise<boolean> {
   const db = getDb();
   const [row] = await db
     .select({
@@ -289,34 +343,59 @@ async function deliverReminder(invoiceId: string, actorUserId?: string | null) {
     .where(eq(invoices.id, invoiceId))
     .limit(1);
   if (!row) throw new Error("Invoice not found");
-  if (storedStatus(row.invoice.status) !== "sent") {
-    throw new Error("Invoice is not outstanding");
-  }
+  if (storedStatus(row.invoice.status) !== "sent") return false;
   if (!row.clientEmail) throw new Error("Client has no email address");
 
   const company = await getCompanySettings(row.invoice.companyId);
   const detail = await getInvoiceDetail(row.invoice.companyId, invoiceId);
   const amountDuePence = detail?.balancePence ?? row.invoice.grossPence;
-  if (amountDuePence <= 0) throw new Error("Invoice has nothing left to pay");
+  if (amountDuePence <= 0) return false;
   const link = invoiceLink(row.invoice.publicToken, company);
   const name = escapeHtml(row.clientName);
   const number = escapeHtml(row.invoice.number);
   const amount = escapeHtml(formatGBP(amountDuePence));
-  const due = escapeHtml(row.invoice.dueDate ?? "");
+  const dueDate = row.invoice.dueDate ?? todayIsoDate();
+  const due = escapeHtml(formatIsoDateUk(dueDate) ?? dueDate);
   const sender = await resolveClientEmailSender({
     companyId: row.invoice.companyId,
     companyName: company.name,
     actorUserId,
   });
 
+  const beforeDue = step != null && step <= 0;
+  let subject: string;
+  let lead: string;
+  if (beforeDue) {
+    subject =
+      step === 0
+        ? `Invoice ${row.invoice.number} is due today`
+        : `Invoice ${row.invoice.number} is due on ${formatIsoDateUk(dueDate)}`;
+    lead = `Just a reminder that invoice ${row.invoice.number} for ${formatGBP(amountDuePence)} is due ${step === 0 ? "today" : `on ${formatIsoDateUk(dueDate)}`}.`;
+  } else {
+    subject = `Reminder: invoice ${row.invoice.number} is overdue`;
+    lead = `Invoice ${row.invoice.number} was due on ${formatIsoDateUk(dueDate)} and ${formatGBP(amountDuePence)} remains unpaid.`;
+  }
+  const leadHtml = beforeDue
+    ? `Just a reminder that invoice <strong>${number}</strong> for ${amount} is due ${step === 0 ? "today" : `on ${due}`}.`
+    : `Invoice <strong>${number}</strong> was due on ${due} and ${amount} remains unpaid.`;
+
+  const charge =
+    !beforeDue && company.latePaymentCharges
+      ? latePaymentCharge({ amountDuePence, dueDate, asOf: todayIsoDate() })
+      : null;
+  const chargeText = charge
+    ? `Under the Late Payment of Commercial Debts (Interest) Act 1998 we're entitled to statutory interest at ${charge.ratePercent}% a year (Bank of England base rate of ${charge.basePercent}% plus 8%) and fixed compensation of ${formatGBP(charge.compensationPence)}. Interest to date is ${formatGBP(charge.interestPence)} and is adding up at ${formatGBP(charge.dailyInterestPence)} a day until the invoice is paid.`
+    : null;
+
   await sendEmail({
     to: row.clientEmail,
     from: sender.from,
     replyTo: sender.replyTo,
-    subject: `Reminder: invoice ${row.invoice.number} is overdue`,
-    html: `<p>Hi ${name},</p><p>Invoice <strong>${number}</strong> was due on ${due} and ${amount} remains unpaid.</p>${link.html}<p>Kind regards,<br/>${escapeHtml(company.name)}</p>`,
-    text: `Invoice ${row.invoice.number} is overdue (due ${row.invoice.dueDate}). ${formatGBP(amountDuePence)} remains unpaid.\n\n${link.text}`,
+    subject,
+    html: `<p>Hi ${name},</p><p>${leadHtml}</p>${chargeText ? `<p>${escapeHtml(chargeText)}</p>` : ""}${link.html}<p>Kind regards,<br/>${escapeHtml(company.name)}</p>`,
+    text: `${lead}${chargeText ? `\n\n${chargeText}` : ""}\n\n${link.text}`,
   });
+  return true;
 }
 
 async function loadOrRenderPdf(
