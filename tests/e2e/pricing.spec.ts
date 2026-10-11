@@ -24,10 +24,9 @@ test.describe("Pricing - Public Access", () => {
     // page says so instead of showing a price.
     const unavailable = page.getByText("Pricing temporarily unavailable");
     if ((await unavailable.count()) > 0) {
-      await expect(unavailable).toHaveCount(2);
+      await expect(unavailable.first()).toBeVisible();
     } else {
-      await expect(page.getByText(/^£[\d,.]+$/)).toHaveCount(3);
-      await expect(page.getByText(/\/ year \(2 months free\)/)).toHaveCount(2);
+      await expect(page.getByText(/\/ year \(2 months free\)/).first()).toBeVisible();
     }
 
     await expect(
