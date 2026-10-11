@@ -19,7 +19,8 @@ describe("clerkFrontendApiHost", () => {
   });
 
   it("returns null for missing or malformed keys", () => {
-    expect(clerkFrontendApiHost(undefined)).toBeNull();
+    // Not `undefined`: that falls back to the env key, which CI sets.
+    expect(clerkFrontendApiHost("")).toBeNull();
     expect(clerkFrontendApiHost("pk_test_not-base64")).toBeNull();
     expect(clerkFrontendApiHost("pk_test_mock")).toBeNull();
   });
