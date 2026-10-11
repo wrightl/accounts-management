@@ -290,7 +290,7 @@ async function getInvoicedGrossByMonth(
   );
 }
 
-async function getTopClientsByRevenue(
+export async function getTopClientsByRevenue(
   companyId: string,
   from: string,
   to: string,

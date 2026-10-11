@@ -5,6 +5,7 @@ export const NAV_COLLAPSED_COOKIE = 'dd-nav-collapsed';
 export type NavIcon =
     | 'overview'
     | 'close'
+    | 'bookkeeper'
     | 'help'
     | 'clients'
     | 'invoices'
@@ -66,6 +67,12 @@ export const NAV_GROUPS: NavGroup[] = [
                 href: '/close',
                 label: 'Weekly close',
                 icon: 'close',
+                permission: 'accounts:read',
+            },
+            {
+                href: '/bookkeeper',
+                label: 'AI bookkeeper',
+                icon: 'bookkeeper',
                 permission: 'accounts:read',
             },
         ],

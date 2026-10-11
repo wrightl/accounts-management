@@ -25,6 +25,7 @@ import {
   ListChecks,
   Banknote,
   TrendingUp,
+  Sparkles,
   HandCoins,
   type LucideIcon,
 } from "lucide-react";
@@ -34,6 +35,7 @@ import { HELP_NAV_ITEM, type NavGroup, type NavIcon, type NavItem } from "./nav"
 export const NAV_ICONS: Record<NavIcon, LucideIcon> = {
   overview: LayoutDashboard,
   close: ListChecks,
+  bookkeeper: Sparkles,
   help: CircleHelp,
   clients: UsersRound,
   invoices: FileText,

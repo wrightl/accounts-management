@@ -1642,7 +1642,13 @@ export async function updateTransactionCategory(
             : await upsertBankSpendingCategory(companyId, spendingCategory);
     await db
         .update(bankTransactions)
-        .set({ spendingCategory: resolved })
+        // A manual choice replaces any pending suggestion, and teaches future ones.
+        .set({
+            spendingCategory: resolved,
+            suggestedCategory: null,
+            suggestedCategoryReason: null,
+            suggestedCategorySource: null,
+        })
         .where(eq(bankTransactions.id, transactionId));
 }
 

@@ -31,6 +31,7 @@ import {
 } from "@/lib/bank/categories";
 import { incomeCategorySelectOptions } from "@/lib/bank/income-categories";
 import type { MatchScoreBreakdown } from "@/lib/bank/match";
+import { explainMatch } from "@/lib/bookkeeper/explain";
 import { cn } from "@/lib/utils";
 import type { ActionResult } from "@/actions/result";
 import type { BankSpendingCategoryRow } from "@/lib/bank/spending-categories";
@@ -172,7 +173,14 @@ export function SuggestMatchesDialog({
                       → {targetLabel(item.target)}
                       <span className="ml-2 text-xs text-muted">Score {item.score}</span>
                     </p>
-                    {item.note ? (
+                    <p className="mt-1 text-xs text-muted">
+                      {explainMatch({
+                        matchType: item.matchType,
+                        breakdown: item.breakdown,
+                        note: item.note,
+                      })}
+                    </p>
+                    {item.note && !item.note.startsWith("AI:") ? (
                       <p className="mt-1 text-xs text-muted">{item.note}</p>
                     ) : null}
                     <ScoreBreakdown breakdown={item.breakdown} />

@@ -637,6 +637,16 @@ export const bankTransactions = pgTable(
     reference: text("reference"),
     description: text("description"),
     spendingCategory: text("spending_category"),
+    /** Suggested spending category, waiting for someone to accept or dismiss it. */
+    suggestedCategory: text("suggested_category"),
+    /** One line on why, e.g. "You put 3 earlier payments to Adobe in Software". */
+    suggestedCategoryReason: text("suggested_category_reason"),
+    /** "history" (learned from earlier categories) or "ai". */
+    suggestedCategorySource: text("suggested_category_source"),
+    /** Someone dismissed a suggestion here: don't suggest again. */
+    categorySuggestionDismissed: boolean("category_suggestion_dismissed")
+      .notNull()
+      .default(false),
     tags: text("tags").array().notNull().default([]),
     raw: jsonb("raw"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
