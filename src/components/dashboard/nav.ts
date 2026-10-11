@@ -14,6 +14,8 @@ export type NavIcon =
     | 'reports'
     | 'dividends'
     | 'shareholders'
+    | 'reserves'
+    | 'directorLoans'
     | 'quotes'
     | 'orders'
     | 'recurring'
@@ -154,6 +156,18 @@ export const NAV_GROUPS: NavGroup[] = [
                 permission: 'reports:read',
             },
             {
+                href: '/reserves',
+                label: 'Tax & reserves',
+                icon: 'reserves',
+                permission: 'reports:read',
+            },
+            {
+                href: '/directors-loans',
+                label: "Director's loans",
+                icon: 'directorLoans',
+                permission: 'accounts:read',
+            },
+            {
                 href: '/company',
                 label: 'Company',
                 icon: 'settings',
@@ -207,6 +221,8 @@ export function flattenNavItems(groups: NavGroup[]): NavItem[] {
 const LTD_ONLY_HREFS = new Set([
     '/dividends',
     '/shareholders',
+    '/reserves',
+    '/directors-loans',
 ]);
 
 /** Filter groups by permission (and entity type), dropping empty groups. */

@@ -3,12 +3,16 @@ import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { getActiveShareholdersForSplit } from "@/lib/shareholders/queries";
 import { DividendDeclareForm } from "@/components/dividends/dividends-form";
 import { buttonClasses } from "@/components/ui/button";
+import { getReservesPosition } from "@/lib/ledger/queries";
 
 export default async function NewDividendPage() {
   const { companyId } = await guardTenantPage("accounts:write");
   const canWrite = await hasPermission("accounts:write");
 
-  const split = await getActiveShareholdersForSplit(companyId);
+  const [split, reserves] = await Promise.all([
+    getActiveShareholdersForSplit(companyId),
+    getReservesPosition(companyId),
+  ]);
 
   return (
     <div>
@@ -29,6 +33,8 @@ export default async function NewDividendPage() {
         balanced={split.balanced}
         totalShares={split.totalShares}
         shareholders={split.shareholders}
+        availablePence={reserves.availablePence}
+        hasOpeningBalances={reserves.hasOpeningBalances}
         registerError={
           !split.balanced
             ? split.shareholders.length === 0

@@ -16,7 +16,17 @@ import {
 } from "@/lib/shareholders/queries";
 import type { ActionResult } from "@/actions/result";
 import { checkPeriodOpen } from "@/lib/period-lock-queries";
+import { getReservesPosition } from "@/lib/ledger/queries";
+import { formatGBP } from "@/lib/money";
+import { formatIsoDateUk } from "@/lib/dates";
+import { FORM_FIELD_ERROR_SUMMARY } from "@/lib/validation/field-errors";
 
+/**
+ * Declare a dividend split across active shareholders. Refused when it is
+ * more than the estimated distributable reserves at the declaration date,
+ * unless the form confirms the reserves have been checked (for example
+ * against interim accounts, or opening balances not yet entered).
+ */
 export async function declareDividend(formData: FormData): Promise<ActionResult> {
   const parsed = parseDeclareDividendInput(dividendRawFromFormData(formData));
   if (!parsed.ok) {
@@ -37,6 +47,17 @@ export async function declareDividend(formData: FormData): Promise<ActionResult>
       }
       const locked = await checkPeriodOpen(companyId, parsed.data.declaredAt);
       if (locked) return { ok: false, error: locked };
+
+      const reserves = await getReservesPosition(companyId, parsed.data.declaredAt);
+      const overReserves = totalPence > reserves.availablePence;
+      if (overReserves && formData.get("confirmOverReserves") !== "on") {
+        const message = `This is more than the ${formatGBP(reserves.availablePence)} the company has available to distribute, estimated at ${formatIsoDateUk(parsed.data.declaredAt)}. Dividends can only be paid from profits after tax.`;
+        return {
+          ok: false,
+          error: FORM_FIELD_ERROR_SUMMARY,
+          fieldErrors: { confirmOverReserves: message },
+        };
+      }
 
       const balanced = await assertRegisterBalanced(companyId);
       if (!balanced.ok) return balanced;
@@ -83,12 +104,17 @@ export async function declareDividend(formData: FormData): Promise<ActionResult>
         action: "dividend.declare",
         entityType: "dividend_declaration",
         entityId: decl.id,
-        meta: { totalPence, payoutCount: splits.length },
+        meta: {
+          totalPence,
+          payoutCount: splits.length,
+          availableReservesPence: reserves.availablePence,
+          overReserves,
+        },
       });
 
       return { ok: true, id: decl.id };
     },
-    { paths: ["/dividends"] },
+    { paths: ["/dividends", "/reserves"] },
   );
 }
 
@@ -121,7 +147,7 @@ export async function deleteDividendDeclaration(id: string): Promise<ActionResul
         entityType: "dividend_declaration",
         entityId: id,
       },
-      paths: ["/dividends"],
+      paths: ["/dividends", "/reserves"],
     },
   );
 }

@@ -30,12 +30,17 @@ export function DividendDeclareForm({
   totalShares,
   shareholders,
   registerError,
+  availablePence,
+  hasOpeningBalances = true,
 }: {
   canWrite: boolean;
   balanced: boolean;
   totalShares: number | null;
   shareholders: Holder[];
   registerError?: string | null;
+  /** Estimated distributable reserves today, after dividends already declared. */
+  availablePence?: number;
+  hasOpeningBalances?: boolean;
 }) {
   const router = useRouter();
   const {
@@ -49,6 +54,7 @@ export function DividendDeclareForm({
   const formRef = useRef<HTMLFormElement>(null);
   const [pending, startTransition] = useTransition();
   const [amountPounds, setAmountPounds] = useState("");
+  const [overReservesMessage, setOverReservesMessage] = useState<string | null>(null);
 
   const preview = useMemo(() => {
     if (!balanced || !totalShares || shareholders.length === 0) return null;
@@ -104,6 +110,9 @@ export function DividendDeclareForm({
         }
         startTransition(async () => {
           const result = await declareDividend(formData);
+          if (!result.ok && result.fieldErrors?.confirmOverReserves) {
+            setOverReservesMessage(result.fieldErrors.confirmOverReserves);
+          }
           if (applyActionResult(result)) {
             router.push("/dividends");
           } else if (!result.ok) {
@@ -156,6 +165,38 @@ export function DividendDeclareForm({
           </FieldError>
         </div>
       </div>
+      {availablePence != null ? (
+        <p className="text-sm text-muted">
+          Available to distribute today: about{" "}
+          <span className="font-medium text-foreground">{formatGBP(availablePence)}</span>
+          {preview && preview.reduce((t, p) => t + p.amountPence, 0) > availablePence
+            ? ". This dividend is more than that."
+            : "."}{" "}
+          <Link href="/reserves" className="underline">
+            {hasOpeningBalances ? "How this is worked out" : "Add opening balances"}
+          </Link>
+        </p>
+      ) : null}
+      {overReservesMessage ? (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm">
+          <p id="confirmOverReserves-error">{overReservesMessage}</p>
+          <label className="mt-3 flex items-start gap-3">
+            <input
+              type="checkbox"
+              name="confirmOverReserves"
+              value="on"
+              className="mt-1"
+              disabled={pending}
+              aria-describedby="confirmOverReserves-error"
+              onChange={() => clearField("confirmOverReserves")}
+            />
+            <span>
+              Our accountant has confirmed the company has enough distributable reserves
+              (for example from interim accounts).
+            </span>
+          </label>
+        </div>
+      ) : null}
       <div>
         <Label htmlFor="notes">Notes (optional)</Label>
         <Textarea id="notes" name="notes" rows={2} disabled={pending} />

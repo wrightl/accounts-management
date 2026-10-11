@@ -4,7 +4,7 @@
  *  - admin:          full access, incl. user & settings management.
  *  - user:           co-founder access to all day-to-day accounting.
  *  - accountant:     external accountant — read-only plus export, and can
- *                    lock the books after filing.
+ *                    lock the books and set opening balances.
  *  - pending:        signed in, no permissions until an admin assigns a role.
  *  - platform_admin: platform operator — `/platform` only, no tenant.
  */
@@ -36,7 +36,7 @@ export type Permission =
   | "reports:export"
   | "settings:manage"
   | "users:manage"
-  /** Set or move the "books locked up to" date. */
+  /** Set the "books locked up to" date and the opening balances. */
   | "books:lock";
 
 const PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {

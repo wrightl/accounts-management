@@ -21,6 +21,8 @@ import {
   Settings,
   CreditCard,
   Users,
+  PiggyBank,
+  HandCoins,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -38,6 +40,8 @@ export const NAV_ICONS: Record<NavIcon, LucideIcon> = {
   reports: BarChart3,
   dividends: Coins,
   shareholders: BadgePercent,
+  reserves: PiggyBank,
+  directorLoans: HandCoins,
   quotes: ScrollText,
   orders: Package,
   recurring: RefreshCw,

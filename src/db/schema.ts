@@ -145,6 +145,16 @@ export const companies = pgTable("companies", {
    * it can be created, changed or removed. Set by an admin or accountant.
    */
   booksLockedThrough: date("books_locked_through"),
+  /**
+   * Last day before Alfa's records start (a financial year end). Opening
+   * reserves and directors' opening loan balances are as at this date, and
+   * earlier records are left out of reserves and director's loan figures.
+   */
+  openingBalancesAsAt: date("opening_balances_as_at"),
+  /** Retained earnings (distributable reserves) at openingBalancesAsAt. */
+  openingReservesPence: integer("opening_reserves_pence"),
+  /** Associated companies for corporation tax limits (Ltd only). */
+  associatedCompanies: integer("associated_companies").notNull().default(0),
   /** When set, tenant writes and outbound cron for this company are blocked. */
   suspendedAt: timestamp("suspended_at", { withTimezone: true }),
   suspendedReason: text("suspended_reason"),
@@ -705,6 +715,39 @@ export const shareholders = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("idx_shareholders_company").on(t.companyId)],
+);
+
+export const directorLoanEntryKindEnum = pgEnum("director_loan_entry_kind", [
+  "opening", // signed balance at companies.opening_balances_as_at
+  "drawing", // director took money from the company
+  "paid_in", // director paid money into the company
+]);
+
+/**
+ * Manual director's loan account movements. The balance also includes
+ * expenses a director paid personally, less reimbursements paid to them.
+ */
+export const directorLoanEntries = pgTable(
+  "director_loan_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    directorUserId: uuid("director_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    kind: directorLoanEntryKindEnum("kind").notNull(),
+    entryDate: date("entry_date").notNull(),
+    /** Positive for drawings and paid in; signed for opening (negative = overdrawn). */
+    amountPence: integer("amount_pence").notNull(),
+    description: text("description"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("idx_director_loan_entries_company").on(t.companyId)],
 );
 
 export const dividendDeclarations = pgTable(
