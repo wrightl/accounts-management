@@ -42,10 +42,10 @@ export default async function PublicInvoicePage({
   searchParams,
 }: {
   params: Promise<{ token: string }>;
-  searchParams: Promise<{ payment?: string }>;
+  searchParams: Promise<{ payment?: string; accepted?: string }>;
 }) {
   const { token } = await params;
-  const { payment } = await searchParams;
+  const { payment, accepted } = await searchParams;
   const data = await getPublicInvoiceByToken(token);
   if (!data) notFound();
   if (data.suspended) {
@@ -104,6 +104,10 @@ export default async function PublicInvoicePage({
           </Notice>
         ) : payment === "cancelled" ? (
           <Notice tone="muted">Payment cancelled. You haven&apos;t been charged.</Notice>
+        ) : accepted ? (
+          <Notice tone="success">
+            Thank you for accepting the quote. This invoice is for the first payment.
+          </Notice>
         ) : null}
       </div>
 

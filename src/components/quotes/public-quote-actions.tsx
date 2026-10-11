@@ -19,10 +19,13 @@ export function PublicQuoteActions({
   token,
   canRespond,
   expired,
+  deposit,
 }: {
   token: string;
   canRespond: boolean;
   expired: boolean;
+  /** The first payment, invoiced on acceptance. */
+  deposit?: { label: string; amountFormatted: string; byCard: boolean } | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -67,6 +70,14 @@ export function PublicQuoteActions({
 
   return (
     <div className="space-y-4">
+      {deposit ? (
+        <p className="text-sm text-muted">
+          Accepting invoices the first payment, {deposit.label} ({deposit.amountFormatted}),{" "}
+          {deposit.byCard
+            ? "and takes you to pay it by card."
+            : "and shows you how to pay it by bank transfer."}
+        </p>
+      ) : null}
       <div className="flex flex-wrap gap-3">
         <Button
           type="button"
@@ -74,6 +85,7 @@ export function PublicQuoteActions({
           onClick={() => {
             clearAll();
             startTransition(async () => {
+              // With a deposit, a successful accept redirects to payment.
               const result = await acceptPublicQuote(token);
               if (!result.ok) {
                 setError(result.error);
@@ -84,7 +96,11 @@ export function PublicQuoteActions({
             });
           }}
         >
-          {pending ? "Working…" : "Accept quote"}
+          {pending
+            ? "Working…"
+            : deposit?.byCard
+              ? `Accept and pay ${deposit.amountFormatted}`
+              : "Accept quote"}
         </Button>
         <Button
           type="button"

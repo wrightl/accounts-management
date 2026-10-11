@@ -99,6 +99,8 @@ export async function createQuote(formData: FormData): Promise<ActionResult> {
             issueDate: parsed.data.issueDate,
             validUntil: parsed.data.validUntil,
             notes: parsed.data.notes,
+            depositOnAccept:
+              parsed.data.depositOnAccept && milestoneResult.milestones.length > 0,
             ...totals,
             createdByUserId: localUserId,
           })
@@ -189,6 +191,8 @@ export async function updateQuote(id: string, formData: FormData): Promise<Actio
             issueDate: parsed.data.issueDate,
             validUntil: parsed.data.validUntil,
             notes: parsed.data.notes,
+            depositOnAccept:
+              parsed.data.depositOnAccept && milestoneResult.milestones.length > 0,
             version: nextVersion,
             ...totals,
             pdfBlobPath: null,

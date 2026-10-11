@@ -37,6 +37,7 @@ export function PaymentScheduleEditor({
   grossPence,
   initialMilestones,
   disabled,
+  depositOption,
 }: {
   grossPence: number;
   initialMilestones?: Array<{
@@ -47,11 +48,16 @@ export function PaymentScheduleEditor({
     dueInDays: number | null;
   }>;
   disabled?: boolean;
+  /** Quotes only: offer to take the first milestone when the client accepts. */
+  depositOption?: { defaultChecked: boolean; cardPayments: boolean };
 }) {
   const [milestones, setMilestones] = useState<PaymentMilestoneDraft[]>(
     initialMilestones?.length
       ? initialMilestones.map(milestoneFromDb)
       : [],
+  );
+  const [depositOnAccept, setDepositOnAccept] = useState(
+    depositOption?.defaultChecked ?? false,
   );
 
   const serialized = milestones
@@ -217,6 +223,32 @@ export function PaymentScheduleEditor({
       >
         <Plus className="h-4 w-4" /> Add milestone
       </Button>
+
+      {depositOption && milestones.length > 0 ? (
+        <label className="flex items-start gap-3 border-t border-border pt-3 text-sm">
+          <input
+            type="checkbox"
+            name="depositOnAccept"
+            value="on"
+            checked={depositOnAccept}
+            onChange={(e) => setDepositOnAccept(e.target.checked)}
+            disabled={disabled}
+            className="mt-1"
+          />
+          <span>
+            <span className="font-medium text-foreground">
+              Take the first payment when the client accepts
+            </span>
+            <span className="mt-0.5 block text-xs text-muted">
+              Accepting online invoices &ldquo;{milestones[0]!.label || "the first milestone"}
+              &rdquo; straight away and{" "}
+              {depositOption.cardPayments
+                ? "takes the client to pay it by card."
+                : "shows the client your bank details. Set up online payments in Settings to take it by card."}
+            </span>
+          </span>
+        </label>
+      ) : null}
 
       <input
         type="hidden"

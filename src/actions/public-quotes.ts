@@ -1,10 +1,15 @@
 "use server";
 
+import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { and, eq, isNull } from "drizzle-orm";
 import { getDb } from "@/db";
 import { companies, quotes } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
 import { createOrderFromQuote } from "@/lib/orders/copy-from-quote";
+import { raiseDepositInvoice, type DepositInvoice } from "@/lib/orders/deposit";
+import { enqueueSendJob, processSendJob } from "@/lib/outbox";
+import { createInvoiceCheckout } from "@/lib/payments/checkout";
 import type { PaymentMilestoneInput } from "@/lib/quotes/payment-schedule";
 import { getQuoteDetail } from "@/lib/quotes/queries";
 import { canTransitionQuote } from "@/lib/quotes/transitions";
@@ -13,6 +18,7 @@ import {
   writeQuoteStatus,
 } from "@/lib/quotes/status-write";
 import { todayIsoDate } from "@/lib/invoices/status";
+import { formatGBP } from "@/lib/money";
 import type { QuoteStatus } from "@/lib/quotes/status";
 import type { ActionResult } from "@/actions/result";
 import {
@@ -63,6 +69,12 @@ export async function markPublicQuoteViewed(
   return { ok: true };
 }
 
+/**
+ * Accept the quote and create its order. With deposit-on-accept, also raise
+ * the first payment milestone as a sent invoice and send the client straight
+ * to paying it: Stripe Checkout when the company takes card payments,
+ * otherwise the invoice page with its bank details.
+ */
 export async function acceptPublicQuote(
   rawToken: string,
 ): Promise<ActionResult> {
@@ -96,9 +108,12 @@ export async function acceptPublicQuote(
     position: m.position,
   }));
 
+  const takeDeposit = detail.quote.depositOnAccept && milestones.length > 0;
+
   const db = getDb();
+  let accepted: { orderId: string; deposit: DepositInvoice | null };
   try {
-    const orderId = await db.transaction(async (tx) => {
+    accepted = await db.transaction(async (tx) => {
       // Status first: a concurrent accept/decline makes this throw and the
       // transaction roll back before an order exists.
       const won = await writeQuoteStatus(tx, {
@@ -112,14 +127,23 @@ export async function acceptPublicQuote(
         },
       });
       if (!won) throw new QuoteStatusConflictError();
-      return createOrderFromQuote(
+      const newOrderId = await createOrderFromQuote(
         tx,
         loaded.companyId,
         { quote: detail.quote, lines: detail.lines },
         milestones,
         loaded.createdByUserId,
       );
+      const raised = takeDeposit
+        ? await raiseDepositInvoice(tx, {
+            companyId: loaded.companyId,
+            orderId: newOrderId,
+            createdByUserId: loaded.createdByUserId,
+          })
+        : null;
+      return { orderId: newOrderId, deposit: raised };
     });
+    const { orderId, deposit } = accepted;
 
     await writeAudit({
       companyId: loaded.companyId,
@@ -127,7 +151,7 @@ export async function acceptPublicQuote(
       action: "quote.public_accept",
       entityType: "quote",
       entityId: loaded.quoteId,
-      meta: { orderId },
+      meta: { orderId, depositInvoiceId: deposit?.invoiceId ?? null },
     });
 
     const { notify } = await import("@/lib/notifications");
@@ -135,13 +159,14 @@ export async function acceptPublicQuote(
       companyId: loaded.companyId,
       type: "quote.accepted",
       title: `Quote ${detail.quote.number} accepted`,
-      body: "A client accepted this quote via the public link.",
+      body: deposit
+        ? `A client accepted this quote via the public link. The first payment, ${formatGBP(deposit.amountPence)}, has been invoiced.`
+        : "A client accepted this quote via the public link.",
       href: `/quotes/${loaded.quoteId}`,
       entityType: "quote",
       entityId: loaded.quoteId,
     });
 
-    return { ok: true, id: orderId };
   } catch (e) {
     if (e instanceof QuoteStatusConflictError) {
       return { ok: false, error: "This quote has already been responded to" };
@@ -150,6 +175,37 @@ export async function acceptPublicQuote(
       ok: false,
       error: e instanceof Error ? e.message : "Could not accept quote",
     };
+  }
+
+  if (!accepted.deposit) return { ok: true, id: accepted.orderId };
+  redirect(await depositPaymentUrl(loaded.companyId, detail, accepted.deposit));
+}
+
+/**
+ * Email the client a copy of the deposit invoice (after the response, so the
+ * client isn't kept waiting), then work out where they pay it.
+ */
+async function depositPaymentUrl(
+  companyId: string,
+  detail: { client: { email: string | null } },
+  deposit: DepositInvoice,
+): Promise<string> {
+  if (detail.client.email) {
+    const jobId = await enqueueSendJob("invoice_send", companyId, deposit.invoiceId);
+    after(async () => {
+      await processSendJob(jobId);
+    });
+  }
+
+  const invoicePage = `/i/${encodeURIComponent(deposit.publicToken)}?accepted=1`;
+  try {
+    const checkout = await createInvoiceCheckout(deposit.publicToken);
+    // Without card payments (or if Stripe is down) the invoice page shows
+    // the bank details instead.
+    return checkout.ok ? checkout.url : invoicePage;
+  } catch (e) {
+    console.error("Deposit checkout failed", e);
+    return invoicePage;
   }
 }
 

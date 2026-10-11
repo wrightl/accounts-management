@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { companies, quotes } from "@/db/schema";
 import { getQuoteDetail } from "@/lib/quotes/queries";
+import { onlinePaymentsStatus } from "@/lib/payments/online-status";
 
 export async function getPublicQuoteByToken(rawToken: string) {
   const db = getDb();
@@ -15,6 +16,8 @@ export async function getPublicQuoteByToken(rawToken: string) {
       logoUrl: companies.logoUrl,
       vatRegistered: companies.vatRegistered,
       vatNumber: companies.vatNumber,
+      stripeConnectAccountId: companies.stripeConnectAccountId,
+      stripeConnectChargesEnabled: companies.stripeConnectChargesEnabled,
     })
     .from(quotes)
     .innerJoin(companies, eq(quotes.companyId, companies.id))
@@ -35,6 +38,7 @@ export async function getPublicQuoteByToken(rawToken: string) {
       logoUrl: row.logoUrl,
       vatRegistered: row.vatRegistered,
       vatNumber: row.vatNumber,
+      onlinePayments: onlinePaymentsStatus(row),
     },
     detail,
   };

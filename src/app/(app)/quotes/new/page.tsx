@@ -5,6 +5,7 @@ import { QuoteForm } from "@/components/quotes/quote-form";
 import { buttonClasses } from "@/components/ui/button";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { defaultLineVatRate } from "@/lib/vat";
+import { onlinePaymentsStatus } from "@/lib/payments/online-status";
 
 export default async function NewQuotePage() {
   const { companyId } = await guardTenantPage("accounts:write");
@@ -37,6 +38,7 @@ export default async function NewQuotePage() {
             clients={clients}
             vatRegistered={company.vatRegistered}
             defaultVatRate={defaultLineVatRate(company)}
+            cardPayments={onlinePaymentsStatus(company) === "enabled"}
           />
         </div>
       )}

@@ -30,6 +30,8 @@ export const quoteSchema = z.object({
     .transform((v) => (v === "" || !v ? null : v)),
   notes: optionalNotes,
   lines: documentLinesSchema,
+  /** Only takes effect when the quote has a payment schedule. */
+  depositOnAccept: z.boolean().default(false),
 });
 
 export type QuoteParsed = z.infer<typeof quoteSchema>;
@@ -41,6 +43,7 @@ export function quoteRawFromFormData(formData: FormData): Record<string, unknown
     validUntil: formData.get("validUntil") ?? "",
     notes: formData.get("notes") ?? "",
     lines: parseDocumentLinesJson(formData.get("linesJson")),
+    depositOnAccept: formData.get("depositOnAccept") === "on",
   };
 }
 

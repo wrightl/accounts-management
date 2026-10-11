@@ -884,6 +884,11 @@ export const quotes = pgTable(
     publicToken: text("public_token"),
     /** First time the client opened the public quote page. */
     viewedAt: timestamp("viewed_at", { withTimezone: true }),
+    /**
+     * When the client accepts online, raise the first payment milestone as a
+     * sent invoice and take them straight to payment.
+     */
+    depositOnAccept: boolean("deposit_on_accept").notNull().default(false),
     createdByUserId: uuid("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),

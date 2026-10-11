@@ -194,6 +194,12 @@ export default async function QuoteDetailPage({
       {detail.milestones.length > 0 ? (
         <div className="mt-8">
           <h2 className="mb-3 font-display text-lg font-semibold">Payment schedule</h2>
+          {detail.quote.depositOnAccept ? (
+            <p className="mb-3 text-sm text-muted">
+              The first payment is invoiced when the client accepts online, and they&apos;re
+              taken straight to pay it.
+            </p>
+          ) : null}
           <Table>
             <THead>
               <TR>

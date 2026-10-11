@@ -67,6 +67,7 @@ export function QuoteForm({
   initialMilestones,
   vatRegistered = false,
   defaultVatRate = 0,
+  cardPayments = false,
 }: {
   mode: "create" | "edit";
   clients: { id: string; name: string; companyName?: string | null }[];
@@ -76,6 +77,7 @@ export function QuoteForm({
     issueDate: string | null;
     validUntil: string | null;
     notes: string | null;
+    depositOnAccept?: boolean;
   };
   initialLines?: QuoteLineDraft[];
   initialMilestones?: Array<{
@@ -87,6 +89,8 @@ export function QuoteForm({
   }>;
   vatRegistered?: boolean;
   defaultVatRate?: number;
+  /** Whether the company can take card payments (Stripe connected). */
+  cardPayments?: boolean;
 }) {
   const router = useRouter();
   const {
@@ -401,6 +405,10 @@ export function QuoteForm({
         grossPence={totals.grossPence}
         initialMilestones={initialMilestones}
         disabled={pending}
+        depositOption={{
+          defaultChecked: quote?.depositOnAccept ?? false,
+          cardPayments,
+        }}
       />
       <div>
         <Label htmlFor="notes">Notes</Label>

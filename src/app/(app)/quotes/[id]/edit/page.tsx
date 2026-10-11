@@ -9,6 +9,7 @@ import { buttonClasses } from "@/components/ui/button";
 import { penceToPounds } from "@/lib/money";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { defaultLineVatRate } from "@/lib/vat";
+import { onlinePaymentsStatus } from "@/lib/payments/online-status";
 
 export default async function EditQuotePage({
   params,
@@ -55,11 +56,13 @@ export default async function EditQuotePage({
             issueDate: detail.quote.issueDate,
             validUntil: detail.quote.validUntil,
             notes: detail.quote.notes,
+            depositOnAccept: detail.quote.depositOnAccept,
           }}
           initialLines={initialLines}
           initialMilestones={detail.milestones}
           vatRegistered={company.vatRegistered}
           defaultVatRate={defaultLineVatRate(company)}
+          cardPayments={onlinePaymentsStatus(company) === "enabled"}
         />
       </div>
     </div>

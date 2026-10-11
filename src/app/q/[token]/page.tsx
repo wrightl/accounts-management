@@ -16,6 +16,7 @@ import { getPublicQuoteByToken } from "@/lib/quotes/public-queries";
 import { quoteStatusLabel, type QuoteStatus } from "@/lib/quotes/status";
 import { todayIsoDate } from "@/lib/invoices/status";
 import { canTransitionQuote } from "@/lib/quotes/transitions";
+import { resolveMilestoneAmountPence } from "@/lib/orders/invoice-from-order";
 
 export default async function PublicQuotePage({
   params,
@@ -44,6 +45,17 @@ export default async function PublicQuotePage({
   const canRespond =
     canTransitionQuote(status, "accepted") ||
     canTransitionQuote(status, "declined");
+  const firstMilestone = detail.milestones[0];
+  const deposit =
+    detail.quote.depositOnAccept && firstMilestone
+      ? {
+          label: firstMilestone.label,
+          amountFormatted: formatGBP(
+            resolveMilestoneAmountPence(firstMilestone, detail.quote.grossPence),
+          ),
+          byCard: company.onlinePayments === "enabled",
+        }
+      : null;
 
   return (
     <main className="mx-auto flex min-h-full max-w-3xl flex-col px-4 py-10">
@@ -141,6 +153,7 @@ export default async function PublicQuotePage({
           token={token}
           canRespond={canRespond}
           expired={expired}
+          deposit={deposit}
         />
       </section>
     </main>
