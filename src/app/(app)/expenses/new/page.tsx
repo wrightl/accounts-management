@@ -8,7 +8,12 @@ import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { getReceiptOcrSettings } from "@/lib/platform-settings";
 import { findLocalUserId } from "@/lib/users";
 
-export default async function NewExpensePage() {
+export default async function NewExpensePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
+  const { status } = await searchParams;
   const { companyId } = await guardTenantPage("accounts:write");
   const canWrite = await hasPermission("accounts:write");
   const user = await requireUser();
@@ -35,6 +40,7 @@ export default async function NewExpensePage() {
         clients={clients}
         canWrite={canWrite}
         defaultPaidByUserId={localUserId}
+        defaultStatus={status === "reimbursable" ? "reimbursable" : ""}
         defaultMileageRatePence={settings.defaultMileageRatePence}
         receiptOcrProvider={ocr.provider ?? "local"}
         receiptOcrModel={ocr.model}

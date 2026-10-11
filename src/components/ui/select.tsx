@@ -6,6 +6,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   type ChangeEvent,
@@ -27,10 +28,46 @@ export type SelectOption = {
 };
 
 type MenuPosition = {
-  top: number;
+  top?: number;
+  bottom?: number;
   left: number;
   width: number;
+  maxHeight: number;
 };
+
+/** Matches `max-h-60`; the menu never grows taller than this. */
+const MENU_MAX_HEIGHT = 240;
+const MENU_GAP = 4;
+/** Keep the menu at least this far from the viewport edges. */
+const VIEWPORT_MARGIN = 8;
+/** Rough option height used before the menu has rendered and can be measured. */
+const ESTIMATED_OPTION_HEIGHT = 36;
+
+/**
+ * Place the menu below the trigger, flipping above when there is more room
+ * there, and clamp it so it never runs off the edge of the viewport.
+ */
+function computeMenuPosition(trigger: HTMLElement, contentHeight: number): MenuPosition {
+  const rect = trigger.getBoundingClientRect();
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const desired = Math.min(contentHeight, MENU_MAX_HEIGHT);
+
+  const spaceBelow = viewportHeight - rect.bottom - MENU_GAP - VIEWPORT_MARGIN;
+  const spaceAbove = rect.top - MENU_GAP - VIEWPORT_MARGIN;
+  const placeAbove = spaceBelow < desired && spaceAbove > spaceBelow;
+  const maxHeight = Math.max(0, Math.min(MENU_MAX_HEIGHT, placeAbove ? spaceAbove : spaceBelow));
+
+  const width = Math.min(rect.width, viewportWidth - VIEWPORT_MARGIN * 2);
+  const left = Math.min(
+    Math.max(rect.left, VIEWPORT_MARGIN),
+    viewportWidth - VIEWPORT_MARGIN - width,
+  );
+
+  return placeAbove
+    ? { bottom: viewportHeight - rect.top + MENU_GAP, left, width, maxHeight }
+    : { top: rect.bottom + MENU_GAP, left, width, maxHeight };
+}
 
 function optionValue(value: unknown): string {
   if (value == null) return "";
@@ -131,16 +168,15 @@ export function Select({
     [isControlled, onChange],
   );
 
+  const optionCount = options.length;
   const updateMenuPosition = useCallback(() => {
     const trigger = triggerRef.current;
     if (!trigger) return;
-    const rect = trigger.getBoundingClientRect();
-    setMenuPosition({
-      top: rect.bottom + 4,
-      left: rect.left,
-      width: rect.width,
-    });
-  }, []);
+    // scrollHeight is the full content height even while maxHeight clips it.
+    const contentHeight =
+      listRef.current?.scrollHeight ?? optionCount * ESTIMATED_OPTION_HEIGHT + 8;
+    setMenuPosition(computeMenuPosition(trigger, contentHeight));
+  }, [optionCount]);
 
   function closeMenu() {
     setOpen(false);
@@ -149,12 +185,9 @@ export function Select({
   function openMenu() {
     const trigger = triggerRef.current;
     if (trigger) {
-      const rect = trigger.getBoundingClientRect();
-      setMenuPosition({
-        top: rect.bottom + 4,
-        left: rect.left,
-        width: rect.width,
-      });
+      setMenuPosition(
+        computeMenuPosition(trigger, options.length * ESTIMATED_OPTION_HEIGHT + 8),
+      );
       setPortalTarget(overlayPortalTarget(trigger) ?? document.body);
     }
     const idx = selectedIndex >= 0 ? selectedIndex : 0;
@@ -166,6 +199,11 @@ export function Select({
         ?.scrollIntoView({ block: "nearest" });
     });
   }
+
+  // Re-place using the rendered height so the estimate never leaves it clipped.
+  useLayoutEffect(() => {
+    if (open) updateMenuPosition();
+  }, [open, updateMenuPosition]);
 
   useEffect(() => {
     if (!open) return;
@@ -249,11 +287,13 @@ export function Select({
         style={{
           position: "fixed",
           top: menuPosition.top,
+          bottom: menuPosition.bottom,
           left: menuPosition.left,
           width: menuPosition.width,
+          maxHeight: menuPosition.maxHeight,
           zIndex: 100,
         }}
-        className="max-h-60 overflow-auto rounded-xl border border-border bg-surface py-1 shadow-lg"
+        className="overflow-auto rounded-xl border border-border bg-surface py-1 shadow-lg"
       >
         {options.map((opt, i) => {
           const enabledIdx = enabledOptions.indexOf(opt);

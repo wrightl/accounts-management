@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { CategoryCell, MatchActions } from '@/components/bank/bank-ui';
+import { CategoryCell, ReconciliationCell } from '@/components/bank/bank-ui';
 import { BankPageSizeSelect } from '@/components/bank/bank-page-size-select';
 import { BankPeriodRangeSelect } from '@/components/period/bank-period-range-select';
 import { Card } from '@/components/ui/card';
@@ -20,21 +20,6 @@ import {
 import type { BankTransactionListItem } from '@/lib/bank/queries';
 import { friendlyDayLabel } from '@/lib/dates';
 import { cn } from '@/lib/utils';
-
-function matchStatus(row: BankTransactionListItem): string {
-    if (row.reconciled) {
-        return row.matchLabel
-            ? `Matched · ${row.matchLabel}`
-            : `Matched (${row.matchType})`;
-    }
-    if (row.suggested) {
-        const base = row.matchLabel
-            ? `Suggested · ${row.matchLabel}`
-            : `Suggested (${row.matchType})`;
-        return row.matchNote ? `${base} · ${row.matchNote}` : base;
-    }
-    return 'Unreconciled';
-}
 
 function CategoryDisplay({
     row,
@@ -284,9 +269,8 @@ export function BankTransactionTable({
                     {showAccount ? <TH>Account</TH> : null}
                     <TH>Reference</TH>
                     <TH>Category</TH>
-                    <TH>Status</TH>
                     <TH className="text-right">Amount</TH>
-                    <TH />
+                    <TH>Reconciliation</TH>
                 </TR>
             </THead>
             <TBody>
@@ -308,17 +292,12 @@ export function BankTransactionTable({
                                 canWrite={canWrite}
                             />
                         </TD>
-                        <TD className="text-sm">{matchStatus(r)}</TD>
                         <TD className="text-right font-medium">
                             {r.amountFormatted}
                         </TD>
                         <TD>
-                            <MatchActions
-                                transactionId={r.id}
-                                amountPence={r.amountPence}
-                                matchId={r.matchId}
-                                matchType={r.matchType}
-                                confirmed={r.confirmed}
+                            <ReconciliationCell
+                                row={r}
                                 canWrite={canWrite}
                                 incomeCategories={incomeCategories}
                             />
@@ -364,29 +343,25 @@ function BankTransactionCard({
                             ? ` · ${row.bankAccountName}`
                             : ''}
                     </p>
-                    <p className="mt-1 text-sm text-muted">{matchStatus(row)}</p>
                 </div>
-                <p
-                    className={cn(
-                        'shrink-0 font-medium tabular-nums',
-                        row.amountPence > 0
-                            ? 'text-success'
-                            : 'text-foreground',
-                    )}
-                >
-                    {row.amountFormatted}
-                </p>
-            </div>
-            <div className="mt-3 flex justify-end">
-                <MatchActions
-                    transactionId={row.id}
-                    amountPence={row.amountPence}
-                    matchId={row.matchId}
-                    matchType={row.matchType}
-                    confirmed={row.confirmed}
-                    canWrite={canWrite}
-                    incomeCategories={incomeCategories}
-                />
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                    <p
+                        className={cn(
+                            'font-medium tabular-nums',
+                            row.amountPence > 0
+                                ? 'text-success'
+                                : 'text-foreground',
+                        )}
+                    >
+                        {row.amountFormatted}
+                    </p>
+                    <ReconciliationCell
+                        row={row}
+                        canWrite={canWrite}
+                        incomeCategories={incomeCategories}
+                        align="end"
+                    />
+                </div>
             </div>
         </Card>
     );

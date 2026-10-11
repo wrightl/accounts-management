@@ -44,6 +44,7 @@ export function ExpenseForm({
   clients,
   canWrite,
   defaultPaidByUserId,
+  defaultStatus = "",
   defaultMileageRatePence,
   receiptOcrProvider = "local",
   receiptOcrModel,
@@ -73,6 +74,8 @@ export function ExpenseForm({
   clients: { id: string; name: string; companyName?: string | null }[];
   canWrite: boolean;
   defaultPaidByUserId?: string | null;
+  /** Pre-selected status for a new expense, e.g. "reimbursable" when a founder paid. */
+  defaultStatus?: ExpenseStatusOption;
   defaultMileageRatePence: number;
   receiptOcrProvider?: string;
   receiptOcrModel?: string;
@@ -132,7 +135,7 @@ export function ExpenseForm({
     ) {
       return expense.status;
     }
-    return "";
+    return expense ? "" : defaultStatus;
   });
 
   const computedMileagePence = useMemo(() => {

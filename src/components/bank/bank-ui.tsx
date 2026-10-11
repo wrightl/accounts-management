@@ -1,18 +1,24 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition, type ReactNode } from "react";
+import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { Check, MoreHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogActions } from "@/components/ui/dialog";
+import { overlayPortalTarget } from "@/components/ui/portal-target";
 import { FieldError, Input, Label, Select, Textarea } from "@/components/ui/form";
 import {
   clearBankCreditExplanationAction,
   confirmBankMatch,
   confirmBankMatchesBatch,
+  createBankSpendingCategoryAction,
   deleteBankSpendingCategory,
   dismissBankMatch,
   dismissBankMatchesBatch,
   explainBankCreditAction,
+  renameBankSpendingCategoryAction,
   runSuggestMatches,
   updateBankCategory,
   type SuggestedMatch,
@@ -25,6 +31,8 @@ import {
 } from "@/lib/bank/categories";
 import { incomeCategorySelectOptions } from "@/lib/bank/income-categories";
 import type { MatchScoreBreakdown } from "@/lib/bank/match";
+import { cn } from "@/lib/utils";
+import type { ActionResult } from "@/actions/result";
 import type { BankSpendingCategoryRow } from "@/lib/bank/spending-categories";
 
 function isCreditExplainMatchType(value: string | null): boolean {
@@ -236,9 +244,16 @@ export function SuggestMatchesDialog({
   );
 }
 
-export function BankToolbar({ canWrite }: { canWrite: boolean }) {
+export function BankToolbar({
+  canWrite,
+  customCategories,
+}: {
+  canWrite: boolean;
+  customCategories: BankSpendingCategoryRow[];
+}) {
   const router = useRouter();
   const [importOpen, setImportOpen] = useState(false);
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [suggestions, setSuggestions] = useState<SuggestedMatch[]>([]);
   const [pending, startTransition] = useTransition();
@@ -271,7 +286,15 @@ export function BankToolbar({ canWrite }: { canWrite: boolean }) {
         >
           {pending ? "Matching…" : "Re-run suggestions"}
         </Button>
+        <Button type="button" variant="secondary" onClick={() => setCategoriesOpen(true)}>
+          Categories
+        </Button>
       </div>
+      <CustomCategoriesDialog
+        open={categoriesOpen}
+        categories={customCategories}
+        onClose={() => setCategoriesOpen(false)}
+      />
       <Dialog
         open={importOpen}
         onClose={() => setImportOpen(false)}
@@ -312,12 +335,9 @@ export function CategoryCell({
     spendingCategory !== null &&
     spendingCategory !== "" &&
     isSelectableBankCategory(spendingCategory, customCategories);
-  const [mode, setMode] = useState<"select" | "custom">(
-    spendingCategory && !selectable ? "custom" : "select",
-  );
-  const [customValue, setCustomValue] = useState(
-    spendingCategory && !selectable ? spendingCategory : "",
-  );
+  const [mode, setMode] = useState<"select" | "custom">("select");
+  const [customValue, setCustomValue] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   if (!canWrite) {
     return (
@@ -326,38 +346,61 @@ export function CategoryCell({
   }
 
   const save = (value: string | null) => {
+    setError(null);
     startTransition(async () => {
-      await updateBankCategory(transactionId, value);
+      const result = await updateBankCategory(transactionId, value);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setMode("select");
+      setCustomValue("");
       router.refresh();
     });
   };
 
+  const commitCustom = () => {
+    const trimmed = customValue.trim();
+    if (!trimmed || trimmed === spendingCategory) {
+      setMode("select");
+      setCustomValue("");
+      return;
+    }
+    save(trimmed);
+  };
+
   const categoryOptions = bankCategorySelectOptions(customCategories);
+  const errorText = error ? <FieldError>{error}</FieldError> : null;
 
   if (mode === "custom") {
     return (
-      <Input
-        className="min-w-[10rem] py-1 text-sm"
-        value={customValue}
-        disabled={pending}
-        placeholder="Custom category"
-        onChange={(e) => setCustomValue(e.target.value)}
-        onBlur={() => {
-          const trimmed = customValue.trim();
-          if (trimmed) save(trimmed);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            const trimmed = customValue.trim();
-            if (trimmed) save(trimmed);
-          }
-          if (e.key === "Escape") {
-            setMode("select");
-            setCustomValue("");
-          }
-        }}
-      />
+      <div>
+        <Input
+          className="min-w-[10rem] py-1 text-sm"
+          value={customValue}
+          disabled={pending}
+          maxLength={120}
+          autoFocus
+          placeholder="Custom category"
+          aria-label="Custom category"
+          onChange={(e) => setCustomValue(e.target.value)}
+          onBlur={() => {
+            if (!pending) commitCustom();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              // Blur commits, so Enter and blur never both save.
+              e.currentTarget.blur();
+            }
+            if (e.key === "Escape") {
+              setMode("select");
+              setCustomValue("");
+            }
+          }}
+        />
+        {errorText}
+      </div>
     );
   }
 
@@ -369,91 +412,234 @@ export function CategoryCell({
         : "";
 
   return (
-    <Select
-      className="min-w-[10rem] py-1 text-sm"
-      disabled={pending}
-      value={selectValue}
-      onChange={(e) => {
-        const v = e.target.value;
-        if (v === "__custom__") {
-          setMode("custom");
-          setCustomValue(spendingCategory && !selectable ? spendingCategory : "");
-          return;
-        }
-        save(v === "" ? null : v);
-      }}
-    >
-      <option value="">—</option>
-      {categoryOptions.map((c) => (
-        <option key={c.value} value={c.value}>
-          {c.label}
-        </option>
-      ))}
-      <option value="__custom__">Custom…</option>
-    </Select>
+    <div>
+      <Select
+        className="min-w-[10rem] py-1 text-sm"
+        disabled={pending}
+        aria-label="Category"
+        value={selectValue}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v === "__custom__") return;
+          if (v === "__new__") {
+            setMode("custom");
+            setCustomValue("");
+            return;
+          }
+          save(v === "" ? null : v);
+        }}
+      >
+        <option value="">—</option>
+        {categoryOptions.map((c) => (
+          <option key={c.value} value={c.value}>
+            {c.label}
+          </option>
+        ))}
+        {spendingCategory && !selectable ? (
+          <option value="__custom__">{spendingCategory}</option>
+        ) : null}
+        <option value="__new__">Custom…</option>
+      </Select>
+      {errorText}
+    </div>
   );
 }
 
-export function CustomCategoriesPanel({
-  categories,
-  canWrite,
+function CustomCategoryRow({
+  category,
+  disabled,
+  onError,
 }: {
-  categories: BankSpendingCategoryRow[];
-  canWrite: boolean;
+  category: BankSpendingCategoryRow;
+  disabled: boolean;
+  onError: (error: string | null) => void;
 }) {
   const router = useRouter();
-  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(category.name);
+  const [pending, startTransition] = useTransition();
+  const inUse = category.usageCount > 0;
+
+  const run = (action: () => Promise<{ ok: boolean; error?: string }>, onOk?: () => void) => {
+    onError(null);
+    startTransition(async () => {
+      const result = await action();
+      if (!result.ok) {
+        onError(result.error ?? "Could not update category");
+        return;
+      }
+      onOk?.();
+      router.refresh();
+    });
+  };
+
+  if (editing) {
+    return (
+      <li className="py-3 first:pt-0 last:pb-0">
+        <form
+          className="flex flex-wrap items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            run(
+              () => renameBankSpendingCategoryAction(category.id, name),
+              () => setEditing(false),
+            );
+          }}
+        >
+          <Input
+            aria-label={`Rename ${category.name}`}
+            className="min-w-[10rem] flex-1 py-1 text-sm"
+            value={name}
+            maxLength={120}
+            autoFocus
+            disabled={pending}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                // Keep the dialog open; just leave edit mode.
+                e.preventDefault();
+                e.stopPropagation();
+                setName(category.name);
+                setEditing(false);
+              }
+            }}
+          />
+          <Button type="submit" disabled={pending || !name.trim()}>
+            {pending ? "Saving…" : "Save"}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={pending}
+            onClick={() => {
+              setName(category.name);
+              setEditing(false);
+            }}
+          >
+            Cancel
+          </Button>
+        </form>
+        {inUse ? (
+          <p className="mt-1 text-xs text-muted">
+            Renaming updates {category.usageCount} transaction
+            {category.usageCount === 1 ? "" : "s"}.
+          </p>
+        ) : null}
+      </li>
+    );
+  }
+
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+      <div className="min-w-0">
+        <p className="truncate font-medium">{category.name}</p>
+        <p className="text-sm text-muted">
+          {inUse
+            ? `${category.usageCount} transaction${category.usageCount === 1 ? "" : "s"}`
+            : "Not used on any transaction"}
+        </p>
+      </div>
+      <div className="flex gap-1">
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={disabled || pending}
+          onClick={() => setEditing(true)}
+        >
+          Rename
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={disabled || pending || inUse}
+          title={inUse ? "Re-categorise or rename its transactions first" : undefined}
+          onClick={() => run(() => deleteBankSpendingCategory(category.id))}
+        >
+          {pending ? "Removing…" : "Remove"}
+        </Button>
+      </div>
+    </li>
+  );
+}
+
+function CustomCategoriesDialog({
+  open,
+  categories,
+  onClose,
+}: {
+  open: boolean;
+  categories: BankSpendingCategoryRow[];
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  if (!canWrite || categories.length === 0) return null;
-
   return (
-    <section className="mt-6 rounded-xl border border-border bg-surface p-4">
-      <h2 className="font-display text-lg font-semibold">Custom categories</h2>
-      <p className="mt-1 text-sm text-muted">
-        Saved labels appear in category dropdowns. Remove unused ones here.
+    <Dialog open={open} onClose={onClose} title="Custom categories">
+      <p className="text-sm text-muted">
+        Custom labels appear alongside the built-in categories in every category
+        dropdown. Renaming a label updates the transactions that use it.
       </p>
+
+      <form
+        className="mt-4 flex flex-wrap items-end gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          setError(null);
+          startTransition(async () => {
+            const result = await createBankSpendingCategoryAction(name);
+            if (!result.ok) {
+              setError(result.error);
+              return;
+            }
+            setName("");
+            router.refresh();
+          });
+        }}
+      >
+        <div className="min-w-[12rem] flex-1">
+          <Label htmlFor="new-spending-category">New category</Label>
+          <Input
+            id="new-spending-category"
+            value={name}
+            maxLength={120}
+            placeholder="e.g. Client gifts"
+            disabled={pending}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+        <Button type="submit" disabled={pending || !name.trim()}>
+          {pending ? "Adding…" : "Add"}
+        </Button>
+      </form>
       <FieldError>{error}</FieldError>
-      <ul className="mt-4 divide-y divide-border">
-        {categories.map((category) => {
-          const inUse = category.usageCount > 0;
-          const removing = pending && pendingId === category.id;
-          return (
-            <li
-              key={category.id}
-              className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
-            >
-              <div>
-                <p className="font-medium">{category.name}</p>
-                <p className="text-sm text-muted">
-                  {inUse
-                    ? `${category.usageCount} transaction${category.usageCount === 1 ? "" : "s"}`
-                    : "Not used on any transaction"}
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                disabled={inUse || removing}
-                onClick={() => {
-                  setError(null);
-                  setPendingId(category.id);
-                  startTransition(async () => {
-                    const result = await deleteBankSpendingCategory(category.id);
-                    setPendingId(null);
-                    if (!result.ok) setError(result.error);
-                    else router.refresh();
-                  });
-                }}
-              >
-                {removing ? "Removing…" : "Remove"}
-              </Button>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
+
+      {categories.length > 0 ? (
+        <ul className="mt-4 max-h-[50vh] divide-y divide-border overflow-y-auto pr-1">
+          {categories.map((category) => (
+            <CustomCategoryRow
+              key={`${category.id}:${category.name}`}
+              category={category}
+              disabled={pending}
+              onError={setError}
+            />
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-4 text-sm text-muted">
+          No custom categories yet. Add one here, or choose “Custom…” in a
+          transaction’s category dropdown.
+        </p>
+      )}
+
+      <DialogActions>
+        <Button type="button" variant="secondary" onClick={onClose}>
+          Done
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }
 
@@ -566,134 +752,307 @@ export function ExplainCreditDialog({
   );
 }
 
-export function MatchActions({
-  transactionId,
-  amountPence,
-  matchId,
-  matchType,
-  confirmed,
-  canWrite,
-  incomeCategories,
-}: {
-  transactionId: string;
+type ReconciliationRow = {
+  id: string;
   amountPence: number;
   matchId: string | null;
   matchType: string | null;
+  matchLabel: string | null;
+  matchHref: string | null;
+  matchNote: string | null;
   confirmed: boolean;
-  canWrite: boolean;
-  incomeCategories: readonly string[];
+  reconciled: boolean;
+  suggested: boolean;
+};
+
+type ReconciliationState = "matched" | "explained" | "suggested" | "unreconciled";
+
+const RECONCILIATION_BADGE: Record<ReconciliationState, { label: string; className: string }> = {
+  matched: { label: "Matched", className: "bg-success/15 text-success" },
+  explained: { label: "Explained", className: "bg-success/15 text-success" },
+  suggested: { label: "Suggested", className: "bg-accent/30 text-navy" },
+  unreconciled: { label: "Unreconciled", className: "bg-wash text-muted" },
+};
+
+function reconciliationState(row: ReconciliationRow): ReconciliationState {
+  if (row.reconciled) {
+    return isCreditExplainMatchType(row.matchType) ? "explained" : "matched";
+  }
+  return row.suggested ? "suggested" : "unreconciled";
+}
+
+function reconciliationDetail(row: ReconciliationRow): string | null {
+  if (!row.reconciled && !row.suggested) return null;
+  const parts = [row.matchLabel ?? row.matchType, row.matchNote].filter(
+    (part): part is string => Boolean(part),
+  );
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+const iconButton =
+  "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-wash hover:text-foreground disabled:pointer-events-none disabled:opacity-50";
+
+type RowMenuItem = { key: string; label: string; onSelect: () => void };
+
+/**
+ * Compact overflow menu for a table row. Portalled with fixed positioning so
+ * the table's horizontal scroll container cannot clip it.
+ */
+function RowActionsMenu({
+  items,
+  disabled,
+  label = "More actions",
+}: {
+  items: RowMenuItem[];
+  disabled?: boolean;
+  label?: string;
 }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const [explainOpen, setExplainOpen] = useState(false);
-  const isIncoming = amountPence > 0;
-  const isCreditExplanation =
-    confirmed && isCreditExplainMatchType(matchType);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLUListElement>(null);
+  const [position, setPosition] = useState<{ top?: number; bottom?: number; right: number } | null>(
+    null,
+  );
 
-  if (!canWrite) return null;
+  const close = () => setPosition(null);
 
-  if (isCreditExplanation && matchId) {
-    return (
-      <div className="flex gap-1">
-        <span className="self-center text-xs text-success">Explained</span>
-        <Button
-          type="button"
-          variant="ghost"
-          disabled={pending}
-          onClick={() => {
-            startTransition(async () => {
-              await clearBankCreditExplanationAction(matchId);
-              router.refresh();
-            });
-          }}
-        >
-          Clear
-        </Button>
-      </div>
+  useEffect(() => {
+    if (!position) return;
+    const onDoc = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (triggerRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      setPosition(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setPosition(null);
+        triggerRef.current?.focus();
+      }
+    };
+    const onMove = () => setPosition(null);
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("resize", onMove);
+    window.addEventListener("scroll", onMove, true);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", onMove);
+      window.removeEventListener("scroll", onMove, true);
+    };
+  }, [position]);
+
+  useEffect(() => {
+    if (position) menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+  }, [position]);
+
+  const open = () => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const right = Math.max(8, window.innerWidth - rect.right);
+    // Flip above the trigger near the bottom of the viewport.
+    const estimatedHeight = items.length * 36 + 8;
+    setPosition(
+      window.innerHeight - rect.bottom < estimatedHeight + 12
+        ? { bottom: window.innerHeight - rect.top + 4, right }
+        : { top: rect.bottom + 4, right },
     );
-  }
-
-  if (confirmed) {
-    return <span className="text-xs text-success">Confirmed</span>;
-  }
+  };
 
   return (
     <>
-      <div className="flex flex-wrap gap-1">
-        {matchId ? (
-          <>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={pending}
-              onClick={() => {
-                startTransition(async () => {
-                  await confirmBankMatch(matchId);
-                  router.refresh();
-                });
-              }}
+      <button
+        ref={triggerRef}
+        type="button"
+        className={iconButton}
+        disabled={disabled}
+        aria-label={label}
+        title={label}
+        aria-haspopup="menu"
+        aria-expanded={position !== null}
+        onClick={() => (position ? close() : open())}
+      >
+        <MoreHorizontal className="h-4 w-4" aria-hidden />
+      </button>
+      {position && triggerRef.current
+        ? createPortal(
+            <ul
+              ref={menuRef}
+              role="menu"
+              style={{ position: "fixed", zIndex: 100, ...position }}
+              className="min-w-max overflow-hidden rounded-xl border border-border bg-surface py-1 shadow-lg"
             >
-              Confirm
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={pending}
-              onClick={() => {
-                startTransition(async () => {
-                  await dismissBankMatch(matchId);
-                  router.refresh();
-                });
-              }}
-            >
-              Dismiss
-            </Button>
-          </>
-        ) : null}
-        {isIncoming ? (
-          <Button
-            type="button"
-            variant={matchId ? "ghost" : "secondary"}
-            disabled={pending}
-            onClick={() => setExplainOpen(true)}
-          >
-            Explain
-          </Button>
-        ) : null}
-      </div>
-      {isIncoming && explainOpen ? (
-        <ExplainCreditDialog
-          open={explainOpen}
-          onClose={() => setExplainOpen(false)}
-          transactionId={transactionId}
-          incomeCategories={incomeCategories}
-        />
-      ) : null}
+              {items.map((item) => (
+                <li key={item.key} role="none">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="flex w-full px-3 py-2 text-left text-sm hover:bg-wash focus:bg-wash focus:outline-none"
+                    onClick={() => {
+                      close();
+                      item.onSelect();
+                    }}
+                  >
+                    {item.label}
+                  </button>
+                </li>
+              ))}
+            </ul>,
+            overlayPortalTarget(triggerRef.current) ?? document.body,
+          )
+        : null}
     </>
   );
 }
 
-export function MatchStatusLabel({
+/**
+ * Status badge, match detail and row actions in a single compact cell:
+ * ✓/✕ for suggestions, Explain for unreconciled credits, ⋯ for the rest.
+ */
+export function ReconciliationCell({
   row,
+  canWrite,
+  incomeCategories,
+  align = "start",
 }: {
-  row: {
-    reconciled: boolean;
-    suggested: boolean;
-    matchType: string | null;
-    matchLabel: string | null;
-    matchNote?: string | null;
-  };
+  row: ReconciliationRow;
+  canWrite: boolean;
+  incomeCategories: readonly string[];
+  /** "end" right-aligns the cell, e.g. under the amount on a card. */
+  align?: "start" | "end";
 }) {
-  let label: ReactNode;
-  if (row.reconciled) {
-    label = row.matchLabel ? `Matched · ${row.matchLabel}` : `Matched (${row.matchType})`;
-  } else if (row.suggested) {
-    const base = row.matchLabel
-      ? `Suggested · ${row.matchLabel}`
-      : `Suggested (${row.matchType})`;
-    label = row.matchNote ? `${base} · ${row.matchNote}` : base;
-  } else {
-    label = "Unreconciled";
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [explainOpen, setExplainOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const state = reconciliationState(row);
+  const badge = RECONCILIATION_BADGE[state];
+  const detail = reconciliationDetail(row);
+  const isIncoming = row.amountPence > 0;
+  const { matchId } = row;
+
+  const run = (action: () => Promise<ActionResult>) => {
+    setError(null);
+    startTransition(async () => {
+      const result = await action();
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      router.refresh();
+    });
+  };
+
+  let actions: ReactNode = null;
+  if (canWrite) {
+    if (state === "suggested" && matchId) {
+      actions = (
+        <>
+          <button
+            type="button"
+            className={cn(iconButton, "text-success hover:text-success")}
+            disabled={pending}
+            aria-label="Confirm match"
+            title="Confirm match"
+            onClick={() => run(() => confirmBankMatch(matchId))}
+          >
+            <Check className="h-4 w-4" aria-hidden />
+          </button>
+          <button
+            type="button"
+            className={iconButton}
+            disabled={pending}
+            aria-label="Dismiss suggestion"
+            title="Dismiss suggestion"
+            onClick={() => run(() => dismissBankMatch(matchId))}
+          >
+            <X className="h-4 w-4" aria-hidden />
+          </button>
+          {isIncoming ? (
+            <RowActionsMenu
+              disabled={pending}
+              items={[
+                { key: "explain", label: "Explain instead…", onSelect: () => setExplainOpen(true) },
+              ]}
+            />
+          ) : null}
+        </>
+      );
+    } else if (state === "unreconciled" && isIncoming) {
+      actions = (
+        <Button
+          type="button"
+          variant="ghost"
+          className="px-3 py-1"
+          disabled={pending}
+          onClick={() => setExplainOpen(true)}
+        >
+          Explain
+        </Button>
+      );
+    } else if (state === "explained" && matchId) {
+      actions = (
+        <RowActionsMenu
+          disabled={pending}
+          items={[
+            {
+              key: "clear",
+              label: "Clear explanation",
+              onSelect: () => run(() => clearBankCreditExplanationAction(matchId)),
+            },
+          ]}
+        />
+      );
+    }
   }
-  return <span className="text-sm">{label}</span>;
+
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-2",
+        align === "end" ? "justify-end text-right" : "justify-between",
+      )}
+    >
+      <div className="min-w-0">
+        <span
+          className={cn(
+            "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
+            badge.className,
+          )}
+        >
+          {badge.label}
+        </span>
+        {detail ? (
+          <p
+            className={cn(
+              "mt-0.5 max-w-[12rem] truncate text-xs text-muted",
+              align === "end" && "ml-auto",
+            )}
+            title={detail}
+          >
+            {row.matchHref ? (
+              <Link
+                href={row.matchHref}
+                className="underline-offset-2 hover:text-foreground hover:underline"
+              >
+                {detail}
+              </Link>
+            ) : (
+              detail
+            )}
+          </p>
+        ) : null}
+        {error ? <FieldError>{error}</FieldError> : null}
+      </div>
+      {actions ? <div className="flex shrink-0 items-center">{actions}</div> : null}
+      {explainOpen ? (
+        <ExplainCreditDialog
+          open={explainOpen}
+          onClose={() => setExplainOpen(false)}
+          transactionId={row.id}
+          incomeCategories={incomeCategories}
+        />
+      ) : null}
+    </div>
+  );
 }

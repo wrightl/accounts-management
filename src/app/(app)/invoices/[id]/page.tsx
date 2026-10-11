@@ -5,6 +5,8 @@ import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
 import { getRecurringTemplateForInvoice } from "@/lib/invoices/recurring-queries";
 import { canEditInvoice, type InvoiceStatus } from "@/lib/invoices/status";
+import { listBankSettlements } from "@/lib/bank/settlements";
+import { BankSettlements } from "@/components/bank/bank-settlements";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { buttonClasses } from "@/components/ui/button";
@@ -30,10 +32,10 @@ export default async function InvoiceDetailPage({
     detail;
 
   const status = invoice.status as InvoiceStatus;
-  const recurring = await getRecurringTemplateForInvoice(
-    companyId,
-    invoice.recurringInvoiceId,
-  );
+  const [recurring, settlements] = await Promise.all([
+    getRecurringTemplateForInvoice(companyId, invoice.recurringInvoiceId),
+    listBankSettlements(companyId, { invoiceId: invoice.id }),
+  ]);
 
   return (
     <div>
@@ -181,6 +183,7 @@ export default async function InvoiceDetailPage({
             <p className="mt-3 text-sm text-muted">
               Paid {paidFormatted} · Balance {balanceFormatted}
             </p>
+            <BankSettlements settlements={settlements} className="mt-4" />
           </>
         )}
       </div>

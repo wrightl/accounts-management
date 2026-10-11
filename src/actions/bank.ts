@@ -60,7 +60,11 @@ import {
   createIncomeCategory,
   deleteUnusedIncomeCategory,
 } from "@/lib/bank/income-category-catalog";
-import { deleteUnusedBankSpendingCategory } from "@/lib/bank/spending-categories";
+import {
+  createBankSpendingCategory,
+  deleteUnusedBankSpendingCategory,
+  renameBankSpendingCategory,
+} from "@/lib/bank/spending-categories";
 import type { ActionResult } from "@/actions/result";
 
 async function resolveCompanyBankProvider(
@@ -509,6 +513,48 @@ export async function deleteBankSpendingCategory(categoryId: string): Promise<Ac
         action: "bank.delete_category",
         entityType: "bank_spending_category",
         entityId: categoryId,
+      },
+      paths: ["/transactions"],
+    },
+  );
+}
+
+export async function createBankSpendingCategoryAction(name: string): Promise<ActionResult> {
+  return mutate(
+    "accounts:write",
+    async ({ companyId }) => {
+      const result = await createBankSpendingCategory(companyId, name);
+      if (!result.ok) return { ok: false, error: result.error };
+      return { ok: true };
+    },
+    {
+      audit: {
+        action: "bank.create_category",
+        entityType: "bank_spending_category",
+        meta: { name },
+      },
+      paths: ["/transactions"],
+    },
+  );
+}
+
+export async function renameBankSpendingCategoryAction(
+  categoryId: string,
+  name: string,
+): Promise<ActionResult> {
+  return mutate(
+    "accounts:write",
+    async ({ companyId }) => {
+      const result = await renameBankSpendingCategory(companyId, categoryId, name);
+      if (!result.ok) return { ok: false, error: result.error };
+      return { ok: true, id: categoryId };
+    },
+    {
+      audit: {
+        action: "bank.rename_category",
+        entityType: "bank_spending_category",
+        entityId: categoryId,
+        meta: { name },
       },
       paths: ["/transactions"],
     },

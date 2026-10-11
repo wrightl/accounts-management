@@ -4,6 +4,8 @@ import { Pencil } from "lucide-react";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { getReimbursementDetail } from "@/lib/reimbursements/queries";
 import { canEditReimbursement } from "@/lib/reimbursements/status";
+import { listBankSettlements } from "@/lib/bank/settlements";
+import { BankSettlements } from "@/components/bank/bank-settlements";
 import { ReimbursementActions } from "@/components/reimbursements/actions";
 import { buttonClasses } from "@/components/ui/button";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
@@ -18,7 +20,10 @@ export default async function ReimbursementDetailPage({
   const canWrite = await hasPermission("accounts:write");
   const { id } = await params;
 
-  const detail = await getReimbursementDetail(companyId, id);
+  const [detail, settlements] = await Promise.all([
+    getReimbursementDetail(companyId, id),
+    listBankSettlements(companyId, { reimbursementId: id }),
+  ]);
   if (!detail) notFound();
 
   return (
@@ -69,6 +74,8 @@ export default async function ReimbursementDetailPage({
           <CardValue>{detail.totalFormatted}</CardValue>
         </Card>
       </div>
+
+      <BankSettlements settlements={settlements} className="mt-6" />
 
       <div className="mt-6">
         <ReimbursementActions

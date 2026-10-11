@@ -5,6 +5,8 @@ import { listClients } from "@/lib/clients/queries";
 import { getExpenseDetail, listFounders } from "@/lib/expenses/queries";
 import { expenseStatusLabel, type ExpenseStatus } from "@/lib/expenses/categories";
 import { getReimbursementForExpense } from "@/lib/reimbursements/queries";
+import { listBankSettlements } from "@/lib/bank/settlements";
+import { BankSettlements } from "@/components/bank/bank-settlements";
 import { ExpenseForm } from "@/components/expenses/expense-form";
 import { ReceiptPanel } from "@/components/expenses/receipt-panel";
 import { buttonClasses } from "@/components/ui/button";
@@ -27,11 +29,12 @@ export default async function ExpenseDetailPage({
   const detail = await getExpenseDetail(companyId, id);
   if (!detail) notFound();
 
-  const [founders, clients, linkedRun, settings] = await Promise.all([
+  const [founders, clients, linkedRun, settings, settlements] = await Promise.all([
     listFounders(companyId),
     listClients(companyId),
     getReimbursementForExpense(companyId, id),
     getOrCreateCompanySettings(companyId),
+    listBankSettlements(companyId, { expenseId: id }),
   ]);
 
   const payeeId = detail.expense.paidByUserId;
@@ -100,6 +103,8 @@ export default async function ExpenseDetailPage({
           </Link>
         </div>
       )}
+
+      <BankSettlements settlements={settlements} />
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>

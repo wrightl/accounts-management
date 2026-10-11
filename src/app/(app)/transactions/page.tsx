@@ -1,9 +1,10 @@
+import Link from "next/link";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { countBankAccounts, listBankTransactions } from "@/lib/bank/queries";
 import { getBankTransactionSummary } from "@/lib/bank/summary";
 import { parseBankListParams, hasActiveBankFilters, BANK_PAGE_SIZE, resolveBankListDateRange } from "@/lib/bank/list-params";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
-import { BankToolbar, CustomCategoriesPanel } from "@/components/bank/bank-ui";
+import { BankToolbar } from "@/components/bank/bank-ui";
 import {
   BankFilters,
   BankPagination,
@@ -85,15 +86,25 @@ export default async function TransactionsPage({
           <p className="mt-1 text-muted">
             Import bank CSV and reconcile against payments and expenses.
           </p>
+          {canWrite ? (
+            <p className="mt-1 text-sm text-muted">
+              Paid for something from a personal account?{" "}
+              <Link
+                href="/expenses/new?status=reimbursable"
+                className="font-medium text-navy underline underline-offset-2 hover:no-underline"
+              >
+                Add it as a reimbursable expense
+              </Link>
+              .
+            </p>
+          ) : null}
         </div>
-        <BankToolbar canWrite={canWrite} />
+        <BankToolbar canWrite={canWrite} customCategories={customCategories} />
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_280px] xl:grid-cols-[1fr_320px]">
         <div>
           <BankFilters params={params} customCategories={customCategoryNames} />
-
-          <CustomCategoriesPanel categories={customCategories} canWrite={canWrite} />
 
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
             <BankViewToggle params={params} />

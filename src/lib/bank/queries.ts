@@ -202,6 +202,8 @@ export type BankTransactionListItem = {
     matchId: string | null;
     matchType: string | null;
     matchLabel: string | null;
+    /** Page for the matched invoice, expense or reimbursement run, when there is one. */
+    matchHref: string | null;
     matchNote: string | null;
     confirmed: boolean;
     reconciled: boolean;
@@ -338,6 +340,39 @@ async function paidTotalForInvoice(
         .from(payments)
         .where(eq(payments.invoiceId, invoiceId));
     return row?.total ?? 0;
+}
+
+/** Link each match to the record it settles (invoice, expense or reimbursement run). */
+async function buildMatchHrefs(
+    db: ReturnType<typeof getDb>,
+    matches: (typeof reconciliationMatches.$inferSelect)[],
+): Promise<Map<string, string>> {
+    const paymentIds = matches
+        .filter((m) => m.paymentId && !m.invoiceId)
+        .map((m) => m.paymentId!);
+    const invoiceByPayment = new Map<string, string>();
+    if (paymentIds.length > 0) {
+        const rows = await db
+            .select({ id: payments.id, invoiceId: payments.invoiceId })
+            .from(payments)
+            .where(inArray(payments.id, paymentIds));
+        for (const row of rows) invoiceByPayment.set(row.id, row.invoiceId);
+    }
+
+    const hrefs = new Map<string, string>();
+    for (const match of matches) {
+        const invoiceId =
+            match.invoiceId ??
+            (match.paymentId ? invoiceByPayment.get(match.paymentId) : undefined);
+        if (match.matchType === 'invoice_payment' && invoiceId) {
+            hrefs.set(match.id, `/invoices/${invoiceId}`);
+        } else if (match.matchType === 'reimbursement' && match.reimbursementId) {
+            hrefs.set(match.id, `/reimbursements/${match.reimbursementId}`);
+        } else if (match.expenseId) {
+            hrefs.set(match.id, `/expenses/${match.expenseId}`);
+        }
+    }
+    return hrefs;
 }
 
 async function buildMatchLabels(
@@ -521,7 +556,10 @@ export async function listBankTransactions(
         }
     }
 
-    const labelByMatchId = await buildMatchLabels(db, matches);
+    const [labelByMatchId, hrefByMatchId] = await Promise.all([
+        buildMatchLabels(db, matches),
+        buildMatchHrefs(db, matches),
+    ]);
 
     const accountIds = [...new Set(pageTx.map((tx) => tx.bankAccountId))];
     const accounts =
@@ -549,6 +587,7 @@ export async function listBankTransactions(
             matchId: match?.id ?? null,
             matchType: match?.matchType ?? null,
             matchLabel: match ? (labelByMatchId.get(match.id) ?? null) : null,
+            matchHref: match ? (hrefByMatchId.get(match.id) ?? null) : null,
             matchNote: match?.note ?? null,
             confirmed: match?.confirmed ?? false,
             reconciled: Boolean(match?.id && match.confirmed),

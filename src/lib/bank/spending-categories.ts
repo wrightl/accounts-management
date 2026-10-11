@@ -1,5 +1,5 @@
 import "server-only";
-import { and, count, eq, sql } from "drizzle-orm";
+import { and, count, eq, inArray, ne, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { bankAccounts, bankSpendingCategories, bankTransactions } from "@/db/schema";
 import { isKnownBankCategory } from "@/lib/bank/categories";
@@ -78,11 +78,15 @@ export async function listBankSpendingCategoriesWithUsage(
       usageCount: count(bankTransactions.id),
     })
     .from(bankSpendingCategories)
+    // Join accounts first so usage only counts this company's transactions.
+    .leftJoin(bankAccounts, eq(bankAccounts.companyId, bankSpendingCategories.companyId))
     .leftJoin(
       bankTransactions,
-      sql`lower(${bankTransactions.spendingCategory}) = lower(${bankSpendingCategories.name})`,
+      and(
+        eq(bankTransactions.bankAccountId, bankAccounts.id),
+        sql`lower(${bankTransactions.spendingCategory}) = lower(${bankSpendingCategories.name})`,
+      ),
     )
-    .leftJoin(bankAccounts, eq(bankTransactions.bankAccountId, bankAccounts.id))
     .where(eq(bankSpendingCategories.companyId, companyId))
     .groupBy(bankSpendingCategories.id, bankSpendingCategories.name)
     .orderBy(bankSpendingCategories.name);
@@ -137,6 +141,92 @@ export async function deleteUnusedBankSpendingCategory(
       ),
     );
   return { ok: true };
+}
+
+type CategoryMutationResult = { ok: true; name: string } | { ok: false; error: string };
+
+/** Add a custom label to the catalog ahead of using it on a transaction. */
+export async function createBankSpendingCategory(
+  companyId: string,
+  value: string,
+): Promise<CategoryMutationResult> {
+  const normalized = normalizeSpendingCategoryName(value);
+  if (!normalized) return { ok: false, error: "Enter a category name" };
+  if (isKnownBankCategory(normalized)) {
+    return { ok: false, error: "That is already a built-in category" };
+  }
+  const name = await upsertBankSpendingCategory(companyId, normalized);
+  return { ok: true, name: name ?? normalized };
+}
+
+/**
+ * Rename a custom label and re-point every transaction that uses it, so typos
+ * can be fixed without re-categorising transactions one by one.
+ */
+export async function renameBankSpendingCategory(
+  companyId: string,
+  categoryId: string,
+  value: string,
+): Promise<CategoryMutationResult> {
+  const normalized = normalizeSpendingCategoryName(value);
+  if (!normalized) return { ok: false, error: "Enter a category name" };
+  if (isKnownBankCategory(normalized)) {
+    return { ok: false, error: "That is already a built-in category" };
+  }
+
+  const db = getDb();
+  const [category] = await db
+    .select({ id: bankSpendingCategories.id, name: bankSpendingCategories.name })
+    .from(bankSpendingCategories)
+    .where(
+      and(
+        eq(bankSpendingCategories.id, categoryId),
+        eq(bankSpendingCategories.companyId, companyId),
+      ),
+    )
+    .limit(1);
+  if (!category) return { ok: false, error: "Category not found" };
+  if (category.name === normalized) return { ok: true, name: normalized };
+
+  const [clash] = await db
+    .select({ id: bankSpendingCategories.id })
+    .from(bankSpendingCategories)
+    .where(
+      and(
+        eq(bankSpendingCategories.companyId, companyId),
+        ne(bankSpendingCategories.id, categoryId),
+        sql`lower(${bankSpendingCategories.name}) = ${normalized.toLowerCase()}`,
+      ),
+    )
+    .limit(1);
+  if (clash) return { ok: false, error: `A category called "${normalized}" already exists` };
+
+  const companyAccountIds = db
+    .select({ id: bankAccounts.id })
+    .from(bankAccounts)
+    .where(eq(bankAccounts.companyId, companyId));
+
+  try {
+    await db.transaction(async (tx) => {
+      await tx
+        .update(bankSpendingCategories)
+        .set({ name: normalized })
+        .where(eq(bankSpendingCategories.id, categoryId));
+      await tx
+        .update(bankTransactions)
+        .set({ spendingCategory: normalized })
+        .where(
+          and(
+            inArray(bankTransactions.bankAccountId, companyAccountIds),
+            sql`lower(${bankTransactions.spendingCategory}) = ${category.name.toLowerCase()}`,
+          ),
+        );
+    });
+  } catch (err) {
+    if (!isUniqueViolation(err)) throw err;
+    return { ok: false, error: `A category called "${normalized}" already exists` };
+  }
+  return { ok: true, name: normalized };
 }
 
 function isUniqueViolation(err: unknown): boolean {
