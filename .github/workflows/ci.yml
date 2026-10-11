@@ -12,6 +12,11 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    # Clerk development-instance keys. The publishable key is inlined at build
+    # time, and `next start` can't serve any page without both.
+    env:
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
     steps:
       - uses: actions/checkout@v4
 
