@@ -20,8 +20,15 @@ test.describe("Pricing - Public Access", () => {
       page.getByRole("heading", { name: "Premium", exact: true }),
     ).toBeVisible();
 
-    await expect(page.getByText("£19").first()).toBeVisible();
-    await expect(page.getByText("£29").first()).toBeVisible();
+    // Paid prices come live from Stripe. Without a Stripe key (as in CI) the
+    // page says so instead of showing a price.
+    const unavailable = page.getByText("Pricing temporarily unavailable");
+    if ((await unavailable.count()) > 0) {
+      await expect(unavailable).toHaveCount(2);
+    } else {
+      await expect(page.getByText(/^£[\d,.]+$/)).toHaveCount(3);
+      await expect(page.getByText(/\/ year \(2 months free\)/)).toHaveCount(2);
+    }
 
     await expect(
       page.getByRole("navigation", { name: "Marketing" }).getByRole("link", {
