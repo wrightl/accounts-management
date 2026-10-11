@@ -16,6 +16,7 @@ export type NavIcon =
     | 'dividends'
     | 'shareholders'
     | 'reserves'
+    | 'safeToPay'
     | 'directorLoans'
     | 'quotes'
     | 'orders'
@@ -163,6 +164,12 @@ export const NAV_GROUPS: NavGroup[] = [
                 permission: 'reports:read',
             },
             {
+                href: '/safe-to-pay',
+                label: 'Safe to pay',
+                icon: 'safeToPay',
+                permission: 'reports:read',
+            },
+            {
                 href: '/reserves',
                 label: 'Tax & reserves',
                 icon: 'reserves',
@@ -230,6 +237,7 @@ const LTD_ONLY_HREFS = new Set([
     '/shareholders',
     '/reserves',
     '/directors-loans',
+    '/safe-to-pay',
 ]);
 
 /** Filter groups by permission (and entity type), dropping empty groups. */

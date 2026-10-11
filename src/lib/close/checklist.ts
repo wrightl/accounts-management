@@ -82,10 +82,11 @@ export async function getBankReconciledThrough(companyId: string): Promise<{
   };
 }
 
-/** Unbilled milestones on active orders that are due within the next week. */
+/** Unbilled milestones on active orders due within `lookaheadDays` (a week by default). */
 export async function listMilestonesReadyToBill(
   companyId: string,
   today: string,
+  lookaheadDays: number = MILESTONE_LOOKAHEAD_DAYS,
 ): Promise<ReadyMilestone[]> {
   const db = getDb();
   const rows = await db
@@ -108,7 +109,7 @@ export async function listMilestonesReadyToBill(
     .where(and(eq(orders.companyId, companyId), eq(orders.status, "active"), isNull(invoices.id)))
     .orderBy(asc(orders.number), asc(orderPaymentMilestones.position));
 
-  const horizon = addDays(today, MILESTONE_LOOKAHEAD_DAYS);
+  const horizon = addDays(today, lookaheadDays);
   return rows.flatMap((r) => {
     const m = r.milestone;
     const start = r.orderIssueDate ?? today;

@@ -393,6 +393,13 @@
       "when": 1789300000000,
       "tag": "0055_weekly_close_and_chasing",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1789400000000,
+      "tag": "0056_safe_to_pay",
+      "breakpoints": true
     }
   ]
 }

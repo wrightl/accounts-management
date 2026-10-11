@@ -4,12 +4,12 @@ import type { BankListParams } from "@/lib/bank/list-params";
 import { bankListWhere } from "@/lib/bank/queries";
 import type { BankTransactionSummaryData } from "@/lib/bank/summary-types";
 import { getDb } from "@/db";
-import { bankTransactions, companies, reconciliationMatches } from "@/db/schema";
+import { bankAccounts, bankTransactions, companies, reconciliationMatches } from "@/db/schema";
 import { formatGBP, poundsToPence } from "@/lib/money";
 
 export type BankTransactionSummary = BankTransactionSummaryData;
 
-function parseStatementBalancePence(raw: unknown): number | null {
+export function parseStatementBalancePence(raw: unknown): number | null {
   if (!raw || typeof raw !== "object") return null;
   const record = raw as Record<string, string>;
   for (const [key, value] of Object.entries(record)) {
@@ -91,6 +91,8 @@ export async function getBankTransactionSummary(
       bookedAt: bankTransactions.bookedAt,
     })
     .from(bankTransactions)
+    .innerJoin(bankAccounts, eq(bankTransactions.bankAccountId, bankAccounts.id))
+    .where(eq(bankAccounts.companyId, companyId))
     .orderBy(desc(bankTransactions.bookedAt), desc(bankTransactions.createdAt))
     .limit(1);
 

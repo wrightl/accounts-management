@@ -171,6 +171,13 @@ export const companies = pgTable("companies", {
    * Commercial Debts (Interest) Act 1998) to overdue reminders.
    */
   latePaymentCharges: boolean("late_payment_charges").notNull().default(false),
+  /**
+   * VAT quarter stagger: the month (1–3) the first VAT quarter of the year
+   * ends in, so 3 means quarters ending March, June, September and December.
+   */
+  vatQuarterEndMonth: integer("vat_quarter_end_month").notNull().default(3),
+  /** Months of average spending to keep back in "safe to pay yourself". */
+  safeToPayBufferMonths: integer("safe_to_pay_buffer_months").notNull().default(1),
   /** When set, tenant writes and outbound cron for this company are blocked. */
   suspendedAt: timestamp("suspended_at", { withTimezone: true }),
   suspendedReason: text("suspended_reason"),

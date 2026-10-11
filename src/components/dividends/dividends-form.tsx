@@ -32,6 +32,7 @@ export function DividendDeclareForm({
   registerError,
   availablePence,
   hasOpeningBalances = true,
+  defaultAmountPounds = "",
 }: {
   canWrite: boolean;
   balanced: boolean;
@@ -41,6 +42,7 @@ export function DividendDeclareForm({
   /** Estimated distributable reserves today, after dividends already declared. */
   availablePence?: number;
   hasOpeningBalances?: boolean;
+  defaultAmountPounds?: string;
 }) {
   const router = useRouter();
   const {
@@ -53,7 +55,7 @@ export function DividendDeclareForm({
   } = useFieldErrors();
   const formRef = useRef<HTMLFormElement>(null);
   const [pending, startTransition] = useTransition();
-  const [amountPounds, setAmountPounds] = useState("");
+  const [amountPounds, setAmountPounds] = useState(defaultAmountPounds);
   const [overReservesMessage, setOverReservesMessage] = useState<string | null>(null);
 
   const preview = useMemo(() => {

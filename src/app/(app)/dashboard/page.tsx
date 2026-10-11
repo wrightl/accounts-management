@@ -13,6 +13,9 @@ import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/roles";
 import { getDashboardOverview } from "@/lib/dashboard/queries";
 import { reportError } from "@/lib/errors/report";
+import { getSafeToPay } from "@/lib/safe-to-pay/queries";
+import { formatGBP } from "@/lib/money";
+import { Card, CardTitle, CardValue } from "@/components/ui/card";
 
 export default async function DashboardOverview({
   searchParams,
@@ -39,6 +42,7 @@ export default async function DashboardOverview({
 
   let overview: Awaited<ReturnType<typeof getDashboardOverview>> | null = null;
   let loadError: string | null = null;
+  let safeToPay: Awaited<ReturnType<typeof getSafeToPay>> | null = null;
 
   if (!can(user.role, "accounts:read")) {
     loadError = "no_permission";
@@ -47,6 +51,10 @@ export default async function DashboardOverview({
   } else {
     try {
       overview = await getDashboardOverview(user.companyId, user, sp.period);
+      if (user.entityType === "limited_company" && can(user.role, "reports:read")) {
+        // Secondary figure: never let it break the dashboard.
+        safeToPay = await getSafeToPay(user.companyId).catch(() => null);
+      }
     } catch (err) {
       loadError = "query_failed";
       console.warn(
@@ -147,7 +155,23 @@ export default async function DashboardOverview({
               </div>
             </div>
 
-            <AttentionPanel items={overview.attention} />
+            <div className="space-y-6">
+              {safeToPay ? (
+                <Card>
+                  <CardTitle>Safe to pay yourself</CardTitle>
+                  <CardValue>{formatGBP(safeToPay.result.safeNowPence)}</CardValue>
+                  <p className="mt-1 text-xs text-muted">
+                    {safeToPay.cash.known
+                      ? `${formatGBP(safeToPay.result.safeLaterPence)} in 30 days if clients pay on time.`
+                      : "Import a bank statement to work this out."}{" "}
+                    <Link href="/safe-to-pay" className="underline">
+                      How it&apos;s worked out
+                    </Link>
+                  </p>
+                </Card>
+              ) : null}
+              <AttentionPanel items={overview.attention} />
+            </div>
           </section>
         </>
       )}

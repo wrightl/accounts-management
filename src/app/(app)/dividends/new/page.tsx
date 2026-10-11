@@ -5,9 +5,16 @@ import { DividendDeclareForm } from "@/components/dividends/dividends-form";
 import { buttonClasses } from "@/components/ui/button";
 import { getReservesPosition } from "@/lib/ledger/queries";
 
-export default async function NewDividendPage() {
+export default async function NewDividendPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ amount?: string }>;
+}) {
   const { companyId } = await guardTenantPage("accounts:write");
   const canWrite = await hasPermission("accounts:write");
+  const { amount } = await searchParams;
+  // Prefilled from "Safe to pay yourself".
+  const defaultAmount = amount && /^\d+(\.\d{1,2})?$/.test(amount) ? amount : "";
 
   const [split, reserves] = await Promise.all([
     getActiveShareholdersForSplit(companyId),
@@ -34,6 +41,7 @@ export default async function NewDividendPage() {
         totalShares={split.totalShares}
         shareholders={split.shareholders}
         availablePence={reserves.availablePence}
+        defaultAmountPounds={defaultAmount}
         hasOpeningBalances={reserves.hasOpeningBalances}
         registerError={
           !split.balanced
