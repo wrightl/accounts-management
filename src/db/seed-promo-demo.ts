@@ -456,7 +456,7 @@ export async function seedPromoDemo(
       status: "pending",
       source: "email",
       billable: true,
-      billableClientId: harbor.id,
+      clientId: harbor.id,
       paidByUserId: admin.id,
       createdByUserId: admin.id,
     })

@@ -161,7 +161,7 @@ export default async function ExpensesPage({
           </Select>
         </div>
         <div>
-          <Label htmlFor="billable">Billable</Label>
+          <Label htmlFor="billable">Rebillable</Label>
           <Select id="billable" name="billable" defaultValue={sp.billable ?? ""}>
             <option value="">All</option>
             <option value="true">Yes</option>
@@ -207,8 +207,11 @@ export default async function ExpensesPage({
                         Review
                       </span>
                     ) : null}
-                    {e.billable && e.clientName ? (
-                      <span className="ml-2 text-xs text-muted">→ {e.clientName}</span>
+                    {e.clientName ? (
+                      <span className="ml-2 text-xs text-muted">
+                        {e.billable ? "Rebill → " : "For "}
+                        {e.clientName}
+                      </span>
                     ) : null}
                   </TD>
                   <TD>{e.category ?? "—"}</TD>

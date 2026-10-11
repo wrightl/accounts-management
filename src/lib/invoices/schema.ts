@@ -1,6 +1,6 @@
 import { z } from "zod";
 import {
-  documentLinesSchema,
+  documentLineSchema,
   parseDocumentLinesJson,
 } from "@/lib/documents/schema";
 import { todayIsoDate } from "@/lib/dates";
@@ -29,7 +29,14 @@ export const invoiceSchema = z.object({
     .optional()
     .or(z.literal("")),
   notes: optionalNotes,
-  lines: documentLinesSchema,
+  lines: z
+    .array(
+      documentLineSchema.extend({
+        /** Set when the line recharges a rebillable expense. */
+        expenseId: z.string().uuid().optional(),
+      }),
+    )
+    .min(1, "Add at least one line item"),
 });
 
 export type InvoiceParsed = z.infer<typeof invoiceSchema>;

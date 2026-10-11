@@ -19,6 +19,7 @@ export type NavIcon =
     | 'reserves'
     | 'safeToPay'
     | 'forecast'
+    | 'profitability'
     | 'directorLoans'
     | 'quotes'
     | 'orders'
@@ -169,6 +170,12 @@ export const NAV_GROUPS: NavGroup[] = [
                 href: '/reports',
                 label: 'Reports',
                 icon: 'reports',
+                permission: 'reports:read',
+            },
+            {
+                href: '/profitability',
+                label: 'Profitability',
+                icon: 'profitability',
                 permission: 'reports:read',
             },
             {

@@ -7,6 +7,8 @@ import { canEditInvoice, type InvoiceStatus } from "@/lib/invoices/status";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { defaultLineVatRate } from "@/lib/vat";
 import { InvoiceForm } from "@/components/invoices/invoice-form";
+import { listRebillableExpenses } from "@/lib/profitability/queries";
+import { toRebillOptions } from "@/lib/profitability/rebill";
 import { buttonClasses } from "@/components/ui/button";
 import { penceToPounds } from "@/lib/money";
 
@@ -27,7 +29,10 @@ export default async function EditInvoicePage({
     notFound();
   }
 
-  const clients = await listClients(companyId);
+  const [clients, rebillable] = await Promise.all([
+    listClients(companyId),
+    listRebillableExpenses(companyId, { invoiceId: id }),
+  ]);
   const initialLines = detail.lines.map((l) => ({
     key: l.id,
     description: l.description,
@@ -35,6 +40,7 @@ export default async function EditInvoicePage({
     discountPercent: l.discountPercent ? String(l.discountPercent) : "",
     unitPricePounds: String(penceToPounds(l.unitPricePence)),
     vatRate: l.vatRate,
+    expenseId: l.expenseId ?? undefined,
   }));
 
   return (
@@ -60,6 +66,7 @@ export default async function EditInvoicePage({
         initialLines={initialLines}
         vatRegistered={company.vatRegistered}
         defaultVatRate={defaultLineVatRate(company)}
+        rebillable={toRebillOptions(rebillable)}
       />
     </div>
   );

@@ -31,6 +31,19 @@ export interface LineDraft {
   /** Percent off the line; blank for no discount. */
   discountPercent: string;
   vatRate: number;
+  /** Set when the line recharges a rebillable expense. */
+  expenseId?: string;
+}
+
+/** A rebillable expense the form can add as a line. */
+export interface RebillOption {
+  id: string;
+  clientId: string;
+  lineDescription: string;
+  /** Date, order and cost, for the picker. */
+  detail: string;
+  pricePounds: string;
+  priceFormatted: string;
 }
 
 function newLine(defaultVatRate: number): LineDraft {
@@ -44,6 +57,15 @@ function newLine(defaultVatRate: number): LineDraft {
   };
 }
 
+function rebillLine(option: RebillOption, vatRate: number): LineDraft {
+  return {
+    ...newLine(vatRate),
+    description: option.lineDescription,
+    unitPricePounds: option.pricePounds,
+    expenseId: option.id,
+  };
+}
+
 export function InvoiceForm({
   mode,
   clients,
@@ -51,6 +73,9 @@ export function InvoiceForm({
   initialLines,
   vatRegistered = false,
   defaultVatRate = 0,
+  rebillable = [],
+  defaultClientId,
+  initialRebillIds = [],
 }: {
   mode: "create" | "edit";
   clients: { id: string; name: string; companyName?: string | null }[];
@@ -64,6 +89,11 @@ export function InvoiceForm({
   initialLines?: LineDraft[];
   vatRegistered?: boolean;
   defaultVatRate?: number;
+  rebillable?: RebillOption[];
+  /** Client to start a new invoice with. */
+  defaultClientId?: string;
+  /** Rebillable expenses to start a new invoice with. */
+  initialRebillIds?: string[];
 }) {
   const router = useRouter();
   const {
@@ -77,14 +107,41 @@ export function InvoiceForm({
   const formRef = useRef<HTMLFormElement>(null);
   const [pending, startTransition] = useTransition();
   const lineDefault = vatRegistered ? defaultVatRate : 0;
-  const [lines, setLines] = useState<LineDraft[]>(
-    initialLines && initialLines.length > 0
-      ? initialLines.map((l) => ({
-          ...l,
-          vatRate: vatRegistered ? l.vatRate : 0,
-        }))
-      : [newLine(lineDefault)],
-  );
+  const [clientId, setClientId] = useState(invoice?.clientId ?? defaultClientId ?? "");
+  const [lines, setLines] = useState<LineDraft[]>(() => {
+    if (initialLines && initialLines.length > 0) {
+      return initialLines.map((l) => ({
+        ...l,
+        vatRate: vatRegistered ? l.vatRate : 0,
+      }));
+    }
+    const starting = rebillable.filter(
+      (r) => r.clientId === clientId && initialRebillIds.includes(r.id),
+    );
+    return starting.length > 0 ? starting.map((o) => rebillLine(o, lineDefault)) : [newLine(lineDefault)];
+  });
+  const clientRebillable = rebillable.filter((r) => r.clientId === clientId);
+  const addedExpenseIds = new Set(lines.flatMap((l) => (l.expenseId ? [l.expenseId] : [])));
+  const notAdded = clientRebillable.filter((r) => !addedExpenseIds.has(r.id));
+
+  function addRebills(options: RebillOption[]) {
+    const added = options.map((o) => rebillLine(o, lineDefault));
+    setLines((prev) => {
+      const blank =
+        prev.length === 1 && !prev[0]!.description.trim() && !prev[0]!.unitPricePounds.trim();
+      return blank ? added : [...prev, ...added];
+    });
+  }
+
+  function changeClient(next: string) {
+    setClientId(next);
+    // Recharges belong to one client, so drop another client's.
+    const keep = new Set(rebillable.filter((r) => r.clientId === next).map((r) => r.id));
+    setLines((prev) => {
+      const kept = prev.filter((l) => !l.expenseId || keep.has(l.expenseId));
+      return kept.length > 0 ? kept : [newLine(lineDefault)];
+    });
+  }
 
   const totals = useMemo(() => {
     try {
@@ -115,6 +172,7 @@ export function InvoiceForm({
           discountPercent:
             l.discountPercent.trim() === "" ? 0 : Number(l.discountPercent),
           vatRate: vatRegistered ? l.vatRate : 0,
+          ...(l.expenseId ? { expenseId: l.expenseId } : {}),
         })),
       ),
     );
@@ -160,11 +218,14 @@ export function InvoiceForm({
           <Select
             id="clientId"
             name="clientId"
-            defaultValue={invoice?.clientId ?? ""}
+            defaultValue={clientId}
             disabled={pending}
             aria-invalid={Boolean(fieldErrors.clientId)}
             aria-describedby={fieldErrors.clientId ? "clientId-error" : undefined}
-            onChange={() => clearField("clientId")}
+            onChange={(e) => {
+              clearField("clientId");
+              changeClient(e.target.value);
+            }}
           >
             <option value="" disabled>
               Select a client…
@@ -262,6 +323,9 @@ export function InvoiceForm({
                 <FieldError id={`line-${index}-description-error`}>
                   {fieldErrors[descKey]}
                 </FieldError>
+                {line.expenseId ? (
+                  <p className="mt-1 text-xs text-muted">Recharged expense</p>
+                ) : null}
               </div>
               <div className="min-w-0">
                 <Input
@@ -378,6 +442,54 @@ export function InvoiceForm({
           <Plus className="h-4 w-4" />
           Add line
         </Button>
+        {clientRebillable.length > 0 ? (
+          <div className="rounded-lg border border-border bg-wash/50 p-3 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="font-medium">Rebillable expenses for this client</p>
+              {notAdded.length > 1 ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={pending}
+                  onClick={() => addRebills(notAdded)}
+                >
+                  Add all ({notAdded.length})
+                </Button>
+              ) : null}
+            </div>
+            <p className="mt-1 text-xs text-muted">
+              {vatRegistered
+                ? "Recharged at cost, net of the VAT you reclaim. The line's VAT rate applies."
+                : "Recharged at what you paid."}
+            </p>
+            <ul className="mt-2 divide-y divide-border">
+              {clientRebillable.map((r) => (
+                <li key={r.id} className="flex items-center justify-between gap-3 py-2">
+                  <div className="min-w-0">
+                    <p className="truncate">{r.lineDescription}</p>
+                    <p className="text-xs text-muted">{r.detail}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <span className="tabular-nums">{r.priceFormatted}</span>
+                    {addedExpenseIds.has(r.id) ? (
+                      <span className="w-16 text-center text-xs text-muted">Added</span>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="w-16"
+                        disabled={pending}
+                        onClick={() => addRebills([r])}
+                      >
+                        Add
+                      </Button>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         <div className="space-y-1 text-right">
           {vatRegistered && totals.vatPence > 0 ? (
             <>

@@ -41,6 +41,8 @@ import type { ActionResult } from "@/actions/result";
 import { periodLockError } from "@/lib/period-lock";
 import { checkPeriodOpen, getBooksLockedThrough } from "@/lib/period-lock-queries";
 import { refreshExpenseBankSuggestion } from "@/lib/bank/expense-match";
+import { resolveExpenseProject } from "@/lib/expenses/project";
+import { getExpenseRebill } from "@/lib/profitability/queries";
 import {
   approvePendingExpense,
   rejectPendingExpense,
@@ -98,6 +100,9 @@ export async function createExpense(formData: FormData): Promise<ActionResult> {
         };
       }
 
+      const project = await resolveExpenseProject(companyId, parsed.data);
+      if (!project.ok) return project;
+
       // Mileage is always 0% VAT; otherwise use posted rate when registered.
       const vatRate = parsed.data.useMileage
         ? 0
@@ -117,7 +122,8 @@ export async function createExpense(formData: FormData): Promise<ActionResult> {
           vatPence,
           status: normalized.status,
           billable: parsed.data.billable,
-          billableClientId: parsed.data.billable ? parsed.data.billableClientId : null,
+          clientId: project.clientId,
+          orderId: project.orderId,
           paidByUserId: normalized.paidByUserId,
           mileageMiles,
           mileageRatePence,
@@ -227,6 +233,22 @@ export async function updateExpense(
         : resolveLineVatRate(company, parseVatRate(parsed.data.vatRate));
       const vatPence = vatFromInclusiveGross(amountPence, vatRate);
 
+      const project = await resolveExpenseProject(companyId, parsed.data);
+      if (!project.ok) return project;
+      const rebill = await getExpenseRebill(companyId, id);
+      if (
+        rebill &&
+        (!parsed.data.billable ||
+          project.clientId !== existing.clientId ||
+          amountPence !== existing.amountPence ||
+          vatPence !== existing.vatPence)
+      ) {
+        return {
+          ok: false,
+          error: `This expense is recharged on invoice ${rebill.number}. Remove it from that invoice before changing the amount, client or rebillable setting.`,
+        };
+      }
+
       await db
         .update(expenses)
         .set({
@@ -238,7 +260,8 @@ export async function updateExpense(
           vatPence,
           status,
           billable: parsed.data.billable,
-          billableClientId: parsed.data.billable ? parsed.data.billableClientId : null,
+          clientId: project.clientId,
+          orderId: project.orderId,
           paidByUserId:
             existing.status === "pending"
               ? existing.paidByUserId
@@ -312,8 +335,10 @@ export async function approveExpense(
 
   return mutate(
     "accounts:write",
-    (ctx) =>
-      approvePendingExpense(ctx, id, {
+    async (ctx) => {
+      const project = await resolveExpenseProject(ctx.companyId, parsed.data);
+      if (!project.ok) return project;
+      return approvePendingExpense(ctx, id, {
         status: targetStatus,
         paidByUserId: parsed.data.paidByUserId,
         fields: {
@@ -323,9 +348,11 @@ export async function approveExpense(
           amountPence: parsed.data.amountPence,
           vatRate: parseVatRate(parsed.data.vatRate),
           billable: parsed.data.billable,
-          billableClientId: parsed.data.billableClientId,
+          clientId: project.clientId,
+          orderId: project.orderId,
         },
-      }),
+      });
+    },
     { paths: ["/expenses", `/expenses/${id}`, "/reimbursements", "/dashboard", "/transactions"] },
   );
 }
@@ -349,6 +376,13 @@ export async function deleteExpense(id: string): Promise<ActionResult> {
       if (!existing) return { ok: false, error: "Expense not found" };
       if (existing.status === "reimbursed") {
         return { ok: false, error: "Cannot delete a reimbursed expense" };
+      }
+      const rebill = await getExpenseRebill(companyId, id);
+      if (rebill) {
+        return {
+          ok: false,
+          error: `This expense is recharged on invoice ${rebill.number}. Remove it from that invoice first.`,
+        };
       }
       if (existing.status !== "pending") {
         const locked = await checkPeriodOpen(companyId, existing.spentAt);

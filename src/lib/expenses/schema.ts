@@ -40,9 +40,15 @@ export const expenseFieldsSchema = z.object({
     .string()
     .optional()
     .transform((v) => v === "on" || v === "true"),
-  billableClientId: z
+  clientId: z
     .string()
     .uuid("Select a client")
+    .optional()
+    .or(z.literal(""))
+    .transform((v) => (v === "" || !v ? null : v)),
+  orderId: z
+    .string()
+    .uuid("Choose an order")
     .optional()
     .or(z.literal(""))
     .transform((v) => (v === "" || !v ? null : v)),
@@ -90,7 +96,8 @@ export function expenseRawFromFormData(formData: FormData): Record<string, unkno
     amountPounds: formData.get("amountPounds") ?? "",
     status: formData.get("status") ?? "",
     billable: formData.get("billable") ?? "",
-    billableClientId: formData.get("billableClientId") ?? "",
+    clientId: formData.get("clientId") ?? "",
+    orderId: formData.get("orderId") ?? "",
     paidByUserId: formData.get("paidByUserId") ?? "",
     useMileage: formData.get("useMileage") ?? "",
     mileageMiles: formData.get("mileageMiles") ?? "",

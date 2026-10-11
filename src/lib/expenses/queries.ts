@@ -74,7 +74,7 @@ export async function listExpenses(companyId: string, filters: ExpenseFilters = 
     .leftJoin(paidBy, eq(expenses.paidByUserId, paidBy.id))
     .leftJoin(createdBy, eq(expenses.createdByUserId, createdBy.id))
     .leftJoin(submittedBy, eq(expenses.submittedByUserId, submittedBy.id))
-    .leftJoin(clients, eq(expenses.billableClientId, clients.id))
+    .leftJoin(clients, eq(expenses.clientId, clients.id))
     .where(and(...conditions))
     .orderBy(desc(expenses.spentAt), desc(expenses.createdAt));
 
@@ -114,7 +114,7 @@ export async function getExpenseDetail(companyId: string, id: string) {
     })
     .from(expenses)
     .leftJoin(users, eq(expenses.paidByUserId, users.id))
-    .leftJoin(clients, eq(expenses.billableClientId, clients.id))
+    .leftJoin(clients, eq(expenses.clientId, clients.id))
     .leftJoin(submitter, eq(expenses.submittedByUserId, submitter.id))
     .where(and(eq(expenses.id, id), eq(expenses.companyId, companyId)))
     .limit(1);

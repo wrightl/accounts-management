@@ -362,8 +362,15 @@ export const invoiceLineItems = pgTable(
       .notNull()
       .default(0),
     position: integer("position").notNull().default(0),
+    /** Set when this line recharges a rebillable expense. */
+    expenseId: uuid("expense_id").references((): AnyPgColumn => expenses.id, {
+      onDelete: "set null",
+    }),
   },
-  (t) => [index("idx_line_items_invoice").on(t.invoiceId)],
+  (t) => [
+    index("idx_line_items_invoice").on(t.invoiceId),
+    index("idx_line_items_expense").on(t.expenseId),
+  ],
 );
 
 export const payments = pgTable(
@@ -470,8 +477,14 @@ export const expenses = pgTable(
     vatPence: integer("vat_pence").notNull().default(0),
     status: expenseStatusEnum("status").notNull().default("recorded"),
     source: expenseSourceEnum("source").notNull().default("manual"),
+    /** Rebillable: recharge this to the client on a later invoice. */
     billable: boolean("billable").notNull().default(false),
-    billableClientId: uuid("billable_client_id").references(() => clients.id, {
+    /** The client (project) this cost belongs to, rebillable or not. */
+    clientId: uuid("client_id").references(() => clients.id, {
+      onDelete: "set null",
+    }),
+    /** The order (project) this cost belongs to; its client is copied to clientId. */
+    orderId: uuid("order_id").references((): AnyPgColumn => orders.id, {
       onDelete: "set null",
     }),
     paidByUserId: uuid("paid_by_user_id").references(() => users.id, {
@@ -496,6 +509,8 @@ export const expenses = pgTable(
     index("idx_expenses_company").on(t.companyId),
     index("idx_expenses_status").on(t.status),
     index("idx_expenses_paid_by").on(t.paidByUserId),
+    index("idx_expenses_client").on(t.clientId),
+    index("idx_expenses_order").on(t.orderId),
     check(
       "expenses_category_known",
       sql`${t.category} is null or ${t.category} in (
