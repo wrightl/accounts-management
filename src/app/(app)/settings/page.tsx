@@ -22,6 +22,10 @@ export default async function SettingsPage() {
           Manage billing
         </a>
         {" · "}
+        <a href="/settings/payments" className="text-brand underline underline-offset-2">
+          Online payments
+        </a>
+        {" · "}
         <a
           href="/settings/notifications"
           className="text-brand underline underline-offset-2"

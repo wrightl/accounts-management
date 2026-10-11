@@ -38,6 +38,8 @@ const serverSchema = z.object({
     // Stripe Billing (manual keys — not Vercel Marketplace).
     STRIPE_SECRET_KEY: z.string().optional(),
     STRIPE_WEBHOOK_SECRET: z.string().optional(),
+    /** Signing secret for the Connect webhook endpoint (invoice payments on connected accounts). */
+    STRIPE_CONNECT_WEBHOOK_SECRET: z.string().optional(),
     STRIPE_TAX_ENABLED: z.enum(['true', 'false']).optional(),
 
     // Cron / automation. Routes refuse to run until CRON_SECRET is set.

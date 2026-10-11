@@ -18,6 +18,9 @@ import { InvoiceActions } from "@/components/invoices/invoice-actions";
 import { InvoiceDueDate } from "@/components/invoices/invoice-due-date";
 import { InvoiceStatusSelect } from "@/components/invoices/invoice-status-select";
 import { CreditNoteStatusBadge } from "@/components/credit-notes/credit-note-status-badge";
+import { CopyButton } from "@/components/ui/copy-button";
+import { onlinePaymentsStatus, publicInvoiceUrl } from "@/lib/payments/online-status";
+import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import {
   formatDiscountPercent,
   formatGBP,
@@ -34,6 +37,7 @@ export default async function InvoiceDetailPage({
 }) {
   const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
+  const canManageSettings = await hasPermission("settings:manage");
   const { id } = await params;
 
   const detail = await getInvoiceDetail(companyId, id);
@@ -58,10 +62,13 @@ export default async function InvoiceDetailPage({
   const stored = storedStatus(invoice.status);
   const canCredit =
     canWrite && (stored === "sent" || stored === "paid") && creditablePence > 0;
-  const [recurring, settlements] = await Promise.all([
+  const [recurring, settlements, company] = await Promise.all([
     getRecurringTemplateForInvoice(companyId, invoice.recurringInvoiceId),
     listBankSettlements(companyId, { invoiceId: invoice.id }),
+    getOrCreateCompanySettings(companyId),
   ]);
+  const clientLink = stored === "draft" ? null : publicInvoiceUrl(invoice.publicToken);
+  const takesCardPayments = onlinePaymentsStatus(company) === "enabled";
 
   return (
     <div>
@@ -116,6 +123,32 @@ export default async function InvoiceDetailPage({
               </>
             ) : null}
           </p>
+          {clientLink ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-muted">
+                Client link{takesCardPayments ? " (view and pay)" : ""}:
+              </span>
+              <a
+                href={clientLink}
+                target="_blank"
+                rel="noreferrer"
+                className="min-w-0 max-w-xs truncate text-foreground hover:underline"
+              >
+                {clientLink}
+              </a>
+              <CopyButton value={clientLink} />
+              <span className="text-muted">
+                {invoice.viewedAt
+                  ? `Viewed ${invoice.viewedAt.toISOString().slice(0, 10)}`
+                  : "Not viewed yet"}
+              </span>
+              {canManageSettings && !takesCardPayments && stored === "sent" ? (
+                <Link href="/settings/payments" className="text-brand underline underline-offset-2">
+                  Take card payments
+                </Link>
+              ) : null}
+            </div>
+          ) : null}
           {canWrite ? (
             <div className="mt-3 flex flex-wrap items-start gap-2">
               <InvoiceStatusSelect

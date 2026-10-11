@@ -127,6 +127,28 @@ outside the repo; once done, add the listed secrets to the Cursor agent
 8. Optional: enable Stripe Tax + UK VAT registration, then set `STRIPE_TAX_ENABLED=true`.
 9. Confirm `/platform/health` shows Stripe keys and price IDs as configured.
 
+### Client invoice payments (Stripe Connect)
+
+Tenants can let clients pay invoices by card from the invoice link (`/i/{token}`).
+Each tenant connects **their own** Stripe account (Standard-style: full Stripe
+dashboard, they pay Stripe's fees, Stripe handles disputes). Alfa takes no fee.
+
+1. Stripe → **Connect** → get started as a platform (UK). Complete the platform
+   profile so Stripe will create connected accounts.
+2. Add these permissions to the restricted key: **Connect** (Accounts, Account
+   links) write, and **Checkout Sessions** write (used on connected accounts).
+3. Add a second webhook endpoint, set to **Listen to events on Connected accounts**:
+   `https://alfa.dotanddashconsulting.com/api/webhooks/stripe-connect`  
+   Events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+   `account.updated`.  
+   Signing secret → `STRIPE_CONNECT_WEBHOOK_SECRET` (separate from `STRIPE_WEBHOOK_SECRET`).
+4. Tenants connect from **Settings → Online payments**. Pay buttons appear only once
+   Stripe reports `charges_enabled` for their account.
+
+Card payments are recorded on the invoice (method `card`). Stripe pays out to the
+tenant's bank in batches net of fees, so payout bank rows won't match individual
+invoices one-to-one.
+
 Legacy: `STRIPE_PRICE_ESSENTIALS_MONTHLY` / `_YEARLY` / `STRIPE_PRICE_PREMIUM_*` env vars only
 seed empty DB columns on first read after migration `0041_stripe_price_ids`. Prefer
 Platform Settings going forward; you can remove the env vars once the DB is seeded.

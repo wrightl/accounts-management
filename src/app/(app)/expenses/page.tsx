@@ -13,7 +13,7 @@ import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { findLocalUser } from "@/lib/users";
 import { getCompany } from "@/lib/tenant";
 import { ExpenseImportButton } from "@/components/expenses/expense-import-panel";
-import { CopyEmailAddress } from "@/components/expenses/copy-email-address";
+import { CopyButton } from "@/components/ui/copy-button";
 
 export default async function ExpensesPage({
   searchParams,
@@ -81,7 +81,7 @@ export default async function ExpensesPage({
             Email receipts to{" "}
             <span className="font-medium text-foreground break-all">{inboundAddress}</span>
           </span>
-          <CopyEmailAddress address={inboundAddress} />
+          <CopyButton value={inboundAddress} />
         </div>
       ) : null}
 

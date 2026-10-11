@@ -3,12 +3,13 @@
 import { useState } from "react";
 import { buttonClasses } from "@/components/ui/button";
 
-export function CopyEmailAddress({ address }: { address: string }) {
+/** Copies `value` to the clipboard and briefly confirms. */
+export function CopyButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
 
   async function onCopy() {
     try {
-      await navigator.clipboard.writeText(address);
+      await navigator.clipboard.writeText(value);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {

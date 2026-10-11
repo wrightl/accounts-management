@@ -37,6 +37,7 @@ export default function robots(): MetadataRoute.Robots {
           "/recurring-invoices",
           "/credit-notes",
           "/q/*",
+          "/i/*",
         ],
       },
       // Allow AI crawlers and research bots

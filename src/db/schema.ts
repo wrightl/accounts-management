@@ -119,6 +119,15 @@ export const companies = pgTable("companies", {
   creditNoteNumberPrefix: text("credit_note_number_prefix").notNull().default("CN"),
   creditNoteNextSeq: integer("credit_note_next_seq").notNull().default(1),
   creditNoteSeqYear: integer("credit_note_seq_year"),
+  /**
+   * Stripe Connect account (Standard: the company's own Stripe account) that
+   * receives online invoice payments. Null until connected in Settings.
+   */
+  stripeConnectAccountId: text("stripe_connect_account_id").unique(),
+  /** Mirrors the account's `charges_enabled`; pay-now shows only when true. */
+  stripeConnectChargesEnabled: boolean("stripe_connect_charges_enabled")
+    .notNull()
+    .default(false),
   /** Default days from issue date until invoice due date. */
   invoicePaymentTermsDays: integer("invoice_payment_terms_days").notNull().default(14),
   /** Default HMRC mileage rate in pence per mile (e.g. 45 = 45p/mi). */
@@ -268,6 +277,12 @@ export const invoices = pgTable(
       () => recurringInvoices.id,
       { onDelete: "set null" },
     ),
+    /** Unguessable token for the client's view-and-pay page (`/i/{token}`). */
+    publicToken: text("public_token")
+      .notNull()
+      .default(sql`replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '')`),
+    /** First time the client opened the public page. */
+    viewedAt: timestamp("viewed_at", { withTimezone: true }),
   },
   (t) => [
     uniqueIndex("uniq_invoices_company_number").on(t.companyId, t.number),
@@ -281,6 +296,7 @@ export const invoices = pgTable(
     index("idx_invoices_status").on(t.status),
     index("idx_invoices_order").on(t.orderId),
     index("idx_invoices_payment_milestone").on(t.paymentMilestoneId),
+    uniqueIndex("uniq_invoices_public_token").on(t.publicToken),
   ],
 );
 
@@ -318,8 +334,13 @@ export const payments = pgTable(
     method: text("method"),
     reference: text("reference"),
     receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
+    /** Set for online card payments; makes webhook delivery idempotent. */
+    stripeCheckoutSessionId: text("stripe_checkout_session_id"),
   },
-  (t) => [index("idx_payments_invoice").on(t.invoiceId)],
+  (t) => [
+    index("idx_payments_invoice").on(t.invoiceId),
+    uniqueIndex("uniq_payments_stripe_checkout_session").on(t.stripeCheckoutSessionId),
+  ],
 );
 
 export const creditNoteStatusEnum = pgEnum("credit_note_status", ["issued", "void"]);

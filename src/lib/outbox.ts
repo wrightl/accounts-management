@@ -11,6 +11,21 @@ import { getInvoiceDetail } from "@/lib/invoices/queries";
 import { getCompanySettings } from "@/lib/settings/queries";
 import { renderInvoicePdfV2 } from "@/lib/invoices/pdf-v2";
 import { storedStatus, todayIsoDate } from "@/lib/invoices/status";
+import { onlinePaymentsStatus, publicInvoiceUrl } from "@/lib/payments/online-status";
+
+/** "View and pay online" when the company takes card payments, else "View online". */
+function invoiceLink(
+  token: string,
+  company: { stripeConnectAccountId: string | null; stripeConnectChargesEnabled: boolean },
+): { html: string; text: string } {
+  const url = publicInvoiceUrl(token);
+  const label =
+    onlinePaymentsStatus(company) === "enabled" ? "View and pay online" : "View online";
+  return {
+    html: `<p><a href="${escapeHtml(url)}">${label}</a></p>`,
+    text: `${label}: ${url}`,
+  };
+}
 
 const MAX_ATTEMPTS = 8;
 const REMIND_COOLDOWN_DAYS = 7;
@@ -228,6 +243,7 @@ async function deliverInvoice(invoiceId: string, actorUserId?: string | null) {
   const companyName = escapeHtml(company.name);
   const invoiceNumber = escapeHtml(detail.invoice.number);
   const amount = escapeHtml(detail.invoice.grossFormatted);
+  const link = invoiceLink(detail.invoice.publicToken, company);
   const sender = await resolveClientEmailSender({
     companyId: invRow.companyId,
     companyName: company.name,
@@ -239,8 +255,8 @@ async function deliverInvoice(invoiceId: string, actorUserId?: string | null) {
     from: sender.from,
     replyTo: sender.replyTo,
     subject: `Invoice ${detail.invoice.number} from ${company.name}`,
-    html: `<p>Hi,</p><p>Please find attached invoice <strong>${invoiceNumber}</strong> for ${amount}.</p><p>Kind regards,<br/>${companyName}</p>`,
-    text: `Please find attached invoice ${detail.invoice.number} for ${detail.invoice.grossFormatted}.`,
+    html: `<p>Hi,</p><p>Please find attached invoice <strong>${invoiceNumber}</strong> for ${amount}.</p>${link.html}<p>Kind regards,<br/>${companyName}</p>`,
+    text: `Please find attached invoice ${detail.invoice.number} for ${detail.invoice.grossFormatted}.\n\n${link.text}`,
     attachments: [
       {
         filename,
@@ -279,9 +295,13 @@ async function deliverReminder(invoiceId: string, actorUserId?: string | null) {
   if (!row.clientEmail) throw new Error("Client has no email address");
 
   const company = await getCompanySettings(row.invoice.companyId);
+  const detail = await getInvoiceDetail(row.invoice.companyId, invoiceId);
+  const amountDuePence = detail?.balancePence ?? row.invoice.grossPence;
+  if (amountDuePence <= 0) throw new Error("Invoice has nothing left to pay");
+  const link = invoiceLink(row.invoice.publicToken, company);
   const name = escapeHtml(row.clientName);
   const number = escapeHtml(row.invoice.number);
-  const amount = escapeHtml(formatGBP(row.invoice.grossPence));
+  const amount = escapeHtml(formatGBP(amountDuePence));
   const due = escapeHtml(row.invoice.dueDate ?? "");
   const sender = await resolveClientEmailSender({
     companyId: row.invoice.companyId,
@@ -294,8 +314,8 @@ async function deliverReminder(invoiceId: string, actorUserId?: string | null) {
     from: sender.from,
     replyTo: sender.replyTo,
     subject: `Reminder: invoice ${row.invoice.number} is overdue`,
-    html: `<p>Hi ${name},</p><p>Invoice <strong>${number}</strong> for ${amount} was due on ${due} and remains unpaid.</p><p>Kind regards,<br/>${escapeHtml(company.name)}</p>`,
-    text: `Invoice ${row.invoice.number} for ${formatGBP(row.invoice.grossPence)} is overdue (due ${row.invoice.dueDate}).`,
+    html: `<p>Hi ${name},</p><p>Invoice <strong>${number}</strong> was due on ${due} and ${amount} remains unpaid.</p>${link.html}<p>Kind regards,<br/>${escapeHtml(company.name)}</p>`,
+    text: `Invoice ${row.invoice.number} is overdue (due ${row.invoice.dueDate}). ${formatGBP(amountDuePence)} remains unpaid.\n\n${link.text}`,
   });
 }
 
