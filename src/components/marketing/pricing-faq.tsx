@@ -30,6 +30,11 @@ export function PricingFaq({
       a: "GBP only. Foreign receipts can be logged for information, but the books stay in pounds.",
     },
     {
+      id: "ai_bookkeeper",
+      q: "Is the AI bookkeeper included?",
+      a: "Yes, on every plan. It suggests categories and receipt matches and answers questions about your figures, up to 40 questions a day per company. Nothing changes in your books until someone accepts a suggestion.",
+    },
+    {
       id: "per_seat",
       q: "Is pricing per seat?",
       a: "No. You pay per organisation. Essentials covers up to 5 users (founders plus accountant); Premium goes up to 15. Fair-use seats, not a seat tax.",

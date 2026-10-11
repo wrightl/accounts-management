@@ -3,6 +3,8 @@ import { Check, X } from "lucide-react";
 const DIFFERENT = [
   "Quote → order → invoice with milestones — built for project work, not just one-off invoices",
   "Founder receipt email + reimbursement runs — the consultancy expense pain, solved",
+  "Founder answers, not just ledgers — safe to pay yourself, a 13-week cash forecast and margin per project",
+  "An AI bookkeeper that only suggests — you accept every category and match",
   "Accountant as a first-class role — multi-company read-only and a one-click pack",
   "Display and focus controls — motion, text size, contrast, readable font, quieter notifications",
   "Honest scope: GBP, bank CSV matching, VAT export (not HMRC filing), no live bank feeds",

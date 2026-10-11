@@ -6,6 +6,22 @@ const INCLUDED = [
     body: "Client says yes, the quote becomes an order. Raise invoices against milestones — no retyping into another spreadsheet.",
   },
   {
+    title: "Get paid online",
+    body: "Clients pay by card from the invoice link, quotes can take a deposit on acceptance, and reminders follow your schedule.",
+  },
+  {
+    title: "Cash forecast and safe to pay",
+    body: "A 13-week cash forecast with what-ifs. Limited companies also see what's safe to pay as dividends, director's loans and a corporation tax estimate.",
+  },
+  {
+    title: "Project profitability",
+    body: "Tag costs to a client or order to see the margin, and recharge rebillable costs on the next invoice.",
+  },
+  {
+    title: "AI bookkeeper",
+    body: "Category and receipt-match suggestions, and plain-English answers about your figures. Nothing changes until you accept it.",
+  },
+  {
     title: "Expenses and receipts",
     body: "Email a receipt, review pending expenses, and batch reimbursement runs. The weekly spend trail stays in one place.",
   },

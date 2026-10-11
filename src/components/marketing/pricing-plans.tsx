@@ -107,6 +107,18 @@ const COMPARE_ROWS: CompareRow[] = [
     premium: "yes",
   },
   {
+    label: "Cash forecast, safe to pay, project margins",
+    trial: "yes",
+    essentials: "yes",
+    premium: "yes",
+  },
+  {
+    label: "AI bookkeeper",
+    trial: "yes",
+    essentials: "yes",
+    premium: "yes",
+  },
+  {
     label: "Users",
     trial: "Up to 5",
     essentials: "Up to 5",
