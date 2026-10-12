@@ -51,6 +51,14 @@ export function addMonths(iso: string, months: number): string {
   return fromUtc(Date.UTC(year, month, Math.min(d!, lastDay)));
 }
 
+/**
+ * Corporation tax is payable 9 months and a day after the accounting period:
+ * a year ending 31 March is due 1 January, one ending 30 June is due 1 April.
+ */
+export function ctPaymentDueDate(periodEnd: string): string {
+  return addMonths(addDays(periodEnd, 1), 9);
+}
+
 /** Split a period at each 1 April (the start of a corporation tax financial year). */
 export function splitByTaxYear(from: string, to: string): Array<{ from: string; to: string }> {
   const parts: Array<{ from: string; to: string }> = [];

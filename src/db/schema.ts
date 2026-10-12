@@ -178,6 +178,16 @@ export const companies = pgTable("companies", {
   vatQuarterEndMonth: integer("vat_quarter_end_month").notNull().default(3),
   /** Months of average spending to keep back in "safe to pay yourself". */
   safeToPayBufferMonths: integer("safe_to_pay_buffer_months").notNull().default(1),
+  /** Date of incorporation (Ltd), from Companies House or entered by hand. */
+  incorporatedOn: date("incorporated_on"),
+  /** Current directors, one per line, for board minutes and vouchers. */
+  directorNames: text("director_names"),
+  /** Next annual accounts deadline as Companies House records it. */
+  accountsDue: date("accounts_due"),
+  /** Next confirmation statement deadline as Companies House records it. */
+  confirmationStatementDue: date("confirmation_statement_due"),
+  /** When the details above were last fetched from Companies House. */
+  companiesHouseSyncedAt: timestamp("companies_house_synced_at", { withTimezone: true }),
   /** When set, tenant writes and outbound cron for this company are blocked. */
   suspendedAt: timestamp("suspended_at", { withTimezone: true }),
   suspendedReason: text("suspended_reason"),
@@ -813,9 +823,38 @@ export const dividendDeclarations = pgTable(
     declaredAt: date("declared_at").notNull(),
     totalPence: integer("total_pence").notNull(),
     notes: text("notes"),
+    /** Distributable reserves estimated when declared, before this dividend. */
+    availableReservesPence: integer("available_reserves_pence"),
+    /** Declared over the estimate after confirming the accountant had checked. */
+    overReservesConfirmed: boolean("over_reserves_confirmed").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("idx_dividend_declarations_company").on(t.companyId)],
+);
+
+/**
+ * Statutory deadlines marked as filed. Deadlines themselves are worked out
+ * from the company's dates (see `src/lib/deadlines`); a row here records that
+ * the one of `kind` due on `dueDate` has been dealt with.
+ */
+export const deadlineFilings = pgTable(
+  "deadline_filings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    dueDate: date("due_date").notNull(),
+    filedOn: date("filed_on").notNull(),
+    filedByUserId: uuid("filed_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("uq_deadline_filings_company_kind_due").on(t.companyId, t.kind, t.dueDate),
+  ],
 );
 
 export const dividendPayouts = pgTable(
@@ -1493,6 +1532,7 @@ export const schema = {
   shareholders,
   dividendDeclarations,
   dividendPayouts,
+  deadlineFilings,
   quotes,
   quoteLineItems,
   quotePaymentMilestones,

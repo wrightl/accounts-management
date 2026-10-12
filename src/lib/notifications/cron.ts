@@ -7,6 +7,7 @@ import {
   quotes,
   recurringInvoices,
 } from "@/db/schema";
+import { scanUpcomingDeadlines } from "@/lib/deadlines/notify";
 import { notify } from "./create";
 import { formatNotifyDate, todayKey } from "./queries";
 
@@ -20,7 +21,7 @@ function addDaysIso(days: number, from = new Date()): string {
 
 /**
  * Daily notification scanners: quote expiry windows, expired quotes,
- * overdue invoices, and recurring invoices due in 3 days.
+ * overdue invoices, recurring invoices due in 3 days, and filing deadlines.
  */
 export async function runNotificationScanners(): Promise<{
   quoteExpiring3d: number;
@@ -28,15 +29,23 @@ export async function runNotificationScanners(): Promise<{
   quoteExpired: number;
   invoiceOverdue: number;
   recurringDue3d: number;
+  deadlineUpcoming: number;
 }> {
-  const [quoteExpiring3d, quoteExpiring1d, quoteExpired, invoiceOverdue, recurringDue3d] =
-    await Promise.all([
-      scanQuoteExpiring(3, "quote.expiring.3d"),
-      scanQuoteExpiring(1, "quote.expiring.1d"),
-      scanQuotesExpired(),
-      scanOverdueInvoices(),
-      scanRecurringDueIn3Days(),
-    ]);
+  const [
+    quoteExpiring3d,
+    quoteExpiring1d,
+    quoteExpired,
+    invoiceOverdue,
+    recurringDue3d,
+    deadlineUpcoming,
+  ] = await Promise.all([
+    scanQuoteExpiring(3, "quote.expiring.3d"),
+    scanQuoteExpiring(1, "quote.expiring.1d"),
+    scanQuotesExpired(),
+    scanOverdueInvoices(),
+    scanRecurringDueIn3Days(),
+    scanUpcomingDeadlines(),
+  ]);
 
   return {
     quoteExpiring3d,
@@ -44,6 +53,7 @@ export async function runNotificationScanners(): Promise<{
     quoteExpired,
     invoiceOverdue,
     recurringDue3d,
+    deadlineUpcoming,
   };
 }
 

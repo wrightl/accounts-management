@@ -94,6 +94,14 @@ export async function completeOnboarding(
       companyNumber:
         data.entityType === "limited_company" ? data.companyNumber : null,
       utr: data.entityType === "sole_trader" ? data.utr : null,
+      ...(data.entityType === "limited_company"
+        ? {
+            incorporatedOn: data.incorporatedOn,
+            accountsDue: data.accountsDue,
+            confirmationStatementDue: data.confirmationStatementDue,
+            directorNames: data.directorNames,
+          }
+        : {}),
       addressLines: data.addressLines,
       email: data.email ?? session.email,
       bankProvider: data.bankProvider,

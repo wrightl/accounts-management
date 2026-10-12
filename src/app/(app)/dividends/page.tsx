@@ -11,6 +11,7 @@ import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/form";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { formatGBP } from "@/lib/money";
+import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 
 export default async function DividendsPage({
   searchParams,
@@ -28,7 +29,11 @@ export default async function DividendsPage({
   const from = sp.from ?? defaults.from;
   const to = sp.to ?? defaults.to;
 
-  const declarations = await listDividendDeclarations(companyId, { from, to });
+  const [declarations, company] = await Promise.all([
+    listDividendDeclarations(companyId, { from, to }),
+    getOrCreateCompanySettings(companyId),
+  ]);
+  const hasDirectors = Boolean(company.directorNames?.trim());
   const totalPence = declarations.reduce((sum, d) => sum + d.totalPence, 0);
 
   return (
@@ -81,6 +86,19 @@ export default async function DividendsPage({
 
       <section className="mt-10">
         <h2 className="font-display text-lg font-semibold">Declarations</h2>
+        <p className="mt-1 text-sm text-muted">
+          Each dividend comes with board minutes and a voucher for every
+          shareholder, ready to sign and keep with the company records.
+          {!hasDirectors ? (
+            <>
+              {" "}
+              <Link href="/company#companies-house" className="underline">
+                Add your directors
+              </Link>{" "}
+              so their names appear on them.
+            </>
+          ) : null}
+        </p>
         <div className="mt-4 space-y-8">
           {declarations.length === 0 ? (
             <p className="text-sm text-muted">
@@ -98,10 +116,18 @@ export default async function DividendsPage({
                       <p className="text-sm text-muted">{d.notes}</p>
                     )}
                   </div>
-                  <DeleteDividendDeclarationButton
-                    id={d.id}
-                    canWrite={canWrite}
-                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <a
+                      href={`/api/dividends/${d.id}/paperwork`}
+                      className={buttonClasses("secondary")}
+                    >
+                      Minutes and vouchers (PDF)
+                    </a>
+                    <DeleteDividendDeclarationButton
+                      id={d.id}
+                      canWrite={canWrite}
+                    />
+                  </div>
                 </div>
                 <Table>
                   <THead>

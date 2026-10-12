@@ -23,7 +23,7 @@ import {
   type ForecastEvent,
 } from "@/lib/forecast/engine";
 import { invoiceAmountDuePence } from "@/lib/invoices/balance";
-import { addDays, addMonths, daysInclusive } from "@/lib/ledger/corporation-tax";
+import { addDays, addMonths, ctPaymentDueDate, daysInclusive } from "@/lib/ledger/corporation-tax";
 import { getReservesPosition } from "@/lib/ledger/queries";
 import { invoiceTotals, type LineItem } from "@/lib/money";
 import { getReimbursementBalances } from "@/lib/reimbursements/queries";
@@ -264,7 +264,7 @@ export async function getForecastInputs(companyId: string, today: string = today
   }
   if (reserves && reserves.years.length > 1) {
     const lastYear = reserves.years[reserves.years.length - 2]!;
-    const due = addDays(addMonths(lastYear.end, 9), 1);
+    const due = ctPaymentDueDate(lastYear.end);
     if (due >= today && due <= until && lastYear.tax.taxPence > 0) {
       events.push({
         date: due,

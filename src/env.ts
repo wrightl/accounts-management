@@ -23,6 +23,9 @@ const serverSchema = z.object({
     // AI Gateway (optional — required when receipt OCR provider is ai_gateway).
     AI_GATEWAY_API_KEY: z.string().optional(),
 
+    // Companies House public data API (optional — lookups are hidden when unset).
+    COMPANIES_HOUSE_API_KEY: z.string().optional(),
+
     // Email (Resend). Provider is pluggable — see src/lib/email.
     EMAIL_PROVIDER: z.enum(['resend', 'console']).default('console'),
     RESEND_API_KEY: z.string().optional(),

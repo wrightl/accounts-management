@@ -85,6 +85,8 @@ export async function declareDividend(formData: FormData): Promise<ActionResult>
           declaredAt: parsed.data.declaredAt,
           totalPence,
           notes: parsed.data.notes,
+          availableReservesPence: reserves.availablePence,
+          overReservesConfirmed: overReserves,
         })
         .returning({ id: dividendDeclarations.id });
 

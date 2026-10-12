@@ -7,6 +7,7 @@ import { hasDatabaseClient } from "@/db";
 import { OnboardingForm } from "@/components/onboarding/onboarding-form";
 import { Logo } from "@/components/brand/logo";
 import { getStripeCatalog } from "@/lib/billing/catalog";
+import { companiesHouseConfigured } from "@/lib/companies-house/client";
 import {
   SIGNUP_PLAN_COOKIE,
   parseSignupPlanCookie,
@@ -58,6 +59,7 @@ export default async function OnboardingPage() {
           defaultName={user.name}
           catalog={catalog}
           initialPlanChoice={initialPlanChoice}
+          companiesHouseEnabled={companiesHouseConfigured()}
         />
       </div>
     </main>

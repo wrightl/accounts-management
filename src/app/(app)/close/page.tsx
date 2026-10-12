@@ -10,6 +10,8 @@ import {
   type CloseItemKey,
 } from "@/lib/close/checklist";
 import { formatIsoDateUk } from "@/lib/dates";
+import { DIGEST_DEADLINE_DAYS } from "@/lib/close/digest";
+import { getUpcomingDeadlines } from "@/lib/deadlines/queries";
 import { formatGBP } from "@/lib/money";
 
 export const metadata: Metadata = { title: "Weekly close" };
@@ -33,9 +35,10 @@ function openCount(snapshot: unknown): number {
 export default async function WeeklyClosePage() {
   const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
-  const [checklist, closes] = await Promise.all([
+  const [checklist, closes, deadlines] = await Promise.all([
     getWeeklyCloseChecklist(companyId),
     listWeeklyCloses(companyId),
+    getUpcomingDeadlines(companyId, DIGEST_DEADLINE_DAYS),
   ]);
   const last = closes[0] ?? null;
 
@@ -133,6 +136,26 @@ export default async function WeeklyClosePage() {
           );
         })}
       </ol>
+
+      {deadlines.length > 0 ? (
+        <section className="mt-6 rounded-xl border border-border bg-surface px-4 py-3">
+          <h2 className="font-medium">Deadlines in the next two weeks</h2>
+          <ul className="mt-2 space-y-1 text-sm">
+            {deadlines.map((d) => (
+              <li key={`${d.kind}:${d.dueDate}`}>
+                <span className={d.status === "overdue" ? "font-medium text-destructive" : undefined}>
+                  {d.status === "overdue" ? "Overdue" : "Due"} {formatIsoDateUk(d.dueDate)}
+                </span>{" "}
+                · {d.label}
+                {d.period ? <span className="text-muted"> · {d.period}</span> : null}
+              </li>
+            ))}
+          </ul>
+          <Link href="/deadlines" className="mt-2 inline-block text-sm text-brand underline">
+            All deadlines
+          </Link>
+        </section>
+      ) : null}
 
       <section className="mt-10">
         <h2 className="font-display text-lg font-semibold">Previous closes</h2>

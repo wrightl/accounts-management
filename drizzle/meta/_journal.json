@@ -414,6 +414,13 @@
       "when": 1789600000000,
       "tag": "0058_project_profitability",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1789700000000,
+      "tag": "0059_ltd_paperwork",
+      "breakpoints": true
     }
   ]
 }

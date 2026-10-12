@@ -416,6 +416,17 @@ export function formatIsoDateUk(iso: string | null | undefined): string | null {
   });
 }
 
+/** Long UK date for documents and deadlines, e.g. 31 March 2026. */
+export function formatIsoDateLong(iso: string): string {
+  const { year, month, day } = parseIso(iso);
+  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 /** Whether an ISO calendar date falls on a Monday. */
 export function isMonday(isoDate: string): boolean {
   return new Date(`${isoDate}T12:00:00Z`).getUTCDay() === 1;

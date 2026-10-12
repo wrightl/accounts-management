@@ -6,7 +6,7 @@ import { OpeningBalancesForm } from "@/components/ledger/opening-balances-form";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { financialYearStartDate, formatIsoDateUk } from "@/lib/dates";
-import { addDays, addMonths } from "@/lib/ledger/corporation-tax";
+import { addDays, ctPaymentDueDate } from "@/lib/ledger/corporation-tax";
 import {
   getDirectorLoanBalances,
   getReservesPosition,
@@ -39,7 +39,7 @@ export default async function ReservesPage() {
     -1,
   );
   // Corporation tax is due 9 months and 1 day after the year end.
-  const taxDue = addDays(addMonths(currentYear.end, 9), 1);
+  const taxDue = ctPaymentDueDate(currentYear.end);
 
   const [directors, openings] = canSetOpening
     ? await Promise.all([
