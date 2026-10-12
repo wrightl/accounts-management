@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { guardTenantPage } from "@/lib/auth";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { ReminderSettingsForm } from "@/components/settings/reminder-settings-form";
@@ -7,6 +6,7 @@ import { todayIsoDate } from "@/lib/dates";
 import { addDays } from "@/lib/ledger/corporation-tax";
 import { latePaymentCharge } from "@/lib/late-payment";
 import { formatGBP } from "@/lib/money";
+import { SettingsPageHeader } from "@/components/settings/settings-page-header";
 
 export const metadata: Metadata = { title: "Payment reminders" };
 
@@ -22,13 +22,10 @@ export default async function ReminderSettingsPage() {
 
   return (
     <div>
-      <p className="text-sm text-muted">
-        <Link href="/settings" className="hover:underline">
-          ← Settings
-        </Link>
-      </p>
-      <h1 className="mt-2 mb-2 font-display text-2xl font-semibold">Payment reminders</h1>
-      <p className="mb-8 text-muted">Chase unpaid invoices automatically.</p>
+      <SettingsPageHeader
+        title="Payment reminders"
+        description="Chase unpaid invoices automatically."
+      />
       <ReminderSettingsForm
         remindersEnabled={company.remindersEnabled}
         schedule={company.reminderScheduleDays}

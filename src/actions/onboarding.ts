@@ -19,6 +19,11 @@ import {
   parseSignupPlanCookie,
   type SignupPlanChoice,
 } from "@/lib/signup-plan";
+import {
+  featuresFromAnswers,
+  menuAnswersFromFormData,
+} from "@/lib/menu/features";
+import { setMenuFeatures } from "@/lib/menu/queries";
 import type { ActionResult } from "@/actions/result";
 
 async function readSignupPlanChoice(): Promise<SignupPlanChoice | null> {
@@ -139,6 +144,11 @@ export async function completeOnboarding(
     role: "admin",
     name: data.userName,
   });
+  await setMenuFeatures(
+    localUserId,
+    company.id,
+    featuresFromAnswers(menuAnswersFromFormData(formData), data.entityType),
+  );
 
   const { clearSignupPlanCookie } = await import("@/actions/signup-plan");
 

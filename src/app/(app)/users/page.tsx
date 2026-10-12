@@ -8,6 +8,7 @@ import { RevokeInviteButton } from "@/components/users/revoke-invite-button";
 import { DeleteUserButton } from "@/components/users/delete-user-button";
 import { roleLabel } from "@/lib/roles";
 import { buttonClasses } from "@/components/ui/button";
+import { SettingsPageHeader } from "@/components/settings/settings-page-header";
 
 export default async function UsersPage() {
   const session = await guardTenantPage("users:manage");
@@ -19,14 +20,17 @@ export default async function UsersPage() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="font-display text-2xl font-semibold">Users</h1>
-        <Link href="/users/new" className={buttonClasses("primary")}>
-          Invite user
-        </Link>
-      </div>
+      <SettingsPageHeader
+        title="Users"
+        description="Invite co-founders and your accountant, and set what each person can do."
+        actions={
+          <Link href="/users/new" className={buttonClasses("primary")}>
+            Invite user
+          </Link>
+        }
+      />
 
-      <div className="mt-6">
+      <div>
         {rows.length === 0 ? (
           <p className="text-sm text-muted">
             No users yet. Invite someone to get started.

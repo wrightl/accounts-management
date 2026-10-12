@@ -119,7 +119,7 @@ export function BillingSettingsPanel({ data }: { data: BillingPageData }) {
 
   return (
     <div className="space-y-8">
-      <section className="rounded-2xl border border-border bg-white p-6">
+      <section className="rounded-2xl border border-border bg-surface p-6">
         <h2 className="font-display text-lg font-semibold">Current plan</h2>
         <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
           <div>
@@ -175,7 +175,7 @@ export function BillingSettingsPanel({ data }: { data: BillingPageData }) {
       </section>
 
       {!e.complimentary ? (
-        <section className="rounded-2xl border border-border bg-white p-6">
+        <section className="rounded-2xl border border-border bg-surface p-6">
           <h2 className="font-display text-lg font-semibold">
             {e.plan === "trial" || e.readOnly || !hasActiveSubscription
               ? "Choose a plan"
@@ -257,7 +257,7 @@ export function BillingSettingsPanel({ data }: { data: BillingPageData }) {
       ) : null}
 
       {showManageSections ? (
-        <section className="rounded-2xl border border-border bg-white p-6">
+        <section className="rounded-2xl border border-border bg-surface p-6">
           <h2 className="font-display text-lg font-semibold">Payment method</h2>
           <p className="mt-1 text-sm text-muted">
             Used for subscription renewals and prorated plan changes.
@@ -303,7 +303,7 @@ export function BillingSettingsPanel({ data }: { data: BillingPageData }) {
       ) : null}
 
       {showManageSections ? (
-        <section className="rounded-2xl border border-border bg-white p-6">
+        <section className="rounded-2xl border border-border bg-surface p-6">
           <h2 className="font-display text-lg font-semibold">Invoices</h2>
           {invoices.length === 0 ? (
             <p className="mt-4 text-sm text-muted">No invoices yet.</p>
@@ -353,7 +353,7 @@ export function BillingSettingsPanel({ data }: { data: BillingPageData }) {
       ) : null}
 
       {showManageSections && hasActiveSubscription ? (
-        <section className="rounded-2xl border border-border bg-white p-6">
+        <section className="rounded-2xl border border-border bg-surface p-6">
           <h2 className="font-display text-lg font-semibold">
             Cancel subscription
           </h2>

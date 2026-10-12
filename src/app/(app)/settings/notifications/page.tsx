@@ -8,6 +8,8 @@ import {
 import { NotificationPrefsForm } from "@/components/notifications/notification-prefs-form";
 import { can } from "@/lib/roles";
 import Link from "next/link";
+import { buttonClasses } from "@/components/ui/button";
+import { SettingsPageHeader, SETTINGS_FORM_WIDTH } from "@/components/settings/settings-page-header";
 
 export default async function NotificationSettingsPage() {
   const session = await guardTenantPage("accounts:read");
@@ -21,29 +23,30 @@ export default async function NotificationSettingsPage() {
   ]);
 
   return (
-    <div className="space-y-10">
-      <div>
-        <h1 className="font-display text-2xl font-semibold">Notifications</h1>
-        <p className="mt-1 text-sm text-muted">
-          Control in-app, email, and push alerts.{" "}
-          <Link href="/inbox" className="text-brand underline underline-offset-2">
+    <div>
+      <SettingsPageHeader
+        title="Notifications"
+        description="Which events reach you in the app, by email, or as push alerts."
+        actions={
+          <Link href="/inbox" className={buttonClasses("secondary")}>
             Open inbox
           </Link>
-        </p>
-      </div>
-
-      {canManageCompany ? (
-        <NotificationPrefsForm
-          mode="company"
-          initial={companyDefaults}
-        />
-      ) : null}
-
-      <NotificationPrefsForm
-        mode="user"
-        initial={mergeChannelPrefs(companyDefaults, userOverrides)}
-        showPushEnable
+        }
       />
+      <div className={`${SETTINGS_FORM_WIDTH} space-y-10`}>
+        {canManageCompany ? (
+          <NotificationPrefsForm
+            mode="company"
+            initial={companyDefaults}
+          />
+        ) : null}
+
+        <NotificationPrefsForm
+          mode="user"
+          initial={mergeChannelPrefs(companyDefaults, userOverrides)}
+          showPushEnable
+        />
+      </div>
     </div>
   );
 }

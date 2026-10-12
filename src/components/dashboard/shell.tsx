@@ -7,7 +7,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Role } from "@/lib/roles";
 import { CompanyNavBrand, type CompanySwitcherOption } from "./company-nav-brand";
-import { NAV_COLLAPSED_COOKIE, type NavGroup } from "./nav";
+import { NAV_COLLAPSED_COOKIE, type NavGroup, type NavItem } from "./nav";
 import { NavHelpLink, NavLinks } from "./nav-links";
 import {
   NavCommandPalette,
@@ -27,6 +27,9 @@ function persistNavCollapsed(collapsed: boolean) {
 
 export function DashboardShell({
   groups,
+  hiddenGroups = [],
+  settingsPages = [],
+  canEditMenu = false,
   role,
   userName,
   avatarUrl,
@@ -43,6 +46,11 @@ export function DashboardShell({
   children,
 }: {
   groups: NavGroup[];
+  /** Pages hidden from this person's menu, still findable in search. */
+  hiddenGroups?: NavGroup[];
+  /** Settings hub destinations, findable in search. */
+  settingsPages?: NavItem[];
+  canEditMenu?: boolean;
   role: Role;
   userName: string | null;
   avatarUrl: string | null;
@@ -243,6 +251,9 @@ export function DashboardShell({
 
       <NavCommandPalette
         groups={groups}
+        hiddenGroups={hiddenGroups}
+        settingsPages={settingsPages}
+        canEditMenu={canEditMenu}
         open={commandOpen}
         onOpenChange={setCommandOpen}
       />

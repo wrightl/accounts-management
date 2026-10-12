@@ -1,68 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import {
-  CalendarClock,
-  LayoutDashboard,
-  CircleHelp,
-  UsersRound,
-  FileText,
-  Receipt,
-  Wallet,
-  Landmark,
-  PieChart,
-  BarChart3,
-  Coins,
-  BadgePercent,
-  ScrollText,
-  ClipboardList,
-  Mail,
-  Package,
-  RefreshCw,
-  Settings,
-  CreditCard,
-  Users,
-  PiggyBank,
-  ListChecks,
-  Banknote,
-  TrendingUp,
-  Percent,
-  Sparkles,
-  HandCoins,
-  type LucideIcon,
-} from "lucide-react";
+import { CircleHelp } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { HELP_NAV_ITEM, type NavGroup, type NavIcon, type NavItem } from "./nav";
-
-export const NAV_ICONS: Record<NavIcon, LucideIcon> = {
-  overview: LayoutDashboard,
-  close: ListChecks,
-  bookkeeper: Sparkles,
-  help: CircleHelp,
-  clients: UsersRound,
-  invoices: FileText,
-  expenses: Receipt,
-  reimbursements: Wallet,
-  bank: Landmark,
-  spending: PieChart,
-  reports: BarChart3,
-  dividends: Coins,
-  shareholders: BadgePercent,
-  reserves: PiggyBank,
-  safeToPay: Banknote,
-  forecast: TrendingUp,
-  profitability: Percent,
-  directorLoans: HandCoins,
-  deadlines: CalendarClock,
-  quotes: ScrollText,
-  orders: Package,
-  recurring: RefreshCw,
-  audit: ClipboardList,
-  inboundEmail: Mail,
-  settings: Settings,
-  billing: CreditCard,
-  users: Users,
-};
+import { HELP_NAV_ITEM, type NavGroup, type NavItem } from "./nav";
+import { NAV_ICONS } from "./nav-icons";
 
 function NavLabel({
   collapsed,
@@ -84,11 +26,20 @@ function NavLabel({
   );
 }
 
-function isNavItemActive(pathname: string, href: string): boolean {
-  if (href === "/dashboard" || href === "/settings") {
-    return pathname === href;
-  }
+function matchesPath(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function isNavItemActive(
+  pathname: string,
+  href: string,
+  activePrefixes?: string[],
+): boolean {
+  if (activePrefixes?.some((prefix) => matchesPath(pathname, prefix))) {
+    return true;
+  }
+  if (href === "/dashboard") return pathname === href;
+  return matchesPath(pathname, href);
 }
 
 function NavLink({
@@ -105,7 +56,7 @@ function NavLink({
   onNavigate?: () => void;
 }) {
   const Icon = NAV_ICONS[item.icon];
-  const active = isNavItemActive(pathname, item.href);
+  const active = isNavItemActive(pathname, item.href, item.activePrefixes);
   const showOverdueBadge =
     item.href === "/invoices" && overdueInvoiceCount > 0;
 

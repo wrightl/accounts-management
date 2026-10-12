@@ -96,7 +96,7 @@ export function SettingsForm({
           : Number(customRate);
 
   return (
-    <div className="mx-auto max-w-2xl space-y-10">
+    <div className="space-y-10">
       <form
         ref={formRef}
         noValidate

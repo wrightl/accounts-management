@@ -16,6 +16,39 @@ import { reportError } from "@/lib/errors/report";
 import { getSafeToPay } from "@/lib/safe-to-pay/queries";
 import { formatGBP } from "@/lib/money";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
+import { MenuSuggestionCard } from "@/components/menu/menu-suggestion-card";
+import {
+  NAV_GROUPS,
+  flattenNavItems,
+  hiddenNavGroups,
+} from "@/components/dashboard/nav";
+import { getMenuState } from "@/lib/menu/queries";
+import { getMenuSuggestions, type MenuSuggestion } from "@/lib/menu/suggestions";
+
+/** The first suggestion to add a hidden page, based on the business's data. */
+async function loadMenuSuggestion(
+  user: Awaited<ReturnType<typeof requireUser>>,
+): Promise<{ suggestion: MenuSuggestion; labels: string[] } | null> {
+  if (!user.companyId || !user.localUserId) return null;
+  const state = await getMenuState(user.localUserId, user.companyId);
+  if (state.enabled === null) return null;
+  const hiddenItems = flattenNavItems(
+    hiddenNavGroups(NAV_GROUPS, {
+      permissionCheck: (permission) => can(user.role, permission),
+      entityType: user.entityType,
+      enabledFeatures: state.enabled,
+    }),
+  );
+  const [suggestion] = await getMenuSuggestions(user.companyId, {
+    hidden: hiddenItems.flatMap((item) => (item.feature ? [item.feature] : [])),
+    dismissed: state.dismissed,
+  });
+  if (!suggestion) return null;
+  const labels = hiddenItems
+    .filter((item) => item.feature && suggestion.features.includes(item.feature))
+    .map((item) => item.label);
+  return { suggestion, labels };
+}
 
 export default async function DashboardOverview({
   searchParams,
@@ -43,6 +76,8 @@ export default async function DashboardOverview({
   let overview: Awaited<ReturnType<typeof getDashboardOverview>> | null = null;
   let loadError: string | null = null;
   let safeToPay: Awaited<ReturnType<typeof getSafeToPay>> | null = null;
+  let menuSuggestion: { suggestion: MenuSuggestion; labels: string[] } | null =
+    null;
 
   if (!can(user.role, "accounts:read")) {
     loadError = "no_permission";
@@ -55,6 +90,8 @@ export default async function DashboardOverview({
         // Secondary figure: never let it break the dashboard.
         safeToPay = await getSafeToPay(user.companyId).catch(() => null);
       }
+      // Secondary too: a failed suggestion must not break the dashboard.
+      menuSuggestion = await loadMenuSuggestion(user).catch(() => null);
     } catch (err) {
       loadError = "query_failed";
       console.warn(
@@ -110,6 +147,12 @@ export default async function DashboardOverview({
         </p>
       ) : (
         <>
+          {menuSuggestion ? (
+            <MenuSuggestionCard
+              suggestion={menuSuggestion.suggestion}
+              labels={menuSuggestion.labels}
+            />
+          ) : null}
           <HeroKpis heroes={overview.heroes} />
 
           <section className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">

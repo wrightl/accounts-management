@@ -17,6 +17,7 @@ import {
 } from "@/components/inbound-email/job-actions";
 import { buttonClasses } from "@/components/ui/button";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
+import { SettingsPageHeader } from "@/components/settings/settings-page-header";
 
 const FILTERS: { value: InboundEmailJobListFilter; label: string }[] = [
   { value: "attention", label: "Needs attention" },
@@ -47,25 +48,21 @@ export default async function InboundEmailPage({
 
   return (
     <div>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-semibold">Inbound email</h1>
-          <p className="mt-1 text-muted">
-            Monitor expense emails from Resend and retry or dismiss processing failures.
-          </p>
-        </div>
-        <RetryAllInboundIssuesButton issueCount={issueCount} />
-      </div>
+      <SettingsPageHeader
+        title="Inbound email"
+        description="Receipts emailed in. Retry or dismiss any that could not be read."
+        actions={<RetryAllInboundIssuesButton issueCount={issueCount} />}
+      />
 
       {issueCount > 0 ? (
-        <div className="mt-4 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
+        <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
           <span className="font-medium text-destructive">{issueCount}</span> job
           {issueCount === 1 ? "" : "s"} need attention — usually attachment download or OCR
           failures. Retry after fixing network or Resend configuration.
         </div>
       ) : null}
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2">
         {FILTERS.map((item) => (
           <Link
             key={item.value}

@@ -1,19 +1,13 @@
-import Link from "next/link";
 import { guardTenantPage } from "@/lib/auth";
 import { UserForm } from "@/components/users/user-form";
-import { buttonClasses } from "@/components/ui/button";
+import { SettingsPageHeader } from "@/components/settings/settings-page-header";
 
 export default async function NewUserPage() {
   await guardTenantPage("users:manage");
 
   return (
     <div>
-      <div className="mb-6 flex items-center gap-3">
-        <Link href="/users" className={buttonClasses("ghost")}>
-          ← Users
-        </Link>
-      </div>
-      <h1 className="mb-6 font-display text-2xl font-semibold">Invite user</h1>
+      <SettingsPageHeader title="Invite user" backHref="/users" backLabel="Users" />
       <UserForm mode="invite" />
     </div>
   );

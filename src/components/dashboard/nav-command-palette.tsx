@@ -1,23 +1,61 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Command } from "cmdk";
-import { Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
+import { addMenuFeatures } from "@/actions/menu";
 import { cn } from "@/lib/utils";
-import { HELP_NAV_ITEM, type NavGroup } from "./nav";
-import { NAV_ICONS } from "./nav-links";
+import { HELP_NAV_ITEM, type NavGroup, type NavItem } from "./nav";
+import { NAV_ICONS } from "./nav-icons";
+
+const GROUP_CLASSES =
+  "[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-muted";
+
+const ITEM_CLASSES = cn(
+  "flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm",
+  "aria-selected:bg-wash aria-selected:text-foreground",
+  "data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50",
+);
 
 export function NavCommandPalette({
   groups,
+  hiddenGroups = [],
+  settingsPages = [],
+  canEditMenu = false,
   open,
   onOpenChange,
 }: {
   groups: NavGroup[];
+  /** Pages hidden from the menu: still searchable, and can be added back. */
+  hiddenGroups?: NavGroup[];
+  settingsPages?: NavItem[];
+  canEditMenu?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const router = useRouter();
+  const [adding, startAdding] = useTransition();
+  const [addError, setAddError] = useState<string | null>(null);
+  const hiddenItems = hiddenGroups.flatMap((group) =>
+    group.items.map((item) => ({ item, groupLabel: group.label })),
+  );
+
+  function addToMenu(item: NavItem) {
+    if (!item.feature) return;
+    const feature = item.feature;
+    setAddError(null);
+    startAdding(async () => {
+      const result = await addMenuFeatures([feature]);
+      if (!result.ok) {
+        setAddError(result.error);
+        return;
+      }
+      onOpenChange(false);
+      router.push(item.href);
+      router.refresh();
+    });
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -75,7 +113,7 @@ export function NavCommandPalette({
                 heading={
                   group.id === "help" ? "Help" : (group.label ?? "Overview")
                 }
-                className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-muted"
+                className={GROUP_CLASSES}
               >
                 {group.items.map((item) => {
                   const Icon = NAV_ICONS[item.icon];
@@ -88,11 +126,7 @@ export function NavCommandPalette({
                           : `${group.label ?? ""} ${item.label}`
                       }
                       onSelect={() => navigate(item.href)}
-                      className={cn(
-                        "flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm",
-                        "aria-selected:bg-wash aria-selected:text-foreground",
-                        "data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50",
-                      )}
+                      className={ITEM_CLASSES}
                     >
                       <Icon className="h-4 w-4 shrink-0 text-muted" />
                       <span className="flex-1">{item.label}</span>
@@ -104,7 +138,66 @@ export function NavCommandPalette({
                 })}
               </Command.Group>
             ))}
+            {settingsPages.length > 0 ? (
+              <Command.Group heading="Settings" className={GROUP_CLASSES}>
+                {settingsPages.map((item) => {
+                  const Icon = NAV_ICONS[item.icon];
+                  return (
+                    <Command.Item
+                      key={item.href}
+                      value={`settings ${item.label}`}
+                      onSelect={() => navigate(item.href)}
+                      className={ITEM_CLASSES}
+                    >
+                      <Icon className="h-4 w-4 shrink-0 text-muted" />
+                      <span className="flex-1">{item.label}</span>
+                      <span className="text-xs text-muted">Settings</span>
+                    </Command.Item>
+                  );
+                })}
+              </Command.Group>
+            ) : null}
+            {hiddenItems.length > 0 ? (
+              <Command.Group heading="Not in your menu" className={GROUP_CLASSES}>
+                {hiddenItems.map(({ item, groupLabel }) => {
+                  const Icon = NAV_ICONS[item.icon];
+                  return (
+                    <Command.Item
+                      key={item.href}
+                      value={`${groupLabel ?? ""} ${item.label} hidden`}
+                      onSelect={() => navigate(item.href)}
+                      className={ITEM_CLASSES}
+                    >
+                      <Icon className="h-4 w-4 shrink-0 text-muted" />
+                      <span className="flex-1">{item.label}</span>
+                      <span className="text-xs text-muted">Not in menu</span>
+                    </Command.Item>
+                  );
+                })}
+                {canEditMenu
+                  ? hiddenItems.map(({ item, groupLabel }) => (
+                      <Command.Item
+                        key={`add-${item.href}`}
+                        value={`${groupLabel ?? ""} ${item.label} add to menu`}
+                        onSelect={() => addToMenu(item)}
+                        disabled={adding}
+                        className={ITEM_CLASSES}
+                      >
+                        <Plus className="h-4 w-4 shrink-0 text-muted" />
+                        <span className="flex-1">
+                          Add {item.label} to your menu
+                        </span>
+                      </Command.Item>
+                    ))
+                  : null}
+              </Command.Group>
+            ) : null}
           </Command.List>
+          {addError ? (
+            <p role="alert" className="border-t border-border px-4 py-2 text-sm text-destructive">
+              {addError}
+            </p>
+          ) : null}
         </Command>
       </div>
     </div>

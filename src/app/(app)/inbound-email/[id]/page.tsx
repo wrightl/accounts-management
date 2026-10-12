@@ -11,8 +11,8 @@ import {
   DismissInboundJobForm,
   RetryInboundJobButton,
 } from "@/components/inbound-email/job-actions";
-import { buttonClasses } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
+import { SettingsPageHeader } from "@/components/settings/settings-page-header";
 
 function formatWhen(date: Date | null): string {
   if (!date) return "—";
@@ -35,26 +35,20 @@ export default async function InboundEmailJobPage({
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-3">
-        <Link href="/inbound-email" className={buttonClasses("ghost", "text-sm")}>
-          ← Inbound email
-        </Link>
-      </div>
+      <SettingsPageHeader
+        title={job.subject || "(no subject)"}
+        description={`From ${job.fromEmail}`}
+        backHref="/inbound-email"
+        backLabel="Inbound email"
+        actions={
+          <>
+            <InboundJobStatusBadge status={status} lastError={job.lastError} />
+            {needsAttention ? <RetryInboundJobButton jobId={job.id} /> : null}
+          </>
+        }
+      />
 
-      <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-semibold">
-            {job.subject || "(no subject)"}
-          </h1>
-          <p className="mt-1 text-muted">From {job.fromEmail}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <InboundJobStatusBadge status={status} lastError={job.lastError} />
-          {needsAttention ? <RetryInboundJobButton jobId={job.id} /> : null}
-        </div>
-      </div>
-
-      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardTitle>Job details</CardTitle>
           <dl className="mt-4 grid gap-3 text-sm">

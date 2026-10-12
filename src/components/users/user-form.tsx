@@ -90,7 +90,7 @@ export function UserForm({
   }
 
   return (
-    <form ref={formRef} noValidate onSubmit={preventResetSubmit(onSubmit)} className="mx-auto max-w-xl space-y-4">
+    <form ref={formRef} noValidate onSubmit={preventResetSubmit(onSubmit)} className="max-w-2xl space-y-4">
       <div>
         <Label htmlFor="email" required={mode === "invite"}>
           Email

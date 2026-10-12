@@ -12,19 +12,31 @@ import { storedStatus } from "@/lib/invoices/status";
 import { formatGBP } from "@/lib/money";
 import { INVOICE_PAYMENT_KIND } from "@/lib/payments/online-status";
 
-/** Copy the connected account's capability flags onto the company. */
-export async function syncConnectAccount(account: Stripe.Account): Promise<void> {
+/** Store whether the connected account can take card payments yet. */
+async function setChargesEnabled(accountId: string, chargesEnabled: boolean): Promise<void> {
   const db = getDb();
   await db
     .update(companies)
-    .set({ stripeConnectChargesEnabled: Boolean(account.charges_enabled), updatedAt: new Date() })
-    .where(eq(companies.stripeConnectAccountId, account.id));
+    .set({ stripeConnectChargesEnabled: chargesEnabled, updatedAt: new Date() })
+    .where(eq(companies.stripeConnectAccountId, accountId));
+}
+
+/** Copy the connected account's capability flags onto the company (v1 `account.updated`). */
+export async function syncConnectAccount(account: Stripe.Account): Promise<void> {
+  await setChargesEnabled(account.id, Boolean(account.charges_enabled));
+}
+
+/** Whether a v2 account's merchant configuration can take card payments. */
+export function v2CardPaymentsActive(account: Stripe.V2.Core.Account): boolean {
+  return account.configuration?.merchant?.capabilities?.card_payments?.status === "active";
 }
 
 /** Re-read the connected account from Stripe (after onboarding returns). */
 export async function refreshConnectAccount(accountId: string): Promise<void> {
-  const account = await getStripe().accounts.retrieve(accountId);
-  await syncConnectAccount(account);
+  const account = await getStripe().v2.core.accounts.retrieve(accountId, {
+    include: ["configuration.merchant"],
+  });
+  await setChargesEnabled(accountId, v2CardPaymentsActive(account));
 }
 
 /**

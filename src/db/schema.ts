@@ -259,6 +259,16 @@ export const companyMemberships = pgTable(
       .notNull()
       .references(() => companies.id, { onDelete: "cascade" }),
     role: roleEnum("role").notNull().default("pending"),
+    /**
+     * Optional menu items this person shows for this company
+     * ({@link import("@/lib/menu/features").MenuFeature}). Null shows everything.
+     */
+    menuFeatures: text("menu_features").array(),
+    /** Menu suggestions this person dismissed, so they are not offered again. */
+    menuSuggestionsDismissed: text("menu_suggestions_dismissed")
+      .array()
+      .notNull()
+      .default([]),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [

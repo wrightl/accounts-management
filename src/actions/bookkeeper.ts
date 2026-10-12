@@ -186,16 +186,20 @@ export async function askBookkeeper(question: string): Promise<AnswerResult> {
   }
 
   let result: AnswerResult;
+  // Only `ai.ask` counts towards the daily limit, so a failed call to the model
+  // doesn't use up one of the company's questions.
+  let action = "ai.ask";
   try {
     result = await answerQuestion(companyId, trimmed);
   } catch (e) {
     console.error("[bookkeeper] answer failed", e);
+    action = "ai.ask_failed";
     result = { ok: false, error: "Couldn't answer that just now. Try again in a moment." };
   }
   await writeAudit({
     companyId,
     actorUserId: authz.user.localUserId ?? null,
-    action: "ai.ask",
+    action,
     meta: { question: trimmed, ok: result.ok, sources: result.ok ? result.sources : [] },
   });
   return result;

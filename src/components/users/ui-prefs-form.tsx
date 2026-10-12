@@ -103,7 +103,7 @@ export function UiPrefsForm({ prefs: rawPrefs }: { prefs: unknown }) {
       <div>
         <h2 className="font-display text-lg font-semibold">Display and focus</h2>
         <p className="mt-1 text-sm text-muted">
-          Adjust motion, text size, contrast, and notifications. These stay on
+          Adjust motion, text size, contrast, font, and success messages. These stay on
           this account. See{" "}
           <Link
             href="/help#easier"

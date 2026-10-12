@@ -67,7 +67,7 @@ export async function refreshFromCompaniesHouse(): Promise<ActionResult> {
     },
     {
       audit: { action: "company.companies_house_refresh", entityType: "company" },
-      paths: ["/company", "/deadlines"],
+      paths: ["/company", "/settings/business", "/deadlines"],
     },
   );
 }
@@ -100,7 +100,7 @@ export async function saveCompaniesHouseDetails(formData: FormData): Promise<Act
           confirmationStatementDue: details.confirmationStatementDue,
         },
       },
-      paths: ["/company", "/deadlines"],
+      paths: ["/company", "/settings/business", "/deadlines"],
     },
   );
 }

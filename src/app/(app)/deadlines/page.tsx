@@ -34,6 +34,10 @@ export default async function DeadlinesPage() {
   ]);
   const { deadlines, settings, missingCompaniesHouse } = await getDeadlines(companyId);
   const isLtd = settings.entityType === "limited_company";
+  // Admins edit Companies House details; everyone else can view them.
+  const companiesHouseHref = canManage
+    ? "/settings/business#companies-house"
+    : "/company#companies-house";
 
   const open = deadlines.filter((d) => d.status !== "done");
   const overdue = open.filter((d) => d.status === "overdue");
@@ -54,8 +58,8 @@ export default async function DeadlinesPage() {
         <p className="mt-6 rounded-xl bg-wash px-4 py-3 text-sm">
           Your confirmation statement isn&apos;t shown because Alfa doesn&apos;t know your
           incorporation date.{" "}
-          <Link href="/company#companies-house" className="underline">
-            Add your Companies House details
+          <Link href={companiesHouseHref} className="underline">
+            {canManage ? "Add your Companies House details" : "See Companies House details"}
           </Link>
           .
         </p>
@@ -164,7 +168,7 @@ export default async function DeadlinesPage() {
             them, which covers first accounts and changed year ends. Large companies paying
             corporation tax in instalments aren&apos;t covered.{" "}
             {canManage ? (
-              <Link href="/company#companies-house" className="underline">
+              <Link href={companiesHouseHref} className="underline">
                 Companies House details
               </Link>
             ) : null}

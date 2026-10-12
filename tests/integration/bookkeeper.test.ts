@@ -24,6 +24,7 @@ import {
 import { updateBankCategory } from "@/actions/bank";
 import { addDays } from "@/lib/ledger/corporation-tax";
 import { todayIsoDate } from "@/lib/dates";
+import { questionsAskedToday } from "@/lib/bookkeeper/ask";
 
 const generateText = vi.fn();
 let aiOn = true;
@@ -257,6 +258,21 @@ describe("asking questions", () => {
       .from(auditLog)
       .where(and(eq(auditLog.companyId, companyId), eq(auditLog.action, "ai.ask")));
     expect(entry!.meta).toMatchObject({ question: "What's our profit today?", ok: true });
+  });
+
+  it("doesn't count a failed answer towards the daily limit", async () => {
+    generateText.mockRejectedValue(new Error("Free tier users do not have access to this model."));
+    const result = await askBookkeeper("What's our profit today?");
+    expect(result).toEqual({
+      ok: false,
+      error: "Couldn't answer that just now. Try again in a moment.",
+    });
+    expect(await questionsAskedToday(companyId)).toBe(0);
+    const [entry] = await db
+      .select()
+      .from(auditLog)
+      .where(and(eq(auditLog.companyId, companyId), eq(auditLog.action, "ai.ask_failed")));
+    expect(entry!.meta).toMatchObject({ question: "What's our profit today?", ok: false });
   });
 
   it("refuses empty questions without calling the model", async () => {

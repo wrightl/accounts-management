@@ -22,7 +22,10 @@ export default async function DividendsPage({
   if (entityType !== "limited_company") {
     redirect("/dashboard");
   }
-  const canWrite = await hasPermission("accounts:write");
+  const [canWrite, canManage] = await Promise.all([
+    hasPermission("accounts:write"),
+    hasPermission("settings:manage"),
+  ]);
   const sp = await searchParams;
 
   const defaults = await defaultReportPeriod(companyId);
@@ -92,10 +95,16 @@ export default async function DividendsPage({
           {!hasDirectors ? (
             <>
               {" "}
-              <Link href="/company#companies-house" className="underline">
-                Add your directors
-              </Link>{" "}
-              so their names appear on them.
+              {canManage ? (
+                <>
+                  <Link href="/settings/business#companies-house" className="underline">
+                    Add your directors
+                  </Link>{" "}
+                  so their names appear on them.
+                </>
+              ) : (
+                "Ask an admin to add your directors so their names appear on them."
+              )}
             </>
           ) : null}
         </p>

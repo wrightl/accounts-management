@@ -88,7 +88,7 @@ export async function updateCompany(formData: FormData): Promise<ActionResult> {
     },
     {
       audit: { action: "settings.update", entityType: "company_settings" },
-      paths: ["/settings", "/dashboard", "/spending", "/reports", "/transactions"],
+      paths: ["/settings", "/settings/business", "/dashboard", "/spending", "/reports", "/transactions"],
     },
   );
 }
@@ -126,7 +126,7 @@ export async function uploadLogo(formData: FormData): Promise<ActionResult> {
 
       return { ok: true, id: companyId };
     },
-    { paths: ["/settings", "/dashboard"] },
+    { paths: ["/settings", "/settings/business", "/dashboard"] },
   );
 }
 
@@ -165,6 +165,7 @@ export async function deleteCompany(
   if (!result.ok) return result;
 
   revalidatePath("/settings");
+  revalidatePath("/settings/business");
   revalidatePath("/dashboard");
   revalidatePath("/onboarding");
   revalidatePath("/");

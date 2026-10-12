@@ -6,6 +6,7 @@ import { getDb } from "@/db";
 import { companies } from "@/db/schema";
 import { mutate } from "@/lib/mutate";
 import { appBaseUrl, getStripe } from "@/lib/billing/stripe";
+import { v2CardPaymentsActive } from "@/lib/payments/online";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import type { ActionResult } from "@/actions/result";
 
@@ -30,16 +31,19 @@ export async function startStripeConnectOnboarding(): Promise<ActionResult> {
       const stripe = getStripe();
       let accountId = company.stripeConnectAccountId;
       if (!accountId) {
-        const account = await stripe.accounts.create({
-          country: "GB",
-          email: company.email ?? undefined,
-          business_profile: { name: company.name },
-          controller: {
-            stripe_dashboard: { type: "full" },
-            fees: { payer: "account" },
-            losses: { payments: "stripe" },
-            requirement_collection: "stripe",
+        const account = await stripe.v2.core.accounts.create({
+          display_name: company.name,
+          contact_email: company.email ?? undefined,
+          dashboard: "full",
+          identity: { country: "gb" },
+          configuration: {
+            merchant: { capabilities: { card_payments: { requested: true } } },
           },
+          defaults: {
+            currency: "gbp",
+            responsibilities: { fees_collector: "stripe", losses_collector: "stripe" },
+          },
+          include: ["configuration.merchant"],
           metadata: { companyId },
         });
         accountId = account.id;
@@ -48,18 +52,23 @@ export async function startStripeConnectOnboarding(): Promise<ActionResult> {
           .update(companies)
           .set({
             stripeConnectAccountId: accountId,
-            stripeConnectChargesEnabled: Boolean(account.charges_enabled),
+            stripeConnectChargesEnabled: v2CardPaymentsActive(account),
             updatedAt: new Date(),
           })
           .where(eq(companies.id, companyId));
       }
 
       const base = appBaseUrl();
-      const link = await stripe.accountLinks.create({
+      const link = await stripe.v2.core.accountLinks.create({
         account: accountId,
-        type: "account_onboarding",
-        refresh_url: `${base}/settings/payments?connect=refresh`,
-        return_url: `${base}/settings/payments?connect=return`,
+        use_case: {
+          type: "account_onboarding",
+          account_onboarding: {
+            configurations: ["merchant"],
+            refresh_url: `${base}/settings/payments?connect=refresh`,
+            return_url: `${base}/settings/payments?connect=return`,
+          },
+        },
       });
       onboardingUrl = link.url;
       return { ok: true, id: accountId };

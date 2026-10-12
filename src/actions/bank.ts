@@ -643,7 +643,7 @@ export async function createIncomeCategoryAction(
         entityType: "income_category",
         meta: { name },
       },
-      paths: ["/settings", "/transactions"],
+      paths: ["/settings", "/settings/business", "/transactions"],
     },
   );
 }
@@ -664,7 +664,7 @@ export async function deleteIncomeCategoryAction(
         entityType: "income_category",
         entityId: categoryId,
       },
-      paths: ["/settings", "/transactions"],
+      paths: ["/settings", "/settings/business", "/transactions"],
     },
   );
 }

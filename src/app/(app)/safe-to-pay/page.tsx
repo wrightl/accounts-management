@@ -72,7 +72,7 @@ export default async function SafeToPayPage() {
             Import a bank statement
           </Link>{" "}
           that has a balance column, or set opening cash in{" "}
-          <Link href="/settings" className="underline">
+          <Link href="/settings/business" className="underline">
             Settings
           </Link>
           .

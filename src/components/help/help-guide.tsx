@@ -20,7 +20,11 @@ const SECTIONS: HelpSection[] = [
   { id: "spend", title: "Tracking spend" },
   { id: "reimbursements", title: "Paying yourselves back" },
   { id: "bank", title: "Matching the bank" },
+  { id: "bookkeeper", title: "AI bookkeeper" },
   { id: "ltd", title: "Shareholders & dividends", ltdOnly: true },
+  { id: "paying-yourself", title: "What you can take out", ltdOnly: true },
+  { id: "looking-ahead", title: "Cash forecast & profitability" },
+  { id: "deadlines", title: "Deadlines & paperwork" },
   { id: "accountant", title: "Year-end & your accountant" },
   { id: "roles", title: "Who can do what" },
   { id: "rhythm", title: "A simple rhythm" },
@@ -170,7 +174,7 @@ export function HelpGuide({
                 <>
                   Finish company details in{" "}
                   {isAdmin ? (
-                    <HelpLink href="/settings">Settings</HelpLink>
+                    <HelpLink href="/settings/business">Business settings</HelpLink>
                   ) : (
                     <span>Settings</span>
                   )}{" "}
@@ -245,7 +249,7 @@ export function HelpGuide({
                 Optionally set <strong>opening cash</strong> (bank balance
                 brought forward) and as-at date in{" "}
                 {isAdmin ? (
-                  <HelpLink href="/settings">Settings</HelpLink>
+                  <HelpLink href="/settings/business">Business settings</HelpLink>
                 ) : (
                   <span>Settings</span>
                 )}
@@ -291,6 +295,9 @@ export function HelpGuide({
                 <strong>Needs attention</strong> is your to-do list: overdue
                 invoices, quotes about to expire, unmatched bank rows, and
                 receipts waiting for review.
+                {isSoleTrader
+                  ? null
+                  : " The Safe to pay card shows how much the company can pay out today."}
               </p>
             </Card>
           </div>
@@ -308,10 +315,18 @@ export function HelpGuide({
                 Add a <HelpLink href="/clients">client</HelpLink>.
               </>,
               <>
-                Create a <HelpLink href="/quotes">quote</HelpLink>. Download or
-                email the PDF. The email includes Accept / Decline links so the
-                client can respond without signing in. Each save creates a new
-                version; you can restore an older one if needed.
+                Create a <HelpLink href="/quotes">quote</HelpLink>. Quantities
+                can be part units (1.5 days, 7.5 hours) and each line can have
+                a percentage discount. Download or email the PDF. The email
+                includes Accept / Decline links so the client can respond
+                without signing in. Each save creates a new version; you can
+                restore an older one if needed.
+              </>,
+              <>
+                To take a deposit, add a payment schedule and tick{" "}
+                <strong>Take the first payment when the client accepts</strong>
+                . Accepting online then invoices the first milestone straight
+                away and takes the client to pay it.
               </>,
               <>
                 When they accept (via the link or you click{" "}
@@ -328,6 +343,15 @@ export function HelpGuide({
                 <strong>Send</strong> the{" "}
                 <HelpLink href="/invoices">invoice</HelpLink> (the client needs
                 an email). Or <strong>Download PDF</strong> and send it yourself.
+                The email links to an online copy of the invoice. If you have
+                set up{" "}
+                {isAdmin ? (
+                  <HelpLink href="/settings/payments">Online payments</HelpLink>
+                ) : (
+                  <span>Online payments</span>
+                )}
+                , the client can pay there by card, Apple Pay or Google Pay and
+                the invoice is marked paid for you.
               </>,
               <>
                 When money arrives: <strong>Record payment</strong>, or match
@@ -349,6 +373,24 @@ export function HelpGuide({
               as draft or email automatically each month.
             </p>
           </Card>
+          <Card className="mt-4">
+            <p className="text-sm font-medium text-foreground">
+              Chasing late payers
+            </p>
+            <p className="mt-2 text-sm text-foreground/90">
+              Reminders go out on a schedule (by default 3 days before the due
+              date, then 1, 7 and 14 days after). Admins can change the steps
+              in{" "}
+              {isAdmin ? (
+                <HelpLink href="/settings/reminders">Payment reminders</HelpLink>
+              ) : (
+                <span>Payment reminders</span>
+              )}{" "}
+              and choose to add statutory interest and compensation under the
+              Late Payment Act. On an overdue invoice,{" "}
+              <strong>Raise late payment invoice</strong> bills that amount.
+            </p>
+          </Card>
           <div className="mt-4 space-y-2">
             <p className="text-sm font-medium text-foreground">
               Invoice statuses, in plain words
@@ -364,6 +406,15 @@ export function HelpGuide({
               cancelled. The number is kept so your sequence stays tidy.
             </Term>
           </div>
+          <p className="mt-4 text-sm text-foreground/90">
+            <strong>Got an invoice wrong after sending it?</strong> Open it and
+            choose <strong>Raise credit note</strong> to credit all or part of
+            it, with a refund if they have already paid. HMRC expects a credit
+            note rather than a void once a VAT invoice has gone out. Credit
+            notes are listed on{" "}
+            <HelpLink href="/credit-notes">Credit notes</HelpLink> and come off
+            your income and VAT figures.
+          </p>
         </section>
 
         <section aria-labelledby="spend">
@@ -407,6 +458,12 @@ export function HelpGuide({
           <p className="mt-2 text-sm text-foreground/90">
             Mileage: choose the Travel category, then log miles × the rate in
             Settings (default 45p per mile).
+          </p>
+          <p className="mt-2 text-sm text-foreground/90">
+            Spent money on a client project? Pick the client or order on the
+            expense so it counts against that project&apos;s margin. Tick{" "}
+            <strong>Rebillable</strong> and it is offered as a line on the
+            client&apos;s next invoice. Each cost can only be billed once.
           </p>
         </section>
 
@@ -464,7 +521,7 @@ export function HelpGuide({
                 For credits that are not client payments, use{" "}
                 <strong>Explain</strong> — other income (counts in profit), a
                 transfer, or tax or loan. Administrators can add extra income
-                categories in <HelpLink href="/settings">Settings</HelpLink>.
+                categories in <HelpLink href="/settings/business">Business settings</HelpLink>.
               </>,
             ]}
           />
@@ -473,6 +530,33 @@ export function HelpGuide({
             out from those imported rows. It stays empty until you import a
             statement.
           </p>
+        </section>
+
+        <section aria-labelledby="bookkeeper">
+          <SectionHeading id="bookkeeper">AI bookkeeper</SectionHeading>
+          <p className="mt-3 text-sm text-foreground/90">
+            The <HelpLink href="/bookkeeper">AI bookkeeper</HelpLink> does the
+            fiddly parts of matching the bank. It only suggests: nothing
+            changes until someone accepts it.
+          </p>
+          <BulletList
+            items={[
+              <>
+                Suggests a category for each bank row, from your own history
+                first. Every correction you make improves the next round.
+              </>,
+              <>
+                Pairs receipts with card payments that differ by a tip, fee or
+                exchange rate.
+              </>,
+              <>Explains each suggested bank match in one line.</>,
+              <>
+                Answers plain-English questions such as &ldquo;what did we spend
+                on software in Q2?&rdquo; from your reports, and lists where
+                each figure came from. Each company can ask 40 questions a day.
+              </>,
+            ]}
+          />
         </section>
 
         {!isSoleTrader ? (
@@ -484,12 +568,118 @@ export function HelpGuide({
               declare a total on <HelpLink href="/dividends">Dividends</HelpLink>
               . The app splits the amount across holders automatically.
             </p>
+            <BulletList
+              items={[
+                <>
+                  Alfa checks the dividend against the company&apos;s
+                  distributable reserves. If it is more than the reserves, you
+                  can only go ahead by confirming your accountant has checked
+                  it.
+                </>,
+                <>
+                  Each dividend has a <strong>Minutes and vouchers</strong> PDF:
+                  board minutes recording the reserves check, and a voucher
+                  for each shareholder. Sign them and keep them with your
+                  records.
+                </>,
+              ]}
+            />
             <p className="mt-2 text-sm text-muted">
               This is a record for your accountant — it does not move money in
               the bank.
             </p>
           </section>
         ) : null}
+
+        {!isSoleTrader ? (
+          <section aria-labelledby="paying-yourself">
+            <SectionHeading id="paying-yourself">
+              What you can take out
+            </SectionHeading>
+            <p className="mt-3 text-sm text-muted">
+              Three pages answer &ldquo;how much can we pay ourselves?&rdquo;
+              Set the opening balances on Tax &amp; reserves first so the
+              figures are right.
+            </p>
+            <div className="mt-4 space-y-2">
+              <Term name="Safe to pay">
+                <HelpLink href="/safe-to-pay">one figure</HelpLink>: cash at
+                the bank less VAT and corporation tax owed, reimbursements due
+                and a buffer, capped at distributable reserves. A second figure
+                adds money expected in the next 30 days. From there you can
+                start a dividend with the amount filled in.
+              </Term>
+              <Term name="Tax & reserves">
+                <HelpLink href="/reserves">retained earnings</HelpLink> year by
+                year and an estimate of corporation tax, including marginal
+                relief. An estimate only — your accountant works out the final
+                figure.
+              </Term>
+              <Term name="Director's loans">
+                a <HelpLink href="/directors-loans">running balance</HelpLink>{" "}
+                for each director: money taken out, money paid in, personal
+                spending and reimbursements. Alfa warns you if a loan is
+                overdrawn near the year end, when s455 tax or a benefit in kind
+                may apply.
+              </Term>
+            </div>
+          </section>
+        ) : null}
+
+        <section aria-labelledby="looking-ahead">
+          <SectionHeading id="looking-ahead">
+            Cash forecast &amp; profitability
+          </SectionHeading>
+          <BulletList
+            items={[
+              <>
+                The <HelpLink href="/forecast">Cash forecast</HelpLink> shows
+                your bank balance week by week for the next 13 weeks, from
+                invoices due, milestones, recurring invoices, tax
+                {isSoleTrader ? "" : ", dividends"} and your usual spending. It
+                warns you if cash runs low. Try what-ifs such as a client
+                paying late or a new monthly cost.
+              </>,
+              <>
+                <HelpLink href="/profitability">Profitability</HelpLink> shows
+                the margin on each order (so far, and projected) and on each
+                client by financial year, plus rebillable costs you have not
+                invoiced yet. It uses the expenses you tagged to a client or
+                order.
+              </>,
+            ]}
+          />
+        </section>
+
+        <section aria-labelledby="deadlines">
+          <SectionHeading id="deadlines">Deadlines &amp; paperwork</SectionHeading>
+          <p className="mt-3 text-sm text-foreground/90">
+            <HelpLink href="/deadlines">Deadlines</HelpLink> lists your filing
+            and payment dates:{" "}
+            {isSoleTrader
+              ? "Self Assessment and VAT returns"
+              : "confirmation statement, annual accounts, CT600, corporation tax payment and VAT returns"}
+            . Choose <strong>Mark done</strong> when each one is dealt with.
+            Reminders go out 14 and 3 days before, and anything due within two
+            weeks appears in the Weekly close.
+          </p>
+          {isSoleTrader ? null : (
+            <p className="mt-2 text-sm text-foreground/90">
+              The dates come from Companies House. Alfa fills in your
+              registered name, office, year end, incorporation date and
+              directors when you set up, and admins can refresh them in{" "}
+              {isAdmin ? (
+                <HelpLink href="/settings/business">Business settings</HelpLink>
+              ) : (
+                <span>Settings</span>
+              )}
+              .
+            </p>
+          )}
+          <p className="mt-2 text-sm text-muted">
+            Alfa reminds you. It does not file anything for you.
+          </p>
+        </section>
 
         <section aria-labelledby="accountant">
           <SectionHeading id="accountant">
@@ -510,13 +700,24 @@ export function HelpGuide({
                 when registered.
               </>,
               <>
+                Once your accountant has filed, lock the books on{" "}
+                <HelpLink href="/reports">Reports</HelpLink>. Nothing dated on
+                or before the lock date can be added or changed. Admins and
+                accountants can move or remove the lock, and each change is
+                recorded in the audit log.
+              </>,
+              <>
+                Reports also show the date your books are up to date to: the
+                latest date your bank rows are all matched.
+              </>,
+              <>
                 Accountants can open the read-only{" "}
                 <HelpLink href="/company">Company</HelpLink> page for UTR, VAT,
                 year-end month, and invoice bank details without editing Settings.
               </>,
               <>
                 Invite them as an <strong>Accountant</strong> so they can read
-                and export, but not change the books.
+                and export, and lock the books, but not change them.
               </>,
               <>
                 Admins can review sensitive changes in the{" "}
@@ -538,7 +739,9 @@ export function HelpGuide({
               everything, including settings and users.
             </Term>
             <Term name="Co-founder">day-to-day books and reports.</Term>
-            <Term name="Accountant">look and export only.</Term>
+            <Term name="Accountant">
+              look and export, and lock the books once they have filed.
+            </Term>
             <Term name="Pending access">
               signed in, waiting for an admin to assign a role.
             </Term>
@@ -558,16 +761,21 @@ export function HelpGuide({
                 same day.
               </>,
               <>
-                <strong>Once a week (~15 min):</strong> open the dashboard →
-                send or chase overdue invoices → import the bank CSV → accept
-                matches → approve pending receipts.
+                <strong>Once a week (~15 min):</strong> import the bank CSV,
+                then work through the{" "}
+                <HelpLink href="/close">Weekly close</HelpLink>: bank rows to
+                match, receipts to review, overdue invoices, milestones ready
+                to bill, reimbursements owed and deadlines coming up. Choose{" "}
+                <strong>Close the week</strong> when you are done. A Monday
+                digest reminds you.
               </>,
               <>
                 <strong>When you pay a founder back:</strong> reimbursement run,
                 then mark paid.
               </>,
               <>
-                <strong>Year-end:</strong> download the accountant pack.
+                <strong>Year-end:</strong> download the accountant pack, then
+                lock the books once they have filed.
               </>,
             ]}
           />
@@ -601,6 +809,14 @@ export function HelpGuide({
               </>,
             ]}
           />
+          <p className="mt-4 text-sm text-foreground/90">
+            <strong>A shorter menu.</strong> Choose which pages show in your
+            sidebar in <HelpLink href="/settings/menu">Your menu</HelpLink>, or
+            answer a few yes/no questions there and let Alfa choose. Hidden
+            pages keep working and you can still find them with search (⌘K).
+            When your books suggest a hidden page would help, such as repeat
+            invoices to the same client, the Overview offers to add it.
+          </p>
           <p className="mt-4 text-sm text-foreground/90">
             Alfa works with the accessibility tools already on your phone or
             computer — VoiceOver, TalkBack, magnification, and dictation. We do

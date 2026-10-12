@@ -11,6 +11,8 @@ import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
 import { useFieldErrors } from "@/components/ui/use-field-errors";
 import { BankFields } from "@/components/settings/bank-fields";
 import { SignupPlanPicker } from "@/components/signup/plan-picker";
+import { MenuQuestions } from "@/components/menu/menu-questions";
+import { bundlesFor } from "@/lib/menu/features";
 import {
   onboardingRawFromFormData,
   parseOnboardingInput,
@@ -500,6 +502,23 @@ export function OnboardingForm({
           optionalHint="Optional — needed for invoice payment details and CSV import."
           errors={fieldErrors}
           onClearError={clearField}
+        />
+      </div>
+
+      <div className="space-y-3 rounded-xl border border-border bg-surface/50 p-4">
+        <div>
+          <h2 className="font-display text-base font-semibold">
+            How you run your business
+          </h2>
+          <p className="mt-1 text-sm text-muted">
+            Your answers decide which pages show in your menu, so you only see
+            what you use. Change them any time in Settings → Your menu.
+          </p>
+        </div>
+        <MenuQuestions
+          bundles={bundlesFor(entityType)}
+          disabled={pending}
+          idPrefix="onboarding-menu"
         />
       </div>
 

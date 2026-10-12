@@ -3,6 +3,7 @@ import { guardTenantPage } from "@/lib/auth";
 import { getDb } from "@/db";
 import { auditLog, users } from "@/db/schema";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
+import { SettingsPageHeader } from "@/components/settings/settings-page-header";
 
 export default async function AuditLogPage() {
   const { companyId } = await guardTenantPage("users:manage");
@@ -26,12 +27,12 @@ export default async function AuditLogPage() {
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-semibold">Audit log</h1>
-      <p className="mt-1 text-muted">
-        Recent sensitive actions for this company (admin only).
-      </p>
+      <SettingsPageHeader
+        title="Audit log"
+        description="Recent sensitive changes to this company and who made them. Admins only."
+      />
 
-      <div className="mt-6">
+      <div>
         {rows.length === 0 ? (
           <p className="text-sm text-muted">No audit entries yet.</p>
         ) : (

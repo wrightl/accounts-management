@@ -421,6 +421,13 @@
       "when": 1789700000000,
       "tag": "0059_ltd_paperwork",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1789800000000,
+      "tag": "0060_menu_features",
+      "breakpoints": true
     }
   ]
 }

@@ -12,7 +12,11 @@ import {
   NAV_COLLAPSED_COOKIE,
   NAV_GROUPS,
   filterNavGroups,
+  hiddenNavGroups,
+  visibleSettingsPages,
+  type NavFilter,
 } from "@/components/dashboard/nav";
+import { getMenuFeatures } from "@/lib/menu/queries";
 import { DashboardShell } from "@/components/dashboard/shell";
 import { SyncUiPrefsCookie } from "@/components/users/sync-ui-prefs-cookie";
 import { parseUiPrefs } from "@/lib/ui-prefs";
@@ -75,11 +79,18 @@ export default async function AppLayout({
       ? await listUserMemberships(localUserId)
       : [];
 
-  const groups = filterNavGroups(
-    NAV_GROUPS,
-    (permission) => can(user.role, permission),
-    user.entityType ?? company.entityType,
-  );
+  const enabledFeatures =
+    localUserId && hasDatabaseClient()
+      ? await getMenuFeatures(localUserId, user.companyId)
+      : null;
+  const navFilter: NavFilter = {
+    permissionCheck: (permission) => can(user.role, permission),
+    entityType: user.entityType ?? company.entityType,
+    enabledFeatures,
+  };
+  const groups = filterNavGroups(NAV_GROUPS, navFilter);
+  const hiddenGroups = hiddenNavGroups(NAV_GROUPS, navFilter);
+  const settingsPages = visibleSettingsPages(navFilter.permissionCheck);
   const navCollapsed =
     (await cookies()).get(NAV_COLLAPSED_COOKIE)?.value === "1";
 
@@ -128,6 +139,9 @@ export default async function AppLayout({
       <SyncUiPrefsCookie prefs={uiPrefs} />
       <DashboardShell
         groups={groups}
+        hiddenGroups={hiddenGroups}
+        settingsPages={settingsPages}
+        canEditMenu={Boolean(localUserId && hasDatabaseClient())}
         role={user.role}
         userName={user.name}
         avatarUrl={avatarUrl}
