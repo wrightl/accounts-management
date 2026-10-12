@@ -16,7 +16,7 @@ import { creditAdjustmentsByInvoice } from "@/lib/credit-notes/adjustments";
 import { formatIsoDateUk, todayIsoDate } from "@/lib/dates";
 import { splitDividendPence } from "@/lib/dividends/split";
 import { invoiceAmountDuePence } from "@/lib/invoices/balance";
-import { addDays, addMonths } from "@/lib/ledger/corporation-tax";
+import { addDays, ctPaymentDueDate } from "@/lib/ledger/corporation-tax";
 import { getReservesPosition } from "@/lib/ledger/queries";
 import { invoiceTotals, type LineItem } from "@/lib/money";
 import { getReimbursementBalances } from "@/lib/reimbursements/queries";
@@ -217,7 +217,7 @@ export async function getSafeToPay(companyId: string, today: string = todayIsoDa
 
   // This year's tax so far, plus last year's until it falls due.
   const lastYear = reserves.years.length > 1 ? reserves.years[reserves.years.length - 2]! : null;
-  const lastYearTaxDue = lastYear ? addDays(addMonths(lastYear.end, 9), 1) : null;
+  const lastYearTaxDue = lastYear ? ctPaymentDueDate(lastYear.end) : null;
   const taxParts = [
     { label: "This year so far", pence: reserves.currentYear.tax.taxPence },
     ...(lastYear && lastYearTaxDue && today <= lastYearTaxDue && lastYear.tax.taxPence > 0

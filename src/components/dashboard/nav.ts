@@ -21,6 +21,7 @@ export type NavIcon =
     | 'forecast'
     | 'profitability'
     | 'directorLoans'
+    | 'deadlines'
     | 'quotes'
     | 'orders'
     | 'recurring'
@@ -200,6 +201,12 @@ export const NAV_GROUPS: NavGroup[] = [
                 href: '/directors-loans',
                 label: "Director's loans",
                 icon: 'directorLoans',
+                permission: 'accounts:read',
+            },
+            {
+                href: '/deadlines',
+                label: 'Deadlines',
+                icon: 'deadlines',
                 permission: 'accounts:read',
             },
             {

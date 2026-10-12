@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { completeOnboarding } from "@/actions/onboarding";
+import { lookupCompaniesHouse } from "@/actions/companies-house";
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label, Textarea } from "@/components/ui/form";
 import { FormStickyActions } from "@/components/ui/form-sticky-actions";
@@ -15,6 +16,10 @@ import {
   parseOnboardingInput,
 } from "@/lib/onboarding/schema";
 import type { StripeCatalog } from "@/lib/billing/catalog-types";
+import {
+  suggestTradingName,
+  type CompaniesHouseCompany,
+} from "@/lib/companies-house/parse";
 import {
   signupPlanLabel,
   type SignupPlanChoice,
@@ -42,11 +47,14 @@ export function OnboardingForm({
   defaultName,
   catalog,
   initialPlanChoice,
+  companiesHouseEnabled = false,
 }: {
   defaultEmail: string | null;
   defaultName: string | null;
   catalog: StripeCatalog | null;
   initialPlanChoice: SignupPlanChoice | null;
+  /** Show the Companies House lookup (the server has an API key). */
+  companiesHouseEnabled?: boolean;
 }) {
   const [planChoice, setPlanChoice] = useState<SignupPlanChoice | null>(
     initialPlanChoice,
@@ -64,6 +72,39 @@ export function OnboardingForm({
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const [pending, startTransition] = useTransition();
+  const [found, setFound] = useState<CompaniesHouseCompany | null>(null);
+  const [lookupError, setLookupError] = useState<string | null>(null);
+  const [lookingUp, startLookup] = useTransition();
+
+  function fieldValue(name: string): string {
+    const el = formRef.current?.elements.namedItem(name);
+    return el && "value" in el ? String(el.value) : "";
+  }
+
+  function setFieldValue(name: string, value: string) {
+    const el = formRef.current?.elements.namedItem(name);
+    if (el && "value" in el) el.value = value;
+    clearField(name);
+  }
+
+  function lookUpCompany() {
+    setLookupError(null);
+    startLookup(async () => {
+      const result = await lookupCompaniesHouse(fieldValue("companyNumber"));
+      if (!result.ok) {
+        setFound(null);
+        setLookupError(result.error);
+        return;
+      }
+      const c = result.company;
+      setFieldValue("companyNumber", c.companyNumber);
+      setFieldValue("legalName", c.companyName);
+      if (!fieldValue("name").trim()) setFieldValue("name", suggestTradingName(c.companyName));
+      if (c.registeredOffice) setFieldValue("addressLines", c.registeredOffice);
+      if (c.yearEndMonth) setFieldValue("financialYearEndMonth", String(c.yearEndMonth));
+      setFound(c);
+    });
+  }
 
   useEffect(() => {
     if (!logoFile) {
@@ -283,20 +324,68 @@ export function OnboardingForm({
           <Label htmlFor="companyNumber" required>
             Company number
           </Label>
-          <Input
-            id="companyNumber"
-            name="companyNumber"
-            required
-            disabled={pending}
-            aria-invalid={Boolean(fieldErrors.companyNumber)}
-            aria-describedby={
-              fieldErrors.companyNumber ? "companyNumber-error" : undefined
-            }
-            onChange={() => clearField("companyNumber")}
-          />
+          <div className="flex gap-2">
+            <Input
+              id="companyNumber"
+              name="companyNumber"
+              required
+              disabled={pending}
+              aria-invalid={Boolean(fieldErrors.companyNumber)}
+              aria-describedby={
+                fieldErrors.companyNumber ? "companyNumber-error" : undefined
+              }
+              onChange={() => {
+                clearField("companyNumber");
+                // Details from an earlier lookup belong to the old number.
+                setFound(null);
+                setLookupError(null);
+              }}
+              onKeyDown={(e) => {
+                if (companiesHouseEnabled && e.key === "Enter") {
+                  e.preventDefault();
+                  lookUpCompany();
+                }
+              }}
+            />
+            {companiesHouseEnabled ? (
+              <Button
+                type="button"
+                variant="secondary"
+                className="shrink-0"
+                disabled={pending || lookingUp}
+                onClick={lookUpCompany}
+              >
+                {lookingUp ? "Looking up…" : "Look up"}
+              </Button>
+            ) : null}
+          </div>
           <FieldError id="companyNumber-error">
-            {fieldErrors.companyNumber}
+            {fieldErrors.companyNumber ?? lookupError}
           </FieldError>
+          {companiesHouseEnabled && !found && !lookupError ? (
+            <p className="mt-1 text-sm text-muted">
+              Look up your company to fill in the details below from Companies House.
+            </p>
+          ) : null}
+          {found ? (
+            <div className="mt-2 rounded-xl bg-wash px-3 py-2 text-sm" role="status">
+              <p>
+                Filled in from Companies House: <strong>{found.companyName}</strong>
+                {found.status && found.status !== "active" ? ` (${found.status})` : ""}.
+              </p>
+              {found.directors.length ? (
+                <p className="text-muted">Directors: {found.directors.join(", ")}</p>
+              ) : null}
+              <input type="hidden" name="incorporatedOn" value={found.incorporatedOn ?? ""} />
+              <input type="hidden" name="accountsDue" value={found.accountsDue ?? ""} />
+              <input
+                type="hidden"
+                name="confirmationStatementDue"
+                value={found.confirmationStatementDue ?? ""}
+              />
+              <input type="hidden" name="directorNames" value={found.directors.join("\n")} />
+            </div>
+          ) : null}
         </div>
       ) : (
         <div>

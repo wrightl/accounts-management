@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
-import { monthName } from "@/lib/dates";
+import { formatIsoDateUk, monthName } from "@/lib/dates";
+import { companiesHouseConfigured } from "@/lib/companies-house/client";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { buttonClasses } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { CompaniesHouseForm } from "@/components/company/companies-house-form";
 
 function Field({
   label,
@@ -36,7 +38,7 @@ export default async function CompanyPage() {
         <div>
           <h1 className="font-display text-2xl font-semibold">Company</h1>
           <p className="mt-1 text-muted">
-            Read-only company profile for year-end and the accountant pack.
+            Company profile for year-end, the accountant pack and filing deadlines.
           </p>
         </div>
         {canManageSettings ? (
@@ -69,6 +71,42 @@ export default async function CompanyPage() {
           </div>
         </dl>
       </Card>
+
+      {settings.entityType === "limited_company" ? (
+        <Card id="companies-house" className="mt-6 scroll-mt-6 p-6">
+          <h2 className="font-display text-lg font-semibold">Companies House</h2>
+          <p className="mt-1 text-sm text-muted">
+            Directors appear on board minutes and dividend vouchers. The dates
+            drive your{" "}
+            <Link href="/deadlines" className="underline">
+              filing deadlines
+            </Link>
+            .
+            {settings.companiesHouseSyncedAt
+              ? ` Last updated from Companies House on ${formatIsoDateUk(settings.companiesHouseSyncedAt.toISOString().slice(0, 10))}.`
+              : null}
+          </p>
+          {canManageSettings ? (
+            <CompaniesHouseForm
+              incorporatedOn={settings.incorporatedOn}
+              accountsDue={settings.accountsDue}
+              confirmationStatementDue={settings.confirmationStatementDue}
+              directorNames={settings.directorNames}
+              canRefresh={Boolean(settings.companyNumber) && companiesHouseConfigured()}
+            />
+          ) : (
+            <dl className="mt-4 grid gap-4 sm:grid-cols-2">
+              <Field label="Incorporated on" value={formatIsoDateUk(settings.incorporatedOn)} />
+              <Field
+                label="Confirmation statement due"
+                value={formatIsoDateUk(settings.confirmationStatementDue)}
+              />
+              <Field label="Next accounts due" value={formatIsoDateUk(settings.accountsDue)} />
+              <Field label="Directors" value={settings.directorNames} />
+            </dl>
+          )}
+        </Card>
+      ) : null}
 
       <Card className="mt-6 p-6">
         <h2 className="font-display text-lg font-semibold">

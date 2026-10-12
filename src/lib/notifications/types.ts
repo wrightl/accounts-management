@@ -15,6 +15,7 @@ export const NOTIFICATION_EVENT_TYPES = [
   "quote.expiring.1d",
   "invoice.overdue",
   "close.weekly",
+  "deadline.upcoming",
   "recurring.due.3d",
   "recurring.sent",
   "expense.inbound.processed",
@@ -90,6 +91,13 @@ export const NOTIFICATION_CATALOG: readonly NotificationEventDefinition[] = [
     label: "Weekly close",
     description: "Monday checklist of what to clear to keep the books up to date",
     defaultRoles: ["admin", "user"],
+    defaultChannels: { inApp: true, email: true, push: true },
+  },
+  {
+    type: "deadline.upcoming",
+    label: "Filing deadline coming up",
+    description: "A Companies House or HMRC deadline is 14 days and then 3 days away",
+    defaultRoles: ["admin", "accountant"],
     defaultChannels: { inApp: true, email: true, push: true },
   },
   {

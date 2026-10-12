@@ -7,6 +7,7 @@ import {
   type ParseOk,
 } from "@/lib/validation/field-errors";
 import type { BankProviderId } from "@/lib/bank/providers";
+import { companiesHouseDetailsSchema } from "@/lib/companies-house/schema";
 
 const optionalText = z
   .string()
@@ -50,6 +51,8 @@ export const onboardingSchema = z.discriminatedUnion("entityType", [
       .trim()
       .min(1, "Enter a company number")
       .max(20, "Company number must be 20 characters or fewer"),
+    // Filled from a Companies House lookup; all optional.
+    ...companiesHouseDetailsSchema.shape,
   }),
   z.object({
     entityType: z.literal("sole_trader"),
@@ -85,6 +88,10 @@ export function onboardingRawFromFormData(formData: FormData): Record<string, un
     name: formData.get("name"),
     legalName: formData.get("legalName"),
     companyNumber: formData.get("companyNumber"),
+    incorporatedOn: formData.get("incorporatedOn") ?? "",
+    accountsDue: formData.get("accountsDue") ?? "",
+    confirmationStatementDue: formData.get("confirmationStatementDue") ?? "",
+    directorNames: formData.get("directorNames") ?? "",
     addressLines: formData.get("addressLines") ?? "",
     email: formData.get("email") ?? "",
     financialYearEndMonth: formData.get("financialYearEndMonth") ?? "3",

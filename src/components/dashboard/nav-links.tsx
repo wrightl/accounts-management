@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import {
+  CalendarClock,
   LayoutDashboard,
   CircleHelp,
   UsersRound,
@@ -52,6 +53,7 @@ export const NAV_ICONS: Record<NavIcon, LucideIcon> = {
   forecast: TrendingUp,
   profitability: Percent,
   directorLoans: HandCoins,
+  deadlines: CalendarClock,
   quotes: ScrollText,
   orders: Package,
   recurring: RefreshCw,
