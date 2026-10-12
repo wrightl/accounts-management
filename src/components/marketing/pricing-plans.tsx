@@ -39,10 +39,12 @@ function buildPlans(catalog: StripeCatalog | null): Plan[] {
       description: "Try the full weekly rhythm before you pick a paid plan.",
       features: [
         "Core books — quotes, invoices, expenses, reports",
-        "Recurring invoices",
+        "Recurring invoices and online card payments",
+        "Deadlines, weekly close and Ltd paperwork",
         "Up to 5 users (founders + accountant)",
         "All multi-bank CSV providers",
-        "VAT summary only (no export)",
+        "Accountant pack (without VAT summary)",
+        "VAT summary on screen only (no export)",
       ],
     },
     {
@@ -61,7 +63,7 @@ function buildPlans(catalog: StripeCatalog | null): Plan[] {
         "VAT rates + VAT export for your accountant",
         "Up to 5 users",
         "All multi-bank CSV providers",
-        "Accountant pack",
+        "VAT summary in the accountant pack",
       ],
     },
     {
@@ -113,6 +115,24 @@ const COMPARE_ROWS: CompareRow[] = [
     premium: "yes",
   },
   {
+    label: "Deadlines and reminders",
+    trial: "yes",
+    essentials: "yes",
+    premium: "yes",
+  },
+  {
+    label: "Board minutes and dividend vouchers (Ltd)",
+    trial: "yes",
+    essentials: "yes",
+    premium: "yes",
+  },
+  {
+    label: "Weekly close checklist",
+    trial: "yes",
+    essentials: "yes",
+    premium: "yes",
+  },
+  {
     label: "AI bookkeeper",
     trial: "yes",
     essentials: "yes",
@@ -133,6 +153,12 @@ const COMPARE_ROWS: CompareRow[] = [
   {
     label: "VAT rates + export",
     trial: "Summary only",
+    essentials: "yes",
+    premium: "yes",
+  },
+  {
+    label: "Accountant pack",
+    trial: "yes",
     essentials: "yes",
     premium: "yes",
   },

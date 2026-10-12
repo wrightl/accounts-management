@@ -21,18 +21,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Complete onboarding first" }, { status: 403 });
   }
 
+  // Every plan can export its books; only the VAT summary is a paid feature.
   const { getEntitlements } = await import("@/lib/billing/entitlements");
   const entitlements = await getEntitlements(user.companyId);
-  if (!entitlements.vatExport) {
-    return NextResponse.json(
-      {
-        error:
-          "VAT export in the accountant pack requires Essentials or Premium. Upgrade to download.",
-        code: "feature_not_on_plan",
-      },
-      { status: 403 },
-    );
-  }
 
   const url = new URL(request.url);
   const defaults = await defaultReportPeriod(user.companyId);
@@ -43,6 +34,7 @@ export async function GET(request: Request) {
     companyId: user.companyId,
     from,
     to,
+    includeVat: entitlements.vatExport,
   });
 
   return new NextResponse(Buffer.from(zip), {

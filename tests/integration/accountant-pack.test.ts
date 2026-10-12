@@ -311,6 +311,19 @@ describe("accountant pack integration", () => {
     expect(paymentLines).toHaveLength(1);
     expect(paymentLines[0]).toContain("50.00");
   });
+
+  it("leaves out the VAT summary when the plan has no VAT export", async () => {
+    const { zip } = await buildAccountantPack({ companyId, ...PERIOD, includeVat: false });
+    const entries = listStoreZipEntries(zip);
+
+    expect(entries).toContain("summary/pnl.csv");
+    expect(entries).toContain("invoices.csv");
+    expect(entries).not.toContain("summary/vat.csv");
+    expect(entries).not.toContain("summary/vat.pdf");
+    expect(extractZipText(zip, "README.txt")).toContain(
+      "VAT summary needs Essentials or Premium",
+    );
+  });
 });
 
 describe("buildStoreZip", () => {

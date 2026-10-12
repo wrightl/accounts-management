@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
 import { PricingAwareSignUpLink } from "@/components/marketing/pricing-aware-sign-up-link";
+import {
+  LEGAL_COMPANY_NUMBER,
+  LEGAL_ENTITY,
+  LEGAL_JURISDICTION,
+  LEGAL_REGISTERED_OFFICE,
+} from "@/lib/legal";
 
 export function PublicFooter() {
   const year = new Date().getFullYear();
@@ -78,12 +84,26 @@ export function PublicFooter() {
                   Dot + Dash Consulting
                 </a>
               </li>
+              <li>
+                <Link href="/privacy" className="hover:text-white">
+                  Privacy
+                </Link>
+              </li>
+              <li>
+                <Link href="/terms" className="hover:text-white">
+                  Terms
+                </Link>
+              </li>
             </ul>
           </div>
         </div>
       </div>
-      <div className="mx-auto mt-10 max-w-6xl border-t border-white/10 pt-6 text-center text-xs text-white/40">
-        © {year} Dot and Dash Consulting Ltd
+      <div className="mx-auto mt-10 max-w-6xl space-y-1 border-t border-white/10 pt-6 text-center text-xs text-white/40">
+        <p>© {year} {LEGAL_ENTITY}</p>
+        <p>
+          Registered in {LEGAL_JURISDICTION}, company no. {LEGAL_COMPANY_NUMBER}.
+          Registered office: {LEGAL_REGISTERED_OFFICE}.
+        </p>
       </div>
     </footer>
   );

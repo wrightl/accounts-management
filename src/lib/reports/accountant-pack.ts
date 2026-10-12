@@ -54,10 +54,13 @@ export async function buildAccountantPack({
   companyId,
   from,
   to,
+  includeVat = true,
 }: {
   companyId: string;
   from: string;
   to: string;
+  /** VAT summary CSV and PDF. Off when the plan doesn't include VAT export. */
+  includeVat?: boolean;
 }): Promise<AccountantPackResult> {
   const db = getDb();
   const warnings: string[] = [];
@@ -772,24 +775,28 @@ export async function buildAccountantPack({
         m.createdAt.toISOString(),
       ]),
     ),
-    "README.txt": buildReadme({ from, to, warnings }),
+    "README.txt": buildReadme({ from, to, warnings, includeVat }),
   };
 
-  try {
-    binaryFiles["summary/vat.pdf"] = await renderVatSummaryPdf({
-      companyName: company.name,
-      vatNumber: vat.vatNumber,
-      from,
-      to,
-      vatOnSalesPence: vat.vatOnSalesPence,
-      vatOnPurchasesPence: vat.vatOnPurchasesPence,
-      netVatPence: vat.netVatPence,
-      note: vat.note,
-    });
-  } catch (e) {
-    warnings.push(
-      `VAT PDF skipped: ${e instanceof Error ? e.message : String(e)}`,
-    );
+  if (!includeVat) {
+    delete textFiles["summary/vat.csv"];
+  } else {
+    try {
+      binaryFiles["summary/vat.pdf"] = await renderVatSummaryPdf({
+        companyName: company.name,
+        vatNumber: vat.vatNumber,
+        from,
+        to,
+        vatOnSalesPence: vat.vatOnSalesPence,
+        vatOnPurchasesPence: vat.vatOnPurchasesPence,
+        netVatPence: vat.netVatPence,
+        note: vat.note,
+      });
+    } catch (e) {
+      warnings.push(
+        `VAT PDF skipped: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
   }
 
   const allFiles: Record<string, ZipEntry> = { ...textFiles, ...binaryFiles };
@@ -831,10 +838,12 @@ function buildReadme({
   from,
   to,
   warnings,
+  includeVat,
 }: {
   from: string;
   to: string;
   warnings: string[];
+  includeVat: boolean;
 }) {
   const lines = [
     "Alfa accountant pack",
@@ -842,7 +851,9 @@ function buildReadme({
     `Generated: ${new Date().toISOString()}`,
     "",
     "Contents:",
-    "  summary/          — company profile, P&L, VAT, aged receivables, cutover",
+    includeVat
+      ? "  summary/          — company profile, P&L, VAT, aged receivables, cutover"
+      : "  summary/          — company profile, P&L, aged receivables, cutover (VAT summary needs Essentials or Premium)",
     "  invoices.csv      — invoice headers (excl. draft & void, by issue date)",
     "  invoice-line-items.csv",
     "  invoices/         — invoice PDFs",

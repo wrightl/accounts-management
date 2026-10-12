@@ -7,11 +7,19 @@ const INCLUDED = [
   },
   {
     title: "Get paid online",
-    body: "Clients pay by card from the invoice link, quotes can take a deposit on acceptance, and reminders follow your schedule.",
+    body: "Clients pay by card from the invoice link, quotes can take a deposit on acceptance, and reminders follow your schedule. When a business client pays late, raise an invoice for the statutory interest and compensation in one click.",
   },
   {
     title: "Cash forecast and safe to pay",
     body: "A 13-week cash forecast with what-ifs. Limited companies also see what's safe to pay as dividends, director's loans and a corporation tax estimate.",
+  },
+  {
+    title: "Deadlines and Ltd paperwork",
+    body: "Confirmation statement, annual accounts, corporation tax, VAT and Self Assessment dates worked out for you, with reminders. Declare a dividend and get board minutes and dividend vouchers as PDFs.",
+  },
+  {
+    title: "Weekly close",
+    body: "A short checklist each week: bank imported, receipts attached, overdue invoices chased, milestones ready to bill, reimbursements owed.",
   },
   {
     title: "Project profitability",
@@ -31,7 +39,7 @@ const INCLUDED = [
   },
   {
     title: "Accountant pack",
-    body: "Invite your accountant read-only. One export gives them CSVs, invoice PDFs, receipts, and bank data for year-end.",
+    body: "Invite your accountant read-only. One export gives them CSVs, invoice PDFs, receipts, and bank data for year-end — on every plan, with the VAT summary on Essentials and Premium.",
   },
   {
     title: "Display and focus",
@@ -41,6 +49,18 @@ const INCLUDED = [
     title: "Plain-language help",
     body: "In-app guidance for busy founders, including how to make the app easier to use with your phone or computer accessibility settings.",
   },
+] as const;
+
+const ALSO_INCLUDED = [
+  "Credit notes",
+  "Mileage at HMRC rates",
+  "Receipt reading",
+  "Spending by category",
+  "Companies House look-up",
+  "CSV import of clients, invoices and expenses",
+  "Email and in-app notifications",
+  "Audit log",
+  "A menu you can tailor",
 ] as const;
 
 export function PricingIncluded() {
@@ -79,6 +99,14 @@ export function PricingIncluded() {
             </li>
           ))}
         </ul>
+        <div className="mx-auto mt-10 max-w-4xl text-center">
+          <h3 className="font-display text-lg font-semibold text-navy">
+            Also included
+          </h3>
+          <p className="mt-3 text-sm leading-relaxed text-muted">
+            {ALSO_INCLUDED.join(" · ")}
+          </p>
+        </div>
       </div>
     </section>
   );

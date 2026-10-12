@@ -118,6 +118,12 @@ Description: Complete guide to UK limited company financial requirements, Compan
 Sole Trader Guide: https://alfa.dotanddashconsulting.com/guides/sole-traders
 Description: Complete guide to UK sole trader requirements, Self Assessment, Income Tax, National Insurance, record keeping
 
+Privacy Notice: https://alfa.dotanddashconsulting.com/privacy
+Description: What data Alfa collects, sub-processors, AI use, retention, UK GDPR rights
+
+Terms of Service: https://alfa.dotanddashconsulting.com/terms
+Description: Subscription terms and the UK GDPR Article 28 data processing agreement
+
 ## Use Cases
 
 ### Consultancy Quote-to-Cash

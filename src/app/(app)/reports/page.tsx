@@ -12,6 +12,7 @@ import {
     getVatSummary,
 } from '@/lib/reports/queries';
 import { getCompanySettings } from '@/lib/settings/queries';
+import { getEntitlements } from '@/lib/billing/entitlements';
 import { buttonClasses } from '@/components/ui/button';
 import { Card, CardTitle, CardValue } from '@/components/ui/card';
 import { Input, Label } from '@/components/ui/form';
@@ -44,7 +45,7 @@ export default async function ReportsPage({
         financialYearStartDate(company.financialYearEndMonth, today),
     );
 
-    const [pnl, aged, byMonth, byCategory, vat, bank, lastClose] = await Promise.all([
+    const [pnl, aged, byMonth, byCategory, vat, bank, lastClose, entitlements] = await Promise.all([
         getProfitAndLoss(companyId, from, to),
         getAgedReceivables(companyId),
         getIncomeByMonth(companyId, from, to),
@@ -52,6 +53,7 @@ export default async function ReportsPage({
         getVatSummary(companyId, from, to),
         getBankReconciledThrough(companyId),
         getLastWeeklyClose(companyId),
+        getEntitlements(companyId),
     ]);
 
     return (
@@ -81,12 +83,14 @@ export default async function ReportsPage({
                 </div>
                 {canExport && (
                     <div className="flex flex-wrap gap-2">
-                        <a
-                            href={`/api/reports/vat?from=${from}&to=${to}`}
-                            className={buttonClasses('secondary')}
-                        >
-                            Download VAT CSV
-                        </a>
+                        {entitlements.vatExport && (
+                            <a
+                                href={`/api/reports/vat?from=${from}&to=${to}`}
+                                className={buttonClasses('secondary')}
+                            >
+                                Download VAT CSV
+                            </a>
+                        )}
                         <a
                             href={`/api/reports/accountant-pack?from=${from}&to=${to}`}
                             className={buttonClasses('primary')}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { SignUp } from "@clerk/nextjs";
 import { saveSignupPlanChoice } from "@/actions/signup-plan";
 import { SignupPlanPicker } from "@/components/signup/plan-picker";
@@ -14,6 +15,17 @@ function ClerkSignUp() {
         Create your account to continue setup.
       </p>
       <SignUp />
+      <p className="mt-4 text-center text-xs text-white/70">
+        By creating an account you agree to our{" "}
+        <Link href="/terms" className="underline hover:text-white">
+          Terms of Service
+        </Link>{" "}
+        and{" "}
+        <Link href="/privacy" className="underline hover:text-white">
+          Privacy Notice
+        </Link>
+        .
+      </p>
     </div>
   );
 }
