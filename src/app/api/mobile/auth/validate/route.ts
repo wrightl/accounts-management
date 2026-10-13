@@ -5,6 +5,10 @@ import {
     getEntitlements,
 } from '@/lib/billing/entitlements';
 import { ensureCompanyBilling } from '@/lib/billing/company-billing';
+import { getMenuFeatures } from '@/lib/menu/queries';
+import { visibleMenuFeatures } from '@/lib/mobile/menu';
+import { permissionsFor } from '@/lib/roles';
+import { ensureLocalUser } from '@/lib/users';
 
 export async function POST() {
     try {
@@ -54,16 +58,26 @@ export async function POST() {
             );
         }
 
+        const localUserId = user.localUserId ?? (await ensureLocalUser(user));
+        const enabledFeatures = await getMenuFeatures(localUserId, user.companyId);
+
         return NextResponse.json({
             success: true,
             user: {
-                id: user.localUserId ?? user.userId,
+                id: localUserId,
                 clerkUserId: user.userId,
                 email: user.email ?? '',
                 name: user.name ?? '',
                 role: user.role,
                 companyId: user.companyId,
                 entityType: user.entityType,
+                permissions: permissionsFor(user.role),
+                // Optional pages this person shows in their web menu.
+                menuFeatures: visibleMenuFeatures(
+                    user.role,
+                    user.entityType,
+                    enabledFeatures,
+                ),
                 billing,
             },
         });

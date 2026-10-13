@@ -4,6 +4,7 @@ import '../expense_provider.dart';
 import '../../auth/auth_provider.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../data/models/expense.dart';
+import 'expense_capture_screen.dart' show ExpensePaymentFields;
 
 class ExpenseListScreen extends StatefulWidget {
   const ExpenseListScreen({super.key});
@@ -28,8 +29,15 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
     await context.read<ExpenseProvider>().loadExpenses(status: status);
   }
 
+  /// Capture and review need write access and an editable plan, as on the web.
+  bool _canWrite(BuildContext context) {
+    final user = context.watch<AuthProvider>().user;
+    return user != null && user.canWriteAccounts && !user.isBillingReadOnly;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final canWrite = _canWrite(context);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Expenses'),
@@ -42,9 +50,11 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
             },
             itemBuilder: (context) => [
               const PopupMenuItem(value: 'all', child: Text('All')),
-              const PopupMenuItem(value: 'pending', child: Text('Pending')),
-              const PopupMenuItem(value: 'recorded', child: Text('Recorded')),
-              const PopupMenuItem(value: 'reimbursable', child: Text('Reimbursable')),
+              for (final status in expenseStatuses)
+                PopupMenuItem(
+                  value: status,
+                  child: Text(expenseStatusLabel(status)),
+                ),
             ],
           ),
         ],
@@ -84,12 +94,14 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
                     'No expenses found',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
-                  const SizedBox(height: 24),
-                  ElevatedButton.icon(
-                    onPressed: () => Navigator.pushNamed(context, '/expenses/capture'),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add Expense'),
-                  ),
+                  if (canWrite) ...[
+                    const SizedBox(height: 24),
+                    ElevatedButton.icon(
+                      onPressed: () => Navigator.pushNamed(context, '/expenses/capture'),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add expense'),
+                    ),
+                  ],
                 ],
               ),
             );
@@ -135,7 +147,7 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
                         _buildStatusChip(expense.status),
                       ],
                     ),
-                    onTap: () => _showExpenseDetail(expense),
+                    onTap: () => _showExpenseDetail(expense, canWrite: canWrite),
                   ),
                 );
               },
@@ -143,7 +155,7 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
           );
         },
       ),
-      floatingActionButton: context.watch<AuthProvider>().user?.isBillingReadOnly == true
+      floatingActionButton: !canWrite
           ? null
           : FloatingActionButton.extended(
               onPressed: () => Navigator.pushNamed(context, '/expenses/capture'),
@@ -161,7 +173,7 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
-        status.toUpperCase(),
+        expenseStatusLabel(status),
         style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.bold,
@@ -181,14 +193,14 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
         return Colors.purple;
       case 'reimbursed':
         return Colors.green;
-      case 'rejected':
-        return Colors.red;
+      case 'company_paid':
+        return Colors.teal;
       default:
         return Colors.grey;
     }
   }
 
-  void _showExpenseDetail(Expense expense) {
+  void _showExpenseDetail(Expense expense, {required bool canWrite}) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -208,7 +220,7 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Expense Details',
+                      'Expense details',
                       style: Theme.of(context).textTheme.headlineMedium,
                     ),
                     IconButton(
@@ -222,12 +234,22 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
                 _buildDetailRow('Amount', CurrencyUtils.formatPence(expense.amountPence)),
                 _buildDetailRow('Category', expense.category),
                 _buildDetailRow('Date', DateUtils.formatDate(expense.expenseDate)),
-                _buildDetailRow('Status', expense.status.toUpperCase()),
-                if (expense.notes != null) _buildDetailRow('Notes', expense.notes!),
+                _buildDetailRow('Status', expense.statusLabel),
+                if (expense.paidByName != null)
+                  _buildDetailRow('Paid by', expense.paidByName!),
+                if (expense.clientName != null)
+                  _buildDetailRow(
+                    'Client',
+                    expense.billable
+                        ? '${expense.clientName!} (rebillable)'
+                        : expense.clientName!,
+                  ),
+                if (expense.vatRate > 0)
+                  _buildDetailRow('VAT rate', '${expense.vatRate}%'),
                 if (expense.createdByName != null)
                   _buildDetailRow('Created by', expense.createdByName!),
                 const SizedBox(height: 24),
-                if (expense.isPending) ...[
+                if (expense.isPending && canWrite) ...[
                   Row(
                     children: [
                       Expanded(
@@ -243,7 +265,7 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: () => _handleApprove(expense.id),
+                          onPressed: () => _handleApprove(expense),
                           icon: const Icon(Icons.check),
                           label: const Text('Approve'),
                         ),
@@ -279,10 +301,28 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
     );
   }
 
-  Future<void> _handleApprove(String id) async {
+  Future<void> _handleApprove(Expense expense) async {
     Navigator.pop(context);
     final provider = context.read<ExpenseProvider>();
-    final success = await provider.approveExpense(id);
+    final options = provider.options ?? await provider.loadOptions();
+    if (!mounted) return;
+
+    final choice = await showModalBottomSheet<_ApproveChoice>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _ApproveSheet(
+        expense: expense,
+        payers: options?.payers ?? const [],
+        defaultPayerId: options?.defaultPayerId,
+      ),
+    );
+    if (choice == null || !mounted) return;
+
+    final success = await provider.approveExpense(
+      expense.id,
+      approvalType: choice.status,
+      paidByUserId: choice.paidByUserId,
+    );
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -301,9 +341,104 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(success ? 'Expense rejected' : provider.error ?? 'Failed to reject'),
+          content: Text(success ? 'Expense discarded' : provider.error ?? 'Failed to reject'),
         ),
       );
     }
+  }
+}
+
+class _ApproveChoice {
+  const _ApproveChoice(this.status, this.paidByUserId);
+
+  final String status;
+  final String? paidByUserId;
+}
+
+/// Asks what the web review asks before approving: the final status and payer.
+class _ApproveSheet extends StatefulWidget {
+  const _ApproveSheet({
+    required this.expense,
+    required this.payers,
+    this.defaultPayerId,
+  });
+
+  final Expense expense;
+  final List<ExpenseChoice> payers;
+  final String? defaultPayerId;
+
+  @override
+  State<_ApproveSheet> createState() => _ApproveSheetState();
+}
+
+class _ApproveSheetState extends State<_ApproveSheet> {
+  final _formKey = GlobalKey<FormState>();
+  String? _status;
+  String? _paidByUserId;
+
+  @override
+  void initState() {
+    super.initState();
+    _paidByUserId = widget.expense.paidByUserId;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        24,
+        24,
+        24,
+        24 + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Approve expense',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${widget.expense.description} · '
+              '${CurrencyUtils.formatPence(widget.expense.amountPence)}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 16),
+            ExpensePaymentFields(
+              status: _status,
+              paidByUserId: _paidByUserId,
+              payers: widget.payers,
+              onStatusChanged: (value) => setState(() {
+                _status = value;
+                if (value == 'company_paid') {
+                  _paidByUserId = null;
+                } else if (value == 'reimbursable') {
+                  _paidByUserId ??= widget.defaultPayerId;
+                }
+              }),
+              onPaidByChanged: (value) => setState(() => _paidByUserId = value),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () {
+                if (!_formKey.currentState!.validate()) return;
+                Navigator.pop(
+                  context,
+                  _ApproveChoice(
+                    _status!,
+                    _status == 'company_paid' ? null : _paidByUserId,
+                  ),
+                );
+              },
+              child: const Text('Approve'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

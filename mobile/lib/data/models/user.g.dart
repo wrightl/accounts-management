@@ -40,6 +40,12 @@ User _$UserFromJson(Map<String, dynamic> json) => User(
   role: json['role'] as String,
   companyId: json['companyId'] as String?,
   entityType: json['entityType'] as String?,
+  permissions:
+      (json['permissions'] as List<dynamic>?)?.map((e) => e as String).toList() ??
+      [],
+  menuFeatures: (json['menuFeatures'] as List<dynamic>?)
+      ?.map((e) => e as String)
+      .toList(),
   billing: json['billing'] == null
       ? null
       : BillingInfo.fromJson(json['billing'] as Map<String, dynamic>),
@@ -54,6 +60,8 @@ Map<String, dynamic> _$UserToJson(User instance) => <String, dynamic>{
   'role': instance.role,
   'companyId': instance.companyId,
   'entityType': instance.entityType,
+  'permissions': instance.permissions,
+  'menuFeatures': instance.menuFeatures,
   'billing': instance.billing,
 };
 

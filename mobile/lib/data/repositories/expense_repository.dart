@@ -7,6 +7,14 @@ import '../../core/constants/app_constants.dart';
 ApiResponse<T> _dioError<T>(DioException e) {
   final data = e.response?.data;
   if (data is Map) {
+    // Field errors say what to fix; the summary alone does not.
+    final fieldErrors = data['fieldErrors'];
+    if (fieldErrors is Map && fieldErrors.isNotEmpty) {
+      return ApiResponse.error(
+        fieldErrors.values.map((v) => v.toString()).join('\n'),
+        code: data['code']?.toString(),
+      );
+    }
     final error = data['error']?.toString();
     final code = data['code']?.toString();
     if (error != null && error.isNotEmpty) {
@@ -124,15 +132,33 @@ class ExpenseRepository {
     }
   }
 
+  Future<ApiResponse<ExpenseOptions>> getOptions() async {
+    try {
+      final response =
+          await _apiClient.get(AppConstants.expenseOptionsEndpoint);
+      if (response.statusCode == 200) {
+        return ApiResponse.success(
+          ExpenseOptions.fromJson(response.data['data']),
+        );
+      }
+      return ApiResponse.error('Failed to load expense options');
+    } on DioException catch (e) {
+      return _dioError(e);
+    } catch (e) {
+      return ApiResponse.error('Unexpected error: $e');
+    }
+  }
+
   Future<ApiResponse<Expense>> approveExpense(
     String id, {
-    String approvalType = 'recorded',
+    required String approvalType,
+    String? paidByUserId,
   }) async {
     try {
       final path = AppConstants.expenseApproveEndpoint.replaceAll(':id', id);
       final response = await _apiClient.post(
         path,
-        data: {'approvalType': approvalType},
+        data: {'approvalType': approvalType, 'paidByUserId': paidByUserId},
       );
 
       if (response.statusCode == 200) {
@@ -151,6 +177,7 @@ class ExpenseRepository {
     }
   }
 
+  /// Reject discards the pending expense, as on the web.
   Future<ApiResponse<Expense>> rejectExpense(
     String id, {
     String? reason,

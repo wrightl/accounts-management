@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/db";
-import { expenses } from "@/db/schema";
-import { and, eq } from "drizzle-orm";
 import { requireMobileAuth } from "@/lib/mobile-auth";
+import { loadMobileExpense } from "@/lib/mobile/expenses";
 
 type Params = Promise<{ id: string }>;
 
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   segmentData: { params: Params }
 ) {
   const params = await segmentData.params;
@@ -16,18 +14,7 @@ export async function GET(
     if (!authz.ok) return authz.response;
     const { user } = authz;
 
-    const db = getDb();
-    const [expense] = await db
-      .select()
-      .from(expenses)
-      .where(
-        and(
-          eq(expenses.id, params.id),
-          eq(expenses.companyId, user.companyId)
-        )
-      )
-      .limit(1);
-
+    const expense = await loadMobileExpense(user.companyId, params.id);
     if (!expense) {
       return NextResponse.json(
         { success: false, error: "Expense not found" },
@@ -35,24 +22,7 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        id: expense.id,
-        companyId: expense.companyId,
-        description: expense.description,
-        amountPence: expense.amountPence,
-        category: expense.category,
-        expenseDate: expense.spentAt,
-        status: expense.status,
-        notes: null,
-        billable: expense.billable,
-        source: expense.source,
-        receipts: [],
-        createdAt: expense.createdAt.toISOString(),
-        updatedAt: expense.createdAt.toISOString(),
-      },
-    });
+    return NextResponse.json({ success: true, data: expense });
   } catch (error) {
     console.error("Get expense error:", error);
     return NextResponse.json(

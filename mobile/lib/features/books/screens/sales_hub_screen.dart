@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../auth/auth_provider.dart';
 import 'record_list_screen.dart';
 
 class SalesHubScreen extends StatelessWidget {
@@ -6,43 +8,36 @@ class SalesHubScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final user = context.watch<AuthProvider>().user;
+    bool shows(String feature) => user?.showsFeature(feature) ?? false;
+    // Hide the pages this person hid from their web menu.
+    final tabs = <(String, String)>[
+      ('invoices', 'Invoices'),
+      if (shows('quotes')) ('quotes', 'Quotes'),
+      if (shows('orders')) ('orders', 'Orders'),
+      ('clients', 'Clients'),
+    ];
+
     return DefaultTabController(
-      length: 4,
+      // Rebuild the controller when the tab count changes.
+      key: ValueKey(tabs.length),
+      length: tabs.length,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Sales'),
-          bottom: const TabBar(
+          bottom: TabBar(
             isScrollable: true,
-            tabs: [
-              Tab(text: 'Invoices'),
-              Tab(text: 'Quotes'),
-              Tab(text: 'Orders'),
-              Tab(text: 'Clients'),
-            ],
+            tabs: [for (final tab in tabs) Tab(text: tab.$2)],
           ),
         ),
-        body: const TabBarView(
+        body: TabBarView(
           children: [
-            RecordListScreen(
-              resource: 'invoices',
-              title: 'Invoices',
-              embedded: true,
-            ),
-            RecordListScreen(
-              resource: 'quotes',
-              title: 'Quotes',
-              embedded: true,
-            ),
-            RecordListScreen(
-              resource: 'orders',
-              title: 'Orders',
-              embedded: true,
-            ),
-            RecordListScreen(
-              resource: 'clients',
-              title: 'Clients',
-              embedded: true,
-            ),
+            for (final tab in tabs)
+              RecordListScreen(
+                resource: tab.$1,
+                title: tab.$2,
+                embedded: true,
+              ),
           ],
         ),
       ),

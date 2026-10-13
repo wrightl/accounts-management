@@ -69,6 +69,13 @@ class User {
   final String role;
   final String? companyId;
   final String? entityType;
+
+  /// Permissions the server grants this role (e.g. `accounts:write`).
+  @JsonKey(defaultValue: <String>[])
+  final List<String> permissions;
+
+  /// Optional pages this person shows in their web menu. Null shows all.
+  final List<String>? menuFeatures;
   final BillingInfo? billing;
 
   User({
@@ -80,6 +87,8 @@ class User {
     required this.role,
     this.companyId,
     this.entityType,
+    this.permissions = const [],
+    this.menuFeatures,
     this.billing,
   });
 
@@ -93,10 +102,17 @@ class User {
   }
 
   bool get isLimitedCompany => entityType == 'limited_company';
-  bool get canReadAccounts =>
-      role == 'admin' || role == 'user' || role == 'accountant';
-  bool get canManageSettings => role == 'admin';
-  bool get canManageUsers => role == 'admin';
+
+  bool can(String permission) => permissions.contains(permission);
+  bool get canReadAccounts => can('accounts:read');
+  bool get canWriteAccounts => can('accounts:write');
+  bool get canReadReports => can('reports:read');
+  bool get canManageSettings => can('settings:manage');
+  bool get canManageUsers => can('users:manage');
+
+  /// Whether an optional page is in this person's menu, as on the web.
+  bool showsFeature(String feature) =>
+      menuFeatures?.contains(feature) ?? true;
   bool get isBillingReadOnly => billing?.readOnly == true;
 }
 

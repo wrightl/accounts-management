@@ -59,7 +59,7 @@ void main() {
       expect(provider.isLoading, false);
     });
 
-    test('approveExpense updates expense status', () async {
+    test('approveExpense sends the chosen status and payer', () async {
       final mockExpense = Expense(
         id: '1',
         companyId: 'company1',
@@ -67,22 +67,56 @@ void main() {
         amountPence: 1000,
         category: 'Travel',
         expenseDate: DateTime.now(),
-        status: 'recorded',
+        status: 'reimbursable',
         billable: false,
+        paidByUserId: 'u1',
         source: 'manual',
         receipts: [],
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
 
-      when(mockRepository.approveExpense('1', approvalType: 'recorded'))
-          .thenAnswer((_) async => ApiResponse.success(mockExpense));
+      when(mockRepository.approveExpense(
+        '1',
+        approvalType: 'reimbursable',
+        paidByUserId: 'u1',
+      )).thenAnswer((_) async => ApiResponse.success(mockExpense));
 
       provider.expenses.add(mockExpense.copyWith(status: 'pending'));
-      final result = await provider.approveExpense('1');
+      final result = await provider.approveExpense(
+        '1',
+        approvalType: 'reimbursable',
+        paidByUserId: 'u1',
+      );
 
       expect(result, true);
       expect(provider.error, null);
+      expect(provider.expenses.single.status, 'reimbursable');
+    });
+
+    test('rejectExpense drops the discarded expense from the list', () async {
+      final pending = Expense(
+        id: '1',
+        companyId: 'company1',
+        description: 'Duplicate',
+        amountPence: 1000,
+        category: 'Travel',
+        expenseDate: DateTime.now(),
+        status: 'pending',
+        billable: false,
+        source: 'email',
+        receipts: [],
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+      when(mockRepository.rejectExpense('1', reason: null))
+          .thenAnswer((_) async => ApiResponse.success(pending));
+
+      provider.expenses.add(pending);
+      final result = await provider.rejectExpense('1');
+
+      expect(result, true);
+      expect(provider.expenses, isEmpty);
     });
   });
 }
@@ -97,8 +131,8 @@ extension on Expense {
       category: category,
       expenseDate: expenseDate,
       status: status ?? this.status,
-      notes: notes,
       billable: billable,
+      paidByUserId: paidByUserId,
       source: source,
       receipts: receipts,
       createdByName: createdByName,

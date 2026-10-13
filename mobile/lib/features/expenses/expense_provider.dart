@@ -8,6 +8,7 @@ class ExpenseProvider with ChangeNotifier {
   final ImagePicker _imagePicker;
   
   List<Expense> _expenses = [];
+  ExpenseOptions? _options;
   Expense? _selectedExpense;
   bool _isLoading = false;
   bool _isUploading = false;
@@ -21,6 +22,7 @@ class ExpenseProvider with ChangeNotifier {
         _imagePicker = imagePicker ?? ImagePicker();
   
   List<Expense> get expenses => _expenses;
+  ExpenseOptions? get options => _options;
   Expense? get selectedExpense => _selectedExpense;
   bool get isLoading => _isLoading;
   bool get isUploading => _isUploading;
@@ -48,6 +50,16 @@ class ExpenseProvider with ChangeNotifier {
     notifyListeners();
   }
   
+  /// Payers, clients, orders and VAT for the capture and approve forms.
+  Future<ExpenseOptions?> loadOptions() async {
+    final response = await _repository.getOptions();
+    if (response.success && response.data != null) {
+      _options = response.data;
+      notifyListeners();
+    }
+    return _options;
+  }
+
   Future<bool> createExpense(CreateExpenseRequest request) async {
     _isLoading = true;
     _error = null;
@@ -131,12 +143,20 @@ class ExpenseProvider with ChangeNotifier {
     }
   }
   
-  Future<bool> approveExpense(String id, {String approvalType = 'recorded'}) async {
+  Future<bool> approveExpense(
+    String id, {
+    required String approvalType,
+    String? paidByUserId,
+  }) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
-    
-    final response = await _repository.approveExpense(id, approvalType: approvalType);
+
+    final response = await _repository.approveExpense(
+      id,
+      approvalType: approvalType,
+      paidByUserId: paidByUserId,
+    );
     
     if (response.success && response.data != null) {
       final index = _expenses.indexWhere((e) => e.id == id);
@@ -161,12 +181,10 @@ class ExpenseProvider with ChangeNotifier {
     notifyListeners();
     
     final response = await _repository.rejectExpense(id, reason: reason);
-    
-    if (response.success && response.data != null) {
-      final index = _expenses.indexWhere((e) => e.id == id);
-      if (index != -1) {
-        _expenses[index] = response.data!;
-      }
+
+    if (response.success) {
+      // Rejecting deletes the expense, so drop it from the list.
+      _expenses.removeWhere((e) => e.id == id);
       _error = null;
       _isLoading = false;
       notifyListeners();

@@ -7,6 +7,7 @@ import { refreshExpenseBankSuggestion } from "@/lib/bank/expense-match";
 import { safeFilename } from "@/lib/files";
 import { parseReceiptFileAsync } from "@/lib/expenses/receipt-file";
 import { normalizeExpensePaymentFields } from "@/lib/expenses/schema";
+import { checkPayerInCompany } from "@/lib/expenses/payer";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { getStorage } from "@/lib/storage";
 import { resolveLineVatRate, vatFromInclusiveGross } from "@/lib/vat";
@@ -79,6 +80,9 @@ export async function approvePendingExpense(
       fieldErrors: normalized.fieldErrors,
     };
   }
+
+  const payer = await checkPayerInCompany(companyId, normalized.paidByUserId);
+  if (!payer.ok) return payer;
 
   const company = await getOrCreateCompanySettings(companyId);
   // Approving brings the expense into the books on its spend date.
