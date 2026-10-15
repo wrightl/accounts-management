@@ -6,6 +6,9 @@ import '../expense_provider.dart';
 import '../../../data/models/expense.dart';
 import '../../../core/utils/formatters.dart';
 
+/// VAT rates offered when the company is VAT registered.
+const _vatRates = [20, 5, 0];
+
 class ExpenseCaptureScreen extends StatefulWidget {
   const ExpenseCaptureScreen({super.key});
 
@@ -17,25 +20,38 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
   final _formKey = GlobalKey<FormState>();
   final _descriptionController = TextEditingController();
   final _amountController = TextEditingController();
-  final _notesController = TextEditingController();
-  
+
   String _selectedCategory = 'Other';
   DateTime _selectedDate = DateTime.now();
+  String? _status;
+  String? _paidByUserId;
+  String? _clientId;
+  String? _orderId;
   bool _billable = false;
+  int? _vatRate;
   XFile? _capturedReceipt;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final options = await context.read<ExpenseProvider>().loadOptions();
+      if (!mounted || options == null) return;
+      setState(() => _vatRate ??= options.defaultVatRate);
+    });
+  }
 
   @override
   void dispose() {
     _descriptionController.dispose();
     _amountController.dispose();
-    _notesController.dispose();
     super.dispose();
   }
 
   Future<void> _captureReceipt() async {
     final provider = context.read<ExpenseProvider>();
     final file = await provider.captureReceipt();
-    
+
     if (file != null) {
       setState(() => _capturedReceipt = file);
     }
@@ -44,7 +60,7 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
   Future<void> _pickFromGallery() async {
     final provider = context.read<ExpenseProvider>();
     final file = await provider.pickReceiptFromGallery();
-    
+
     if (file != null) {
       setState(() => _capturedReceipt = file);
     }
@@ -57,10 +73,37 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
       firstDate: DateTime(2020),
       lastDate: DateTime.now(),
     );
-    
+
     if (picked != null) {
       setState(() => _selectedDate = picked);
     }
+  }
+
+  void _setStatus(String? status, ExpenseOptions? options) {
+    setState(() {
+      _status = status;
+      if (status == 'company_paid') {
+        _paidByUserId = null;
+      } else if (status == 'reimbursable') {
+        _paidByUserId ??= options?.defaultPayerId;
+      }
+    });
+  }
+
+  void _setClient(String? clientId, ExpenseOptions? options) {
+    setState(() {
+      _clientId = clientId;
+      final order = options?.orders.where((o) => o.id == _orderId).firstOrNull;
+      if (order != null && order.clientId != clientId) _orderId = null;
+    });
+  }
+
+  void _setOrder(String? orderId, ExpenseOptions? options) {
+    setState(() {
+      _orderId = orderId;
+      final order = options?.orders.where((o) => o.id == orderId).firstOrNull;
+      if (order != null) _clientId = order.clientId;
+    });
   }
 
   Future<void> _submitExpense() async {
@@ -76,19 +119,29 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
       return;
     }
 
+    final provider = context.read<ExpenseProvider>();
     final request = CreateExpenseRequest(
       description: _descriptionController.text,
       amountPence: CurrencyUtils.poundsToPence(amount),
       category: _selectedCategory,
       expenseDate: _selectedDate,
-      notes: _notesController.text.isEmpty ? null : _notesController.text,
+      status: _status!,
+      paidByUserId: _status == 'company_paid' ? null : _paidByUserId,
       billable: _billable,
+      clientId: _clientId,
+      orderId: _orderId,
+      vatRate: provider.options?.vatRegistered == true ? (_vatRate ?? 0) : 0,
     );
 
-    final provider = context.read<ExpenseProvider>();
     final success = await provider.createExpense(request);
 
-    if (!success || !mounted) return;
+    if (!mounted) return;
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(provider.error ?? 'Could not save the expense')),
+      );
+      return;
+    }
 
     final expenseId = provider.selectedExpense?.id;
     if (expenseId != null && _capturedReceipt != null) {
@@ -97,7 +150,7 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Expense created successfully')),
+        const SnackBar(content: Text('Expense saved')),
       );
       Navigator.of(context).pop(true);
     }
@@ -122,10 +175,15 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Capture Expense'),
+        title: const Text('Capture expense'),
       ),
       body: Consumer<ExpenseProvider>(
         builder: (context, provider, child) {
+          final options = provider.options;
+          final categories = options?.categories ?? expenseCategories;
+          final orders = (options?.orders ?? const <ExpenseOrderChoice>[])
+              .where((o) => _clientId == null || o.clientId == _clientId)
+              .toList();
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
             child: Form(
@@ -187,7 +245,7 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
                           child: ElevatedButton.icon(
                             onPressed: _captureReceipt,
                             icon: const Icon(Icons.camera_alt),
-                            label: const Text('Take Photo'),
+                            label: const Text('Take photo'),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -209,8 +267,8 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
                       prefixIcon: Icon(Icons.description),
                     ),
                     validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter a description';
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Enter a description';
                       }
                       return null;
                     },
@@ -220,13 +278,12 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
                     controller: _amountController,
                     decoration: const InputDecoration(
                       labelText: 'Amount (£)',
-                      prefixIcon: Icon(Icons.attach_money),
-                      prefixText: '£ ',
+                      prefixIcon: Icon(Icons.currency_pound),
                     ),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
-                        return 'Please enter an amount';
+                        return 'Enter an amount';
                       }
                       if (!ValidationUtils.isValidAmount(value)) {
                         return 'Invalid amount';
@@ -234,14 +291,34 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
                       return null;
                     },
                   ),
+                  if (options?.vatRegistered == true) ...[
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<int>(
+                      initialValue: _vatRates.contains(_vatRate) ? _vatRate : 0,
+                      decoration: const InputDecoration(
+                        labelText: 'VAT rate',
+                        prefixIcon: Icon(Icons.percent),
+                        helperText: 'The amount includes VAT at this rate.',
+                      ),
+                      items: _vatRates
+                          .map((rate) => DropdownMenuItem(
+                                value: rate,
+                                child: Text('$rate%'),
+                              ))
+                          .toList(),
+                      onChanged: (value) => setState(() => _vatRate = value),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
-                    initialValue: _selectedCategory,
+                    initialValue: categories.contains(_selectedCategory)
+                        ? _selectedCategory
+                        : categories.last,
                     decoration: const InputDecoration(
                       labelText: 'Category',
                       prefixIcon: Icon(Icons.category),
                     ),
-                    items: expenseCategories.map((category) {
+                    items: categories.map((category) {
                       return DropdownMenuItem(
                         value: category,
                         child: Text(category),
@@ -257,27 +334,86 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.calendar_today),
-                    title: const Text('Expense Date'),
+                    title: const Text('Date'),
                     subtitle: Text(DateUtils.formatDate(_selectedDate)),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: _selectDate,
                   ),
                   const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _notesController,
-                    decoration: const InputDecoration(
-                      labelText: 'Notes (Optional)',
-                      prefixIcon: Icon(Icons.note),
+                  ExpensePaymentFields(
+                    status: _status,
+                    paidByUserId: _paidByUserId,
+                    payers: options?.payers ?? const [],
+                    onStatusChanged: (value) => _setStatus(value, options),
+                    onPaidByChanged: (value) =>
+                        setState(() => _paidByUserId = value),
+                  ),
+                  if (options != null && options.clients.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String?>(
+                      key: ValueKey('client-$_clientId'),
+                      initialValue: _clientId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Client',
+                        prefixIcon: Icon(Icons.business),
+                        helperText:
+                            'Tag a cost to a client or order to see the margin on that work.',
+                      ),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('No client'),
+                        ),
+                        for (final client in options.clients)
+                          DropdownMenuItem<String?>(
+                            value: client.id,
+                            child: Text(client.name, overflow: TextOverflow.ellipsis),
+                          ),
+                      ],
+                      onChanged: (value) => _setClient(value, options),
+                      validator: (value) => _billable && value == null
+                          ? 'Choose the client to recharge'
+                          : null,
                     ),
-                    maxLines: 3,
-                  ),
-                  const SizedBox(height: 16),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Billable to Client'),
-                    value: _billable,
-                    onChanged: (value) => setState(() => _billable = value),
-                  ),
+                    if (orders.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String?>(
+                        key: ValueKey('order-$_orderId-$_clientId'),
+                        initialValue: _orderId,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Order',
+                          prefixIcon: Icon(Icons.assignment_outlined),
+                        ),
+                        items: [
+                          const DropdownMenuItem<String?>(
+                            value: null,
+                            child: Text('No order'),
+                          ),
+                          for (final order in orders)
+                            DropdownMenuItem<String?>(
+                              value: order.id,
+                              child: Text(
+                                '${order.number} · ${order.clientName}',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                        ],
+                        onChanged: (value) => _setOrder(value, options),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Rebillable'),
+                      subtitle: const Text(
+                        'Recharge this to the client on their next invoice.',
+                      ),
+                      value: _billable,
+                      onChanged: (value) => setState(() => _billable = value),
+                    ),
+                  ],
                   const SizedBox(height: 24),
                   if (provider.isUploading) ...[
                     LinearProgressIndicator(value: provider.uploadProgress),
@@ -299,7 +435,7 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
                             width: 20,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text('Create Expense'),
+                        : const Text('Save expense'),
                   ),
                 ],
               ),
@@ -307,6 +443,78 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
           );
         },
       ),
+    );
+  }
+}
+
+/// "How was it paid?" and "Paid by", shared by capture and approve so both
+/// ask what the web form asks.
+class ExpensePaymentFields extends StatelessWidget {
+  const ExpensePaymentFields({
+    super.key,
+    required this.status,
+    required this.paidByUserId,
+    required this.payers,
+    required this.onStatusChanged,
+    required this.onPaidByChanged,
+  });
+
+  final String? status;
+  final String? paidByUserId;
+  final List<ExpenseChoice> payers;
+  final ValueChanged<String?> onStatusChanged;
+  final ValueChanged<String?> onPaidByChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DropdownButtonFormField<String>(
+          initialValue: status,
+          decoration: const InputDecoration(
+            labelText: 'Status',
+            prefixIcon: Icon(Icons.account_balance_wallet_outlined),
+            helperText:
+                'Reimbursable = you paid personally; the company owes you back.',
+            helperMaxLines: 2,
+          ),
+          hint: const Text('Select status…'),
+          items: [
+            for (final value in expensePaymentStatuses)
+              DropdownMenuItem(
+                value: value,
+                child: Text(expenseStatusLabel(value)),
+              ),
+          ],
+          onChanged: onStatusChanged,
+          validator: (value) => value == null ? 'Select a status' : null,
+        ),
+        if (status != 'company_paid' && payers.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String?>(
+            key: ValueKey('payer-$status-$paidByUserId'),
+            initialValue: paidByUserId,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Paid by',
+              prefixIcon: Icon(Icons.person_outline),
+            ),
+            hint: const Text('Select founder…'),
+            items: [
+              for (final payer in payers)
+                DropdownMenuItem<String?>(
+                  value: payer.id,
+                  child: Text(payer.name, overflow: TextOverflow.ellipsis),
+                ),
+            ],
+            onChanged: onPaidByChanged,
+            validator: (value) => status == 'reimbursable' && value == null
+                ? 'Select who paid for reimbursable expenses'
+                : null,
+          ),
+        ],
+      ],
     );
   }
 }

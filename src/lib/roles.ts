@@ -71,6 +71,12 @@ export function can(role: Role | undefined | null, permission: Permission): bool
   return PERMISSIONS[role]?.has(permission) ?? false;
 }
 
+/** Every permission a role is granted, e.g. for the mobile app to gate its UI. */
+export function permissionsFor(role: Role | undefined | null): Permission[] {
+  if (!role) return [];
+  return [...(PERMISSIONS[role] ?? [])];
+}
+
 /** Human-readable label for a role. */
 export function roleLabel(role: Role): string {
   switch (role) {

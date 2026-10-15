@@ -12,6 +12,8 @@ class MoreScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().user;
+    // Same pages and order as the web menu, minus any this person hid.
+    bool shows(String feature) => user?.showsFeature(feature) ?? false;
     final items = <_MoreItem>[
       const _MoreItem(
         resource: 'transactions',
@@ -19,44 +21,49 @@ class MoreScreen extends StatelessWidget {
         subtitle: 'Bank feed and reconciliation',
         icon: Icons.account_balance_outlined,
       ),
-      const _MoreItem(
-        resource: 'spending',
-        title: 'Spending',
-        subtitle: 'Cash outflows this month',
-        icon: Icons.payments_outlined,
-      ),
-      const _MoreItem(
-        resource: 'reimbursements',
-        title: 'Reimbursements',
-        subtitle: 'Founder payout runs',
-        icon: Icons.outbox_outlined,
-      ),
-      const _MoreItem(
-        resource: 'recurring',
-        title: 'Recurring invoices',
-        subtitle: 'Templates and next run dates',
-        icon: Icons.autorenew,
-      ),
-      const _MoreItem(
-        resource: 'reports',
-        title: 'Reports',
-        subtitle: 'Profit & loss and aged AR',
-        icon: Icons.insights_outlined,
-      ),
-      if (user?.isLimitedCompany ?? true) ...[
+      if (shows('spending'))
+        const _MoreItem(
+          resource: 'spending',
+          title: 'Spending',
+          subtitle: 'Cash outflows this month',
+          icon: Icons.payments_outlined,
+        ),
+      if (shows('reimbursements'))
+        const _MoreItem(
+          resource: 'reimbursements',
+          title: 'Reimbursements',
+          subtitle: 'Founder payout runs',
+          icon: Icons.outbox_outlined,
+        ),
+      if (shows('recurring'))
+        const _MoreItem(
+          resource: 'recurring',
+          title: 'Recurring',
+          subtitle: 'Templates and next run dates',
+          icon: Icons.autorenew,
+        ),
+      // The server leaves limited-company pages out for sole traders.
+      if (shows('dividends'))
         const _MoreItem(
           resource: 'dividends',
           title: 'Dividends',
           subtitle: 'Declarations and payouts',
           icon: Icons.pie_chart_outline,
         ),
+      if (shows('shareholders'))
         const _MoreItem(
           resource: 'shareholders',
           title: 'Shareholders',
           subtitle: 'Share register',
           icon: Icons.groups_outlined,
         ),
-      ],
+      if (user?.canReadReports ?? false)
+        const _MoreItem(
+          resource: 'reports',
+          title: 'Reports',
+          subtitle: 'Profit & loss and aged AR',
+          icon: Icons.insights_outlined,
+        ),
       if (user?.canManageSettings ?? false)
         const _MoreItem(
           resource: 'settings',

@@ -17,6 +17,13 @@ export type MobileExpenseInput = {
   expenseDate?: string | null;
   status: string;
   billable?: boolean | null;
+  vatRate?: number | null;
+  vatPence?: number | null;
+  clientId?: string | null;
+  orderId?: string | null;
+  clientName?: string | null;
+  paidByUserId?: string | null;
+  paidByName?: string | null;
   source?: string | null;
   createdAt?: Date | string | null;
   createdByName?: string | null;
@@ -47,8 +54,14 @@ export function toMobileExpense(expense: MobileExpenseInput) {
       expense.expenseDate ??
       calendarDate(expense.createdAt),
     status: expense.status,
-    notes: null as string | null,
     billable: Boolean(expense.billable),
+    vatRate: expense.vatRate ?? 0,
+    vatPence: expense.vatPence ?? 0,
+    clientId: expense.clientId ?? null,
+    orderId: expense.orderId ?? null,
+    clientName: expense.clientName ?? null,
+    paidByUserId: expense.paidByUserId ?? null,
+    paidByName: expense.paidByName ?? null,
     source: expense.source ?? "manual",
     receipts: (expense.receipts ?? []).map((receipt) => ({
       id: receipt.id,

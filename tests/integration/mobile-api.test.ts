@@ -12,6 +12,9 @@ import { GET as getExpense } from "@/app/api/mobile/expenses/[id]/route";
 import { POST as approveExpense } from "@/app/api/mobile/expenses/[id]/approve/route";
 import { POST as rejectExpense } from "@/app/api/mobile/expenses/[id]/reject/route";
 import { POST as uploadReceipt } from "@/app/api/mobile/expenses/[id]/receipts/route";
+import { GET as expenseOptions } from "@/app/api/mobile/expenses/options/route";
+import { POST as validateSession } from "@/app/api/mobile/auth/validate/route";
+import { clients, companyMemberships } from "@/db/schema";
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -113,6 +116,7 @@ describe("mobile API authz and tenant isolation", () => {
           amountPence: 100,
           category: "Travel",
           expenseDate: "2026-03-02",
+          status: "company_paid",
         }),
       }) as never,
     );
@@ -183,6 +187,7 @@ describe("mobile API authz and tenant isolation", () => {
           amountPence: 100,
           category: "Travel",
           expenseDate: "2026-03-02",
+          status: "company_paid",
         }),
       }) as never,
     );
@@ -234,6 +239,7 @@ describe("mobile API authz and tenant isolation", () => {
           amountPence: 1500,
           category: "Travel",
           expenseDate: "2026-03-02",
+          status: "company_paid",
         }),
       }) as never,
     );
@@ -346,5 +352,177 @@ describe("mobile expense review matches web rules", () => {
       .where(eq(expenseReceipts.expenseId, pending.id));
     expect(receipts).toHaveLength(1);
     expect(receipts[0].contentType).toBe("image/png");
+  });
+});
+
+describe("mobile expense create matches web rules", () => {
+  function create(body: Record<string, unknown>) {
+    return createExpense(
+      new Request("http://localhost/api/mobile/expenses", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          description: "Train",
+          amountPence: 2400,
+          category: "Travel",
+          expenseDate: "2026-03-02",
+          status: "recorded",
+          ...body,
+        }),
+      }) as never,
+    );
+  }
+
+  it("refuses an unknown category and a missing status", async () => {
+    const company = await seedCompany(db, { name: "Rules Co" });
+    await seedAdmin(company.id);
+
+    const badCategory = await create({ category: "Yachts" });
+    expect(badCategory.status).toBe(400);
+    expect((await badCategory.json()).fieldErrors.category).toBeTruthy();
+
+    const noStatus = await create({ status: undefined });
+    expect(noStatus.status).toBe(400);
+    expect((await noStatus.json()).fieldErrors.status).toBeTruthy();
+
+    expect(await db.select().from(expenses)).toHaveLength(0);
+  });
+
+  it("records a reimbursable expense against the payer, with an audit entry", async () => {
+    const company = await seedCompany(db, { name: "Payer Co" });
+    const admin = await seedAdmin(company.id);
+
+    const res = await create({ status: "reimbursable" });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.data.status).toBe("reimbursable");
+    expect(body.data.paidByUserId).toBe(admin.id);
+
+    const audits = await db.select().from(auditLog).where(eq(auditLog.entityId, body.data.id));
+    expect(audits.map((a) => a.action)).toContain("expense.create");
+  });
+
+  it("refuses a payer from another company", async () => {
+    const company = await seedCompany(db, { name: "Mine" });
+    const other = await seedCompany(db, { name: "Theirs" });
+    await seedAdmin(company.id);
+    const [stranger] = await db
+      .insert(users)
+      .values({ companyId: other.id, clerkUserId: "user_other", email: "o@example.com", role: "admin" })
+      .returning();
+
+    const res = await create({ status: "reimbursable", paidByUserId: stranger.id });
+    expect(res.status).toBe(400);
+    expect((await res.json()).fieldErrors.paidByUserId).toBeTruthy();
+  });
+
+  it("needs a client for a rebillable expense and keeps the client", async () => {
+    const company = await seedCompany(db, { name: "Rebill Co" });
+    await seedAdmin(company.id);
+    const [client] = await db
+      .insert(clients)
+      .values({ companyId: company.id, name: "Ada", companyName: "Ada Ltd" })
+      .returning();
+
+    const noClient = await create({ billable: true });
+    expect(noClient.status).toBe(400);
+    expect((await noClient.json()).fieldErrors.clientId).toBeTruthy();
+
+    const ok = await create({ billable: true, clientId: client.id });
+    expect(ok.status).toBe(201);
+    const body = await ok.json();
+    expect(body.data.clientId).toBe(client.id);
+    expect(body.data.clientName).toBe("Ada Ltd");
+  });
+
+  it("returns the real created date in the list", async () => {
+    const company = await seedCompany(db, { name: "Dates Co" });
+    await seedAdmin(company.id);
+    const createdAt = new Date("2026-01-05T10:00:00Z");
+    await db.insert(expenses).values({
+      companyId: company.id,
+      description: "Old",
+      amountPence: 100,
+      status: "recorded",
+      createdAt,
+    });
+
+    const res = await listExpenses(new Request("http://localhost/api/mobile/expenses") as never);
+    const body = await res.json();
+    expect(body.data[0].createdAt).toBe(createdAt.toISOString());
+  });
+
+  it("gives the capture form its choices", async () => {
+    const company = await seedCompany(db, { name: "Options Co" });
+    const admin = await seedAdmin(company.id);
+
+    const res = await expenseOptions();
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.categories).toContain("Travel");
+    expect(body.data.defaultPayerId).toBe(admin.id);
+    expect(body.data.payers.map((p: { id: string }) => p.id)).toContain(admin.id);
+  });
+});
+
+describe("mobile approve needs the same choice as the web", () => {
+  it("refuses an approve with no payment choice", async () => {
+    const company = await seedCompany(db, { name: "Choice Co" });
+    await seedAdmin(company.id);
+    const [pending] = await db
+      .insert(expenses)
+      .values({ companyId: company.id, description: "Hotel", amountPence: 9000, status: "pending" })
+      .returning();
+
+    const res = await approveExpense(
+      new Request("http://localhost/api/mobile/expenses/x/approve", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      }) as never,
+      { params: Promise.resolve({ id: pending.id }) },
+    );
+    expect(res.status).toBe(400);
+    const [row] = await db.select().from(expenses).where(eq(expenses.id, pending.id));
+    expect(row.status).toBe("pending");
+  });
+});
+
+describe("mobile session carries permissions and menu", () => {
+  it("returns the role's permissions and only the menu pages this person shows", async () => {
+    const company = await seedCompany(db, { name: "Menu Co" });
+    const admin = await seedAdmin(company.id);
+    await db.insert(companyMemberships).values({
+      userId: admin.id,
+      companyId: company.id,
+      role: "admin",
+      menuFeatures: ["quotes", "dividends"],
+    });
+
+    const res = await validateSession();
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.user.permissions).toContain("accounts:write");
+    expect(body.user.menuFeatures).toEqual(["quotes", "dividends"]);
+  });
+
+  it("gives an accountant no write permission", async () => {
+    const company = await seedCompany(db, { name: "Acc Co" });
+    await db.insert(users).values({
+      companyId: company.id,
+      clerkUserId: "user_clerk_mobile",
+      email: "accountant@example.com",
+      role: "accountant",
+    });
+    clerkMocks.currentUser.mockResolvedValue({
+      primaryEmailAddress: { emailAddress: "accountant@example.com" },
+      firstName: "Acc",
+      lastName: "Ountant",
+      publicMetadata: {},
+    });
+
+    const body = await (await validateSession()).json();
+    expect(body.user.permissions).not.toContain("accounts:write");
+    expect(body.user.permissions).toContain("accounts:read");
   });
 });

@@ -113,15 +113,36 @@ class MockExpenseRepository extends _i1.Mock implements _i3.ExpenseRepository {
   ) as _i4.Future<_i2.ApiResponse<String>>);
 
   @override
+  _i4.Future<_i2.ApiResponse<_i5.ExpenseOptions>> getOptions() =>
+      (super.noSuchMethod(
+        Invocation.method(#getOptions, []),
+        returnValue: _i4.Future<_i2.ApiResponse<_i5.ExpenseOptions>>.value(
+          _FakeApiResponse_0<_i5.ExpenseOptions>(
+            this,
+            Invocation.method(#getOptions, []),
+          ),
+        ),
+      ) as _i4.Future<_i2.ApiResponse<_i5.ExpenseOptions>>);
+
+  @override
   _i4.Future<_i2.ApiResponse<_i5.Expense>> approveExpense(
     String? id, {
-    String? approvalType = 'recorded',
+    required String? approvalType,
+    String? paidByUserId,
   }) => (super.noSuchMethod(
-    Invocation.method(#approveExpense, [id], {#approvalType: approvalType}),
+    Invocation.method(
+      #approveExpense,
+      [id],
+      {#approvalType: approvalType, #paidByUserId: paidByUserId},
+    ),
     returnValue: _i4.Future<_i2.ApiResponse<_i5.Expense>>.value(
       _FakeApiResponse_0<_i5.Expense>(
         this,
-        Invocation.method(#approveExpense, [id], {#approvalType: approvalType}),
+        Invocation.method(
+          #approveExpense,
+          [id],
+          {#approvalType: approvalType, #paidByUserId: paidByUserId},
+        ),
       ),
     ),
   ) as _i4.Future<_i2.ApiResponse<_i5.Expense>>);

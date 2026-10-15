@@ -43,6 +43,7 @@ import { checkPeriodOpen, getBooksLockedThrough } from "@/lib/period-lock-querie
 import { refreshExpenseBankSuggestion } from "@/lib/bank/expense-match";
 import { resolveExpenseProject } from "@/lib/expenses/project";
 import { getExpenseRebill } from "@/lib/profitability/queries";
+import { createExpenseRecord } from "@/lib/expenses/create";
 import {
   approvePendingExpense,
   rejectPendingExpense,
@@ -67,74 +68,10 @@ export async function createExpense(formData: FormData): Promise<ActionResult> {
     };
   }
 
-  const {
-    amountPence,
-    resolvedMileageMiles: mileageMiles,
-    resolvedMileageRatePence: mileageRatePence,
-  } = parsed.data;
-
-  let description = parsed.data.description;
-  if (mileageMiles != null && mileageRatePence != null) {
-    description = appendMileageDescription(description, mileageMiles, mileageRatePence);
-  }
-
   return mutate(
     "accounts:write",
-    async ({ companyId, localUserId }) => {
-      const company = await getOrCreateCompanySettings(companyId);
-      const locked = periodLockError(company.booksLockedThrough, parsed.data.spentAt);
-      if (locked) return { ok: false, error: locked };
-      const paidByDefault =
-        parsed.data.status === "reimbursable"
-          ? (parsed.data.paidByUserId ?? localUserId)
-          : parsed.data.paidByUserId;
-      const normalized = normalizeExpensePaymentFields({
-        status: parsed.data.status,
-        paidByUserId: paidByDefault,
-      });
-      if (!normalized.ok) {
-        return {
-          ok: false,
-          error: normalized.error,
-          fieldErrors: normalized.fieldErrors,
-        };
-      }
-
-      const project = await resolveExpenseProject(companyId, parsed.data);
-      if (!project.ok) return project;
-
-      // Mileage is always 0% VAT; otherwise use posted rate when registered.
-      const vatRate = parsed.data.useMileage
-        ? 0
-        : resolveLineVatRate(company, parseVatRate(parsed.data.vatRate));
-      const vatPence = vatFromInclusiveGross(amountPence, vatRate);
-
-      const db = getDb();
-      const [row] = await db
-        .insert(expenses)
-        .values({
-          companyId,
-          description,
-          category: parsed.data.category || null,
-          spentAt: parsed.data.spentAt || null,
-          amountPence,
-          vatRate,
-          vatPence,
-          status: normalized.status,
-          billable: parsed.data.billable,
-          clientId: project.clientId,
-          orderId: project.orderId,
-          paidByUserId: normalized.paidByUserId,
-          mileageMiles,
-          mileageRatePence,
-          createdByUserId: localUserId,
-        })
-        .returning({ id: expenses.id });
-
-      await refreshExpenseBankSuggestion(companyId, row.id);
-
-      return { ok: true, id: row.id };
-    },
+    ({ companyId, localUserId }) =>
+      createExpenseRecord({ companyId, localUserId }, parsed.data),
     {
       audit: { action: "expense.create", entityType: "expense" },
       paths: ["/expenses", "/reimbursements", "/dashboard", "/transactions"],

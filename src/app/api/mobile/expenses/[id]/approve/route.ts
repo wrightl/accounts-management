@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq } from "drizzle-orm";
-import { getDb } from "@/db";
-import { expenses } from "@/db/schema";
 import { requireMobileAuth } from "@/lib/mobile-auth";
-import { toMobileExpense } from "@/lib/mobile/expense-payload";
+import { loadMobileExpense } from "@/lib/mobile/expenses";
 import { approvePendingExpense, type ApproveStatus } from "@/lib/expenses/review";
 import { ensureLocalUser } from "@/lib/users";
 
@@ -26,13 +23,18 @@ export async function POST(
     const { user } = authz;
 
     const body = await request.json().catch(() => ({}));
-    const approvalType = body?.approvalType || "recorded";
+    // No default: the person must choose, as on the web review form.
+    const approvalType = body?.approvalType;
     if (!APPROVE_STATUSES.includes(approvalType)) {
       return NextResponse.json(
-        { success: false, error: "Invalid approval type" },
+        { success: false, error: "Choose how the expense was paid" },
         { status: 400 }
       );
     }
+    const paidByUserId =
+      typeof body?.paidByUserId === "string" && body.paidByUserId
+        ? body.paidByUserId
+        : null;
 
     // Same rules as the web review: positive amount, payer for reimbursable,
     // VAT, audit, bank-match refresh.
@@ -40,20 +42,17 @@ export async function POST(
     const result = await approvePendingExpense(
       { companyId: user.companyId, localUserId },
       params.id,
-      { status: approvalType },
+      { status: approvalType, paidByUserId },
     );
     if (!result.ok) {
       const status = result.error === "Expense not found" ? 404 : 400;
       return NextResponse.json({ success: false, error: result.error }, { status });
     }
 
-    const [expense] = await getDb()
-      .select()
-      .from(expenses)
-      .where(and(eq(expenses.id, params.id), eq(expenses.companyId, user.companyId)))
-      .limit(1);
-
-    return NextResponse.json({ success: true, data: toMobileExpense(expense) });
+    return NextResponse.json({
+      success: true,
+      data: await loadMobileExpense(user.companyId, params.id),
+    });
   } catch (error) {
     console.error("Approve expense error:", error);
     return NextResponse.json(

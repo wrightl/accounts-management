@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { writeAudit } from "@/lib/audit";
+import { createExpenseRecord } from "@/lib/expenses/create";
 import { listExpenses } from "@/lib/expenses/queries";
-import { getDb } from "@/db";
-import { expenses, expenseReceipts } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { parseExpenseInput } from "@/lib/expenses/schema";
 import { requireMobileAuth } from "@/lib/mobile-auth";
+import { toMobileExpense } from "@/lib/mobile/expense-payload";
+import { loadMobileExpense, receiptsByExpense } from "@/lib/mobile/expenses";
+import { ensureLocalUser } from "@/lib/users";
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,45 +18,23 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get("status") || undefined;
     const limit = searchParams.get("limit") ? parseInt(searchParams.get("limit")!) : 50;
 
-    const expensesList = await listExpenses(user.companyId, { status });
-    const limitedExpenses = expensesList.slice(0, limit);
-
-    const db = getDb();
-    const expensesWithReceipts = await Promise.all(
-      limitedExpenses.map(async (expense) => {
-        const receipts = await db
-          .select()
-          .from(expenseReceipts)
-          .where(eq(expenseReceipts.expenseId, expense.id));
-
-        return {
-          id: expense.id,
-          companyId: user.companyId,
-          description: expense.description,
-          amountPence: expense.amountPence,
-          category: expense.category,
-          expenseDate: expense.spentAt,
-          status: expense.status,
-          notes: null,
-          billable: expense.billable,
-          source: "manual",
-          receipts: receipts.map((r) => ({
-            id: r.id,
-            filename: r.filename,
-            url: `/api/receipts/${r.id}`,
-            fileSizeBytes: r.sizeBytes,
-            uploadedAt: r.uploadedAt,
-          })),
-          createdByName: expense.createdByName,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-      })
-    );
+    const rows = (await listExpenses(user.companyId, { status })).slice(0, limit);
+    const receipts = await receiptsByExpense(rows.map((row) => row.id));
 
     return NextResponse.json({
       success: true,
-      data: expensesWithReceipts,
+      data: rows.map((row) =>
+        toMobileExpense({
+          ...row,
+          companyId: user.companyId,
+          receipts: (receipts.get(row.id) ?? []).map((r) => ({
+            id: r.id,
+            filename: r.filename,
+            sizeBytes: r.sizeBytes,
+            uploadedAt: r.uploadedAt,
+          })),
+        }),
+      ),
     });
   } catch (error) {
     console.error("Expenses list error:", error);
@@ -64,58 +45,82 @@ export async function GET(request: NextRequest) {
   }
 }
 
+function optionalString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+/** Map the mobile JSON body onto the web form's fields. */
+function expenseRawFromJson(body: Record<string, unknown>): Record<string, unknown> {
+  const pence = body.amountPence;
+  return {
+    description: optionalString(body.description),
+    category: optionalString(body.category),
+    spentAt: optionalString(body.expenseDate),
+    amountPounds:
+      typeof pence === "number" && Number.isFinite(pence)
+        ? (pence / 100).toFixed(2)
+        : "",
+    status: optionalString(body.status),
+    billable: body.billable === true ? "true" : "",
+    clientId: optionalString(body.clientId),
+    orderId: optionalString(body.orderId),
+    paidByUserId: optionalString(body.paidByUserId),
+    vatRate: typeof body.vatRate === "number" ? String(body.vatRate) : "0",
+  };
+}
+
+// Same validation and saving as the web form (createExpense).
 export async function POST(request: NextRequest) {
   try {
     const authz = await requireMobileAuth("accounts:write", { checkSuspended: true });
     if (!authz.ok) return authz.response;
     const { user } = authz;
 
-    const body = await request.json();
-    const { description, amountPence, category, expenseDate, billable } = body;
-
-    if (!description || !amountPence || !category || !expenseDate) {
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object") {
       return NextResponse.json(
-        { success: false, error: "Missing required fields" },
+        { success: false, error: "Invalid JSON" },
         { status: 400 }
       );
     }
 
-    const db = getDb();
+    const parsed = parseExpenseInput(expenseRawFromJson(body));
+    if (!parsed.ok) {
+      return NextResponse.json(
+        { success: false, error: parsed.error, fieldErrors: parsed.fieldErrors },
+        { status: 400 }
+      );
+    }
 
-    const [expense] = await db
-      .insert(expenses)
-      .values({
-        companyId: user.companyId,
-        description,
-        amountPence,
-        category,
-        spentAt: expenseDate,
-        status: "pending",
-        billable: billable || false,
-        source: "manual",
-        createdByUserId: user.localUserId,
-      })
-      .returning();
+    const localUserId = await ensureLocalUser(user);
+    const result = await createExpenseRecord(
+      { companyId: user.companyId, localUserId },
+      parsed.data,
+    );
+    if (!result.ok || !result.id) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: result.ok ? "Could not create expense" : result.error,
+          fieldErrors: result.ok ? undefined : result.fieldErrors,
+        },
+        { status: 400 }
+      );
+    }
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        id: expense.id,
-        companyId: expense.companyId,
-        description: expense.description,
-        amountPence: expense.amountPence,
-        category: expense.category,
-        expenseDate: expense.spentAt,
-        status: expense.status,
-        notes: null,
-        billable: expense.billable,
-        source: expense.source,
-        receipts: [],
-        createdByName: user.name,
-        createdAt: expense.createdAt.toISOString(),
-        updatedAt: expense.createdAt.toISOString(),
-      },
-    }, { status: 201 });
+    await writeAudit({
+      companyId: user.companyId,
+      actorUserId: localUserId,
+      action: "expense.create",
+      entityType: "expense",
+      entityId: result.id,
+      meta: { source: "mobile" },
+    });
+
+    return NextResponse.json(
+      { success: true, data: await loadMobileExpense(user.companyId, result.id) },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("Create expense error:", error);
     return NextResponse.json(
