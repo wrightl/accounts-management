@@ -29,6 +29,7 @@ class DashboardData {
     required this.expenseMix,
     required this.spending,
     required this.attention,
+    this.safeToPay,
   });
 
   final String role;
@@ -45,6 +46,9 @@ class DashboardData {
   final List<NamedSlice> expenseMix;
   final SpendingSnapshotData spending;
   final AttentionData attention;
+
+  /// Limited companies only, for roles that can see reports.
+  final SafeToPayData? safeToPay;
 
   bool get isPending => role == 'pending';
 
@@ -104,8 +108,30 @@ class DashboardData {
           .toList(),
       spending: SpendingSnapshotData.fromJson(asMap(json['spending'])),
       attention: AttentionData.fromJson(asMap(json['attention'])),
+      safeToPay: json['safeToPay'] is Map
+          ? SafeToPayData.fromJson(asMap(json['safeToPay']))
+          : null,
     );
   }
+}
+
+/// The web Overview's "Safe to pay yourself" figure.
+class SafeToPayData {
+  SafeToPayData({
+    required this.safeNowFormatted,
+    this.safeLaterFormatted,
+    required this.cashKnown,
+  });
+
+  final String safeNowFormatted;
+  final String? safeLaterFormatted;
+  final bool cashKnown;
+
+  factory SafeToPayData.fromJson(Map<String, dynamic> json) => SafeToPayData(
+        safeNowFormatted: asString(json['safeNowFormatted'], '£0.00'),
+        safeLaterFormatted: json['safeLaterFormatted'] as String?,
+        cashKnown: json['cashKnown'] == true,
+      );
 }
 
 class HeroKpi {

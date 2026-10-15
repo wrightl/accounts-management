@@ -10,6 +10,7 @@ import '../widgets/hero_kpis.dart';
 import '../widgets/horizontal_charts.dart';
 import '../widgets/period_chips.dart';
 import '../widgets/quote_to_cash_funnel.dart';
+import '../widgets/safe_to_pay_card.dart';
 import '../widgets/series_charts.dart';
 import '../widgets/spending_snapshot.dart';
 
@@ -97,6 +98,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       const SizedBox(height: 20),
                       HeroKpiGrid(heroes: data.heroes),
                       const SizedBox(height: 20),
+                      if (data.safeToPay != null) ...[
+                        SafeToPayCard(data: data.safeToPay!),
+                        const SizedBox(height: 16),
+                      ],
                       CashVsInvoicedCard(data: data.cashSeries),
                       const SizedBox(height: 16),
                       QuoteToCashFunnelCard(

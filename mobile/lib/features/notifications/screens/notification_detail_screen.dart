@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../../../data/models/notification.dart';
 import '../../../features/expenses/screens/expense_list_screen.dart';
 import '../../../features/books/screens/sales_hub_screen.dart';
+import '../../../features/work/bookkeeper_screen.dart';
+import '../../../features/work/deadlines_screen.dart';
+import '../../../features/work/weekly_close_screen.dart';
 
 class NotificationDetailScreen extends StatelessWidget {
   const NotificationDetailScreen({super.key, required this.notification});
@@ -48,6 +51,17 @@ class NotificationDetailScreen extends StatelessWidget {
 
   void _openRelated(BuildContext context, AppNotification n) {
     final href = n.href ?? '';
+    final Widget? work = href.startsWith('/deadlines')
+        ? const DeadlinesScreen()
+        : href.startsWith('/close')
+            ? const WeeklyCloseScreen()
+            : href.startsWith('/bookkeeper')
+                ? const BookkeeperScreen()
+                : null;
+    if (work != null) {
+      Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => work));
+      return;
+    }
     if (href.contains('/expenses')) {
       Navigator.of(context).push(
         MaterialPageRoute<void>(builder: (_) => const ExpenseListScreen()),

@@ -16,16 +16,8 @@ import {
   parseExpenseImportCsv,
   type ParsedExpenseImportRow,
 } from "@/lib/expenses/import-csv";
-import { parseReceiptFileAsync } from "@/lib/expenses/receipt-file";
-import {
-  extractReceiptFromBytes,
-  type ReceiptOcrProvider,
-} from "@/lib/expenses/receipt-ocr";
-import type { ReceiptExtraction } from "@/lib/expenses/receipt-parse";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
-import { isReceiptOcrProvider } from "@/lib/expenses/receipt-parse";
 import { listFounders } from "@/lib/expenses/queries";
-import { getReceiptOcrSettings } from "@/lib/platform-settings";
 import {
   expenseRawFromFormData,
   normalizeExpensePaymentFields,
@@ -45,6 +37,10 @@ import { resolveExpenseProject } from "@/lib/expenses/project";
 import { getExpenseRebill } from "@/lib/profitability/queries";
 import { createExpenseRecord } from "@/lib/expenses/create";
 import {
+  readReceiptFields,
+  type ReceiptExtractionResult,
+} from "@/lib/expenses/receipt-extract";
+import {
   approvePendingExpense,
   rejectPendingExpense,
   storeExpenseReceipt,
@@ -52,10 +48,6 @@ import {
 
 export type ExpenseImportPreviewResult =
   | { ok: true; rows: ParsedExpenseImportRow[] }
-  | { ok: false; error: string; fieldErrors?: Record<string, string> };
-
-export type ReceiptExtractionResult =
-  | { ok: true; extraction: ReceiptExtraction }
   | { ok: false; error: string; fieldErrors?: Record<string, string> };
 
 export async function createExpense(formData: FormData): Promise<ActionResult> {
@@ -372,33 +364,8 @@ export async function uploadReceipt(
 export async function extractReceiptFields(
   formData: FormData,
 ): Promise<ReceiptExtractionResult> {
-  return mutateWide("accounts:write", async () => {
-    const parsed = await parseReceiptFileAsync(formData);
-    if (!parsed.ok) return parsed;
-
-    const ocr = await getReceiptOcrSettings();
-    const providerRaw = ocr.provider ?? "local";
-    const provider: ReceiptOcrProvider = isReceiptOcrProvider(providerRaw)
-      ? providerRaw
-      : "local";
-
-    try {
-      const extraction = await extractReceiptFromBytes(
-        parsed.data.bytes,
-        parsed.data.contentType,
-        provider,
-        ocr.model,
-      );
-      return { ok: true, extraction };
-    } catch (e) {
-      return {
-        ok: false,
-        error: e instanceof Error ? e.message : "Could not read receipt",
-      };
-    }
-  });
+  return mutateWide("accounts:write", () => readReceiptFields(formData));
 }
-
 
 export async function deleteReceipt(receiptId: string): Promise<ActionResult> {
   return mutate(

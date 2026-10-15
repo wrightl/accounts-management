@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:clerk_flutter/clerk_flutter.dart';
 import '../../features/dashboard/screens/dashboard_screen.dart';
 import '../../features/expenses/screens/expense_list_screen.dart';
@@ -11,6 +10,7 @@ import '../../features/notifications/screens/inbox_screen.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/constants/app_constants.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -113,14 +113,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     ),
                     TextButton(
                       onPressed: () async {
-                        await Clipboard.setData(
-                          ClipboardData(text: AppConstants.webBillingUrl),
+                        final opened = await launchUrl(
+                          Uri.parse(AppConstants.webBillingUrl),
+                          mode: LaunchMode.externalApplication,
                         );
-                        if (!context.mounted) return;
+                        if (opened || !context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text(
-                              'Billing link copied — open it on the web to manage your plan.',
+                              'Could not open billing. Manage your plan on the web.',
                             ),
                           ),
                         );

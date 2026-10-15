@@ -50,6 +50,15 @@ class ExpenseProvider with ChangeNotifier {
     notifyListeners();
   }
   
+  /// Read a receipt photo; null (with [error] set) when it can't be read.
+  Future<ReceiptExtraction?> readReceipt(XFile file) async {
+    final response = await _repository.extractReceipt(file.path);
+    if (response.success) return response.data;
+    _error = response.error;
+    notifyListeners();
+    return null;
+  }
+
   /// Payers, clients, orders and VAT for the capture and approve forms.
   Future<ExpenseOptions?> loadOptions() async {
     final response = await _repository.getOptions();

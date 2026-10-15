@@ -40,6 +40,7 @@ export async function GET() {
         })),
         vatRegistered: settings.vatRegistered,
         defaultVatRate: settings.vatRegistered ? settings.defaultVatRate : 0,
+        defaultMileageRatePence: settings.defaultMileageRatePence,
       },
     });
   } catch (error) {
