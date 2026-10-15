@@ -11,7 +11,7 @@ import 'package:ddapp_mobile/features/dashboard/screens/dashboard_screen.dart';
 import '../unit/dashboard_provider_test.mocks.dart';
 
 void main() {
-  testWidgets('renders welcome, period chips, and hero KPIs', (tester) async {
+  testWidgets('leads with what needs doing, charts behind More insights', (tester) async {
     final repository = MockDashboardRepository();
     final overview = DashboardData.fromJson({
       'role': 'admin',
@@ -118,6 +118,17 @@ void main() {
     expect(find.text('Collected'), findsOneWidget);
     expect(find.text('£400.00'), findsOneWidget);
     expect(find.text('Needs attention'), findsOneWidget);
+    // Needs attention comes before the headline figures.
+    expect(
+      tester.getTopLeft(find.text('Needs attention')).dy,
+      lessThan(tester.getTopLeft(find.text('Collected')).dy),
+    );
+
+    // Charts stay folded away until asked for.
+    expect(find.text('Quote → cash'), findsNothing);
+    await tester.scrollUntilVisible(find.text('More insights'), 200);
+    await tester.tap(find.text('More insights'));
+    await tester.pumpAndSettle();
     expect(find.text('Quote → cash'), findsOneWidget);
   });
 }

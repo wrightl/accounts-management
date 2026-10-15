@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { toMobileExpense } from "@/lib/mobile/expense-payload";
-import { canAccessResource } from "@/lib/mobile/resources";
+import { canAccessResource, isMobileResource } from "@/lib/mobile/resources";
 import type { SessionUser } from "@/lib/auth";
 
 function user(overrides: Partial<SessionUser> = {}): SessionUser {
@@ -52,8 +52,14 @@ describe("canAccessResource", () => {
     expect(canAccessResource("dividends", user({ role: "user" }))).toBe(true);
   });
 
-  it("restricts settings to admins", () => {
-    expect(canAccessResource("settings", user({ role: "user" }))).toBe(false);
-    expect(canAccessResource("settings", user({ role: "admin" }))).toBe(true);
+  it("lets every role that can read the books see the lists", () => {
+    expect(canAccessResource("invoices", user({ role: "accountant" }))).toBe(true);
+    expect(canAccessResource("invoices", user({ role: "pending" }))).toBe(false);
+  });
+
+  it("leaves pages the app no longer shows to the web", () => {
+    expect(isMobileResource("transactions")).toBe(false);
+    expect(isMobileResource("settings")).toBe(false);
+    expect(isMobileResource("invoices")).toBe(true);
   });
 });

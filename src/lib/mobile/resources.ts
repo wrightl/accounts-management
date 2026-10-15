@@ -1,20 +1,17 @@
 import type { SessionUser } from "@/lib/auth";
 import { can } from "@/lib/roles";
 
+/**
+ * Read-only lists the app shows. Everything else is left to the web, which
+ * the app links to.
+ */
 export const MOBILE_RESOURCES = [
   "clients",
   "invoices",
   "quotes",
-  "orders",
-  "transactions",
   "reimbursements",
-  "recurring",
   "spending",
-  "reports",
   "dividends",
-  "shareholders",
-  "settings",
-  "users",
 ] as const;
 
 export type MobileResource = (typeof MOBILE_RESOURCES)[number];
@@ -27,10 +24,7 @@ export function canAccessResource(
   resource: MobileResource,
   user: SessionUser,
 ): boolean {
-  if (resource === "settings") return can(user.role, "settings:manage");
-  if (resource === "users") return can(user.role, "users:manage");
-  if (resource === "reports") return can(user.role, "reports:read");
-  if (resource === "dividends" || resource === "shareholders") {
+  if (resource === "dividends") {
     return can(user.role, "accounts:read") && user.entityType !== "sole_trader";
   }
   return can(user.role, "accounts:read");

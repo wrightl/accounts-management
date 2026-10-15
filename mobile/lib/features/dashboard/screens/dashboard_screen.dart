@@ -10,7 +10,9 @@ import '../widgets/hero_kpis.dart';
 import '../widgets/horizontal_charts.dart';
 import '../widgets/period_chips.dart';
 import '../widgets/quote_to_cash_funnel.dart';
+import '../widgets/next_deadline_card.dart';
 import '../widgets/safe_to_pay_card.dart';
+import '../../work/deadlines_screen.dart';
 import '../widgets/series_charts.dart';
 import '../widgets/spending_snapshot.dart';
 
@@ -91,43 +93,71 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         todayLabel: data.todayLabel,
                       ),
                       const SizedBox(height: 16),
+                      AttentionPanelCard(
+                        items: data.attention,
+                        onOpenExpenses: widget.onOpenExpenses,
+                      ),
+                      const SizedBox(height: 20),
                       PeriodChips(
                         current: provider.period,
                         onSelected: provider.setPeriod,
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 16),
                       HeroKpiGrid(heroes: data.heroes),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 16),
                       if (data.safeToPay != null) ...[
                         SafeToPayCard(data: data.safeToPay!),
                         const SizedBox(height: 16),
                       ],
-                      CashVsInvoicedCard(data: data.cashSeries),
-                      const SizedBox(height: 16),
-                      QuoteToCashFunnelCard(
-                        stages: data.funnel,
-                        periodLabel: data.periodLabel,
-                      ),
-                      const SizedBox(height: 16),
-                      AgedReceivablesCard(data: data.agedReceivables),
-                      const SizedBox(height: 16),
-                      IncomeExpenseCard(data: data.cashSeries),
-                      const SizedBox(height: 16),
-                      TopClientsCard(
-                        clients: data.topClients,
-                        periodLabel: data.periodLabel,
-                      ),
-                      const SizedBox(height: 16),
-                      ExpenseMixCard(
-                        slices: data.expenseMix,
-                        periodLabel: data.periodLabel,
-                      ),
-                      const SizedBox(height: 16),
-                      SpendingSnapshotCard(data: data.spending),
-                      const SizedBox(height: 16),
-                      AttentionPanelCard(
-                        items: data.attention,
-                        onOpenExpenses: widget.onOpenExpenses,
+                      if (data.nextDeadline != null) ...[
+                        NextDeadlineCard(
+                          deadline: data.nextDeadline!,
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const DeadlinesScreen(),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      // The rest of the web Overview's charts, out of the way.
+                      Theme(
+                        data: Theme.of(context).copyWith(
+                          dividerColor: Colors.transparent,
+                        ),
+                        child: ExpansionTile(
+                          key: const PageStorageKey('more-insights'),
+                          tilePadding: EdgeInsets.zero,
+                          childrenPadding: EdgeInsets.zero,
+                          title: const Text('More insights'),
+                          subtitle: const Text(
+                            'Cash, sales funnel, clients and spending',
+                          ),
+                          children: [
+                            CashVsInvoicedCard(data: data.cashSeries),
+                            const SizedBox(height: 16),
+                            QuoteToCashFunnelCard(
+                              stages: data.funnel,
+                              periodLabel: data.periodLabel,
+                            ),
+                            const SizedBox(height: 16),
+                            AgedReceivablesCard(data: data.agedReceivables),
+                            const SizedBox(height: 16),
+                            IncomeExpenseCard(data: data.cashSeries),
+                            const SizedBox(height: 16),
+                            TopClientsCard(
+                              clients: data.topClients,
+                              periodLabel: data.periodLabel,
+                            ),
+                            const SizedBox(height: 16),
+                            ExpenseMixCard(
+                              slices: data.expenseMix,
+                              periodLabel: data.periodLabel,
+                            ),
+                            const SizedBox(height: 16),
+                            SpendingSnapshotCard(data: data.spending),
+                          ],
+                        ),
                       ),
                     ],
                   ),

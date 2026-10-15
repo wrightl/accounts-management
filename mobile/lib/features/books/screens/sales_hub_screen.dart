@@ -10,11 +10,11 @@ class SalesHubScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().user;
     bool shows(String feature) => user?.showsFeature(feature) ?? false;
-    // Hide the pages this person hid from their web menu.
+    // Hide the pages this person hid from their web menu. Orders are left to
+    // the web.
     final tabs = <(String, String)>[
       ('invoices', 'Invoices'),
       if (shows('quotes')) ('quotes', 'Quotes'),
-      if (shows('orders')) ('orders', 'Orders'),
       ('clients', 'Clients'),
     ];
 

@@ -41,7 +41,9 @@ User _$UserFromJson(Map<String, dynamic> json) => User(
   companyId: json['companyId'] as String?,
   entityType: json['entityType'] as String?,
   permissions:
-      (json['permissions'] as List<dynamic>?)?.map((e) => e as String).toList() ??
+      (json['permissions'] as List<dynamic>?)
+          ?.map((e) => e as String)
+          .toList() ??
       [],
   menuFeatures: (json['menuFeatures'] as List<dynamic>?)
       ?.map((e) => e as String)

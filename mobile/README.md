@@ -4,12 +4,16 @@ Flutter mobile application for Alfa, providing on-the-go access to expense manag
 
 ## Features
 
-- **Dashboard**: View KPIs, outstanding invoices, pending expenses, and attention items
-- **Expense Management**: 
-  - Capture expenses with camera
-  - Upload receipts
-  - Approve/reject pending expenses
-  - View expense history
+The phone does capture, review and "what needs me today"; everything else
+opens on the web app. See `MOBILE_IMPLEMENTATION.md` at the repo root.
+
+- **Overview**: needs attention, headline figures, safe to pay, next deadline;
+  the web's charts behind "More insights"
+- **Expenses**: capture with receipt reading and mileage; review emailed
+  receipts with the same approve choices as the web
+- **Sales**: invoices, quotes (if in your menu) and clients
+- **More**: weekly close, AI bookkeeper, deadlines, spending, reimbursements,
+  dividends, notifications, links to the web, sign out
 - **Secure Authentication**: Clerk sign-in (Google and other dashboard providers), same instance as the web app
 
 ## Requirements
@@ -28,7 +32,7 @@ flutter pub get
 
 2. Generate JSON serialization code:
 ```bash
-flutter pub run build_runner build --delete-conflicting-outputs
+dart run build_runner build
 ```
 
 3. API URL and Clerk: debug builds load `.env.development`.
@@ -97,16 +101,22 @@ mobile/
 
 ## API Endpoints
 
-The mobile app communicates with these API endpoints:
+The app talks to `/api/mobile/*` on the web app. Each route calls the same
+`src/lib` function as the matching web action, so both apply the same rules.
 
-- `POST /api/mobile/auth/validate` - Validate JWT token
-- `GET /api/mobile/dashboard` - Get dashboard data
-- `GET /api/mobile/expenses` - List expenses
-- `POST /api/mobile/expenses` - Create expense
-- `GET /api/mobile/expenses/:id` - Get expense details
-- `POST /api/mobile/expenses/:id/approve` - Approve expense
-- `POST /api/mobile/expenses/:id/reject` - Reject expense
-- `POST /api/mobile/expenses/:id/receipts` - Upload receipt
+| Endpoint | Purpose |
+| --- | --- |
+| `POST /auth/validate` | Session user, permissions, menu features, billing |
+| `GET /dashboard` | Overview figures, safe to pay, next deadline |
+| `GET/POST /expenses` | List; create (same validation as the web form) |
+| `GET /expenses/options` | Payers, clients, orders, VAT and mileage defaults |
+| `POST /expenses/extract` | Read a receipt photo |
+| `GET /expenses/:id`, `POST /expenses/:id/approve`, `/reject`, `/receipts` | One expense; review; receipt upload |
+| `GET/POST /deadlines` | List; mark done or undo |
+| `GET/POST /close` | Weekly close checklist; close the week |
+| `GET/POST /bookkeeper` | AI suggestions; accept, dismiss, find |
+| `GET /records?resource=` | Read-only lists: clients, invoices, quotes, reimbursements, spending, dividends |
+| `/notifications/*` | Inbox, unread count, preferences, push token |
 
 ## Authentication
 
