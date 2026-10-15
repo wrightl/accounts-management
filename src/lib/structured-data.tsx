@@ -121,6 +121,8 @@ export function generateSoftwareApplicationSchema(
       "Reimbursement tracking",
       "Accountant collaboration",
       "Dividend calculations for limited companies",
+      "Board minutes and dividend vouchers as PDFs",
+      "Companies House, corporation tax, VAT and Self Assessment deadline reminders",
       "Financial reporting and exports",
       "UK-specific tax year support",
       "Multi-user access with role-based permissions",

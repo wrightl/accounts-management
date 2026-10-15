@@ -1,7 +1,7 @@
 const FAQS = [
   {
     q: "Is this full accounting software?",
-    a: "It replaces the spreadsheets and folders you use day to day: quotes, invoices, credit notes, expenses, bank CSV matching and reports. It also forecasts cash, shows project margins and, for limited companies, tracks director's loans and what's safe to pay yourself. Your accountant still files returns and handles Companies House.",
+    a: "It replaces the spreadsheets and folders you use day to day: quotes, invoices, credit notes, expenses, bank CSV matching and reports. It also forecasts cash, shows project margins, keeps track of your filing deadlines and, for limited companies, tracks director's loans and what's safe to pay yourself. Your accountant still files returns and handles Companies House.",
   },
   {
     q: "Do you support VAT or Making Tax Digital?",
@@ -17,7 +17,7 @@ const FAQS = [
   },
   {
     q: "Limited company or sole trader?",
-    a: "Both. Day-to-day books are the same. Limited companies also get shareholders, dividends, director's loans, a corporation tax estimate and a reserves check. See our UK Financial Guides for obligations by structure.",
+    a: "Both. Day-to-day books are the same, and both get their filing deadlines worked out with reminders — Self Assessment for sole traders; accounts, confirmation statement and corporation tax for limited companies. Limited companies also get shareholders, dividends with board minutes and vouchers, director's loans, a corporation tax estimate and a reserves check. See our UK Financial Guides for obligations by structure.",
   },
   {
     q: "How does Alfa use AI?",

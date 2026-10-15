@@ -34,8 +34,9 @@ export function ProductVideo() {
           See the books in motion
         </h2>
         <p className="mx-auto mt-4 max-w-2xl text-muted">
-          A short look at the dashboard, quote-to-invoice path, and expense
-          capture — recorded from the live product. Prefer less motion? Your
+          A short look at the dashboard, quote to invoice, expenses, bank
+          matching, the cash forecast and your deadlines — recorded from the
+          live product with demo data. Prefer less motion? Your
           device setting or Profile controls keep the tour as a still image.
         </p>
 

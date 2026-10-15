@@ -14,7 +14,7 @@ const AUDIENCES = [
   {
     icon: Building2,
     title: "Ltd & sole traders",
-    body: "Same day-to-day books. Limited companies also get shareholders and dividends.",
+    body: "Same day-to-day books, with your filing deadlines worked out. Limited companies also get dividends with board minutes and vouchers.",
   },
   {
     icon: Focus,

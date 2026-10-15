@@ -29,7 +29,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import pg from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
-import { chromium, type Page } from '@playwright/test';
+import { chromium, type BrowserContext, type Page } from '@playwright/test';
 import { createClerkClient } from '@clerk/backend';
 import {
     clerkSetup,
@@ -165,22 +165,55 @@ async function waitForApp(page: Page) {
         .catch(() => {});
 }
 
+/**
+ * Next.js DevTools and the trial banner (account state, not product, and it
+ * would date the shots).
+ */
+const CAPTURE_HIDE_CSS = `
+  [data-billing-banner],
+  nextjs-portal,
+  [data-nextjs-toast],
+  [data-next-badge],
+  [data-nextjs-dev-tools-button],
+  #__next-build-watcher {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+`;
+
+/**
+ * Hide capture chrome from first paint so it never flashes in the tour.
+ * Hydration can drop a style added this early, so put it back if it goes.
+ */
+async function hideChromeFromFirstPaint(context: BrowserContext) {
+    // A string, not a function: tsx wraps named functions in a `__name`
+    // helper that does not exist in the browser.
+    await context.addInitScript({
+        content: `(() => {
+            const css = ${JSON.stringify(CAPTURE_HIDE_CSS)};
+            const ensure = () => {
+                const root = document.head ?? document.documentElement;
+                if (!root || document.getElementById('capture-hide')) return;
+                const style = document.createElement('style');
+                style.id = 'capture-hide';
+                style.textContent = css;
+                root.appendChild(style);
+            };
+            // The document is still empty when this runs.
+            new MutationObserver(ensure).observe(document, {
+                childList: true,
+                subtree: true,
+            });
+            ensure();
+        })();`,
+    });
+}
+
 /** Strip Next.js DevTools / portal from the viewport before screenshots. */
 async function hideDevChrome(page: Page) {
-    await page.addStyleTag({
-        content: `
-      nextjs-portal,
-      [data-nextjs-toast],
-      [data-next-badge],
-      [data-nextjs-dev-tools-button],
-      #__next-build-watcher {
-        display: none !important;
-        visibility: hidden !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
-      }
-    `,
-    });
+    await page.addStyleTag({ content: CAPTURE_HIDE_CSS });
     await page.evaluate(() => {
         document.querySelectorAll('nextjs-portal').forEach((el) => el.remove());
     });
@@ -475,6 +508,45 @@ async function main() {
     }
 
     const browser = await chromium.launch({ headless: true });
+
+    // Stills come from a context that is not recording, so the tour does not
+    // open with every screenshot page flashing past.
+    const stillsContext = await browser.newContext({
+        viewport,
+        deviceScaleFactor: 1,
+        storageState,
+    });
+    if (!isRemoteTarget || clerkKeyKind() === 'test') {
+        await setupClerkTestingToken({ context: stillsContext }).catch(() => {
+            /* testing tokens are development-only */
+        });
+    }
+    await hideChromeFromFirstPaint(stillsContext);
+    try {
+        const stills = await stillsContext.newPage();
+        await stills.goto(`${BASE_URL}/dashboard`, {
+            waitUntil: 'domcontentloaded',
+        });
+        await waitForApp(stills);
+        await assertOnDashboard(stills);
+
+        await captureStill(stills, 'dashboard', routes.dashboard);
+        await captureStill(stills, 'quote', routes.quoteUrl);
+        await captureStill(stills, 'order', routes.orderUrl);
+        await captureStill(stills, 'invoice', routes.invoiceSentUrl);
+        await captureStill(stills, 'expense', routes.expenseUrl);
+        await captureStill(stills, 'transactions', routes.transactionsUrl);
+        await captureStill(stills, 'reports', routes.reportsUrl);
+        await captureStill(stills, 'deadlines', routes.deadlinesUrl);
+
+        copyFileSync(
+            join(marketingDir, 'dashboard.png'),
+            join(marketingDir, 'poster.png'),
+        );
+    } finally {
+        await stillsContext.close();
+    }
+
     const context = await browser.newContext({
         viewport,
         deviceScaleFactor: 1,
@@ -489,25 +561,10 @@ async function main() {
             /* testing tokens are development-only */
         });
     }
+    await hideChromeFromFirstPaint(context);
     const page = await context.newPage();
 
     try {
-        await page.goto(`${BASE_URL}/dashboard`, {
-            waitUntil: 'domcontentloaded',
-        });
-        await waitForApp(page);
-        await assertOnDashboard(page);
-        await hideDevChrome(page);
-        await page.waitForTimeout(1500);
-
-        await captureStill(page, 'dashboard', routes.dashboard);
-        await captureStill(page, 'quote', routes.quoteUrl);
-        await captureStill(page, 'order', routes.orderUrl);
-        await captureStill(page, 'invoice', routes.invoiceSentUrl);
-        await captureStill(page, 'expense', routes.expenseUrl);
-        await captureStill(page, 'transactions', routes.transactionsUrl);
-        await captureStill(page, 'reports', routes.reportsUrl);
-
         await captureClip(page, 'clip-dashboard', [routes.dashboard], 600);
         await captureClip(page, 'clip-sales', [
             routes.quoteUrl,
@@ -518,10 +575,12 @@ async function main() {
             routes.expenseUrl,
             routes.reimbursementUrl,
         ]);
-
-        copyFileSync(
-            join(marketingDir, 'dashboard.png'),
-            join(marketingDir, 'poster.png'),
+        await captureClip(page, 'clip-bank', [routes.transactionsUrl]);
+        await captureClip(
+            page,
+            'clip-outlook',
+            [routes.forecastUrl, routes.deadlinesUrl],
+            400,
         );
     } finally {
         const video = page.video();

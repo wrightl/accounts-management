@@ -202,6 +202,7 @@ export function DashboardShell({
             ) : null}
             {billingBanner ? (
               <div
+                data-billing-banner
                 className={cn(
                   "flex flex-wrap items-center justify-between gap-2 px-6 py-2 text-sm",
                   billingBanner.tone === "danger" && "bg-red-50 text-red-900",

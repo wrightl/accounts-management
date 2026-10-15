@@ -2,12 +2,12 @@ const STEPS = [
   {
     n: "01",
     title: "Set up your company",
-    body: "Trading name, logo, bank details, and invoice numbering. Invite your co-founder and accountant.",
+    body: "Look your company up on Companies House, then add your logo, bank details and invoice numbering. Invite your co-founder and accountant.",
   },
   {
     n: "02",
     title: "Run a weekly rhythm",
-    body: "Send quotes and invoices, log expenses, import the bank CSV, and clear what needs attention.",
+    body: "Send quotes and invoices, log expenses, import the bank CSV, and work through the weekly close — including any deadlines coming up.",
   },
   {
     n: "03",

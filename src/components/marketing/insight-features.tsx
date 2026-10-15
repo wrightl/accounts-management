@@ -21,7 +21,7 @@ const INSIGHTS = [
   {
     icon: PiggyBank,
     title: "Safe to pay yourself",
-    body: "For limited companies: one figure for what you could take as dividends today, after VAT, corporation tax, money owed back to founders and a buffer, and never more than your reserves. Director's loans are tracked too.",
+    body: "For limited companies: one figure for what you could take as dividends today, after VAT, corporation tax, money owed back to founders and a buffer, and never more than your reserves. Declare a dividend and get the board minutes and vouchers as PDFs. Director's loans are tracked too.",
   },
   {
     icon: TrendingUp,

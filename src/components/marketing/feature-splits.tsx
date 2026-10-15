@@ -78,11 +78,19 @@ const FEATURES: FeatureSplitProps[] = [
     reverse: true,
   },
   {
+    eyebrow: "Deadlines",
+    title: "Filing dates worked out, with reminders",
+    body: "Annual accounts, confirmation statement, corporation tax, CT600, VAT and Self Assessment — worked out from your year end and Companies House record. Reminders arrive 14 and 3 days before, and you mark each one done once it's filed or paid.",
+    imageSrc: "/marketing/deadlines.png",
+    imageAlt: "Deadlines calendar showing annual accounts, corporation tax, CT600 and confirmation statement dates",
+  },
+  {
     eyebrow: "Year-end",
     title: "One-click accountant pack",
     body: "Hand your accountant CSVs, invoice PDFs, receipts, and bank data in one export. Invite them read-only so they can check figures without editing your books.",
     imageSrc: "/marketing/reports.png",
     imageAlt: "Reports page with accountant pack export",
+    reverse: true,
   },
 ];
 

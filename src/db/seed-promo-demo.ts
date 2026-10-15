@@ -2,12 +2,13 @@
  * Idempotent fictional demo dataset for the promo video.
  * All entities use fixed document numbers (900x suffix) and fictional UK clients.
  */
-import { and, asc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import type { Database } from "@/db";
 import {
   bankAccounts,
   bankTransactions,
   clients,
+  companies,
   expenses,
   inboundEmailJobs,
   invoiceLineItems,
@@ -33,11 +34,39 @@ export const PROMO_NUMBERS = {
   invoiceOverdue: "DD-2026-9003",
 } as const;
 
+/** Seeded expenses are found by these descriptions when the demo is reset. */
+const PROMO_EXPENSE_DESCRIPTIONS = [
+  "Client lunch — Harbor Digital kick-off",
+  "Train to client workshop — Leeds",
+] as const;
+
 export const PROMO_CLIENT_NAMES = [
   "Harbor Digital Ltd",
   "Northbridge Studio Ltd",
   "Meridian Agency Ltd",
 ] as const;
+
+/** ISO date `offset` days from today, so the demo always looks current. */
+function day(offset: number): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + offset);
+  return d.toISOString().slice(0, 10);
+}
+
+function at(offset: number, hour = 9): Date {
+  return new Date(`${day(offset)}T${String(hour).padStart(2, "0")}:00:00Z`);
+}
+
+/** e.g. "June 2026" */
+function monthLabel(offset: number): string {
+  return at(offset).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
+}
+
+/** e.g. "JUN-2026" */
+function monthRef(offset: number): string {
+  const d = at(offset);
+  return `${d.toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" }).toUpperCase()}-${d.getUTCFullYear()}`;
+}
 
 export interface PromoSeedResult {
   routes: {
@@ -56,6 +85,8 @@ export interface PromoSeedResult {
     inboundEmailUrl: string;
     transactionsUrl: string;
     reportsUrl: string;
+    deadlinesUrl: string;
+    forecastUrl: string;
   };
   cleared: boolean;
 }
@@ -162,7 +193,11 @@ async function clearPromoEntities(db: Database) {
     .select({ id: expenses.id })
     .from(expenses)
     .where(
-      sql`${expenses.description} like '[PROMO]%'`,
+      or(
+        inArray(expenses.description, [...PROMO_EXPENSE_DESCRIPTIONS]),
+        // Seeds before Oct 2026 marked expenses with a prefix.
+        sql`${expenses.description} like '[PROMO]%'`,
+      ),
     );
 
   if (promoExpenses.length) {
@@ -227,6 +262,12 @@ export async function seedPromoDemo(
     );
   }
 
+  // Deadlines need an incorporation date for the confirmation statement.
+  await db
+    .update(companies)
+    .set({ incorporatedOn: "2023-06-14" })
+    .where(and(eq(companies.id, companyId), isNull(companies.incorporatedOn)));
+
   const [harbor, northbridge, meridian] = await db
     .insert(clients)
     .values([
@@ -283,8 +324,8 @@ export async function seedPromoDemo(
       number: PROMO_NUMBERS.order,
       clientId: harbor.id,
       status: "active",
-      issueDate: "2026-07-01",
-      notes: "[PROMO] Order from accepted quote.",
+      issueDate: day(-13),
+      notes: `Order from accepted quote ${PROMO_NUMBERS.quote}.`,
       netPence: quoteNet,
       vatPence: 0,
       grossPence: quoteGross,
@@ -311,14 +352,14 @@ export async function seedPromoDemo(
       clientId: harbor.id,
       status: "accepted",
       version: 1,
-      issueDate: "2026-06-15",
-      validUntil: "2026-07-15",
+      issueDate: day(-29),
+      validUntil: day(1),
       notes: "Payment: 40% on acceptance, 60% on delivery.",
       netPence: quoteNet,
       vatPence: 0,
       grossPence: quoteGross,
       orderId: order.id,
-      acceptedAt: new Date("2026-06-20T10:00:00Z"),
+      acceptedAt: at(-24, 10),
       createdByUserId: admin.id,
     })
     .returning();
@@ -338,8 +379,8 @@ export async function seedPromoDemo(
     quoteId: quote.id,
     version: 1,
     clientId: harbor.id,
-    issueDate: "2026-06-15",
-    validUntil: "2026-07-15",
+    issueDate: day(-29),
+    validUntil: day(1),
     notes: "Payment: 40% on acceptance, 60% on delivery.",
     netPence: quoteNet,
     vatPence: 0,
@@ -363,13 +404,13 @@ export async function seedPromoDemo(
       clientId: harbor.id,
       orderId: order.id,
       status: "sent",
-      issueDate: "2026-07-05",
-      dueDate: "2026-07-19",
-      notes: "[PROMO] Deposit invoice.",
+      issueDate: day(-9),
+      dueDate: day(5),
+      notes: "Deposit of 40% on acceptance, as agreed in the quote.",
       netPence: 108_000,
       vatPence: 0,
       grossPence: 108_000,
-      sentAt: new Date("2026-07-05T09:00:00Z"),
+      sentAt: at(-9),
       createdByUserId: admin.id,
     })
     .returning();
@@ -390,13 +431,13 @@ export async function seedPromoDemo(
       number: PROMO_NUMBERS.invoicePaid,
       clientId: northbridge.id,
       status: "paid",
-      issueDate: "2026-05-01",
-      dueDate: "2026-05-15",
+      issueDate: day(-30),
+      dueDate: day(-16),
       netPence: 45_000,
       vatPence: 0,
       grossPence: 45_000,
-      sentAt: new Date("2026-05-01T09:00:00Z"),
-      paidAt: new Date("2026-05-10T14:00:00Z"),
+      sentAt: at(-30),
+      paidAt: at(-4, 14),
       createdByUserId: admin.id,
     })
     .returning();
@@ -414,8 +455,8 @@ export async function seedPromoDemo(
     invoiceId: invoicePaid.id,
     amountPence: 45_000,
     method: "Bank transfer",
-    reference: "NB-MAY-2026",
-    receivedAt: new Date("2026-05-10T14:00:00Z"),
+    reference: `NB-${monthRef(-4)}`,
+    receivedAt: at(-4, 14),
   });
 
   const [invoiceOverdue] = await db
@@ -425,19 +466,19 @@ export async function seedPromoDemo(
       number: PROMO_NUMBERS.invoiceOverdue,
       clientId: meridian.id,
       status: "sent",
-      issueDate: "2026-06-01",
-      dueDate: "2026-06-15",
+      issueDate: day(-43),
+      dueDate: day(-29),
       netPence: 32_000,
       vatPence: 0,
       grossPence: 32_000,
-      sentAt: new Date("2026-06-01T09:00:00Z"),
+      sentAt: at(-43),
       createdByUserId: admin.id,
     })
     .returning();
 
   await db.insert(invoiceLineItems).values({
     invoiceId: invoiceOverdue.id,
-    description: "Retainer — June 2026",
+    description: `Retainer — ${monthLabel(-43)}`,
     quantity: 1,
     unitPricePence: 32_000,
     vatRate: 0,
@@ -448,9 +489,9 @@ export async function seedPromoDemo(
     .insert(expenses)
     .values({
       companyId,
-      description: "[PROMO] Client lunch — Harbor Digital kick-off",
+      description: PROMO_EXPENSE_DESCRIPTIONS[0],
       category: "Meals",
-      spentAt: "2026-07-03",
+      spentAt: day(-11),
       amountPence: 4_850,
       vatPence: 0,
       status: "pending",
@@ -470,16 +511,16 @@ export async function seedPromoDemo(
     subject: "Receipt — Harbor kick-off lunch",
     status: "processed",
     expenseId: expensePending.id,
-    processedAt: new Date("2026-07-04T08:30:00Z"),
+    processedAt: at(-10, 8),
   });
 
   const [expenseReimbursable] = await db
     .insert(expenses)
     .values({
       companyId,
-      description: "[PROMO] Train to client workshop — Leeds",
+      description: PROMO_EXPENSE_DESCRIPTIONS[1],
       category: "Travel",
-      spentAt: "2026-07-08",
+      spentAt: day(-6),
       amountPence: 8_420,
       vatPence: 0,
       status: "reimbursable",
@@ -496,7 +537,7 @@ export async function seedPromoDemo(
       payeeUserId: admin.id,
       status: "pending",
       totalPence: 8_420,
-      reference: "PROMO-JUL-2026",
+      reference: `PROMO-${monthRef(-6)}`,
     })
     .returning();
 
@@ -521,21 +562,24 @@ export async function seedPromoDemo(
     {
       bankAccountId: bankAccount.id,
       externalId: "promo-tx-harbor-payment",
-      bookedAt: "2026-07-12",
+      bookedAt: day(-2),
       amountPence: 108_000,
       counterparty: "Harbor Digital Ltd",
       reference: "DD20269001 deposit",
       description: "Faster payment in",
+      // A statement balance column gives the forecast and safe to pay their cash figure.
+      raw: { Balance: "18240.00" },
     },
     {
       bankAccountId: bankAccount.id,
       externalId: "promo-tx-software",
-      bookedAt: "2026-07-09",
+      bookedAt: day(-5),
       amountPence: -2_400,
       counterparty: "Figma",
       reference: "FIGMA PRO",
       description: "Card payment",
       spendingCategory: "Software",
+      raw: { Balance: "17160.00" },
     },
   ]);
 
@@ -556,6 +600,8 @@ export async function seedPromoDemo(
       inboundEmailUrl: "/inbound-email",
       transactionsUrl: "/transactions",
       reportsUrl: "/reports",
+      deadlinesUrl: "/deadlines",
+      forecastUrl: "/forecast",
     },
     cleared,
   };
