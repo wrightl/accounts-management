@@ -42,6 +42,10 @@ class AppConstants {
   static const String recordsEndpoint = '/api/mobile/records';
   static const String expensesEndpoint = '/api/mobile/expenses';
   static const String expenseOptionsEndpoint = '/api/mobile/expenses/options';
+  static const String expenseExtractEndpoint = '/api/mobile/expenses/extract';
+  static const String deadlinesEndpoint = '/api/mobile/deadlines';
+  static const String closeEndpoint = '/api/mobile/close';
+  static const String bookkeeperEndpoint = '/api/mobile/bookkeeper';
   static const String expenseEndpoint = '/api/mobile/expenses/:id';
   static const String expenseApproveEndpoint = '/api/mobile/expenses/:id/approve';
   static const String expenseRejectEndpoint = '/api/mobile/expenses/:id/reject';

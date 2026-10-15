@@ -116,6 +116,8 @@ class CreateExpenseRequest {
     this.clientId,
     this.orderId,
     this.vatRate = 0,
+    this.mileageMiles,
+    this.mileageRatePence,
   });
 
   final String description;
@@ -131,6 +133,12 @@ class CreateExpenseRequest {
   final String? orderId;
   final int vatRate;
 
+  /// Set both to log a mileage allowance; the server works out the amount.
+  final num? mileageMiles;
+  final int? mileageRatePence;
+
+  bool get isMileage => mileageMiles != null;
+
   Map<String, dynamic> toJson() => {
         'description': description,
         'amountPence': amountPence,
@@ -142,7 +150,67 @@ class CreateExpenseRequest {
         'clientId': clientId,
         'orderId': orderId,
         'vatRate': vatRate,
+        if (isMileage) ...{
+          'useMileage': true,
+          'mileageMiles': mileageMiles,
+          'mileageRatePence': mileageRatePence,
+        },
       };
+}
+
+/// What the server read from a receipt photo.
+class ReceiptExtraction {
+  ReceiptExtraction({
+    this.description,
+    this.amountPounds,
+    this.spentAt,
+    this.category,
+    this.currency,
+    required this.confidence,
+  });
+
+  final String? description;
+  final String? amountPounds;
+  final DateTime? spentAt;
+  final String? category;
+
+  /// e.g. GBP, USD; null when not detected.
+  final String? currency;
+
+  /// `high`, `partial` or `none`.
+  final String confidence;
+
+  bool get isForeignCurrency =>
+      currency != null && currency!.toUpperCase() != 'GBP';
+
+  /// Same wording as the web receipt field.
+  String get summary {
+    final parts = [
+      if (description != null) 'description',
+      if (amountPounds != null) 'amount',
+      if (spentAt != null) 'date',
+      if (category != null) 'category',
+    ];
+    if (parts.isEmpty) return 'No fields could be read — fill in the details manually.';
+    return 'Filled: ${parts.join(', ')}';
+  }
+
+  factory ReceiptExtraction.fromJson(Map<String, dynamic> json) {
+    String? text(String key) {
+      final value = json[key];
+      return value is String && value.trim().isNotEmpty ? value.trim() : null;
+    }
+
+    final date = text('spentAt');
+    return ReceiptExtraction(
+      description: text('description'),
+      amountPounds: text('amountPounds'),
+      spentAt: date == null ? null : DateTime.tryParse(date),
+      category: text('category'),
+      currency: text('currency'),
+      confidence: text('confidence') ?? 'none',
+    );
+  }
 }
 
 /// Choices for the capture and approve forms, loaded from the server.
@@ -155,6 +223,7 @@ class ExpenseOptions {
     required this.orders,
     required this.vatRegistered,
     required this.defaultVatRate,
+    this.defaultMileageRatePence = 45,
   });
 
   final List<String> categories;
@@ -164,6 +233,7 @@ class ExpenseOptions {
   final List<ExpenseOrderChoice> orders;
   final bool vatRegistered;
   final int defaultVatRate;
+  final int defaultMileageRatePence;
 
   factory ExpenseOptions.fromJson(Map<String, dynamic> json) {
     List<ExpenseChoice> choices(dynamic value) => asList(value)
@@ -182,6 +252,7 @@ class ExpenseOptions {
           .toList(),
       vatRegistered: json['vatRegistered'] == true,
       defaultVatRate: asInt(json['defaultVatRate']),
+      defaultMileageRatePence: asInt(json['defaultMileageRatePence'], 45),
     );
   }
 }

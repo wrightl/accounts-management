@@ -1,28 +1,9 @@
 import 'package:dio/dio.dart';
 import '../api/api_client.dart';
+import '../api/api_errors.dart';
 import '../models/expense.dart';
 import '../models/api_response.dart';
 import '../../core/constants/app_constants.dart';
-
-ApiResponse<T> _dioError<T>(DioException e) {
-  final data = e.response?.data;
-  if (data is Map) {
-    // Field errors say what to fix; the summary alone does not.
-    final fieldErrors = data['fieldErrors'];
-    if (fieldErrors is Map && fieldErrors.isNotEmpty) {
-      return ApiResponse.error(
-        fieldErrors.values.map((v) => v.toString()).join('\n'),
-        code: data['code']?.toString(),
-      );
-    }
-    final error = data['error']?.toString();
-    final code = data['code']?.toString();
-    if (error != null && error.isNotEmpty) {
-      return ApiResponse.error(error, code: code);
-    }
-  }
-  return ApiResponse.error(e.message ?? 'Network error');
-}
 
 class ExpenseRepository {
   final ApiClient _apiClient;
@@ -55,7 +36,7 @@ class ExpenseRepository {
         return ApiResponse.error('Failed to load expenses');
       }
     } on DioException catch (e) {
-      return _dioError(e);
+      return apiErrorFrom(e);
     } catch (e) {
       return ApiResponse.error('Unexpected error: $e');
     }
@@ -73,7 +54,7 @@ class ExpenseRepository {
         return ApiResponse.error('Failed to load expense');
       }
     } on DioException catch (e) {
-      return _dioError(e);
+      return apiErrorFrom(e);
     } catch (e) {
       return ApiResponse.error('Unexpected error: $e');
     }
@@ -95,7 +76,7 @@ class ExpenseRepository {
         return ApiResponse.error('Failed to create expense');
       }
     } on DioException catch (e) {
-      return _dioError(e);
+      return apiErrorFrom(e);
     } catch (e) {
       return ApiResponse.error('Unexpected error: $e');
     }
@@ -126,7 +107,24 @@ class ExpenseRepository {
         return ApiResponse.error('Failed to upload receipt');
       }
     } on DioException catch (e) {
-      return _dioError(e);
+      return apiErrorFrom(e);
+    } catch (e) {
+      return ApiResponse.error('Unexpected error: $e');
+    }
+  }
+
+  /// Read description, amount, date and category from a receipt photo.
+  Future<ApiResponse<ReceiptExtraction>> extractReceipt(String filePath) async {
+    try {
+      final response = await _apiClient.uploadFile(
+        AppConstants.expenseExtractEndpoint,
+        filePath,
+      );
+      return ApiResponse.success(
+        ReceiptExtraction.fromJson(response.data['data']),
+      );
+    } on DioException catch (e) {
+      return apiErrorFrom(e);
     } catch (e) {
       return ApiResponse.error('Unexpected error: $e');
     }
@@ -143,7 +141,7 @@ class ExpenseRepository {
       }
       return ApiResponse.error('Failed to load expense options');
     } on DioException catch (e) {
-      return _dioError(e);
+      return apiErrorFrom(e);
     } catch (e) {
       return ApiResponse.error('Unexpected error: $e');
     }
@@ -171,7 +169,7 @@ class ExpenseRepository {
         return ApiResponse.error('Failed to approve expense');
       }
     } on DioException catch (e) {
-      return _dioError(e);
+      return apiErrorFrom(e);
     } catch (e) {
       return ApiResponse.error('Unexpected error: $e');
     }
@@ -199,7 +197,7 @@ class ExpenseRepository {
         return ApiResponse.error('Failed to reject expense');
       }
     } on DioException catch (e) {
-      return _dioError(e);
+      return apiErrorFrom(e);
     } catch (e) {
       return ApiResponse.error('Unexpected error: $e');
     }

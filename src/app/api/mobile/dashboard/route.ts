@@ -3,6 +3,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { firstNameFrom, toMobileDashboard } from "@/lib/dashboard/mobile";
 import { getDashboardOverview } from "@/lib/dashboard/queries";
 import { can } from "@/lib/roles";
+import { formatGBP } from "@/lib/money";
+import { getSafeToPay } from "@/lib/safe-to-pay/queries";
 
 export async function GET(request: NextRequest) {
   try {
@@ -48,10 +50,26 @@ export async function GET(request: NextRequest) {
 
     const period = request.nextUrl.searchParams.get("period");
     const overview = await getDashboardOverview(user.companyId, user, period);
+    // Same card as the web Overview; a secondary figure, so never fatal.
+    const safe =
+      user.entityType === "limited_company" && can(user.role, "reports:read")
+        ? await getSafeToPay(user.companyId).catch(() => null)
+        : null;
 
     return NextResponse.json({
       success: true,
-      data: toMobileDashboard(overview, { role: user.role, firstName }),
+      data: {
+        ...toMobileDashboard(overview, { role: user.role, firstName }),
+        safeToPay: safe
+          ? {
+              safeNowFormatted: formatGBP(safe.result.safeNowPence),
+              safeLaterFormatted: safe.cash.known
+                ? formatGBP(safe.result.safeLaterPence)
+                : null,
+              cashKnown: safe.cash.known,
+            }
+          : null,
+      },
     });
   } catch (error) {
     console.error("Dashboard error:", error);

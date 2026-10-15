@@ -1,9 +1,7 @@
 "use server";
 
-import { getDb } from "@/db";
-import { weeklyCloses } from "@/db/schema";
 import { mutate } from "@/lib/mutate";
-import { checklistSnapshot, getWeeklyCloseChecklist } from "@/lib/close/checklist";
+import { recordWeeklyClose } from "@/lib/close/record";
 import type { ActionResult } from "@/actions/result";
 
 /**
@@ -11,25 +9,8 @@ import type { ActionResult } from "@/actions/result";
  * accountant can see what was left.
  */
 export async function closeWeek(): Promise<ActionResult> {
-  return mutate(
-    "accounts:write",
-    async ({ companyId, localUserId }) => {
-      const checklist = await getWeeklyCloseChecklist(companyId);
-      const snapshot = checklistSnapshot(checklist);
-      const [row] = await getDb()
-        .insert(weeklyCloses)
-        .values({
-          companyId,
-          closedByUserId: localUserId,
-          bankReconciledThrough: checklist.bankReconciledThrough,
-          snapshot,
-        })
-        .returning({ id: weeklyCloses.id });
-      return { ok: true, id: row.id };
-    },
-    {
-      audit: { action: "close.week", entityType: "weekly_close" },
-      paths: ["/close", "/reports", "/dashboard"],
-    },
-  );
+  return mutate("accounts:write", recordWeeklyClose, {
+    audit: { action: "close.week", entityType: "weekly_close" },
+    paths: ["/close", "/reports", "/dashboard"],
+  });
 }

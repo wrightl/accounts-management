@@ -4,6 +4,9 @@ import '../../../core/theme/app_theme.dart';
 import '../../../features/auth/auth_provider.dart';
 import '../../../features/notifications/screens/inbox_screen.dart';
 import '../../../features/notifications/screens/notification_prefs_screen.dart';
+import '../../work/bookkeeper_screen.dart';
+import '../../work/deadlines_screen.dart';
+import '../../work/weekly_close_screen.dart';
 import 'record_list_screen.dart';
 
 class MoreScreen extends StatelessWidget {
@@ -15,6 +18,27 @@ class MoreScreen extends StatelessWidget {
     // Same pages and order as the web menu, minus any this person hid.
     bool shows(String feature) => user?.showsFeature(feature) ?? false;
     final items = <_MoreItem>[
+      if (shows('close'))
+        _MoreItem(
+          title: 'Weekly close',
+          subtitle: 'The checklist that keeps the books up to date',
+          icon: Icons.task_alt,
+          screen: (_) => const WeeklyCloseScreen(),
+        ),
+      if (shows('bookkeeper'))
+        _MoreItem(
+          title: 'AI bookkeeper',
+          subtitle: 'Category and receipt suggestions to review',
+          icon: Icons.auto_awesome_outlined,
+          screen: (_) => const BookkeeperScreen(),
+        ),
+      if (user?.canReadAccounts ?? false)
+        _MoreItem(
+          title: 'Deadlines',
+          subtitle: 'Filings and tax payments coming up',
+          icon: Icons.event_outlined,
+          screen: (_) => const DeadlinesScreen(),
+        ),
       const _MoreItem(
         resource: 'transactions',
         title: 'Transactions',
@@ -145,10 +169,11 @@ class MoreScreen extends StatelessWidget {
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (_) => RecordListScreen(
-                        resource: item.resource,
-                        title: item.title,
-                      ),
+                      builder: item.screen ??
+                          (_) => RecordListScreen(
+                                resource: item.resource!,
+                                title: item.title,
+                              ),
                     ),
                   );
                 },
@@ -162,13 +187,16 @@ class MoreScreen extends StatelessWidget {
 
 class _MoreItem {
   const _MoreItem({
-    required this.resource,
+    this.resource,
     required this.title,
     required this.subtitle,
     required this.icon,
+    this.screen,
   });
 
-  final String resource;
+  /// A read-only list from /api/mobile/records, unless [screen] is given.
+  final String? resource;
+  final WidgetBuilder? screen;
   final String title;
   final String subtitle;
   final IconData icon;
