@@ -113,6 +113,19 @@ class MockExpenseRepository extends _i1.Mock implements _i3.ExpenseRepository {
   ) as _i4.Future<_i2.ApiResponse<String>>);
 
   @override
+  _i4.Future<_i2.ApiResponse<_i5.ReceiptExtraction>> extractReceipt(
+    String? filePath,
+  ) => (super.noSuchMethod(
+    Invocation.method(#extractReceipt, [filePath]),
+    returnValue: _i4.Future<_i2.ApiResponse<_i5.ReceiptExtraction>>.value(
+      _FakeApiResponse_0<_i5.ReceiptExtraction>(
+        this,
+        Invocation.method(#extractReceipt, [filePath]),
+      ),
+    ),
+  ) as _i4.Future<_i2.ApiResponse<_i5.ReceiptExtraction>>);
+
+  @override
   _i4.Future<_i2.ApiResponse<_i5.ExpenseOptions>> getOptions() =>
       (super.noSuchMethod(
         Invocation.method(#getOptions, []),

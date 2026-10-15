@@ -5,6 +5,7 @@ import { getDashboardOverview } from "@/lib/dashboard/queries";
 import { can } from "@/lib/roles";
 import { formatGBP } from "@/lib/money";
 import { getSafeToPay } from "@/lib/safe-to-pay/queries";
+import { getUpcomingDeadlines, HORIZON_DAYS } from "@/lib/deadlines/queries";
 
 export async function GET(request: NextRequest) {
   try {
@@ -55,6 +56,7 @@ export async function GET(request: NextRequest) {
       user.entityType === "limited_company" && can(user.role, "reports:read")
         ? await getSafeToPay(user.companyId).catch(() => null)
         : null;
+    const [next] = await getUpcomingDeadlines(user.companyId, HORIZON_DAYS).catch(() => []);
 
     return NextResponse.json({
       success: true,
@@ -67,6 +69,15 @@ export async function GET(request: NextRequest) {
                 ? formatGBP(safe.result.safeLaterPence)
                 : null,
               cashKnown: safe.cash.known,
+            }
+          : null,
+        nextDeadline: next
+          ? {
+              kind: next.kind,
+              label: next.label,
+              dueDate: next.dueDate,
+              daysLeft: next.daysLeft,
+              status: next.status,
             }
           : null,
       },

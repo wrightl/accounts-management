@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/utils/web_links.dart';
 import '../../../data/models/notification.dart';
 import '../../../features/expenses/screens/expense_list_screen.dart';
 import '../../../features/books/screens/sales_hub_screen.dart';
@@ -68,19 +69,15 @@ class NotificationDetailScreen extends StatelessWidget {
       );
       return;
     }
-    if (href.contains('/quotes') ||
-        href.contains('/invoices') ||
-        href.contains('/orders') ||
-        href.contains('/recurring')) {
+    if (href.contains('/quotes') || href.contains('/invoices')) {
       Navigator.of(context).push(
         MaterialPageRoute<void>(builder: (_) => const SalesHubScreen()),
       );
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Open this item in the web app for full detail.'),
-      ),
-    );
+    // Anything the phone leaves to the web opens there.
+    if (href.startsWith('/')) {
+      openOnWeb(context, href);
+    }
   }
 }

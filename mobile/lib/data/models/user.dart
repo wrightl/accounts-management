@@ -4,13 +4,20 @@ part 'user.g.dart';
 
 @JsonSerializable()
 class BillingInfo {
+  @JsonKey(defaultValue: 'trial')
   final String plan;
+  @JsonKey(defaultValue: 'trialing')
   final String status;
+  @JsonKey(defaultValue: false)
   final bool readOnly;
   final String? trialEndsAt;
+  @JsonKey(defaultValue: 5)
   final int maxUsers;
+  @JsonKey(defaultValue: 0)
   final int userCount;
+  @JsonKey(defaultValue: false)
   final bool vatExport;
+  @JsonKey(defaultValue: false)
   final bool complimentary;
   final String? reason;
 

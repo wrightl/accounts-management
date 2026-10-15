@@ -1,4 +1,5 @@
 import '../../core/utils/json.dart';
+import 'work.dart';
 
 class DashboardPeriodOption {
   const DashboardPeriodOption(this.value, this.label);
@@ -30,6 +31,7 @@ class DashboardData {
     required this.spending,
     required this.attention,
     this.safeToPay,
+    this.nextDeadline,
   });
 
   final String role;
@@ -49,6 +51,9 @@ class DashboardData {
 
   /// Limited companies only, for roles that can see reports.
   final SafeToPayData? safeToPay;
+
+  /// The soonest open deadline (overdue ones first), if any.
+  final Deadline? nextDeadline;
 
   bool get isPending => role == 'pending';
 
@@ -110,6 +115,9 @@ class DashboardData {
       attention: AttentionData.fromJson(asMap(json['attention'])),
       safeToPay: json['safeToPay'] is Map
           ? SafeToPayData.fromJson(asMap(json['safeToPay']))
+          : null,
+      nextDeadline: json['nextDeadline'] is Map
+          ? Deadline.fromJson(asMap(json['nextDeadline']))
           : null,
     );
   }

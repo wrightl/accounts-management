@@ -269,6 +269,7 @@ describe("mobile dashboard safe to pay", () => {
     ).json();
     expect(ltd.data.safeToPay).not.toBeNull();
     expect(typeof ltd.data.safeToPay.safeNowFormatted).toBe("string");
+    expect(ltd.data.nextDeadline.daysLeft).toBeGreaterThanOrEqual(0);
 
     const sole = await seedCompany(db, { name: "Sole", entityType: "sole_trader" });
     await db.update(users).set({ companyId: sole.id });

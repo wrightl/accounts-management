@@ -69,9 +69,9 @@ class AppConstants {
   static const String currencySymbol = '£';
   static const String currencyCode = 'GBP';
 
-  /// Web billing settings (manage plan / upgrade).
-  static String get webBillingUrl {
+  /// A page on the web app, e.g. `/settings`.
+  static String webUrl(String path) {
     final base = apiBaseUrl.replaceAll(RegExp(r'/$'), '');
-    return '$base/settings/billing';
+    return '$base$path';
   }
 }
