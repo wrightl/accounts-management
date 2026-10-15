@@ -2,7 +2,7 @@ name: Cron inbound email
 
 # Hobby Vercel Cron only runs once per day; inbound retries need ~15m cadence.
 # Requires GitHub Environment "production" secrets: CRON_SECRET, APP_URL
-# (e.g. https://accounts.dotanddashconsulting.com)
+# (e.g. https://alfa.dotanddashconsulting.com)
 
 on:
     schedule:

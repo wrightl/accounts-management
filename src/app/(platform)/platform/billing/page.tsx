@@ -7,6 +7,8 @@ import {
 } from "@/lib/platform/billing-queries";
 import { formatGBP } from "@/lib/money";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
+import { StatusPill } from "@/components/platform/status-pill";
+import { formatDateUk } from "@/lib/dates";
 
 export default async function PlatformBillingPage() {
   await requirePlatformAdmin();
@@ -97,14 +99,17 @@ export default async function PlatformBillingPage() {
                         {c.companyName}
                       </Link>
                       {c.readOnly ? (
-                        <span className="ml-2 text-xs text-red-700">
-                          read-only
-                        </span>
+                        <StatusPill
+                          status="read_only"
+                          label="Read-only"
+                          tone="danger"
+                          className="ml-2"
+                        />
                       ) : null}
                     </TD>
                     <TD className="capitalize">{c.plan}</TD>
-                    <TD className="capitalize">
-                      {c.status.replace("_", " ")}
+                    <TD>
+                      <StatusPill status={c.status} />
                     </TD>
                     <TD>
                       {c.access === "complimentary_unlimited"
@@ -113,9 +118,9 @@ export default async function PlatformBillingPage() {
                     </TD>
                     <TD className="text-xs text-muted">
                       {c.trialEndsAt
-                        ? `Trial ${c.trialEndsAt.toLocaleDateString("en-GB")}`
+                        ? `Trial ends ${formatDateUk(c.trialEndsAt)}`
                         : c.currentPeriodEnd
-                          ? c.currentPeriodEnd.toLocaleDateString("en-GB")
+                          ? `Period ends ${formatDateUk(c.currentPeriodEnd)}`
                           : "—"}
                     </TD>
                   </TR>

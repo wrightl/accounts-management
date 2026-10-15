@@ -3,6 +3,12 @@ import { requirePlatformAdmin } from "@/lib/platform";
 import { hasDatabaseClient } from "@/db";
 import { listPlatformLogs } from "@/lib/platform/queries";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
+import { ExpandableText } from "@/components/platform/expandable-text";
+import { StatusPill } from "@/components/platform/status-pill";
+import { ClearFilters, Pager, parseOffset } from "@/components/platform/pager";
+import { formatDateTimeUk } from "@/lib/dates";
+
+const PAGE_SIZE = 100;
 
 export default async function PlatformLogsPage({
   searchParams,
@@ -12,11 +18,13 @@ export default async function PlatformLogsPage({
     source?: string;
     q?: string;
     hours?: string;
+    offset?: string;
   }>;
 }) {
   await requirePlatformAdmin();
   const params = await searchParams;
   const hours = Math.min(168, Math.max(1, Number(params.hours ?? 24) || 24));
+  const offset = parseOffset(params.offset);
 
   if (!hasDatabaseClient()) {
     return (
@@ -27,18 +35,21 @@ export default async function PlatformLogsPage({
     );
   }
 
-  const rows = await listPlatformLogs({
+  const fetched = await listPlatformLogs({
     level: params.level,
     source: params.source,
     q: params.q,
     sinceHours: hours,
+    limit: PAGE_SIZE + 1,
+    offset,
   });
+  const rows = fetched.slice(0, PAGE_SIZE);
 
   return (
     <div>
       <h1 className="font-display text-2xl font-semibold">Logs</h1>
       <p className="mt-1 text-muted">
-        Persisted errors and warnings (default last {hours}h).
+        Persisted errors and warnings from the last {hours} hours.
       </p>
 
       <form className="mt-6 flex flex-wrap gap-3">
@@ -64,20 +75,28 @@ export default async function PlatformLogsPage({
           placeholder="Message contains…"
           className="rounded-lg border border-border px-3 py-2 text-sm"
         />
-        <input
-          name="hours"
-          type="number"
-          min={1}
-          max={168}
-          defaultValue={hours}
-          className="w-24 rounded-lg border border-border px-3 py-2 text-sm"
-        />
+        <label className="flex items-center gap-2 text-sm text-muted">
+          Last
+          <input
+            name="hours"
+            type="number"
+            min={1}
+            max={168}
+            defaultValue={hours}
+            className="w-20 rounded-lg border border-border px-3 py-2 text-sm text-foreground"
+          />
+          hours
+        </label>
         <button
           type="submit"
           className="rounded-full bg-navy px-4 py-2 text-sm text-white"
         >
           Filter
         </button>
+        <ClearFilters
+          path="/platform/logs"
+          active={Boolean(params.level || params.source || params.q || params.hours)}
+        />
       </form>
 
       <div className="mt-6">
@@ -98,26 +117,29 @@ export default async function PlatformLogsPage({
               {rows.map((r) => (
                 <TR key={r.id}>
                   <TD className="whitespace-nowrap text-muted">
-                    {r.createdAt.toLocaleString("en-GB")}
+                    {formatDateTimeUk(r.createdAt)}
                   </TD>
                   <TD>
-                    <span
-                      className={
+                    <StatusPill
+                      status={r.level}
+                      tone={
                         r.level === "error"
-                          ? "text-red-700"
+                          ? "danger"
                           : r.level === "warn"
-                            ? "text-amber-700"
-                            : "text-muted"
+                            ? "warning"
+                            : "neutral"
                       }
-                    >
-                      {r.level}
-                    </span>
+                    />
                   </TD>
                   <TD className="font-mono text-xs">{r.source}</TD>
                   <TD className="max-w-md">
-                    <p className="truncate text-sm" title={r.message}>
-                      {r.message}
-                    </p>
+                    <ExpandableText
+                      text={
+                        r.meta
+                          ? `${r.message}\n\n${JSON.stringify(r.meta, null, 2)}`
+                          : r.message
+                      }
+                    />
                     {r.digest ? (
                       <p className="font-mono text-xs text-muted">
                         digest {r.digest}
@@ -141,6 +163,21 @@ export default async function PlatformLogsPage({
             </TBody>
           </Table>
         )}
+        <Pager
+          path="/platform/logs"
+          params={{
+            level: params.level,
+            source: params.source,
+            q: params.q,
+            hours: params.hours,
+          }}
+          offset={offset}
+          pageSize={PAGE_SIZE}
+          shown={rows.length}
+          hasMore={fetched.length > PAGE_SIZE}
+          newerLabel="← Newer"
+          olderLabel="Older →"
+        />
       </div>
     </div>
   );

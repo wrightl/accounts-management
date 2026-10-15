@@ -2,9 +2,46 @@ import { requirePlatformAdmin } from "@/lib/platform";
 import { serverEnv } from "@/env";
 import { hasDatabaseClient } from "@/db";
 import { getPlatformSettings } from "@/lib/platform-settings";
-import { RunDailyCronButton } from "@/components/platform/run-cron-button";
+import {
+  RunDailyCronButton,
+  RunInboundDrainButton,
+} from "@/components/platform/run-cron-button";
+import { getLatestCronRuns } from "@/lib/platform/queries";
+import { ExpandableText } from "@/components/platform/expandable-text";
+import { StatusPill } from "@/components/platform/status-pill";
+import { formatDateTimeUk } from "@/lib/dates";
 
-function StatusPill({ ok, label }: { ok: boolean; label: string }) {
+type CronRun = Awaited<ReturnType<typeof getLatestCronRuns>>["daily"] | null;
+
+function CronResult({ label, at, run }: { label: string; at: Date | null | undefined; run: CronRun }) {
+  return (
+    <div className="space-y-1 border-t border-border pt-3 first:border-0 first:pt-0">
+      <div className="flex justify-between gap-4">
+        <dt className="text-muted">{label}</dt>
+        <dd>{at ? formatDateTimeUk(at) : "never"}</dd>
+      </div>
+      {run ? (
+        <dd className="space-y-1">
+          <div className="flex items-center gap-2 text-xs text-muted">
+            <StatusPill
+              status={run.level}
+              label={run.level === "info" ? "ok" : run.level}
+              tone={run.level === "error" ? "danger" : run.level === "warn" ? "warning" : "success"}
+            />
+            {run.source.endsWith(".manual") ? "manual run" : "scheduled"} ·{" "}
+            {formatDateTimeUk(run.createdAt)}
+          </div>
+          <ExpandableText
+            text={run.meta ? JSON.stringify(run.meta, null, 2) : run.message}
+            mono
+          />
+        </dd>
+      ) : null}
+    </div>
+  );
+}
+
+function ConfigCheck({ ok, label }: { ok: boolean; label: string }) {
   return (
     <li className="flex items-center justify-between rounded-xl border border-border bg-white px-4 py-3 text-sm">
       <span>{label}</span>
@@ -25,7 +62,9 @@ export default async function PlatformHealthPage() {
   await requirePlatformAdmin();
 
   const env = serverEnv();
-  const settings = hasDatabaseClient() ? await getPlatformSettings() : null;
+  const [settings, cronRuns] = hasDatabaseClient()
+    ? await Promise.all([getPlatformSettings(), getLatestCronRuns()])
+    : [null, null];
   const checks = [
     { label: "Database", ok: hasDatabaseClient() },
     { label: "Vercel Blob", ok: Boolean(env.BLOB_READ_WRITE_TOKEN) },
@@ -64,32 +103,27 @@ export default async function PlatformHealthPage() {
 
       <ul className="mt-6 max-w-lg space-y-2">
         {checks.map((c) => (
-          <StatusPill key={c.label} ok={c.ok} label={c.label} />
+          <ConfigCheck key={c.label} ok={c.ok} label={c.label} />
         ))}
       </ul>
 
       <section className="mt-8 max-w-lg rounded-2xl border border-border bg-white p-5">
         <h2 className="font-display text-lg font-semibold">Cron</h2>
-        <dl className="mt-3 space-y-2 text-sm">
-          <div className="flex justify-between gap-4">
-            <dt className="text-muted">Last daily</dt>
-            <dd>
-              {settings?.lastCronDailyAt
-                ? settings.lastCronDailyAt.toLocaleString("en-GB")
-                : "never"}
-            </dd>
-          </div>
-          <div className="flex justify-between gap-4">
-            <dt className="text-muted">Last inbound drain</dt>
-            <dd>
-              {settings?.lastCronInboundAt
-                ? settings.lastCronInboundAt.toLocaleString("en-GB")
-                : "never"}
-            </dd>
-          </div>
+        <dl className="mt-3 space-y-3 text-sm">
+          <CronResult
+            label="Last daily"
+            at={settings?.lastCronDailyAt}
+            run={cronRuns?.daily ?? null}
+          />
+          <CronResult
+            label="Last inbound drain"
+            at={settings?.lastCronInboundAt}
+            run={cronRuns?.inbound ?? null}
+          />
         </dl>
-        <div className="mt-4">
+        <div className="mt-4 flex flex-wrap gap-2">
           <RunDailyCronButton />
+          <RunInboundDrainButton />
         </div>
       </section>
     </div>

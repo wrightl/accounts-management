@@ -4,13 +4,17 @@ import { listPlatformUsers } from "@/lib/platform/queries";
 import { isPlatformAdminEmail } from "@/lib/bootstrap";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { InvitePlatformAdminButton } from "@/components/platform/invite-admin-form";
+import { PlatformAdminActions } from "@/components/platform/platform-admin-actions";
+import { StatusPill } from "@/components/platform/status-pill";
+import { ClearFilters } from "@/components/platform/pager";
+import { findLocalUserId } from "@/lib/users";
 
 export default async function PlatformUsersPage({
   searchParams,
 }: {
   searchParams: Promise<{ q?: string }>;
 }) {
-  await requirePlatformAdmin();
+  const session = await requirePlatformAdmin();
   const { q } = await searchParams;
 
   if (!hasDatabaseClient()) {
@@ -22,7 +26,10 @@ export default async function PlatformUsersPage({
     );
   }
 
-  const rows = await listPlatformUsers({ q });
+  const [rows, selfId] = await Promise.all([
+    listPlatformUsers({ q }),
+    findLocalUserId(session.userId),
+  ]);
 
   return (
     <div>
@@ -48,6 +55,7 @@ export default async function PlatformUsersPage({
             >
               Search
             </button>
+            <ClearFilters path="/platform/users" active={Boolean(q)} />
           </form>
           <InvitePlatformAdminButton />
         </div>
@@ -61,12 +69,15 @@ export default async function PlatformUsersPage({
               <TH>Name</TH>
               <TH>Status</TH>
               <TH>Source</TH>
+              <TH />
             </TR>
           </THead>
           <TBody>
             {rows.length === 0 ? (
               <TR>
-                <TD colSpan={4}>No platform admins yet.</TD>
+                <TD colSpan={5}>
+                  {q ? "No platform admins match that search." : "No platform admins yet."}
+                </TD>
               </TR>
             ) : (
               rows.map((r) => {
@@ -75,8 +86,23 @@ export default async function PlatformUsersPage({
                   <TR key={r.id}>
                     <TD>{r.email}</TD>
                     <TD>{r.name ?? "—"}</TD>
-                    <TD>{r.clerkUserId ? "Active" : "Pending invite"}</TD>
+                    <TD>
+                      {r.clerkUserId ? (
+                        <StatusPill status="active" />
+                      ) : (
+                        <StatusPill status="pending" label="Invite pending" />
+                      )}
+                    </TD>
                     <TD>{envLocked ? "Env allowlist" : "Invited"}</TD>
+                    <TD>
+                      <PlatformAdminActions
+                        userId={r.id}
+                        email={r.email}
+                        pendingInvite={!r.clerkUserId}
+                        envLocked={envLocked}
+                        isSelf={r.id === selfId}
+                      />
+                    </TD>
                   </TR>
                 );
               })

@@ -2,11 +2,13 @@
 
 import { z } from "zod";
 import { eq } from "drizzle-orm";
+import { clerkClient } from "@clerk/nextjs/server";
 import { getDb } from "@/db";
 import {
   companies,
   companyBilling,
   companySupportNotes,
+  inboundEmailJobs,
   sendJobs,
   subscriptionTiers,
   users,
@@ -18,8 +20,16 @@ import {
   getMembership,
   listUserMemberships,
   normalizeEmail,
+  removeMembership,
   upsertMembership,
 } from "@/lib/users";
+import {
+  changeCompanyMemberRole,
+  removeCompanyMember,
+  resendClerkInvitation,
+  revokeClerkInvitations,
+  revokeCompanyInvite,
+} from "@/lib/users/manage";
 import {
   uniquifyUserInboundSlug,
   userInboundSlugSeed,
@@ -27,15 +37,22 @@ import {
 import {
   adminDismissInboundEmailJob,
   adminRetryInboundEmailJob,
+  drainInboundEmailJobs,
 } from "@/lib/expenses/inbound-email";
-import { processSendJob, drainSendJobs, enqueueOverdueReminders } from "@/lib/outbox";
+import { processSendJob } from "@/lib/outbox";
+import { runDailyCron } from "@/lib/cron-daily";
 import { updatePlatformSettings } from "@/lib/platform-settings";
 import { getCurrentUser } from "@/lib/auth";
-import { generateRecurringInvoices } from "@/lib/invoices/recurring-generate";
-import { purgeOldPlatformLogs, logPlatformEvent } from "@/lib/platform-log";
-import { sendClerkInvitation } from "@/lib/clerk-invite";
+import { logPlatformEvent } from "@/lib/platform-log";
+import { clerkErrorMessage, sendClerkInvitation } from "@/lib/clerk-invite";
 import type { ActionResult } from "@/actions/result";
-import { isPlatformAdminRole, isTenantRole, PLATFORM_ADMIN_ROLE, type TenantRole } from "@/lib/roles";
+import {
+  isPlatformAdminRole,
+  isTenantRole,
+  PLATFORM_ADMIN_ROLE,
+  TENANT_ROLES,
+  type TenantRole,
+} from "@/lib/roles";
 import {
   companyInviteAdminRawFromFormData,
   parseCompanyInviteAdminInput,
@@ -51,6 +68,15 @@ import {
   platformSettingsRawFromFormData,
 } from "@/lib/platform/schema";
 import { deleteCompanyById } from "@/lib/companies/delete";
+
+async function inboundJobCompanyId(jobId: string): Promise<string | null> {
+  const [job] = await getDb()
+    .select({ companyId: inboundEmailJobs.companyId })
+    .from(inboundEmailJobs)
+    .where(eq(inboundEmailJobs.id, jobId))
+    .limit(1);
+  return job?.companyId ?? null;
+}
 
 export async function suspendCompany(
   companyId: string,
@@ -308,7 +334,24 @@ export async function platformInviteCompanyAdmin(
       }
 
       const invited = await sendClerkInvitation(email);
-      if (!invited.ok) return invited;
+      if (!invited.ok) {
+        // Undo the local rows so the admin can fix the problem and retry.
+        if (existing) {
+          await removeMembership(existing.id, companyId);
+          await db
+            .update(users)
+            .set({
+              name: existing.name,
+              role: existing.role,
+              companyId: existing.companyId,
+              expenseInboundSlug: existing.expenseInboundSlug,
+            })
+            .where(eq(users.id, existing.id));
+        } else {
+          await db.delete(users).where(eq(users.id, userId));
+        }
+        return invited;
+      }
 
       return { ok: true, id: userId };
     },
@@ -371,7 +414,10 @@ export async function invitePlatformAdmin(
         .returning({ id: users.id });
 
       const invited = await sendClerkInvitation(email);
-      if (!invited.ok) return invited;
+      if (!invited.ok) {
+        await db.delete(users).where(eq(users.id, created.id));
+        return invited;
+      }
 
       return { ok: true, id: created.id };
     },
@@ -477,19 +523,21 @@ export async function platformRetryInboundJob(
   const parsed = z.string().uuid().safeParse(jobId);
   if (!parsed.success) return { ok: false, error: "Invalid job id" };
 
+  let companyId: string | null = null;
   return platformMutate(
     async () => {
+      companyId = await inboundJobCompanyId(parsed.data);
       const result = await adminRetryInboundEmailJob(parsed.data);
       if (!result.ok) return { ok: false, error: result.error ?? "Retry failed" };
       return { ok: true, id: jobId };
     },
     {
-      audit: {
+      audit: () => ({
         action: "platform.inbound_email.retry",
         entityType: "inbound_email_job",
         entityId: jobId,
-        companyId: null,
-      },
+        companyId,
+      }),
       paths: ["/platform/jobs", "/platform"],
     },
   );
@@ -502,72 +550,98 @@ export async function platformDismissInboundJob(
   const parsed = z.string().uuid().safeParse(jobId);
   if (!parsed.success) return { ok: false, error: "Invalid job id" };
 
+  let companyId: string | null = null;
   return platformMutate(
     async () => {
+      companyId = await inboundJobCompanyId(parsed.data);
       const result = await adminDismissInboundEmailJob(parsed.data, reason);
       if (!result.ok) return { ok: false, error: result.error ?? "Dismiss failed" };
       return { ok: true, id: jobId };
     },
     {
-      audit: {
+      audit: () => ({
         action: "platform.inbound_email.dismiss",
         entityType: "inbound_email_job",
         entityId: jobId,
-        companyId: null,
+        companyId,
         meta: reason?.trim() ? { reason: reason.trim() } : undefined,
-      },
+      }),
       paths: ["/platform/jobs", "/platform"],
     },
   );
+}
+
+/** Reset a failed send job and process it now. */
+async function retrySendJob(
+  jobId: string,
+): Promise<{ companyId: string | null; result: ActionResult }> {
+  const db = getDb();
+  const [job] = await db
+    .select()
+    .from(sendJobs)
+    .where(eq(sendJobs.id, jobId))
+    .limit(1);
+  if (!job) return { companyId: null, result: { ok: false, error: "Send job not found" } };
+  if (job.status !== "failed") {
+    return {
+      companyId: job.companyId,
+      result: { ok: false, error: "Only failed send jobs can be retried." },
+    };
+  }
+
+  const [company] = await db
+    .select({ suspendedAt: companies.suspendedAt })
+    .from(companies)
+    .where(eq(companies.id, job.companyId))
+    .limit(1);
+  if (company?.suspendedAt) {
+    return {
+      companyId: job.companyId,
+      result: {
+        ok: false,
+        error: "Cannot retry send jobs for a suspended company.",
+      },
+    };
+  }
+
+  await db
+    .update(sendJobs)
+    .set({
+      status: "pending",
+      attempts: 0,
+      lastError: null,
+      sentAt: null,
+    })
+    .where(eq(sendJobs.id, jobId));
+
+  const result = await processSendJob(jobId);
+  if (!result.ok) {
+    return {
+      companyId: job.companyId,
+      result: { ok: false, error: result.error ?? "Retry failed" },
+    };
+  }
+  return { companyId: job.companyId, result: { ok: true, id: jobId } };
 }
 
 export async function platformRetrySendJob(jobId: string): Promise<ActionResult> {
   const parsed = z.string().uuid().safeParse(jobId);
   if (!parsed.success) return { ok: false, error: "Invalid job id" };
 
+  let companyId: string | null = null;
   return platformMutate(
     async () => {
-      const db = getDb();
-      const [job] = await db
-        .select()
-        .from(sendJobs)
-        .where(eq(sendJobs.id, parsed.data))
-        .limit(1);
-      if (!job) return { ok: false, error: "Send job not found" };
-
-      const [company] = await db
-        .select({ suspendedAt: companies.suspendedAt })
-        .from(companies)
-        .where(eq(companies.id, job.companyId))
-        .limit(1);
-      if (company?.suspendedAt) {
-        return {
-          ok: false,
-          error: "Cannot retry send jobs for a suspended company.",
-        };
-      }
-
-      await db
-        .update(sendJobs)
-        .set({
-          status: "pending",
-          attempts: 0,
-          lastError: null,
-          sentAt: null,
-        })
-        .where(eq(sendJobs.id, parsed.data));
-
-      const result = await processSendJob(parsed.data);
-      if (!result.ok) return { ok: false, error: result.error ?? "Retry failed" };
-      return { ok: true, id: jobId };
+      const result = await retrySendJob(parsed.data);
+      companyId = result.companyId;
+      return result.result;
     },
     {
-      audit: {
+      audit: () => ({
         action: "platform.send_job.retry",
         entityType: "send_job",
         entityId: jobId,
-        companyId: null,
-      },
+        companyId,
+      }),
       paths: ["/platform/jobs", "/platform"],
     },
   );
@@ -576,25 +650,12 @@ export async function platformRetrySendJob(jobId: string): Promise<ActionResult>
 export async function platformRunDailyCron(): Promise<ActionResult> {
   return platformMutate(
     async () => {
-      const recurring = await generateRecurringInvoices();
-      let reminders: Record<string, unknown> = { skipped: "no database" };
-      let billingEmails: Record<string, unknown> = { skipped: "no database" };
-      if (process.env.DATABASE_URL) {
-        const queued = await enqueueOverdueReminders();
-        const drained = await drainSendJobs();
-        reminders = { queued, ...drained };
-        const { processBillingLifecycleEmails } = await import(
-          "@/lib/billing/emails"
-        );
-        billingEmails = await processBillingLifecycleEmails();
-      }
-      const purged = await purgeOldPlatformLogs(90);
-      await updatePlatformSettings({ lastCronDailyAt: new Date() });
+      const summary = await runDailyCron();
       await logPlatformEvent({
         level: "info",
         source: "cron.daily.manual",
         message: "Platform admin triggered daily cron",
-        meta: { recurring, reminders, purged, billingEmails },
+        meta: summary,
       });
       return { ok: true, id: "cron-daily" };
     },
@@ -767,6 +828,13 @@ export async function extendCompanyTrial(
         .from(companyBilling)
         .where(eq(companyBilling.companyId, parsed.data.companyId))
         .limit(1);
+      if (row && (row.status === "active" || row.status === "past_due")) {
+        return {
+          ok: false,
+          error:
+            "This company has a paid subscription. Extending a trial would replace its plan. Grant complimentary access instead.",
+        };
+      }
       const base =
         row?.trialEndsAt && row.trialEndsAt.getTime() > Date.now()
           ? row.trialEndsAt
@@ -842,6 +910,300 @@ export async function updateSubscriptionTier(
         meta: parsed.data,
       },
       paths: ["/platform/billing/tiers", "/platform/billing"],
+    },
+  );
+}
+
+const uuidSchema = z.string().uuid();
+const jobIdsSchema = z.array(z.string().uuid()).min(1).max(100);
+
+function companyMemberPaths(companyId: string) {
+  return ["/platform/companies", `/platform/companies/${companyId}`];
+}
+
+export async function platformChangeMemberRole(
+  companyId: string,
+  userId: string,
+  role: string,
+): Promise<ActionResult> {
+  const parsed = z
+    .object({ companyId: uuidSchema, userId: uuidSchema, role: z.enum(TENANT_ROLES) })
+    .safeParse({ companyId, userId, role });
+  if (!parsed.success) return { ok: false, error: "Invalid member or role" };
+
+  return platformMutate(
+    () => changeCompanyMemberRole(parsed.data),
+    {
+      audit: {
+        action: "platform.company.member_role",
+        entityType: "user",
+        entityId: userId,
+        companyId,
+        meta: { role: parsed.data.role },
+      },
+      paths: companyMemberPaths(companyId),
+    },
+  );
+}
+
+export async function platformRemoveCompanyMember(
+  companyId: string,
+  userId: string,
+): Promise<ActionResult> {
+  if (!uuidSchema.safeParse(companyId).success || !uuidSchema.safeParse(userId).success) {
+    return { ok: false, error: "Invalid member" };
+  }
+
+  return platformMutate(
+    () => removeCompanyMember({ companyId, userId }),
+    {
+      audit: {
+        action: "platform.company.member_remove",
+        entityType: "user",
+        entityId: userId,
+        companyId,
+      },
+      paths: companyMemberPaths(companyId),
+    },
+  );
+}
+
+export async function platformRevokeCompanyInvite(
+  companyId: string,
+  userId: string,
+): Promise<ActionResult> {
+  if (!uuidSchema.safeParse(companyId).success || !uuidSchema.safeParse(userId).success) {
+    return { ok: false, error: "Invalid member" };
+  }
+
+  return platformMutate(
+    () => revokeCompanyInvite({ companyId, userId }),
+    {
+      audit: {
+        action: "platform.company.invite_revoke",
+        entityType: "user",
+        entityId: userId,
+        companyId,
+      },
+      paths: companyMemberPaths(companyId),
+    },
+  );
+}
+
+export async function platformResendCompanyInvite(
+  companyId: string,
+  userId: string,
+): Promise<ActionResult> {
+  if (!uuidSchema.safeParse(companyId).success || !uuidSchema.safeParse(userId).success) {
+    return { ok: false, error: "Invalid member" };
+  }
+
+  return platformMutate(
+    async () => {
+      if (!(await getMembership(userId, companyId))) {
+        return { ok: false, error: "User not found" };
+      }
+      const [target] = await getDb()
+        .select({ email: users.email, clerkUserId: users.clerkUserId })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+      if (!target) return { ok: false, error: "User not found" };
+      if (target.clerkUserId) {
+        return { ok: false, error: "This user has already signed in." };
+      }
+      const sent = await resendClerkInvitation(target.email);
+      if (!sent.ok) return sent;
+      return { ok: true, id: userId };
+    },
+    {
+      audit: {
+        action: "platform.company.invite_resend",
+        entityType: "user",
+        entityId: userId,
+        companyId,
+      },
+      paths: [`/platform/companies/${companyId}`],
+    },
+  );
+}
+
+/**
+ * Remove a platform operator: deletes their Clerk account (or pending invite)
+ * and local row. Env-allowlisted emails are re-seeded, so they cannot be removed here.
+ */
+export async function removePlatformAdmin(userId: string): Promise<ActionResult> {
+  if (!uuidSchema.safeParse(userId).success) return { ok: false, error: "Invalid user" };
+
+  let email: string | null = null;
+  return platformMutate(
+    async ({ localUserId }) => {
+      if (userId === localUserId) {
+        return { ok: false, error: "You cannot remove yourself." };
+      }
+      const db = getDb();
+      const [target] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!target || !isPlatformAdminRole(target.role)) {
+        return { ok: false, error: "Platform admin not found" };
+      }
+      email = target.email;
+      if (isPlatformAdminEmail(target.email)) {
+        return {
+          ok: false,
+          error:
+            "This admin comes from the PLATFORM_ADMIN_EMAILS allowlist. Remove them from that environment variable instead.",
+        };
+      }
+
+      if (target.clerkUserId) {
+        try {
+          const client = await clerkClient();
+          await client.users.deleteUser(target.clerkUserId);
+        } catch (err) {
+          return { ok: false, error: clerkErrorMessage(err) };
+        }
+      } else {
+        const revoked = await revokeClerkInvitations(target.email);
+        if (!revoked.ok) return revoked;
+      }
+      await db.delete(users).where(eq(users.id, userId));
+      return { ok: true, id: userId };
+    },
+    {
+      audit: () => ({
+        action: "platform.user.remove_admin",
+        entityType: "user",
+        entityId: userId,
+        companyId: null,
+        meta: { email },
+      }),
+      paths: ["/platform/users"],
+    },
+  );
+}
+
+export async function resendPlatformAdminInvite(userId: string): Promise<ActionResult> {
+  if (!uuidSchema.safeParse(userId).success) return { ok: false, error: "Invalid user" };
+
+  return platformMutate(
+    async () => {
+      const [target] = await getDb()
+        .select({ email: users.email, role: users.role, clerkUserId: users.clerkUserId })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+      if (!target || !isPlatformAdminRole(target.role)) {
+        return { ok: false, error: "Platform admin not found" };
+      }
+      if (target.clerkUserId) {
+        return { ok: false, error: "This admin has already signed in." };
+      }
+      const sent = await resendClerkInvitation(target.email);
+      if (!sent.ok) return sent;
+      return { ok: true, id: userId };
+    },
+    {
+      audit: {
+        action: "platform.user.resend_invite",
+        entityType: "user",
+        entityId: userId,
+        companyId: null,
+      },
+      paths: ["/platform/users"],
+    },
+  );
+}
+
+export type BulkJobResult = ActionResult & { succeeded?: number; failed?: number };
+
+/** Retry or dismiss several inbound email jobs. Each job is attempted independently. */
+export async function platformBulkInboundJobs(
+  jobIds: string[],
+  op: "retry" | "dismiss",
+  reason?: string,
+): Promise<BulkJobResult> {
+  const parsed = jobIdsSchema.safeParse(jobIds);
+  if (!parsed.success) return { ok: false, error: "Select between 1 and 100 jobs." };
+
+  let succeeded = 0;
+  let failed = 0;
+  const result = await platformMutate(
+    async () => {
+      for (const id of parsed.data) {
+        const r =
+          op === "retry"
+            ? await adminRetryInboundEmailJob(id)
+            : await adminDismissInboundEmailJob(id, reason);
+        if (r.ok) succeeded++;
+        else failed++;
+      }
+      return { ok: true };
+    },
+    {
+      audit: () => ({
+        action: `platform.inbound_email.bulk_${op}`,
+        entityType: "inbound_email_job",
+        entityId: "bulk",
+        companyId: null,
+        meta: { jobIds: parsed.data, succeeded, failed, reason: reason?.trim() || undefined },
+      }),
+      paths: ["/platform/jobs", "/platform"],
+    },
+  );
+  return result.ok ? { ...result, succeeded, failed } : result;
+}
+
+export async function platformBulkRetrySendJobs(jobIds: string[]): Promise<BulkJobResult> {
+  const parsed = jobIdsSchema.safeParse(jobIds);
+  if (!parsed.success) return { ok: false, error: "Select between 1 and 100 jobs." };
+
+  let succeeded = 0;
+  let failed = 0;
+  const result = await platformMutate(
+    async () => {
+      for (const id of parsed.data) {
+        const { result: r } = await retrySendJob(id);
+        if (r.ok) succeeded++;
+        else failed++;
+      }
+      return { ok: true };
+    },
+    {
+      audit: () => ({
+        action: "platform.send_job.bulk_retry",
+        entityType: "send_job",
+        entityId: "bulk",
+        companyId: null,
+        meta: { jobIds: parsed.data, succeeded, failed },
+      }),
+      paths: ["/platform/jobs", "/platform"],
+    },
+  );
+  return result.ok ? { ...result, succeeded, failed } : result;
+}
+
+/** Manual trigger for the inbound email drain (same work as the cron route). */
+export async function platformRunInboundDrain(): Promise<ActionResult> {
+  return platformMutate(
+    async () => {
+      const drained = await drainInboundEmailJobs();
+      await updatePlatformSettings({ lastCronInboundAt: new Date() });
+      await logPlatformEvent({
+        level: "info",
+        source: "cron.inbound-email.manual",
+        message: "Platform admin triggered inbound email drain",
+        meta: { ...drained },
+      });
+      return { ok: true, id: "cron-inbound" };
+    },
+    {
+      audit: {
+        action: "platform.cron.inbound",
+        entityType: "cron",
+        entityId: "inbound-email",
+        companyId: null,
+      },
+      paths: ["/platform/health", "/platform", "/platform/jobs"],
     },
   );
 }

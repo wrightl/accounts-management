@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import { cronAuthError } from "@/lib/cron";
-import { generateRecurringInvoices } from "@/lib/invoices/recurring-generate";
-import { drainSendJobs, enqueueOverdueReminders } from "@/lib/outbox";
-import { updatePlatformSettings } from "@/lib/platform-settings";
-import { logPlatformEvent, purgeOldPlatformLogs } from "@/lib/platform-log";
+import { runDailyCron } from "@/lib/cron-daily";
+import { logPlatformEvent } from "@/lib/platform-log";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -22,29 +20,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: denied.error }, { status: denied.status });
   }
 
-  const recurring = await generateRecurringInvoices();
-
-  let reminders: Record<string, unknown> = { skipped: "no database" };
-  let purged = 0;
-  let billingEmails: Record<string, unknown> = { skipped: "no database" };
-  let notifications: Record<string, unknown> = { skipped: "no database" };
-  let weeklyClose: Record<string, unknown> = { skipped: "no database" };
-
-  if (process.env.DATABASE_URL) {
-    const queued = await enqueueOverdueReminders();
-    const drained = await drainSendJobs();
-    reminders = { queued, ...drained };
-    purged = await purgeOldPlatformLogs(90);
-    const { processBillingLifecycleEmails } = await import(
-      "@/lib/billing/emails"
-    );
-    billingEmails = await processBillingLifecycleEmails();
-    const { runNotificationScanners } = await import("@/lib/notifications");
-    notifications = await runNotificationScanners();
-    const { sendWeeklyCloseDigests } = await import("@/lib/close/digest");
-    weeklyClose = await sendWeeklyCloseDigests();
-    await updatePlatformSettings({ lastCronDailyAt: new Date() });
-  }
+  const { recurring, reminders, purged, billingEmails, notifications, weeklyClose } =
+    await runDailyCron();
 
   console.info(
     JSON.stringify({

@@ -3,10 +3,19 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { platformRunDailyCron } from "@/actions/platform";
+import { platformRunDailyCron, platformRunInboundDrain } from "@/actions/platform";
+import type { ActionResult } from "@/actions/result";
 import { toast } from "@/components/ui/toast";
 
-export function RunDailyCronButton() {
+function RunCronButton({
+  action,
+  label,
+  done,
+}: {
+  action: () => Promise<ActionResult>;
+  label: string;
+  done: string;
+}) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -20,18 +29,38 @@ export function RunDailyCronButton() {
         onClick={() => {
           setError(null);
           start(async () => {
-            const result = await platformRunDailyCron();
+            const result = await action();
             if (!result.ok) setError(result.error);
             else {
-              toast("Cron finished.");
+              toast(done);
               router.refresh();
             }
           });
         }}
       >
-        {pending ? "Running…" : "Run daily cron now"}
+        {pending ? "Running…" : label}
       </Button>
       {error ? <p className="mt-2 text-sm text-red-700">{error}</p> : null}
     </div>
+  );
+}
+
+export function RunDailyCronButton() {
+  return (
+    <RunCronButton
+      action={platformRunDailyCron}
+      label="Run daily cron now"
+      done="Daily cron finished."
+    />
+  );
+}
+
+export function RunInboundDrainButton() {
+  return (
+    <RunCronButton
+      action={platformRunInboundDrain}
+      label="Run inbound drain now"
+      done="Inbound drain finished."
+    />
   );
 }
