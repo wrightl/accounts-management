@@ -67,3 +67,6 @@ next-env.d.ts
 /.secrets
 # clerk configuration (can include secrets)
 /.clerk/
+
+# agent pipeline scratch output
+/agent-output/

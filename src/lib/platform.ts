@@ -47,10 +47,13 @@ export async function getPlatformAdminOrNull(): Promise<SessionUser | null> {
  * Authz + local user + audit + revalidation for platform portal actions.
  * No tenant scope — callers pass companyId explicitly when needed.
  */
+type PlatformAudit = MutateAudit & { companyId?: string | null };
+
 export async function platformMutate(
   run: (ctx: PlatformMutateContext) => Promise<ActionResult>,
   after?: {
-    audit?: MutateAudit & { companyId?: string | null };
+    /** Pass a function when fields (e.g. companyId) are only known after `run`. */
+    audit?: PlatformAudit | (() => PlatformAudit);
     paths?: string[];
   },
 ): Promise<ActionResult> {
@@ -62,14 +65,15 @@ export async function platformMutate(
   const localUserId = await ensureLocalUser(session);
   const result = await run({ session, localUserId });
   if (!result.ok) return result;
-  if (after?.audit) {
+  const audit = typeof after?.audit === "function" ? after.audit() : after?.audit;
+  if (audit) {
     await writeAudit({
-      companyId: after.audit.companyId ?? null,
+      companyId: audit.companyId ?? null,
       actorUserId: localUserId,
-      action: after.audit.action,
-      entityType: after.audit.entityType,
-      entityId: after.audit.entityId ?? result.id ?? "",
-      meta: after.audit.meta,
+      action: audit.action,
+      entityType: audit.entityType,
+      entityId: audit.entityId ?? result.id ?? "",
+      meta: audit.meta,
     });
   }
   for (const path of after?.paths ?? []) {

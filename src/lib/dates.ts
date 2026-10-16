@@ -431,3 +431,22 @@ export function formatIsoDateLong(iso: string): string {
 export function isMonday(isoDate: string): boolean {
   return new Date(`${isoDate}T12:00:00Z`).getUTCDay() === 1;
 }
+
+/** Date and time in UK civil time, for timestamps shown in the UI. */
+export function formatDateTimeUk(value: Date | null | undefined): string {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: APP_TIMEZONE,
+    dateStyle: "short",
+    timeStyle: "medium",
+  }).format(value);
+}
+
+/** Calendar date in UK civil time. */
+export function formatDateUk(value: Date | null | undefined): string {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: APP_TIMEZONE,
+    dateStyle: "short",
+  }).format(value);
+}

@@ -45,3 +45,108 @@ jobs:
 
       - name: End-to-end tests
         run: npm run test:e2e
+
+      # Evidence for reviewers: traces and screenshots from any failing e2e test.
+      - name: Upload e2e results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Production dependencies only: dev tooling never ships.
+      - name: Dependency audit
+        run: npm audit --omit=dev --audit-level=high | tee npm-audit.txt; exit "${PIPESTATUS[0]}"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: npm-audit
+          path: npm-audit.txt
+          if-no-files-found: ignore
+
+  # AI review runs only after the deterministic checks pass, in a fresh
+  # context, on a different model from the builder. It never approves.
+  review:
+    needs: [verify, security]
+    if: >-
+      github.event_name == 'pull_request' &&
+      !github.event.pull_request.draft &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !contains(github.event.pull_request.labels.*.name, 'needs-human')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Bot token
+        id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Agent config on base branch
+        id: base
+        run: scripts/agent/base-has-config.sh "${{ github.base_ref }}" >> "$GITHUB_OUTPUT"
+
+      - name: Round cap
+        id: cap
+        if: steps.base.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          BOT_LOGIN: ${{ vars.AGENT_BOT_LOGIN }}
+        run: scripts/agent/round-cap.sh ${{ github.event.pull_request.number }} >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        if: steps.cap.outputs.continue == 'true'
+        with:
+          name: npm-audit
+          path: agent-output/
+
+      - name: Run reviewer
+        id: claude
+        if: steps.cap.outputs.continue == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ steps.app.outputs.token }}
+          prompt: |
+            Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }}.
+            The branch is checked out; see the change with `gh pr diff ${{ github.event.pull_request.number }}`.
+            Dependency audit output is in agent-output/npm-audit.txt (may be absent).
+            Post inline comments with mcp__github_inline_comment__create_inline_comment, then submit one review with
+            `gh pr review ${{ github.event.pull_request.number }} --request-changes --body-file <file>` or `--comment --body-file <file>`.
+          claude_args: >-
+            --agent reviewer
+            --settings .claude/ci-settings.json
+            --max-turns 30
+            --max-budget-usd 3
+            --allowedTools "Read,Glob,Grep,Task,Write(agent-output/**),mcp__github_inline_comment__create_inline_comment,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr review:*)"
+
+      - name: Record run
+        if: always() && steps.cap.outputs.continue == 'true'
+        run: node scripts/agent/report-run.mjs reviewer "${{ steps.claude.outputs.execution_file }}"

@@ -1,0 +1,54 @@
+{
+    "$schema": "https://json.schemastore.org/claude-code-settings.json",
+    "permissions": {
+        "deny": [
+            "Read(./.env*)",
+            "Read(./.secrets/**)",
+            "Read(./.bank-exports/**)",
+            "Read(./.vercel/**)",
+            "Edit(./.env*)",
+            "Edit(./drizzle/meta/**)",
+            "Bash(git push origin main:*)",
+            "Bash(git push --force:*)",
+            "Bash(gh pr merge:*)",
+            "Bash(vercel:*)",
+            "Bash(npm publish:*)"
+        ]
+    },
+    "hooks": {
+        "PreToolUse": [
+            {
+                "matcher": "Bash",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/block-dangerous.mjs\""
+                    }
+                ]
+            }
+        ],
+        "PostToolUse": [
+            {
+                "matcher": "Edit|MultiEdit|Write",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/lint-edited-file.mjs\"",
+                        "timeout": 60
+                    }
+                ]
+            }
+        ],
+        "Stop": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/typecheck-on-stop.mjs\"",
+                        "timeout": 180
+                    }
+                ]
+            }
+        ]
+    }
+}

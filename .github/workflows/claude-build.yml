@@ -1,0 +1,139 @@
+name: Agent · builder
+
+# Rollout stage 3: manual trigger only. Once PR acceptance is consistently
+# good, add a Jira automation rule that calls the repository_dispatch API with
+# event_type "jira-agent-ready" when the `agent-ready` label is added.
+on:
+  workflow_dispatch:
+    inputs:
+      ticket:
+        description: Jira ticket key (e.g. ALFA-123)
+        required: true
+  repository_dispatch:
+    types: [jira-agent-ready]
+
+env:
+  TICKET: ${{ github.event.inputs.ticket || github.event.client_payload.ticket }}
+
+# One run per ticket; a second trigger for the same ticket waits. Each run gets
+# its own runner and checkout, so tickets never share a working tree.
+concurrency:
+  group: agent-build-${{ github.event.inputs.ticket || github.event.client_payload.ticket }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Validate ticket key
+        run: '[[ "$TICKET" =~ ^[A-Z][A-Z0-9]+-[0-9]+$ ]] || { echo "Bad ticket key: $TICKET"; exit 1; }'
+
+      - name: Bot token
+        id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app.outputs.token }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Fetch ticket from Jira
+        env:
+          JIRA_BASE_URL: ${{ vars.JIRA_BASE_URL }}
+          JIRA_AUTH: ${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}
+        run: |
+          mkdir -p agent-output
+          curl -sf -u "$JIRA_AUTH" \
+            "$JIRA_BASE_URL/rest/api/3/issue/$TICKET?fields=summary,description,labels,issuetype,priority,comment" \
+            > agent-output/ticket.json
+
+      - name: Create branch
+        run: git switch -c "agent/$TICKET"
+
+      - name: Run builder
+        id: claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ steps.app.outputs.token }}
+          prompt: |
+            Build Jira ticket ${{ env.TICKET }}. The ticket is in agent-output/ticket.json.
+            If the ticket has the `plan-approved` label, a plan was already approved in its comments: follow it and skip the READINESS: PLAN step.
+            Follow your agent instructions exactly, and finish by writing agent-output/summary.md.
+          claude_args: >-
+            --agent builder
+            --settings .claude/ci-settings.json
+            --max-turns 80
+            --max-budget-usd 10
+            --allowedTools "Read,Edit,Write,Glob,Grep,Task,Skill,Bash(npm run lint:*),Bash(npm run typecheck:*),Bash(npm test:*),Bash(npm run test:e2e:*),Bash(npx next build:*),Bash(npx eslint:*),Bash(npx tsc:*),Bash(npx vitest:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git add:*),Bash(git commit:*)"
+
+      - name: Record run
+        if: always()
+        run: node scripts/agent/report-run.mjs builder "${{ steps.claude.outputs.execution_file }}"
+
+      - name: Act on readiness
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          JIRA_BASE_URL: ${{ vars.JIRA_BASE_URL }}
+          JIRA_AUTH: ${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}
+          BOT_EMAIL: ${{ vars.AGENT_APP_USER_ID }}+${{ vars.AGENT_BOT_LOGIN }}@users.noreply.github.com
+          BOT_LOGIN: ${{ vars.AGENT_BOT_LOGIN }}
+        run: |
+          summary=agent-output/summary.md
+          [ -f "$summary" ] || { echo "Builder wrote no summary"; exit 1; }
+          readiness=$(head -n1 "$summary")
+
+          jira_comment() {
+            body=$(jq -n --rawfile t "$summary" --arg h "$1" \
+              '{body:{type:"doc",version:1,content:[{type:"paragraph",content:[{type:"text",text:$h}]},{type:"codeBlock",content:[{type:"text",text:$t}]}]}}')
+            curl -sf -u "$JIRA_AUTH" -H 'Content-Type: application/json' \
+              -X POST "$JIRA_BASE_URL/rest/api/3/issue/$TICKET/comment" -d "$body" > /dev/null
+          }
+          jira_labels() {
+            curl -sf -u "$JIRA_AUTH" -H 'Content-Type: application/json' \
+              -X PUT "$JIRA_BASE_URL/rest/api/3/issue/$TICKET" -d "$1" > /dev/null
+          }
+
+          case "$readiness" in
+            "READINESS: BLOCKED"*)
+              jira_comment "The build agent needs answers before it can start:"
+              jira_labels '{"update":{"labels":[{"remove":"agent-ready"},{"add":"needs-info"}]}}'
+              exit 0 ;;
+            "READINESS: PLAN"*)
+              jira_comment "Proposed plan. Add the plan-approved label and re-run to build it:"
+              jira_labels '{"update":{"labels":[{"remove":"agent-ready"},{"add":"plan-review"}]}}'
+              exit 0 ;;
+            "READINESS: OK"*) ;;
+            *) echo "Unexpected readiness line: $readiness"; exit 1 ;;
+          esac
+
+          git config user.name "$BOT_LOGIN"
+          git config user.email "$BOT_EMAIL"
+          git add -A -- . ':!agent-output'
+          git diff --cached --quiet || git commit -m "$TICKET: agent build"
+          git push -u origin "agent/$TICKET"
+
+          title=$(jq -r '.fields.summary' agent-output/ticket.json)
+          gh pr create --base main --head "agent/$TICKET" \
+            --title "$TICKET: $title" --body-file "$summary" --label agent
+
+      - name: Upload agent output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: builder-output
+          path: agent-output/
+          if-no-files-found: ignore

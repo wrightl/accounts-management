@@ -5,21 +5,18 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { clerkClient } from "@clerk/nextjs/server";
 import { getDb } from "@/db";
-import { reimbursements, users } from "@/db/schema";
+import { users } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { mutate } from "@/lib/mutate";
-import { cancelPendingReimbursementRunsForPayee } from "@/lib/reimbursements/cancel";
 import { isPlatformAdminRole, isTenantRole, type TenantRole } from "@/lib/roles";
 import {
-  countAdminUsers,
   countUserMemberships,
   ensureLocalUser,
   findUserByEmail,
   getMembership,
   listUserMemberships,
   normalizeEmail,
-  removeMembership,
   upsertMembership,
 } from "@/lib/users";
 import { isPlatformAdminEmail } from "@/lib/bootstrap";
@@ -31,6 +28,11 @@ import {
   clerkErrorMessage,
   sendClerkInvitation,
 } from "@/lib/clerk-invite";
+import {
+  changeCompanyMemberRole,
+  removeCompanyMember,
+  revokeCompanyInvite,
+} from "@/lib/users/manage";
 import {
   inviteUserRawFromFormData,
   parseInviteUserInput,
@@ -69,24 +71,6 @@ async function clerkProfileImageFile(file: File): Promise<File> {
   return new File([bytes], name, { type: contentType });
 }
 
-async function revokeClerkInvitations(email: string): Promise<ActionResult> {
-  try {
-    const client = await clerkClient();
-    const normalised = normalizeEmail(email);
-    const { data: invitations } = await client.invitations.getInvitationList({
-      query: normalised,
-      status: "pending",
-    });
-    for (const invitation of invitations) {
-      if (normalizeEmail(invitation.emailAddress) === normalised) {
-        await client.invitations.revokeInvitation(invitation.id);
-      }
-    }
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: clerkErrorMessage(err) };
-  }
-}
 
 export async function updateUserRole(
   userId: string,
@@ -106,59 +90,13 @@ export async function updateUserRole(
   return mutate(
     "users:manage",
     async ({ session, companyId }) => {
-      if (session.userId) {
-        const db = getDb();
-        const membership = await getMembership(parsed.data.userId, companyId);
-        if (!membership) return { ok: false, error: "User not found" };
-
-        const [target] = await db
-          .select({
-            clerkUserId: users.clerkUserId,
-            companyId: users.companyId,
-            email: users.email,
-            name: users.name,
-            expenseInboundSlug: users.expenseInboundSlug,
-          })
-          .from(users)
-          .where(eq(users.id, parsed.data.userId))
-          .limit(1);
-        if (!target) return { ok: false, error: "User not found" };
-        if (target.clerkUserId === session.userId) {
-          return { ok: false, error: "You cannot change your own role" };
-        }
-
-        const nextRole = parsed.data.role;
-        const membershipCount = await countUserMemberships(parsed.data.userId);
-        if (membershipCount > 1 && nextRole !== "accountant") {
-          return {
-            ok: false,
-            error: "Users with access to multiple companies must remain accountants.",
-          };
-        }
-
-        const patch: { role?: TenantRole; expenseInboundSlug?: string } = {};
-        if (target.companyId === companyId) {
-          patch.role = nextRole;
-        }
-        if (
-          (nextRole === "admin" || nextRole === "user") &&
-          !target.expenseInboundSlug
-        ) {
-          patch.expenseInboundSlug = await uniquifyUserInboundSlug(
-            userInboundSlugSeed(target.name, target.email),
-            parsed.data.userId,
-          );
-        }
-        if (Object.keys(patch).length > 0) {
-          await db
-            .update(users)
-            .set(patch)
-            .where(eq(users.id, parsed.data.userId));
-        }
-        await upsertMembership(parsed.data.userId, companyId, nextRole);
-        return { ok: true, id: parsed.data.userId };
-      }
-      return { ok: false, error: "Not signed in" };
+      if (!session.userId) return { ok: false, error: "Not signed in" };
+      return changeCompanyMemberRole({
+        companyId,
+        userId: parsed.data.userId,
+        role: parsed.data.role,
+        actingClerkUserId: session.userId,
+      });
     },
     {
       audit: {
@@ -327,33 +265,7 @@ export async function inviteUser(formData: FormData): Promise<ActionResult> {
 export async function revokeUserInvite(userId: string): Promise<ActionResult> {
   return mutate(
     "users:manage",
-    async ({ companyId }) => {
-      const membership = await getMembership(userId, companyId);
-      if (!membership) return { ok: false, error: "User not found" };
-
-      const db = getDb();
-      const [target] = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
-      if (!target) return { ok: false, error: "User not found" };
-      if (target.clerkUserId) {
-        return {
-          ok: false,
-          error: "Cannot revoke an invitation for a user who has already signed in.",
-        };
-      }
-
-      const { remaining } = await removeMembership(userId, companyId);
-      if (remaining === 0) {
-        const clerkResult = await revokeClerkInvitations(target.email);
-        if (!clerkResult.ok) return clerkResult;
-        await db.delete(users).where(eq(users.id, userId));
-      }
-
-      return { ok: true, id: userId };
-    },
+    async ({ companyId }) => revokeCompanyInvite({ companyId, userId }),
     {
       audit: {
         action: "user.invite.revoke",
@@ -368,70 +280,12 @@ export async function revokeUserInvite(userId: string): Promise<ActionResult> {
 export async function deleteUser(userId: string): Promise<ActionResult> {
   return mutate(
     "users:manage",
-    async ({ session, companyId }) => {
-      const membership = await getMembership(userId, companyId);
-      if (!membership) return { ok: false, error: "User not found" };
-
-      const db = getDb();
-      const [target] = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
-      if (!target) return { ok: false, error: "User not found" };
-      if (target.clerkUserId === session.userId) {
-        return { ok: false, error: "You cannot delete your own account." };
-      }
-      if (membership.role === "admin" && (await countAdminUsers(companyId)) <= 1) {
-        return { ok: false, error: "Cannot delete the last administrator." };
-      }
-
-      const membershipCount = await countUserMemberships(userId);
-      const isLastMembership = membershipCount <= 1;
-
-      if (isLastMembership) {
-        if (!target.clerkUserId) {
-          const clerkResult = await revokeClerkInvitations(target.email);
-          if (!clerkResult.ok) return clerkResult;
-        } else {
-          try {
-            const client = await clerkClient();
-            await client.users.deleteUser(target.clerkUserId);
-          } catch (err) {
-            return { ok: false, error: clerkErrorMessage(err) };
-          }
-        }
-      }
-
-      await db.transaction(async (tx) => {
-        await cancelPendingReimbursementRunsForPayee(tx, companyId, userId);
-      });
-
-      if (!isLastMembership) {
-        await removeMembership(userId, companyId);
-        return { ok: true, id: userId };
-      }
-
-      const [remainingReimbursement] = await db
-        .select({ id: reimbursements.id })
-        .from(reimbursements)
-        .where(eq(reimbursements.payeeUserId, userId))
-        .limit(1);
-
-      await removeMembership(userId, companyId);
-
-      if (remainingReimbursement) {
-        // Keep the row for payee history; null clerk so re-invite/sign-in can claim.
-        await db
-          .update(users)
-          .set({ clerkUserId: null })
-          .where(eq(users.id, userId));
-      } else {
-        await db.delete(users).where(eq(users.id, userId));
-      }
-
-      return { ok: true, id: userId };
-    },
+    async ({ session, companyId }) =>
+      removeCompanyMember({
+        companyId,
+        userId,
+        actingClerkUserId: session.userId,
+      }),
     {
       audit: {
         action: "user.delete",

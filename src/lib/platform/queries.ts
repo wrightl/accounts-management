@@ -7,6 +7,7 @@ import {
   eq,
   gte,
   ilike,
+  inArray,
   isNotNull,
   or,
   sql,
@@ -17,9 +18,11 @@ import { PLATFORM_ADMIN_ROLE } from "@/lib/roles";
 import {
   auditLog,
   companies,
+  companyBilling,
   companyMemberships,
   companySupportNotes,
   inboundEmailJobs,
+  invoices,
   platformLogs,
   sendJobs,
   users,
@@ -36,20 +39,73 @@ export type PlatformCompanyListItem = {
   failedInbound: number;
   failedSend: number;
   lastAuditAt: Date | null;
+  billingPlan: string | null;
+  billingStatus: string | null;
+  complimentary: boolean;
 };
+
+export const COMPANY_LIST_FILTERS = [
+  "suspended",
+  "trialing",
+  "active",
+  "past_due",
+  "canceled",
+  "complimentary",
+] as const;
+export type CompanyListFilter = (typeof COMPANY_LIST_FILTERS)[number];
+
+export function isCompanyListFilter(value: unknown): value is CompanyListFilter {
+  return COMPANY_LIST_FILTERS.includes(value as CompanyListFilter);
+}
+
+/** id + name only — for filter dropdowns, without the list page's counts. */
+export async function listCompanyOptions() {
+  return getDb()
+    .select({ id: companies.id, name: companies.name })
+    .from(companies)
+    .orderBy(asc(companies.name));
+}
 
 export async function listPlatformCompanies(opts?: {
   q?: string;
+  filter?: CompanyListFilter;
+  limit?: number;
+  offset?: number;
 }): Promise<PlatformCompanyListItem[]> {
   const db = getDb();
   const q = opts?.q?.trim();
-  const where = q
-    ? or(
+  const conditions: SQL[] = [];
+  if (q) {
+    conditions.push(
+      or(
         ilike(companies.name, `%${q}%`),
         ilike(companies.slug, `%${q}%`),
         ilike(companies.legalName, `%${q}%`),
-      )
-    : undefined;
+      )!,
+    );
+  }
+  switch (opts?.filter) {
+    case "suspended":
+      conditions.push(isNotNull(companies.suspendedAt));
+      break;
+    case "complimentary":
+      conditions.push(eq(companyBilling.access, "complimentary_unlimited"));
+      break;
+    case "canceled":
+      conditions.push(inArray(companyBilling.status, ["canceled", "unpaid"]));
+      break;
+    case "trialing":
+    case "active":
+    case "past_due":
+      conditions.push(eq(companyBilling.status, opts.filter));
+      break;
+  }
+  const where = conditions.length ? and(...conditions) : undefined;
+
+  // Qualify the outer reference explicitly: Drizzle leaves columns
+  // unqualified in single-table selects, and the subquery would then bind it
+  // to its own `id`.
+  const companyId = sql`${companies}.${sql.identifier(companies.id.name)}`;
 
   const rows = await db
     .select({
@@ -61,29 +117,37 @@ export async function listPlatformCompanies(opts?: {
       suspendedAt: companies.suspendedAt,
       memberCount: sql<number>`(
         select count(*)::int from ${companyMemberships}
-        where ${companyMemberships.companyId} = ${companies.id}
+        where ${companyMemberships.companyId} = ${companyId}
       )`,
       failedInbound: sql<number>`(
         select count(*)::int from ${inboundEmailJobs}
-        where ${inboundEmailJobs.companyId} = ${companies.id}
+        where ${inboundEmailJobs.companyId} = ${companyId}
           and ${inboundEmailJobs.status} = 'failed'
       )`,
       failedSend: sql<number>`(
         select count(*)::int from ${sendJobs}
-        where ${sendJobs.companyId} = ${companies.id}
+        where ${sendJobs.companyId} = ${companyId}
           and ${sendJobs.status} = 'failed'
       )`,
       lastAuditAt: sql<Date | null>`(
         select max(${auditLog.createdAt}) from ${auditLog}
-        where ${auditLog.companyId} = ${companies.id}
+        where ${auditLog.companyId} = ${companyId}
       )`,
+      billingPlan: companyBilling.plan,
+      billingStatus: companyBilling.status,
+      billingAccess: companyBilling.access,
     })
     .from(companies)
+    .leftJoin(companyBilling, eq(companyBilling.companyId, companies.id))
     .where(where)
-    .orderBy(asc(companies.name));
+    .orderBy(asc(companies.name))
+    .limit(Math.min(opts?.limit ?? 500, 500))
+    .offset(opts?.offset ?? 0);
 
-  return rows.map((r) => ({
+  return rows.map(({ billingAccess, ...r }) => ({
     ...r,
+    lastAuditAt: r.lastAuditAt ? new Date(r.lastAuditAt) : null,
+    complimentary: billingAccess === "complimentary_unlimited",
     memberCount: Number(r.memberCount) || 0,
     failedInbound: Number(r.failedInbound) || 0,
     failedSend: Number(r.failedSend) || 0,
@@ -104,6 +168,7 @@ export async function getPlatformCompanyDetail(companyId: string) {
       id: users.id,
       email: users.email,
       name: users.name,
+      clerkUserId: users.clerkUserId,
       role: companyMemberships.role,
       createdAt: companyMemberships.createdAt,
     })
@@ -356,6 +421,7 @@ export async function listPlatformLogs(opts?: {
 export async function listPlatformInboundJobs(opts?: {
   status?: string;
   limit?: number;
+  offset?: number;
 }) {
   const db = getDb();
   const limit = Math.min(opts?.limit ?? 50, 200);
@@ -393,12 +459,14 @@ export async function listPlatformInboundJobs(opts?: {
     .innerJoin(companies, eq(companies.id, inboundEmailJobs.companyId))
     .where(and(...conditions))
     .orderBy(desc(inboundEmailJobs.createdAt))
-    .limit(limit);
+    .limit(limit)
+    .offset(opts?.offset ?? 0);
 }
 
 export async function listPlatformSendJobs(opts?: {
   status?: string;
   limit?: number;
+  offset?: number;
 }) {
   const db = getDb();
   const limit = Math.min(opts?.limit ?? 50, 200);
@@ -420,15 +488,18 @@ export async function listPlatformSendJobs(opts?: {
       kind: sendJobs.kind,
       status: sendJobs.status,
       invoiceId: sendJobs.invoiceId,
+      invoiceNumber: invoices.number,
       attempts: sendJobs.attempts,
       lastError: sendJobs.lastError,
       createdAt: sendJobs.createdAt,
     })
     .from(sendJobs)
     .innerJoin(companies, eq(companies.id, sendJobs.companyId))
+    .leftJoin(invoices, eq(invoices.id, sendJobs.invoiceId))
     .where(and(...conditions))
     .orderBy(desc(sendJobs.createdAt))
-    .limit(limit);
+    .limit(limit)
+    .offset(opts?.offset ?? 0);
 }
 
 export async function countSuspendedCompanies(): Promise<number> {
@@ -438,4 +509,29 @@ export async function countSuspendedCompanies(): Promise<number> {
     .from(companies)
     .where(isNotNull(companies.suspendedAt));
   return Number(row?.count ?? 0);
+}
+
+/** Most recent logged run for each cron (scheduled or manual). */
+export async function getLatestCronRuns() {
+  const db = getDb();
+  const latest = async (prefix: string) => {
+    const [row] = await db
+      .select({
+        source: platformLogs.source,
+        level: platformLogs.level,
+        message: platformLogs.message,
+        meta: platformLogs.meta,
+        createdAt: platformLogs.createdAt,
+      })
+      .from(platformLogs)
+      .where(ilike(platformLogs.source, `${prefix}%`))
+      .orderBy(desc(platformLogs.createdAt))
+      .limit(1);
+    return row ?? null;
+  };
+  const [daily, inbound] = await Promise.all([
+    latest("cron.daily"),
+    latest("cron.inbound-email"),
+  ]);
+  return { daily, inbound };
 }

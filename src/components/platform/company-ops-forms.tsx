@@ -32,6 +32,7 @@ export function CompanySuspendForm({
     suspended: boolean;
 }) {
     const router = useRouter();
+    const { confirm } = useAlert();
     const [pending, start] = useTransition();
     const {
         fieldErrors,
@@ -85,7 +86,7 @@ export function CompanySuspendForm({
                 variant={suspended ? 'primary' : 'destructive'}
                 className="mt-4"
                 disabled={pending}
-                onClick={() => {
+                onClick={async () => {
                     clearAll();
                     if (!suspended) {
                         const clientParsed = parseSuspendCompanyInput({
@@ -100,12 +101,27 @@ export function CompanySuspendForm({
                             );
                             return;
                         }
+                        // Confirm outside startTransition so the dialog opens immediately.
+                        const ok = await confirm({
+                            title: 'Suspend this company?',
+                            message:
+                                'Members will be unable to change data and scheduled emails will stop until the company is unsuspended.',
+                            confirmLabel: 'Suspend company',
+                            variant: 'destructive',
+                        });
+                        if (!ok) return;
                     }
                     start(async () => {
                         const result = suspended
                             ? await unsuspendCompany(companyId)
                             : await suspendCompany(companyId, reason);
                         if (applyActionResult(result)) {
+                            toast(
+                                suspended
+                                    ? 'Company unsuspended.'
+                                    : 'Company suspended.',
+                            );
+                            setReason('');
                             router.refresh();
                         } else if (!result.ok) {
                             scheduleFocusFirstFieldError(

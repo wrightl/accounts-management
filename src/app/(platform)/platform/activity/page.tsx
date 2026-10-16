@@ -1,8 +1,13 @@
 import Link from "next/link";
 import { requirePlatformAdmin } from "@/lib/platform";
 import { hasDatabaseClient } from "@/db";
-import { listPlatformActivity, listPlatformCompanies } from "@/lib/platform/queries";
+import { listCompanyOptions, listPlatformActivity } from "@/lib/platform/queries";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
+import { ExpandableText } from "@/components/platform/expandable-text";
+import { ClearFilters, Pager, parseOffset } from "@/components/platform/pager";
+import { formatDateTimeUk } from "@/lib/dates";
+
+const PAGE_SIZE = 50;
 
 export default async function PlatformActivityPage({
   searchParams,
@@ -15,7 +20,7 @@ export default async function PlatformActivityPage({
 }) {
   await requirePlatformAdmin();
   const params = await searchParams;
-  const offset = Math.max(0, Number(params.offset ?? 0) || 0);
+  const offset = parseOffset(params.offset);
 
   if (!hasDatabaseClient()) {
     return (
@@ -26,15 +31,16 @@ export default async function PlatformActivityPage({
     );
   }
 
-  const [rows, companyOptions] = await Promise.all([
+  const [fetched, companyOptions] = await Promise.all([
     listPlatformActivity({
       companyId: params.companyId || undefined,
       actionPrefix: params.action || undefined,
-      limit: 50,
+      limit: PAGE_SIZE + 1,
       offset,
     }),
-    listPlatformCompanies(),
+    listCompanyOptions(),
   ]);
+  const rows = fetched.slice(0, PAGE_SIZE);
 
   return (
     <div>
@@ -68,6 +74,10 @@ export default async function PlatformActivityPage({
         >
           Filter
         </button>
+        <ClearFilters
+          path="/platform/activity"
+          active={Boolean(params.companyId || params.action)}
+        />
       </form>
 
       <div className="mt-6">
@@ -88,7 +98,7 @@ export default async function PlatformActivityPage({
               {rows.map((r) => (
                 <TR key={r.id}>
                   <TD className="whitespace-nowrap text-muted">
-                    {r.createdAt.toLocaleString("en-GB")}
+                    {formatDateTimeUk(r.createdAt)}
                   </TD>
                   <TD>
                     {r.companyId ? (
@@ -104,8 +114,11 @@ export default async function PlatformActivityPage({
                   </TD>
                   <TD>{r.actorName ?? r.actorEmail ?? "—"}</TD>
                   <TD className="font-mono text-xs">{r.action}</TD>
-                  <TD className="max-w-xs truncate font-mono text-xs text-muted">
-                    {r.meta ? JSON.stringify(r.meta) : "—"}
+                  <TD>
+                    <ExpandableText
+                      text={r.meta ? JSON.stringify(r.meta, null, 2) : null}
+                      mono
+                    />
                   </TD>
                 </TR>
               ))}
@@ -114,28 +127,16 @@ export default async function PlatformActivityPage({
         )}
       </div>
 
-      <div className="mt-4 flex gap-3 text-sm">
-        {offset > 0 ? (
-          <Link
-            href={`/platform/activity?offset=${Math.max(0, offset - 50)}${
-              params.companyId ? `&companyId=${params.companyId}` : ""
-            }${params.action ? `&action=${encodeURIComponent(params.action)}` : ""}`}
-            className="text-navy hover:underline"
-          >
-            ← Newer
-          </Link>
-        ) : null}
-        {rows.length === 50 ? (
-          <Link
-            href={`/platform/activity?offset=${offset + 50}${
-              params.companyId ? `&companyId=${params.companyId}` : ""
-            }${params.action ? `&action=${encodeURIComponent(params.action)}` : ""}`}
-            className="text-navy hover:underline"
-          >
-            Older →
-          </Link>
-        ) : null}
-      </div>
+      <Pager
+        path="/platform/activity"
+        params={{ companyId: params.companyId, action: params.action }}
+        offset={offset}
+        pageSize={PAGE_SIZE}
+        shown={rows.length}
+        hasMore={fetched.length > PAGE_SIZE}
+        newerLabel="← Newer"
+        olderLabel="Older →"
+      />
     </div>
   );
 }

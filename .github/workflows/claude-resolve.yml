@@ -1,0 +1,120 @@
+name: Agent · resolver
+
+# Rollout stage 2: fixes one review round on an agent PR. Runs only for a
+# review that requests changes, from the reviewer bot or someone with write
+# access. Comments from anyone else are a prompt-injection route and ignored.
+on:
+  pull_request_review:
+    types: [submitted]
+
+concurrency:
+  group: agent-resolve-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    if: >-
+      github.event.review.state == 'changes_requested' &&
+      startsWith(github.event.pull_request.head.ref, 'agent/') &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !contains(github.event.pull_request.labels.*.name, 'needs-human') &&
+      (github.event.review.user.login == vars.AGENT_BOT_LOGIN ||
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.review.author_association))
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Bot token
+        id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ steps.app.outputs.token }}
+
+      - name: Agent config on base branch
+        id: base
+        run: scripts/agent/base-has-config.sh "${{ github.event.pull_request.base.ref }}" >> "$GITHUB_OUTPUT"
+
+      - name: Round cap
+        id: cap
+        if: steps.base.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          BOT_LOGIN: ${{ vars.AGENT_BOT_LOGIN }}
+        run: scripts/agent/round-cap.sh ${{ github.event.pull_request.number }} >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        if: steps.cap.outputs.continue == 'true'
+        with:
+          node-version: 22
+          cache: npm
+
+      - if: steps.cap.outputs.continue == 'true'
+        run: npm ci
+
+      # The review's author was checked above, so every comment in this
+      # review comes from a trusted account.
+      - name: Collect review comments
+        if: steps.cap.outputs.continue == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REVIEW_BODY: ${{ github.event.review.body }}
+          REVIEW_URL: ${{ github.event.review.html_url }}
+        run: |
+          mkdir -p agent-output
+          gh api --paginate \
+            "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews/${{ github.event.review.id }}/comments" \
+            --jq '[.[] | {url: .html_url, path, line, body}]' \
+            | jq -s --arg body "$REVIEW_BODY" --arg url "$REVIEW_URL" \
+                '[{url: $url, path: null, line: null, body: $body}] + add' \
+            > agent-output/comments.json
+
+      - name: Run resolver
+        id: claude
+        if: steps.cap.outputs.continue == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ steps.app.outputs.token }}
+          prompt: |
+            Address the review on PR #${{ github.event.pull_request.number }}.
+            The comments to act on are in agent-output/comments.json. Follow your agent instructions exactly,
+            and finish by writing agent-output/summary.md.
+          claude_args: >-
+            --agent resolver
+            --settings .claude/ci-settings.json
+            --max-turns 60
+            --max-budget-usd 6
+            --allowedTools "Read,Edit,Write,Glob,Grep,Task,Skill,Bash(npm run lint:*),Bash(npm run typecheck:*),Bash(npm test:*),Bash(npm run test:e2e:*),Bash(npx next build:*),Bash(npx eslint:*),Bash(npx tsc:*),Bash(npx vitest:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git add:*),Bash(git commit:*)"
+
+      - name: Record run
+        if: always() && steps.cap.outputs.continue == 'true'
+        run: node scripts/agent/report-run.mjs resolver "${{ steps.claude.outputs.execution_file }}"
+
+      # Pushing with the app token (not GITHUB_TOKEN) re-triggers CI, which
+      # re-runs the deterministic checks and then the reviewer.
+      - name: Push and reply
+        if: steps.cap.outputs.continue == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          BOT_EMAIL: ${{ vars.AGENT_APP_USER_ID }}+${{ vars.AGENT_BOT_LOGIN }}@users.noreply.github.com
+          BOT_LOGIN: ${{ vars.AGENT_BOT_LOGIN }}
+        run: |
+          [ -f agent-output/summary.md ] || { echo "Resolver wrote no summary"; exit 1; }
+          git config user.name "$BOT_LOGIN"
+          git config user.email "$BOT_EMAIL"
+          git add -A -- . ':!agent-output'
+          if git diff --cached --quiet; then
+            echo "No code changes."
+          else
+            git commit -m "Address review ${{ github.event.review.id }}"
+            git push
+          fi
+          gh pr comment ${{ github.event.pull_request.number }} --body-file agent-output/summary.md

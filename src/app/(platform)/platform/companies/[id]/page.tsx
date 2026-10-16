@@ -12,7 +12,10 @@ import {
   CompanySuspendForm,
 } from "@/components/platform/company-ops-forms";
 import { CompanyBillingOpsForm } from "@/components/platform/company-billing-ops";
-import { roleLabel, isRole } from "@/lib/roles";
+import { MemberActions } from "@/components/platform/member-actions";
+import { StatusPill } from "@/components/platform/status-pill";
+import { stripeDashboardUrl } from "@/lib/billing/stripe-dashboard";
+import { formatDateTimeUk } from "@/lib/dates";
 
 export default async function PlatformCompanyDetailPage({
   params,
@@ -54,10 +57,11 @@ export default async function PlatformCompanyDetailPage({
           </p>
         </div>
         {company.suspendedAt ? (
-          <span className="rounded-full bg-red-100 px-3 py-1 text-sm text-red-800">
-            Suspended
-            {company.suspendedReason ? `: ${company.suspendedReason}` : ""}
-          </span>
+          <StatusPill
+            status="suspended"
+            label={`Suspended${company.suspendedReason ? `: ${company.suspendedReason}` : ""}`}
+            className="!text-sm normal-case"
+          />
         ) : null}
       </div>
 
@@ -87,7 +91,7 @@ export default async function PlatformCompanyDetailPage({
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-muted">Created</dt>
-              <dd>{company.createdAt.toLocaleString("en-GB")}</dd>
+              <dd>{formatDateTimeUk(company.createdAt)}</dd>
             </div>
           </dl>
         </section>
@@ -114,16 +118,6 @@ export default async function PlatformCompanyDetailPage({
           </dl>
         </section>
 
-        <CompanySuspendForm
-          companyId={company.id}
-          suspended={Boolean(company.suspendedAt)}
-        />
-
-        <CompanyDeleteForm
-          companyId={company.id}
-          companyName={company.name}
-        />
-
         <CompanyBillingOpsForm
           companyId={company.id}
           complimentary={entitlements.complimentary}
@@ -133,6 +127,11 @@ export default async function PlatformCompanyDetailPage({
           currentPeriodEnd={billing.currentPeriodEnd}
           stripeCustomerId={billing.stripeCustomerId}
           stripeSubscriptionId={billing.stripeSubscriptionId}
+          stripeCustomerUrl={stripeDashboardUrl("customers", billing.stripeCustomerId)}
+          stripeSubscriptionUrl={stripeDashboardUrl(
+            "subscriptions",
+            billing.stripeSubscriptionId,
+          )}
           complimentaryNote={billing.complimentaryNote}
           complimentaryExpiresAt={billing.complimentaryExpiresAt}
           readOnly={entitlements.readOnly}
@@ -148,24 +147,50 @@ export default async function PlatformCompanyDetailPage({
       </div>
 
       <section className="mt-8">
-        <h2 className="font-display text-lg font-semibold">Members</h2>
+        <h2 className="font-display text-lg font-semibold">
+          Members ({members.length})
+        </h2>
         <div className="mt-3">
           <Table>
             <THead>
               <TR>
                 <TH>Email</TH>
                 <TH>Name</TH>
-                <TH>Role</TH>
+                <TH>Status</TH>
+                <TH className="text-right">Role &amp; actions</TH>
               </TR>
             </THead>
             <TBody>
-              {members.map((m) => (
-                <TR key={m.id}>
-                  <TD>{m.email}</TD>
-                  <TD>{m.name ?? "—"}</TD>
-                  <TD>{isRole(m.role) ? roleLabel(m.role) : m.role}</TD>
+              {members.length === 0 ? (
+                <TR>
+                  <TD colSpan={4} className="text-muted">
+                    No members. Invite an admin above.
+                  </TD>
                 </TR>
-              ))}
+              ) : (
+                members.map((m) => (
+                  <TR key={m.id}>
+                    <TD>{m.email}</TD>
+                    <TD>{m.name ?? "—"}</TD>
+                    <TD>
+                      {m.clerkUserId ? (
+                        <StatusPill status="active" />
+                      ) : (
+                        <StatusPill status="pending" label="Invite pending" />
+                      )}
+                    </TD>
+                    <TD>
+                      <MemberActions
+                        companyId={company.id}
+                        userId={m.id}
+                        email={m.email}
+                        role={m.role}
+                        pendingInvite={!m.clerkUserId}
+                      />
+                    </TD>
+                  </TR>
+                ))
+              )}
             </TBody>
           </Table>
         </div>
@@ -186,7 +211,7 @@ export default async function PlatformCompanyDetailPage({
                 <p className="whitespace-pre-wrap">{n.body}</p>
                 <p className="mt-2 text-xs text-muted">
                   {n.authorName ?? n.authorEmail ?? "Unknown"} ·{" "}
-                  {n.createdAt.toLocaleString("en-GB")}
+                  {formatDateTimeUk(n.createdAt)}
                 </p>
               </li>
             ))
@@ -194,8 +219,28 @@ export default async function PlatformCompanyDetailPage({
         </ul>
       </section>
 
+      <div className="mt-8 grid gap-6 lg:grid-cols-2">
+        <CompanySuspendForm
+          companyId={company.id}
+          suspended={Boolean(company.suspendedAt)}
+        />
+
+        <CompanyDeleteForm
+          companyId={company.id}
+          companyName={company.name}
+        />
+      </div>
+
       <section className="mt-8">
-        <h2 className="font-display text-lg font-semibold">Recent activity</h2>
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <h2 className="font-display text-lg font-semibold">Recent activity</h2>
+          <Link
+            href={`/platform/activity?companyId=${company.id}`}
+            className="text-sm text-navy hover:underline"
+          >
+            View all →
+          </Link>
+        </div>
         <div className="mt-3">
           {recentAudit.length === 0 ? (
             <p className="text-sm text-muted">No audit entries.</p>
@@ -213,7 +258,7 @@ export default async function PlatformCompanyDetailPage({
                 {recentAudit.map((r) => (
                   <TR key={r.id}>
                     <TD className="whitespace-nowrap text-muted">
-                      {r.createdAt.toLocaleString("en-GB")}
+                      {formatDateTimeUk(r.createdAt)}
                     </TD>
                     <TD>{r.actorName ?? r.actorEmail ?? "—"}</TD>
                     <TD className="font-mono text-xs">{r.action}</TD>
