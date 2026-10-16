@@ -1,0 +1,10 @@
+# Every change needs an approval from a code owner; agents cannot approve.
+*                @wrightl
+
+# Pipeline config: changes here alter what agents are allowed to do.
+/.github/        @wrightl
+/.claude/        @wrightl
+/CLAUDE.md       @wrightl
+/AGENTS.md       @wrightl
+/scripts/agent/  @wrightl
+/drizzle/        @wrightl
