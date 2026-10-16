@@ -38,8 +38,13 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref }}
           token: ${{ steps.app.outputs.token }}
 
+      - name: Agent config on base branch
+        id: base
+        run: scripts/agent/base-has-config.sh "${{ github.event.pull_request.base.ref }}" >> "$GITHUB_OUTPUT"
+
       - name: Round cap
         id: cap
+        if: steps.base.outputs.ready == 'true'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           BOT_LOGIN: ${{ vars.AGENT_BOT_LOGIN }}
