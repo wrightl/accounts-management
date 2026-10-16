@@ -5,6 +5,7 @@ import { getDb } from "@/db";
 import { reimbursements, users } from "@/db/schema";
 import { cancelPendingReimbursementRunsForPayee } from "@/lib/reimbursements/cancel";
 import { clerkErrorMessage, sendClerkInvitation } from "@/lib/clerk-invite";
+import type { InviteContext } from "@/lib/invite-email";
 import {
   uniquifyUserInboundSlug,
   userInboundSlugSeed,
@@ -45,10 +46,13 @@ export async function revokeClerkInvitations(email: string): Promise<ActionResul
 }
 
 /** Revoke any pending invite and send a fresh one (new email, new link). */
-export async function resendClerkInvitation(email: string): Promise<ActionResult> {
+export async function resendClerkInvitation(
+  email: string,
+  context?: InviteContext,
+): Promise<ActionResult> {
   const revoked = await revokeClerkInvitations(email);
   if (!revoked.ok) return revoked;
-  return sendClerkInvitation(email);
+  return sendClerkInvitation(email, context);
 }
 
 export async function changeCompanyMemberRole(params: {

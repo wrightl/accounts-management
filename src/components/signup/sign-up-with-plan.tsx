@@ -8,7 +8,7 @@ import { SignupPlanPicker } from "@/components/signup/plan-picker";
 import type { StripeCatalog } from "@/lib/billing/catalog-types";
 import type { PricingPlan } from "@/lib/marketing-analytics";
 
-function ClerkSignUp() {
+export function ClerkSignUp() {
   return (
     <div className="w-full max-w-md">
       <p className="mb-4 text-center text-sm text-white/70">

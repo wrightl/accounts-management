@@ -113,7 +113,10 @@ beforeEach(async () => {
   getInvitationList.mockReset();
   revokeInvitation.mockReset();
   getInvitationList.mockResolvedValue({ data: [] });
-  createInvitation.mockResolvedValue({});
+  createInvitation.mockResolvedValue({
+    id: "inv_test",
+    url: "https://clerk.example.com/v1/tickets/accept?ticket=tkt_test",
+  });
   updateClerkUser.mockResolvedValue({});
   deleteClerkUser.mockResolvedValue({});
   revokeInvitation.mockResolvedValue({});
@@ -178,6 +181,8 @@ describe("inviteUser", () => {
     expect(createInvitation).toHaveBeenCalledWith({
       emailAddress: "accountant@example.com",
       redirectUrl: expect.stringMatching(/\/sign-up$/),
+      expiresInDays: 7,
+      notify: false,
     });
 
     const invited = await findUserByEmail("accountant@example.com");

@@ -190,7 +190,10 @@ export async function inviteUser(formData: FormData): Promise<ActionResult> {
           await upsertMembership(existing.id, companyId, "accountant");
 
           if (!existing.clerkUserId) {
-            const invited = await sendClerkInvitation(email);
+            const invited = await sendClerkInvitation(email, {
+              companyId,
+              invitedByUserId: localUserId,
+            });
             if (!invited.ok) return invited;
           }
 
@@ -246,7 +249,10 @@ export async function inviteUser(formData: FormData): Promise<ActionResult> {
         await upsertMembership(userId, companyId, role);
       }
 
-      const invited = await sendClerkInvitation(email);
+      const invited = await sendClerkInvitation(email, {
+        companyId,
+        invitedByUserId: localUserId,
+      });
       if (!invited.ok) return invited;
 
       return { ok: true, id: userId };

@@ -333,7 +333,7 @@ export async function platformInviteCompanyAdmin(
         userId = created.id;
       }
 
-      const invited = await sendClerkInvitation(email);
+      const invited = await sendClerkInvitation(email, { companyId });
       if (!invited.ok) {
         // Undo the local rows so the admin can fix the problem and retry.
         if (existing) {
@@ -1012,7 +1012,7 @@ export async function platformResendCompanyInvite(
       if (target.clerkUserId) {
         return { ok: false, error: "This user has already signed in." };
       }
-      const sent = await resendClerkInvitation(target.email);
+      const sent = await resendClerkInvitation(target.email, { companyId });
       if (!sent.ok) return sent;
       return { ok: true, id: userId };
     },

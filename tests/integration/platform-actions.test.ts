@@ -197,7 +197,9 @@ describe("platformInviteCompanyAdmin", () => {
     const result = await platformInviteCompanyAdmin(inviteForm(company.id, "new@example.com"));
 
     expect(result.ok).toBe(true);
-    expect(mocks.sendClerkInvitation).toHaveBeenCalledWith("new@example.com");
+    expect(mocks.sendClerkInvitation).toHaveBeenCalledWith("new@example.com", {
+      companyId: expect.any(String),
+    });
     const [membership] = await db.select().from(companyMemberships);
     expect(membership).toMatchObject({ companyId: company.id, role: "admin" });
   });
@@ -348,7 +350,9 @@ describe("company member management", () => {
 
     expect((await platformResendCompanyInvite(company.id, invitee.id)).ok).toBe(true);
     expect(mocks.revokeInvitation).toHaveBeenCalledWith("inv_1");
-    expect(mocks.sendClerkInvitation).toHaveBeenCalledWith("invitee@example.com");
+    expect(mocks.sendClerkInvitation).toHaveBeenCalledWith("invitee@example.com", {
+      companyId: expect.any(String),
+    });
 
     expect((await platformRevokeCompanyInvite(company.id, invitee.id)).ok).toBe(true);
     expect(await db.select().from(users).where(eq(users.id, invitee.id))).toHaveLength(0);
@@ -393,7 +397,7 @@ describe("platform admin management", () => {
       .returning();
 
     expect((await resendPlatformAdminInvite(pending.id)).ok).toBe(true);
-    expect(mocks.sendClerkInvitation).toHaveBeenCalledWith("pending-ops@example.com");
+    expect(mocks.sendClerkInvitation).toHaveBeenCalledWith("pending-ops@example.com", undefined);
     expect((await removePlatformAdmin(pending.id)).ok).toBe(true);
     expect((await removePlatformAdmin(active.id)).ok).toBe(true);
 
