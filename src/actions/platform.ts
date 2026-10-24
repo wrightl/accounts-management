@@ -259,7 +259,7 @@ export async function platformInviteCompanyAdmin(
   const role: TenantRole = "admin";
 
   return platformMutate(
-    async () => {
+    async ({ localUserId }) => {
       if (isPlatformAdminEmail(email)) {
         return {
           ok: false,
@@ -333,7 +333,7 @@ export async function platformInviteCompanyAdmin(
         userId = created.id;
       }
 
-      const invited = await sendClerkInvitation(email);
+      const invited = await sendClerkInvitation(email, { companyId, invitedByUserId: localUserId });
       if (!invited.ok) {
         // Undo the local rows so the admin can fix the problem and retry.
         if (existing) {
@@ -389,7 +389,7 @@ export async function invitePlatformAdmin(
   const name = parsed.data.name;
 
   return platformMutate(
-    async () => {
+    async ({ localUserId }) => {
       const existing = await findUserByEmail(email);
       if (existing) {
         return {
@@ -413,7 +413,7 @@ export async function invitePlatformAdmin(
         })
         .returning({ id: users.id });
 
-      const invited = await sendClerkInvitation(email);
+      const invited = await sendClerkInvitation(email, { invitedByUserId: localUserId });
       if (!invited.ok) {
         await db.delete(users).where(eq(users.id, created.id));
         return invited;
@@ -999,7 +999,7 @@ export async function platformResendCompanyInvite(
   }
 
   return platformMutate(
-    async () => {
+    async ({ localUserId }) => {
       if (!(await getMembership(userId, companyId))) {
         return { ok: false, error: "User not found" };
       }
@@ -1012,7 +1012,10 @@ export async function platformResendCompanyInvite(
       if (target.clerkUserId) {
         return { ok: false, error: "This user has already signed in." };
       }
-      const sent = await resendClerkInvitation(target.email);
+      const sent = await resendClerkInvitation(target.email, {
+        companyId,
+        invitedByUserId: localUserId,
+      });
       if (!sent.ok) return sent;
       return { ok: true, id: userId };
     },
@@ -1086,7 +1089,7 @@ export async function resendPlatformAdminInvite(userId: string): Promise<ActionR
   if (!uuidSchema.safeParse(userId).success) return { ok: false, error: "Invalid user" };
 
   return platformMutate(
-    async () => {
+    async ({ localUserId }) => {
       const [target] = await getDb()
         .select({ email: users.email, role: users.role, clerkUserId: users.clerkUserId })
         .from(users)
@@ -1098,7 +1101,7 @@ export async function resendPlatformAdminInvite(userId: string): Promise<ActionR
       if (target.clerkUserId) {
         return { ok: false, error: "This admin has already signed in." };
       }
-      const sent = await resendClerkInvitation(target.email);
+      const sent = await resendClerkInvitation(target.email, { invitedByUserId: localUserId });
       if (!sent.ok) return sent;
       return { ok: true, id: userId };
     },

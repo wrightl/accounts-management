@@ -240,14 +240,15 @@ describe("late payment invoice", () => {
 });
 
 describe("weekly close", () => {
-  async function seedWork() {
-    await seedInvoice({ issueDate: addDays(today, -30), dueDate: addDays(today, -2) });
+  // `base` stands in for today so the digest test can pin a fixed Monday.
+  async function seedWork(base = today) {
+    await seedInvoice({ issueDate: addDays(base, -30), dueDate: addDays(base, -2) });
     await db.insert(expenses).values([
-      { companyId, description: "Forwarded receipt", spentAt: today, amountPence: 1_200, status: "pending" },
+      { companyId, description: "Forwarded receipt", spentAt: base, amountPence: 1_200, status: "pending" },
       {
         companyId,
         description: "Train",
-        spentAt: today,
+        spentAt: base,
         amountPence: 3_000,
         status: "reimbursable",
         paidByUserId: userId,
@@ -260,15 +261,15 @@ describe("weekly close", () => {
         number: "O-1",
         clientId,
         status: "active",
-        issueDate: today,
+        issueDate: base,
         netPence: 100_000,
         vatPence: 0,
         grossPence: 100_000,
       })
       .returning();
     await db.insert(orderPaymentMilestones).values([
-      { orderId: order.id, label: "Kick-off", amountPence: 40_000, dueDate: addDays(today, 3), position: 0 },
-      { orderId: order.id, label: "Delivery", amountPence: 60_000, dueDate: addDays(today, 40), position: 1 },
+      { orderId: order.id, label: "Kick-off", amountPence: 40_000, dueDate: addDays(base, 3), position: 0 },
+      { orderId: order.id, label: "Delivery", amountPence: 60_000, dueDate: addDays(base, 40), position: 1 },
     ]);
     const [account] = await db
       .insert(bankAccounts)
@@ -277,8 +278,8 @@ describe("weekly close", () => {
     const [done, open] = await db
       .insert(bankTransactions)
       .values([
-        { bankAccountId: account.id, externalId: "t1", bookedAt: addDays(today, -9), amountPence: 500, counterparty: "A" },
-        { bankAccountId: account.id, externalId: "t2", bookedAt: addDays(today, -5), amountPence: -900, counterparty: "B" },
+        { bankAccountId: account.id, externalId: "t1", bookedAt: addDays(base, -9), amountPence: 500, counterparty: "A" },
+        { bankAccountId: account.id, externalId: "t2", bookedAt: addDays(base, -5), amountPence: -900, counterparty: "B" },
       ])
       .returning();
     await db
@@ -307,10 +308,17 @@ describe("weekly close", () => {
   });
 
   it("sends a Monday digest once, and nothing on other days", async () => {
-    await seedWork();
-    expect((await sendWeeklyCloseDigests("2026-10-13")).notified).toBe(0);
-    expect((await sendWeeklyCloseDigests("2026-10-12")).notified).toBe(1);
-    expect((await sendWeeklyCloseDigests("2026-10-12")).notified).toBe(0);
+    // Pin the data and the company's join date (which filters deadlines) to
+    // the digest's Monday, so the count doesn't drift with the real clock.
+    const monday = "2026-10-12";
+    await db
+      .update(companies)
+      .set({ createdAt: new Date(`${monday}T00:00:00Z`) })
+      .where(eq(companies.id, companyId));
+    await seedWork(monday);
+    expect((await sendWeeklyCloseDigests(addDays(monday, 1))).notified).toBe(0);
+    expect((await sendWeeklyCloseDigests(monday)).notified).toBe(1);
+    expect((await sendWeeklyCloseDigests(monday)).notified).toBe(0);
     const [n] = await db
       .select()
       .from(notifications)
