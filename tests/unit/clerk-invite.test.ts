@@ -15,6 +15,9 @@ vi.mock("@clerk/backend", () => ({
 const inviteEmailModule = () => ({ sendInviteEmail });
 
 const CLERK_URL = "https://clerk.example.com/v1/tickets/accept?ticket=tkt_1";
+const SEND_FAILED = "Could not send the invitation email. Please try again.";
+
+let consoleError: ReturnType<typeof vi.spyOn>;
 
 async function loadClerkInvite(inviteEmail: () => object = inviteEmailModule) {
   vi.resetModules();
@@ -27,9 +30,11 @@ beforeEach(() => {
   createInvitation.mockReset().mockResolvedValue({ id: "inv_1", url: CLERK_URL });
   revokeInvitation.mockReset().mockResolvedValue({});
   sendInviteEmail.mockReset().mockResolvedValue(undefined);
+  consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
 afterEach(() => {
+  consoleError.mockRestore();
   delete process.env.CLERK_SECRET_KEY;
   vi.doUnmock("@/lib/invite-email");
 });
@@ -53,17 +58,16 @@ describe("sendClerkInvitation", () => {
     expect(revokeInvitation).not.toHaveBeenCalled();
   });
 
-  it("revokes the invitation when our email fails to send", async () => {
-    sendInviteEmail.mockRejectedValue(new Error("Resend is down"));
+  it("revokes the invitation when our email fails to send, and logs the cause", async () => {
+    const providerError = new Error("Resend 403: api key re_live_123 is restricted");
+    sendInviteEmail.mockRejectedValue(providerError);
     const { sendClerkInvitation } = await loadClerkInvite();
 
     const result = await sendClerkInvitation("new@example.com");
 
-    expect(result).toEqual({
-      ok: false,
-      error: "Could not send the invitation email: Resend is down",
-    });
+    expect(result).toEqual({ ok: false, error: SEND_FAILED });
     expect(revokeInvitation).toHaveBeenCalledWith("inv_1");
+    expect(consoleError).toHaveBeenCalledWith(expect.any(String), providerError);
   });
 
   it.each([
@@ -93,5 +97,18 @@ describe("sendClerkInvitation", () => {
       expect.objectContaining({ notify: true }),
     );
     expect(sendInviteEmail).not.toHaveBeenCalled();
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it("fails without inviting when the module breaks for any other reason", async () => {
+    const { sendClerkInvitation } = await loadClerkInvite(() => {
+      throw new Error("Invalid environment variables: RESEND_API_KEY");
+    });
+
+    const result = await sendClerkInvitation("new@example.com");
+
+    expect(result).toEqual({ ok: false, error: SEND_FAILED });
+    expect(createInvitation).not.toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalledTimes(1);
   });
 });

@@ -59,16 +59,31 @@ export function inviteAcceptUrl(clerkInvitationUrl: string | undefined): string 
 
 type InviteEmailModule = typeof import("@/lib/invite-email");
 
+const SEND_FAILED = "Could not send the invitation email. Please try again.";
+
+/**
+ * The error `server-only` throws when imported outside a React Server
+ * environment. Module loaders may wrap it, so follow the `cause` chain.
+ */
+function isServerOnlyImportError(err: unknown): boolean {
+  for (let e = err; e instanceof Error; e = e.cause) {
+    if (e.message.includes("cannot be imported from a Client Component")) return true;
+  }
+  return false;
+}
+
 /**
  * The invite email module is server-only (it uses the app's email provider).
  * Outside the Next.js runtime, e.g. install-time data migrations run by tsx,
- * the import throws and we fall back to Clerk's own invitation email.
+ * that import throws and we fall back to Clerk's own invitation email (null).
+ * Any other import failure is a real fault and is rethrown.
  */
 async function loadInviteEmail(): Promise<InviteEmailModule | null> {
   try {
     return await import("@/lib/invite-email");
-  } catch {
-    return null;
+  } catch (err) {
+    if (isServerOnlyImportError(err)) return null;
+    throw err;
   }
 }
 
@@ -81,7 +96,13 @@ export async function sendClerkInvitation(
   context?: InviteContext,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const emailAddress = email.trim().toLowerCase();
-  const inviteEmail = await loadInviteEmail();
+  let inviteEmail: InviteEmailModule | null;
+  try {
+    inviteEmail = await loadInviteEmail();
+  } catch (err) {
+    console.error("[invite] could not load the invite email module", err);
+    return { ok: false, error: SEND_FAILED };
+  }
   try {
     const client = getClerkClient();
     const invitation = await client.invitations.createInvitation({
@@ -105,8 +126,9 @@ export async function sendClerkInvitation(
     } catch (sendErr) {
       // Revoke so a retry creates a fresh invite instead of hitting "already invited".
       await client.invitations.revokeInvitation(invitation.id).catch(() => undefined);
-      const reason = sendErr instanceof Error ? sendErr.message : "unknown error";
-      return { ok: false, error: `Could not send the invitation email: ${reason}` };
+      // Provider errors can carry internal detail, so log them rather than show them.
+      console.error("[invite] invitation email failed", sendErr);
+      return { ok: false, error: SEND_FAILED };
     }
     return { ok: true };
   } catch (err) {
