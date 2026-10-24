@@ -92,8 +92,9 @@ export async function sendClerkInvitation(
     });
     if (!inviteEmail) return { ok: true };
 
-    const acceptUrl = inviteAcceptUrl(invitation.url);
+    // Anything that fails after the invitation exists must revoke it.
     try {
+      const acceptUrl = inviteAcceptUrl(invitation.url);
       if (!acceptUrl) throw new Error("Clerk did not return an invitation link");
       await inviteEmail.sendInviteEmail({
         to: emailAddress,
