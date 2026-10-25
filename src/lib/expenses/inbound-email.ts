@@ -44,7 +44,7 @@ import {
 import { formatExpenseAmount, poundsToPence } from "@/lib/money";
 import { getResendClient } from "@/lib/resend/client";
 import { getReceiptOcrSettings } from "@/lib/platform-settings";
-import { getStorage } from "@/lib/storage";
+import { getStorage, type StoredObject } from "@/lib/storage";
 import { findUserByEmail, getUser, normalizeEmail } from "@/lib/users";
 import { refreshExpenseBankSuggestion } from "@/lib/bank/expense-match";
 
@@ -249,16 +249,20 @@ export async function processInboundEmailJob(
   }
 
   try {
-    const expenseIds = await deliverInboundEmail(job);
+    const { expenseIds, skipped } = await deliverInboundEmail(job);
     const expenseId = expenseIds[0];
     const many = expenseIds.length > 1;
+    // Kept on the processed job as a note; it does not flag the job for attention.
+    const skippedNote = skipped.length
+      ? `Skipped ${skipped.length === 1 ? "an attachment" : `${skipped.length} attachments`}: ${skipped.join(", ")}`
+      : null;
     await db
       .update(inboundEmailJobs)
       .set({
         status: "processed",
         expenseId,
         processedAt: new Date(),
-        lastError: null,
+        lastError: skippedNote,
         lockedUntil: null,
       })
       .where(eq(inboundEmailJobs.id, jobId));
@@ -270,9 +274,14 @@ export async function processInboundEmailJob(
         companyId: job.companyId,
         type: "expense.inbound.processed",
         title: "Expense email processed",
-        body: many
-          ? `${expenseIds.length} expenses submitted by email were processed successfully.`
-          : "An expense submitted by email was processed successfully.",
+        body: [
+          many
+            ? `${expenseIds.length} expenses submitted by email were processed successfully.`
+            : "An expense submitted by email was processed successfully.",
+          skippedNote ? `${skippedNote}.` : null,
+        ]
+          .filter(Boolean)
+          .join(" "),
         href: many ? `/inbound-email/${jobId}` : `/expenses/${expenseId}`,
         entityType: "expense",
         entityId: expenseId,
@@ -374,10 +383,13 @@ export async function drainInboundEmailJobs(limit = 20): Promise<{
   return { processed: jobs.length, sent, failed };
 }
 
-/** Creates the email's expenses and returns their ids, first attachment first. */
+/**
+ * Creates the email's expenses and returns their ids, first attachment first,
+ * plus the attachments that were skipped and why.
+ */
 async function deliverInboundEmail(
   job: typeof inboundEmailJobs.$inferSelect,
-): Promise<string[]> {
+): Promise<{ expenseIds: string[]; skipped: string[] }> {
   const recipient = await resolveInboundRecipient(job.toEmail);
   if (!recipient || !isFounderRole(recipient.role)) {
     throw new Error("REJECTED: Inbound mailbox is not an authorised founder");
@@ -442,17 +454,23 @@ async function deliverInboundEmail(
     filename: string;
     extraction: ReceiptExtraction | null;
   }[] = [];
+  /** Attachments that got no expense, with why, so the job can say so. */
+  const skipped: string[] = [];
 
   for (const attachment of pickReceiptAttachments(attachmentList?.data ?? [])) {
-    if (!attachment.download_url) continue;
+    const label = attachment.filename ?? attachment.id;
+    if (!attachment.download_url) {
+      skipped.push(`${label} (no download link)`);
+      continue;
+    }
     if (attachment.size > MAX_RECEIPT_BYTES) {
       console.warn(
         `[inbound-email] Skipping oversized attachment ${attachment.filename} (${attachment.size} bytes)`,
       );
+      skipped.push(`${label} (too large)`);
       continue;
     }
 
-    const label = attachment.filename ?? attachment.id;
     const response = await fetchAttachmentDownload(attachment.download_url, label);
     if (!response.ok) {
       throw new Error(
@@ -461,13 +479,17 @@ async function deliverInboundEmail(
     }
 
     const bytes = Buffer.from(await response.arrayBuffer());
-    if (bytes.length > MAX_RECEIPT_BYTES) continue;
+    if (bytes.length > MAX_RECEIPT_BYTES) {
+      skipped.push(`${label} (too large)`);
+      continue;
+    }
 
     const contentType = resolveReceiptContentType(bytes);
     if (!contentType) {
       console.warn(
         `[inbound-email] Skipping unsupported attachment ${attachment.filename ?? attachment.id}`,
       );
+      skipped.push(`${label} (not a PDF or image)`);
       continue;
     }
 
@@ -504,25 +526,43 @@ async function deliverInboundEmail(
 
   const db = getDb();
   const storage = getStorage();
-  // All-or-nothing, so a retry after a failure cannot leave some expenses behind.
-  // now() is fixed within a transaction; step createdAt so attachment order survives.
-  const createdBase = Date.now();
-  const expenseIds = await db.transaction(async (tx) => {
-    const ids: string[] = [];
-    for (const [i, draft] of drafts.entries()) {
-      const merged = draft.extraction;
-      let amountPence = 0;
-      if (merged.amountPounds) {
-        try {
-          amountPence = poundsToPence(merged.amountPounds);
-        } catch {
-          amountPence = 0;
-        }
-      }
+  // Ids are chosen up front so receipts can be uploaded before the
+  // transaction: storage is not rolled back with it, so uploads made by a
+  // failed attempt are deleted rather than left orphaned.
+  const plannedIds = drafts.map(() => globalThis.crypto.randomUUID());
+  const uploaded: (StoredObject | null)[] = [];
+  let expenseIds: string[];
+  try {
+    for (const [i, id] of plannedIds.entries()) {
+      const receipt = receipts[i];
+      uploaded.push(
+        receipt
+          ? await storage.put(
+              `receipts/${id}/${Date.now()}-${receipt.filename}`,
+              receipt.bytes,
+              receipt.contentType,
+            )
+          : null,
+      );
+    }
 
-      const [expense] = await tx
-        .insert(expenses)
-        .values({
+    // All-or-nothing, so a retry after a failure cannot leave some expenses behind.
+    // now() is fixed within a transaction; step createdAt so attachment order survives.
+    const createdBase = Date.now();
+    expenseIds = await db.transaction(async (tx) => {
+      for (const [i, draft] of drafts.entries()) {
+        const merged = draft.extraction;
+        let amountPence = 0;
+        if (merged.amountPounds) {
+          try {
+            amountPence = poundsToPence(merged.amountPounds);
+          } catch {
+            amountPence = 0;
+          }
+        }
+
+        await tx.insert(expenses).values({
+          id: plannedIds[i],
           companyId,
           description: draft.description,
           category: merged.category ?? null,
@@ -540,28 +580,38 @@ async function deliverInboundEmail(
           detectedCurrency: isForeignCurrency(merged.currency)
             ? merged.currency!.toUpperCase()
             : null,
-        })
-        .returning({ id: expenses.id });
-
-      const receipt = receipts[i];
-      if (receipt) {
-        const stored = await storage.put(
-          `receipts/${expense.id}/${Date.now()}-${receipt.filename}`,
-          receipt.bytes,
-          receipt.contentType,
-        );
-        await tx.insert(expenseReceipts).values({
-          expenseId: expense.id,
-          blobPath: stored.path,
-          filename: receipt.filename,
-          contentType: receipt.contentType,
-          sizeBytes: stored.size,
         });
+
+        const receipt = receipts[i];
+        const stored = uploaded[i];
+        if (receipt && stored) {
+          await tx.insert(expenseReceipts).values({
+            expenseId: plannedIds[i],
+            blobPath: stored.path,
+            filename: receipt.filename,
+            contentType: receipt.contentType,
+            sizeBytes: stored.size,
+          });
+        }
       }
-      ids.push(expense.id);
-    }
-    return ids;
-  });
+      return plannedIds;
+    });
+  } catch (err) {
+    await Promise.all(
+      uploaded.map(async (stored) => {
+        if (!stored) return;
+        try {
+          await storage.delete(stored.path);
+        } catch (cleanupErr) {
+          console.error(
+            `[inbound-email] Could not delete orphaned receipt ${stored.path}:`,
+            cleanupErr instanceof Error ? cleanupErr.message : cleanupErr,
+          );
+        }
+      }),
+    );
+    throw err;
+  }
 
   for (const [i, expenseId] of expenseIds.entries()) {
     await writeAudit({
@@ -575,6 +625,7 @@ async function deliverInboundEmail(
         from: job.fromEmail,
         attachmentCount: receipts[i] ? 1 : 0,
         expensesFromEmail: expenseIds.length,
+        skippedAttachments: skipped,
       },
     });
 
@@ -585,7 +636,7 @@ async function deliverInboundEmail(
     }
   }
 
-  return expenseIds;
+  return { expenseIds, skipped };
 }
 
 /** Whether a user email belongs to an authorised founder (admin or user role). */

@@ -16,6 +16,7 @@ import {
   listInboundEmailJobs,
   processInboundEmailJob,
 } from "@/lib/expenses/inbound-email";
+import { getStorage } from "@/lib/storage";
 import { seedCompany } from "@/lib/test/seed-company";
 
 vi.mock("server-only", () => ({}));
@@ -100,6 +101,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   setTestDb(null);
   await ctx.client.close();
 });
@@ -400,6 +402,83 @@ describe("inbound email jobs", () => {
     const again = await processInboundEmailJob(jobId);
     expect(again.expenseIds).toEqual(result.expenseIds);
     expect(await db.select().from(expenses)).toHaveLength(2);
+  });
+
+  async function enqueueTwoAttachmentEmail(
+    emailId: string,
+    sizes: { train: number; hotel: number } = { train: 100, hotel: 100 },
+  ) {
+    await insertMailboxUser({
+      companyId,
+      email: "founder@example.com",
+      role: "user",
+      expenseInboundSlug: "founder",
+    });
+    mockReceivingGet.mockResolvedValue({
+      data: { subject: "Receipts", text: "", html: null },
+      error: null,
+    });
+    mockAttachmentsList.mockResolvedValue({
+      data: {
+        data: (["train", "hotel"] as const).map((id) => ({
+          id,
+          filename: `${id}.pdf`,
+          size: sizes[id],
+          content_disposition: "attachment",
+          download_url: `https://files.example/${id}`,
+        })),
+      },
+      error: null,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => new Response(`%PDF-1.4 ${url.split("/").pop()}`)),
+    );
+    mockExtractReceipt.mockResolvedValue({ confidence: "none" });
+    const { jobId } = await enqueueInboundEmailJob({
+      email_id: emailId,
+      from: "founder@example.com",
+      to: [mailbox("founder")],
+      subject: "Receipts",
+    });
+    if (!jobId) throw new Error("expected job");
+    return jobId;
+  }
+
+  it("deletes receipts already uploaded when a later upload fails", async () => {
+    const jobId = await enqueueTwoAttachmentEmail("email-upload-fails");
+    const storage = getStorage();
+    const put = storage.put.bind(storage);
+    const uploadedPaths: string[] = [];
+    vi.spyOn(storage, "put").mockImplementation(async (path, data, type) => {
+      if (uploadedPaths.length) throw new Error("blob store down");
+      uploadedPaths.push(path);
+      return put(path, data, type);
+    });
+    const deleteSpy = vi.spyOn(storage, "delete");
+
+    const result = await processInboundEmailJob(jobId);
+    expect(result.ok).toBe(false);
+    expect(deleteSpy).toHaveBeenCalledWith(uploadedPaths[0]);
+    await expect(storage.get(uploadedPaths[0])).rejects.toThrow();
+    expect(await db.select().from(expenses)).toHaveLength(0);
+    expect(await db.select().from(expenseReceipts)).toHaveLength(0);
+    const [job] = await db.select().from(inboundEmailJobs).where(eq(inboundEmailJobs.id, jobId));
+    expect(job.status).toBe("pending");
+  });
+
+  it("notes skipped attachments on the processed job", async () => {
+    const jobId = await enqueueTwoAttachmentEmail("email-oversized", {
+      train: 100,
+      hotel: 50 * 1024 * 1024,
+    });
+
+    const result = await processInboundEmailJob(jobId);
+    expect(result.ok).toBe(true);
+    expect(result.expenseIds).toHaveLength(1);
+    const [job] = await db.select().from(inboundEmailJobs).where(eq(inboundEmailJobs.id, jobId));
+    expect(job.status).toBe("processed");
+    expect(job.lastError).toBe("Skipped an attachment: hotel.pdf (too large)");
   });
 
   it("creates one expense when two workers process the same job concurrently", async () => {
