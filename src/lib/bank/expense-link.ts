@@ -241,6 +241,26 @@ export function isExpenseLinkable(expense: {
   );
 }
 
+export const LINKED_EXPENSE_EDIT_ERROR =
+  "This expense is linked to a bank transaction. Unlink it before changing the amount, date or status.";
+export const LINKED_EXPENSE_DELETE_ERROR =
+  "This expense is linked to a bank transaction. Unlink it before deleting.";
+
+/** Whether a confirmed bank match settles this expense. Caller checks the company. */
+export async function isExpenseLinkedToBank(expenseId: string): Promise<boolean> {
+  const [match] = await getDb()
+    .select({ id: reconciliationMatches.id })
+    .from(reconciliationMatches)
+    .where(
+      and(
+        eq(reconciliationMatches.expenseId, expenseId),
+        eq(reconciliationMatches.confirmed, true),
+      ),
+    )
+    .limit(1);
+  return Boolean(match);
+}
+
 /**
  * Why a debit can't take an expense, or null when it can. Checked before
  * creating an expense from a transaction, so the expense isn't orphaned.

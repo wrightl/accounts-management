@@ -79,7 +79,7 @@ export default async function ExpenseDetailPage({
         <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
           Foreign currency detected on the receipt ({foreignCurrency}). Amounts in
           this app are recorded in GBP — confirm the sterling amount before
-          approving.
+          approving. If the receipt is actually in sterling, set the currency to GBP.
         </div>
       ) : null}
 
@@ -166,6 +166,7 @@ export default async function ExpenseDetailPage({
           clients={clients}
           orders={orders}
           rebilledOn={rebill}
+          linkedToBank={settlements.length > 0}
           canWrite={canWrite}
           defaultMileageRatePence={settings.defaultMileageRatePence}
           vatRegistered={settings.vatRegistered}

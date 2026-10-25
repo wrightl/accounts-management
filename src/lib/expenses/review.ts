@@ -36,6 +36,8 @@ export type ApproveExpenseInput = {
     billable: boolean;
     clientId: string | null;
     orderId: string | null;
+    /** Null marks the receipt as sterling; omitted = keep the detected currency. */
+    detectedCurrency?: null;
   };
 };
 
@@ -108,6 +110,7 @@ export async function approvePendingExpense(
             orderId: input.fields.orderId,
             mileageMiles: null,
             mileageRatePence: null,
+            ...(input.fields.detectedCurrency === null ? { detectedCurrency: null } : {}),
           }
         : {}),
       amountPence,

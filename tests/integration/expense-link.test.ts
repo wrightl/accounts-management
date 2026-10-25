@@ -13,12 +13,14 @@ import {
 } from "@/db/schema";
 import {
   compareLinkCandidates,
+  LINKED_EXPENSE_DELETE_ERROR,
+  LINKED_EXPENSE_EDIT_ERROR,
   linkExpenseToBankTx,
   listBankDebitCandidatesForExpense,
   listExpenseCandidatesForBankTx,
   unlinkExpenseMatch,
 } from "@/lib/bank/expense-link";
-import { createExpense } from "@/actions/expenses";
+import { createExpense, deleteExpense, updateExpense } from "@/actions/expenses";
 import { seedCompany } from "@/lib/test/seed-company";
 
 vi.mock("server-only", () => ({}));
@@ -383,5 +385,86 @@ describe("createExpense from a bank transaction", () => {
     expect(
       await db.select().from(expenses).where(and(eq(expenses.companyId, companyId))),
     ).toHaveLength(0);
+  });
+});
+
+describe("editing a linked expense", () => {
+  let linked: typeof expenses.$inferSelect;
+
+  beforeEach(async () => {
+    await db.insert(users).values({
+      companyId,
+      clerkUserId: "user_clerk_1",
+      email: "lee@dotanddashconsulting.com",
+      name: "Lee",
+      role: "admin",
+    });
+    const tx = await debit("2026-04-03", -1500);
+    linked = await expense({ description: "Train", category: "Travel" });
+    await linkExpenseToBankTx(companyId, { expenseId: linked.id, bankTransactionId: tx.id });
+  });
+
+  function form(overrides: Record<string, string> = {}) {
+    const f = new FormData();
+    const values = {
+      description: "Train",
+      category: "Travel",
+      spentAt: "2026-04-03",
+      amountPounds: "15.00",
+      status: "company_paid",
+      vatRate: "0",
+      ...overrides,
+    };
+    for (const [k, v] of Object.entries(values)) f.set(k, v);
+    return f;
+  }
+
+  async function reload() {
+    const [row] = await db.select().from(expenses).where(eq(expenses.id, linked.id));
+    return row;
+  }
+
+  it.each([
+    ["amount", { amountPounds: "16.00" }],
+    ["date", { spentAt: "2026-04-04" }],
+    ["status", { status: "recorded" }],
+    ["status to reimbursable", { status: "reimbursable" }],
+  ])("refuses a change to the %s", async (_label, overrides) => {
+    const result = await updateExpense(linked.id, form(overrides));
+    expect(result).toMatchObject({ ok: false, error: LINKED_EXPENSE_EDIT_ERROR });
+    expect(await reload()).toMatchObject({
+      amountPence: 1500,
+      spentAt: "2026-04-03",
+      status: "company_paid",
+    });
+  });
+
+  it("allows changes to the description and category", async () => {
+    const result = await updateExpense(
+      linked.id,
+      form({ description: "Train to client", category: "Meals" }),
+    );
+    expect(result).toMatchObject({ ok: true });
+    expect(await reload()).toMatchObject({
+      description: "Train to client",
+      category: "Meals",
+      amountPence: 1500,
+    });
+  });
+
+  it("refuses to delete until unlinked", async () => {
+    expect(await deleteExpense(linked.id)).toMatchObject({
+      ok: false,
+      error: LINKED_EXPENSE_DELETE_ERROR,
+    });
+    expect(await reload()).toBeDefined();
+  });
+
+  it("allows the change once unlinked", async () => {
+    await unlinkExpenseMatch(companyId, { expenseId: linked.id });
+    expect(await updateExpense(linked.id, form({ amountPounds: "16.00" }))).toMatchObject({
+      ok: true,
+    });
+    expect(await deleteExpense(linked.id)).toMatchObject({ ok: true });
   });
 });
