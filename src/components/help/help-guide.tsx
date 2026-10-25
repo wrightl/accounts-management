@@ -432,7 +432,8 @@ export function HelpGuide({
               <>
                 Email a photo or PDF to the personal expenses address shown on
                 that page. It lands as <strong>pending</strong> until you
-                approve it.
+                approve it. Attach several receipts to one email and each
+                becomes its own expense.
               </>,
               <>Import a CSV of past spend if you are catching up.</>,
             ]}

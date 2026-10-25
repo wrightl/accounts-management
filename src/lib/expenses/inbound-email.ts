@@ -11,13 +11,12 @@ import {
 import { writeAudit } from "@/lib/audit";
 import { safeFilename } from "@/lib/files";
 import {
-  buildInboundExpenseDescription,
   matchesInboundMailboxPattern,
-  mergeReceiptExtractions,
   parseEmailAddressHeader,
   parseEmailBodyText,
   parseInboundMailbox,
-  resolveInboundSpentAt,
+  pickReceiptAttachments,
+  planInboundExpenses,
 } from "@/lib/expenses/inbound-merge";
 import {
   describeFetchError,
@@ -28,7 +27,11 @@ import {
   extractReceiptFromBytes,
   type ReceiptOcrProvider,
 } from "@/lib/expenses/receipt-ocr";
-import { isReceiptOcrProvider } from "@/lib/expenses/receipt-parse";
+import {
+  isForeignCurrency,
+  isReceiptOcrProvider,
+  type ReceiptExtraction,
+} from "@/lib/expenses/receipt-parse";
 import {
   MAX_RECEIPT_BYTES,
   resolveReceiptContentType,
@@ -43,7 +46,6 @@ import { getResendClient } from "@/lib/resend/client";
 import { getReceiptOcrSettings } from "@/lib/platform-settings";
 import { getStorage } from "@/lib/storage";
 import { findUserByEmail, getUser, normalizeEmail } from "@/lib/users";
-import { isForeignCurrency } from "@/lib/expenses/receipt-parse";
 import { refreshExpenseBankSuggestion } from "@/lib/bank/expense-match";
 
 const MAX_ATTEMPTS = 8;
@@ -184,9 +186,18 @@ export async function enqueueInboundEmailJob(
   return { jobId: created.id, skipped: false };
 }
 
+export type InboundEmailJobResult = {
+  ok: boolean;
+  busy?: boolean;
+  error?: string;
+  /** The first expense created; see `expenseIds` for all of them. */
+  expenseId?: string;
+  expenseIds?: string[];
+};
+
 export async function processInboundEmailJob(
   jobId: string,
-): Promise<{ ok: boolean; busy?: boolean; error?: string; expenseId?: string }> {
+): Promise<InboundEmailJobResult> {
   const db = getDb();
   const [job] = await db
     .select()
@@ -196,7 +207,7 @@ export async function processInboundEmailJob(
 
   if (!job) return { ok: false, error: "Inbound email job not found" };
   if (job.status === "processed") {
-    return { ok: true, expenseId: job.expenseId ?? undefined };
+    return processedJobResult(job);
   }
   if (job.status === "rejected") {
     return { ok: false, error: job.lastError ?? "Rejected" };
@@ -238,7 +249,9 @@ export async function processInboundEmailJob(
   }
 
   try {
-    const expenseId = await deliverInboundEmail(job);
+    const expenseIds = await deliverInboundEmail(job);
+    const expenseId = expenseIds[0];
+    const many = expenseIds.length > 1;
     await db
       .update(inboundEmailJobs)
       .set({
@@ -257,8 +270,10 @@ export async function processInboundEmailJob(
         companyId: job.companyId,
         type: "expense.inbound.processed",
         title: "Expense email processed",
-        body: "An expense submitted by email was processed successfully.",
-        href: `/expenses/${expenseId}`,
+        body: many
+          ? `${expenseIds.length} expenses submitted by email were processed successfully.`
+          : "An expense submitted by email was processed successfully.",
+        href: many ? `/inbound-email/${jobId}` : `/expenses/${expenseId}`,
         entityType: "expense",
         entityId: expenseId,
         extraUserIds: recipient?.userId ? [recipient.userId] : [],
@@ -274,7 +289,7 @@ export async function processInboundEmailJob(
       );
     }
 
-    return { ok: true, expenseId };
+    return { ok: true, expenseId, expenseIds };
   } catch (err) {
     const message = logInboundJobFailure(job, err);
     const rejected = message.startsWith("REJECTED:");
@@ -359,9 +374,10 @@ export async function drainInboundEmailJobs(limit = 20): Promise<{
   return { processed: jobs.length, sent, failed };
 }
 
+/** Creates the email's expenses and returns their ids, first attachment first. */
 async function deliverInboundEmail(
   job: typeof inboundEmailJobs.$inferSelect,
-): Promise<string> {
+): Promise<string[]> {
   const recipient = await resolveInboundRecipient(job.toEmail);
   if (!recipient || !isFounderRole(recipient.role)) {
     throw new Error("REJECTED: Inbound mailbox is not an authorised founder");
@@ -420,14 +436,14 @@ async function deliverInboundEmail(
     });
   }
 
-  const attachmentExtractions = [];
-  const storedAttachments: {
+  const receipts: {
     bytes: Buffer;
     contentType: string;
     filename: string;
+    extraction: ReceiptExtraction | null;
   }[] = [];
 
-  for (const attachment of attachmentList?.data ?? []) {
+  for (const attachment of pickReceiptAttachments(attachmentList?.data ?? [])) {
     if (!attachment.download_url) continue;
     if (attachment.size > MAX_RECEIPT_BYTES) {
       console.warn(
@@ -455,14 +471,14 @@ async function deliverInboundEmail(
       continue;
     }
 
+    let extraction: ReceiptExtraction | null = null;
     try {
-      const extraction = await extractReceiptFromBytes(
+      extraction = await extractReceiptFromBytes(
         bytes,
         contentType,
         provider,
         ocr.model,
       );
-      attachmentExtractions.push(extraction);
     } catch (error) {
       console.error(
         "[inbound-email] OCR failed for attachment:",
@@ -470,97 +486,106 @@ async function deliverInboundEmail(
       );
     }
 
-    storedAttachments.push({
+    receipts.push({
       bytes,
       contentType,
       filename: safeFilename(attachment.filename ?? `attachment-${attachment.id}`),
+      extraction,
     });
   }
 
-  const merged = mergeReceiptExtractions(bodyExtraction, ...attachmentExtractions);
-  const description = buildInboundExpenseDescription(
-    merged,
+  // One expense per receipt attachment; an email without any still makes one.
+  const drafts = planInboundExpenses(
+    bodyExtraction,
+    receipts.map((r) => r.extraction),
     email.subject ?? job.subject ?? "",
+    email.created_at || job.createdAt,
   );
 
-  const spentAt =
-    resolveInboundSpentAt(
-      bodyExtraction,
-      attachmentExtractions,
-      email.created_at || job.createdAt,
-    ) ?? null;
-
-  let amountPence = 0;
-  if (merged.amountPounds) {
-    try {
-      amountPence = poundsToPence(merged.amountPounds);
-    } catch {
-      amountPence = 0;
-    }
-  }
-
   const db = getDb();
-  const expenseId = await db.transaction(async (tx) => {
-    const [expense] = await tx
-      .insert(expenses)
-      .values({
-        companyId,
-        description,
-        category: merged.category ?? null,
-        spentAt,
-        amountPence,
-        vatPence: 0,
-        status: "pending",
-        source: "email",
-        billable: false,
-        paidByUserId: null,
-        submittedByUserId: sender.id,
-        createdByUserId: sender.id,
-        detectedCurrency: isForeignCurrency(merged.currency)
-          ? merged.currency!.toUpperCase()
-          : null,
-      })
-      .returning({ id: expenses.id });
+  const storage = getStorage();
+  // All-or-nothing, so a retry after a failure cannot leave some expenses behind.
+  // now() is fixed within a transaction; step createdAt so attachment order survives.
+  const createdBase = Date.now();
+  const expenseIds = await db.transaction(async (tx) => {
+    const ids: string[] = [];
+    for (const [i, draft] of drafts.entries()) {
+      const merged = draft.extraction;
+      let amountPence = 0;
+      if (merged.amountPounds) {
+        try {
+          amountPence = poundsToPence(merged.amountPounds);
+        } catch {
+          amountPence = 0;
+        }
+      }
 
-    const storage = getStorage();
-    for (const attachment of storedAttachments) {
-      const stored = await storage.put(
-        `receipts/${expense.id}/${Date.now()}-${attachment.filename}`,
-        attachment.bytes,
-        attachment.contentType,
-      );
-      await tx.insert(expenseReceipts).values({
-        expenseId: expense.id,
-        blobPath: stored.path,
-        filename: attachment.filename,
-        contentType: attachment.contentType,
-        sizeBytes: stored.size,
-      });
+      const [expense] = await tx
+        .insert(expenses)
+        .values({
+          companyId,
+          description: draft.description,
+          category: merged.category ?? null,
+          spentAt: draft.spentAt ?? null,
+          amountPence,
+          vatPence: 0,
+          status: "pending",
+          source: "email",
+          billable: false,
+          paidByUserId: null,
+          submittedByUserId: sender.id,
+          createdByUserId: sender.id,
+          inboundEmailJobId: job.id,
+          createdAt: new Date(createdBase + i),
+          detectedCurrency: isForeignCurrency(merged.currency)
+            ? merged.currency!.toUpperCase()
+            : null,
+        })
+        .returning({ id: expenses.id });
+
+      const receipt = receipts[i];
+      if (receipt) {
+        const stored = await storage.put(
+          `receipts/${expense.id}/${Date.now()}-${receipt.filename}`,
+          receipt.bytes,
+          receipt.contentType,
+        );
+        await tx.insert(expenseReceipts).values({
+          expenseId: expense.id,
+          blobPath: stored.path,
+          filename: receipt.filename,
+          contentType: receipt.contentType,
+          sizeBytes: stored.size,
+        });
+      }
+      ids.push(expense.id);
     }
-
-    return expense.id;
+    return ids;
   });
 
-  await writeAudit({
-    companyId,
-    actorUserId: sender.id,
-    action: "expense.inbound_create",
-    entityType: "expense",
-    entityId: expenseId,
-    meta: {
-      resendEmailId: job.resendEmailId,
-      from: job.fromEmail,
-      attachmentCount: storedAttachments.length,
-    },
-  });
+  for (const [i, expenseId] of expenseIds.entries()) {
+    await writeAudit({
+      companyId,
+      actorUserId: sender.id,
+      action: "expense.inbound_create",
+      entityType: "expense",
+      entityId: expenseId,
+      meta: {
+        resendEmailId: job.resendEmailId,
+        from: job.fromEmail,
+        attachmentCount: receipts[i] ? 1 : 0,
+        expensesFromEmail: expenseIds.length,
+      },
+    });
 
-  try {
-    await refreshExpenseBankSuggestion(companyId, expenseId);
-  } catch (err) {
-    console.error("expense bank suggestion failed after inbound create", err);
+    try {
+      await refreshExpenseBankSuggestion(companyId, expenseId);
+    } catch (err) {
+      console.error("expense bank suggestion failed after inbound create", err);
+    }
   }
 
-  return expenseId;
+  return expenseIds;
 }
 
 /** Whether a user email belongs to an authorised founder (admin or user role). */
@@ -690,11 +715,47 @@ export async function listInboundEmailJobs(input: {
       createdAt: inboundEmailJobs.createdAt,
       processedAt: inboundEmailJobs.processedAt,
       expenseId: inboundEmailJobs.expenseId,
+      // Qualified by hand: Drizzle leaves columns unqualified in a one-table select.
+      expenseCount: sql<number>`(select count(*)::int from "expenses" e where e."inbound_email_job_id" = "inbound_email_jobs"."id")`,
     })
     .from(inboundEmailJobs)
     .where(and(...conditions))
     .orderBy(desc(inboundEmailJobs.createdAt))
     .limit(limit);
+}
+
+/** Expenses an inbound email created, in the order of its attachments. */
+export async function listInboundEmailJobExpenses(companyId: string, jobId: string) {
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: expenses.id,
+      description: expenses.description,
+      amountPence: expenses.amountPence,
+      detectedCurrency: expenses.detectedCurrency,
+      status: expenses.status,
+    })
+    .from(expenses)
+    .where(
+      and(eq(expenses.companyId, companyId), eq(expenses.inboundEmailJobId, jobId)),
+    )
+    .orderBy(expenses.createdAt, expenses.id);
+  return rows.map((r) => ({
+    ...r,
+    amountFormatted: formatExpenseAmount(r.amountPence, r.detectedCurrency),
+  }));
+}
+
+async function processedJobResult(
+  job: typeof inboundEmailJobs.$inferSelect,
+): Promise<InboundEmailJobResult> {
+  const rows = await listInboundEmailJobExpenses(job.companyId, job.id);
+  const expenseIds = rows.length
+    ? rows.map((r) => r.id)
+    : job.expenseId
+      ? [job.expenseId]
+      : [];
+  return { ok: true, expenseId: job.expenseId ?? expenseIds[0], expenseIds };
 }
 
 export async function getInboundEmailJob(companyId: string, jobId: string) {
@@ -712,7 +773,7 @@ export async function getInboundEmailJob(companyId: string, jobId: string) {
 /** Admin: reset a failed job and retry processing immediately. */
 export async function adminRetryInboundEmailJob(
   jobId: string,
-): Promise<{ ok: boolean; error?: string; expenseId?: string }> {
+): Promise<InboundEmailJobResult> {
   const db = getDb();
   const [job] = await db
     .select()
@@ -722,7 +783,7 @@ export async function adminRetryInboundEmailJob(
 
   if (!job) return { ok: false, error: "Inbound email job not found" };
   if (job.status === "processed") {
-    return { ok: true, expenseId: job.expenseId ?? undefined };
+    return processedJobResult(job);
   }
 
   await db
@@ -800,7 +861,7 @@ export async function adminRetryAllInboundEmailIssues(): Promise<{
 export async function retryInboundEmailJobForCompany(
   companyId: string,
   jobId: string,
-): Promise<{ ok: boolean; error?: string; expenseId?: string }> {
+): Promise<InboundEmailJobResult> {
   const job = await getInboundEmailJob(companyId, jobId);
   if (!job) return { ok: false, error: "Inbound email job not found" };
   return adminRetryInboundEmailJob(jobId);

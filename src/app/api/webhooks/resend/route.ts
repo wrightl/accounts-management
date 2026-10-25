@@ -85,6 +85,7 @@ export async function POST(request: Request) {
     jobId,
     processed: result.ok,
     expenseId: result.expenseId ?? null,
+    expenseIds: result.expenseIds ?? [],
     drained,
   });
 }

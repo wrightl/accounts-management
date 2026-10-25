@@ -428,6 +428,13 @@
       "when": 1789800000000,
       "tag": "0060_menu_features",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1789900000000,
+      "tag": "0061_expense_inbound_email_job",
+      "breakpoints": true
     }
   ]
 }

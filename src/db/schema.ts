@@ -520,6 +520,11 @@ export const expenses = pgTable(
      * unset or sterling. Used to warn on pending email review.
      */
     detectedCurrency: text("detected_currency"),
+    /** The inbound email this expense came from; one email can create several. */
+    inboundEmailJobId: uuid("inbound_email_job_id").references(
+      (): AnyPgColumn => inboundEmailJobs.id,
+      { onDelete: "set null" },
+    ),
     createdByUserId: uuid("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -527,6 +532,7 @@ export const expenses = pgTable(
   },
   (t) => [
     index("idx_expenses_company").on(t.companyId),
+    index("idx_expenses_inbound_email_job").on(t.inboundEmailJobId),
     index("idx_expenses_status").on(t.status),
     index("idx_expenses_paid_by").on(t.paidByUserId),
     index("idx_expenses_client").on(t.clientId),
@@ -1166,7 +1172,8 @@ export const inboundEmailJobs = pgTable(
     toEmail: text("to_email").notNull(),
     subject: text("subject"),
     status: inboundEmailJobStatusEnum("status").notNull().default("pending"),
-    expenseId: uuid("expense_id").references(() => expenses.id, {
+    /** First expense created; see expenses.inboundEmailJobId for all of them. */
+    expenseId: uuid("expense_id").references((): AnyPgColumn => expenses.id, {
       onDelete: "set null",
     }),
     attempts: integer("attempts").notNull().default(0),

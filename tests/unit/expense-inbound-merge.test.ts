@@ -8,6 +8,8 @@ import {
   parseEmailAddressHeader,
   parseEmailBodyText,
   parseInboundMailbox,
+  pickReceiptAttachments,
+  planInboundExpenses,
   resolveInboundSpentAt,
   slugifyInbound,
   tokenizedInboundSlug,
@@ -202,5 +204,77 @@ describe("tokenizedInboundSlug", () => {
 
   it("produces a different token each time", () => {
     expect(tokenizedInboundSlug("pat")).not.toBe(tokenizedInboundSlug("pat"));
+  });
+});
+
+describe("pickReceiptAttachments", () => {
+  it("ignores inline parts when the email has real attachments", () => {
+    const picked = pickReceiptAttachments([
+      { id: "logo", content_disposition: "inline" },
+      { id: "a", content_disposition: "attachment" },
+      { id: "b", content_disposition: "attachment" },
+    ]);
+    expect(picked.map((a) => a.id)).toEqual(["a", "b"]);
+  });
+
+  it("falls back to inline parts when there is nothing attached", () => {
+    const picked = pickReceiptAttachments([
+      { id: "photo", content_disposition: "inline" },
+    ]);
+    expect(picked.map((a) => a.id)).toEqual(["photo"]);
+  });
+});
+
+describe("planInboundExpenses", () => {
+  const received = new Date("2026-03-10T12:00:00Z");
+  const body = {
+    amountPounds: "99.00",
+    spentAt: "2026-03-01",
+    confidence: "partial" as const,
+  };
+
+  it("makes one expense from the body when there are no receipts", () => {
+    const drafts = planInboundExpenses(body, [], "Lunch", received);
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0].extraction.amountPounds).toBe("99.00");
+    expect(drafts[0].spentAt).toBe("2026-03-01");
+    expect(drafts[0].description).toBe("Lunch");
+  });
+
+  it("merges the body into a single receipt", () => {
+    const drafts = planInboundExpenses(
+      body,
+      [{ description: "Pret", confidence: "partial" }],
+      "Lunch",
+      received,
+    );
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0].description).toBe("Pret");
+    expect(drafts[0].extraction.amountPounds).toBe("99.00");
+  });
+
+  it("makes one expense per receipt without borrowing body fields", () => {
+    const drafts = planInboundExpenses(
+      body,
+      [
+        {
+          description: "Pret",
+          amountPounds: "4.50",
+          spentAt: "2026-03-05",
+          confidence: "high",
+        },
+        null,
+      ],
+      "Receipts",
+      received,
+    );
+    expect(drafts).toHaveLength(2);
+    expect(drafts[0].description).toBe("Pret");
+    expect(drafts[0].extraction.amountPounds).toBe("4.50");
+    expect(drafts[0].spentAt).toBe("2026-03-05");
+    // OCR failed: fall back to the subject and arrival day, not the body's £99.
+    expect(drafts[1].description).toBe("Receipts");
+    expect(drafts[1].extraction.amountPounds).toBeUndefined();
+    expect(drafts[1].spentAt).toBe("2026-03-10");
   });
 });

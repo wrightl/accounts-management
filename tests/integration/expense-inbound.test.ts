@@ -2,11 +2,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
-import { companyMemberships, inboundEmailJobs, expenses, users } from "@/db/schema";
+import {
+  companyMemberships,
+  expenseReceipts,
+  inboundEmailJobs,
+  expenses,
+  users,
+} from "@/db/schema";
 import {
   adminDismissInboundEmailJob,
   adminRetryInboundEmailJob,
   enqueueInboundEmailJob,
+  listInboundEmailJobs,
   processInboundEmailJob,
 } from "@/lib/expenses/inbound-email";
 import { seedCompany } from "@/lib/test/seed-company";
@@ -15,6 +22,7 @@ vi.mock("server-only", () => ({}));
 
 const mockReceivingGet = vi.fn();
 const mockAttachmentsList = vi.fn();
+const mockExtractReceipt = vi.fn();
 let mockInboundDomain = "dotanddashconsulting.com";
 let mockInboundPrefix = "expenses";
 
@@ -38,6 +46,11 @@ vi.mock("@/lib/platform-settings", () => ({
     model: "google/gemini-2.5-flash",
   })),
   updatePlatformSettings: vi.fn(),
+}));
+
+vi.mock("@/lib/expenses/receipt-ocr", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/expenses/receipt-ocr")>()),
+  extractReceiptFromBytes: (...args: unknown[]) => mockExtractReceipt(...args),
 }));
 
 vi.mock("@/lib/resend/client", () => ({
@@ -82,9 +95,11 @@ beforeEach(async () => {
   mockInboundPrefix = "expenses";
   mockReceivingGet.mockReset();
   mockAttachmentsList.mockReset();
+  mockExtractReceipt.mockReset();
 });
 
 afterEach(async () => {
+  vi.unstubAllGlobals();
   setTestDb(null);
   await ctx.client.close();
 });
@@ -308,6 +323,83 @@ describe("inbound email jobs", () => {
     expect(expense.submittedByUserId).toBe(founder.id);
     expect(expense.createdByUserId).toBe(founder.id);
     expect(expense.detectedCurrency).toBeNull();
+  });
+
+  it("creates one expense per attachment and ignores inline images", async () => {
+    await insertMailboxUser({
+      companyId,
+      email: "founder@example.com",
+      role: "user",
+      expenseInboundSlug: "founder",
+    });
+    mockReceivingGet.mockResolvedValue({
+      data: { subject: "This week's receipts", text: "Total £99.00", html: null },
+      error: null,
+    });
+    const part = (id: string, disposition: "inline" | "attachment") => ({
+      id,
+      filename: `${id}.pdf`,
+      size: 100,
+      content_disposition: disposition,
+      download_url: `https://files.example/${id}`,
+    });
+    mockAttachmentsList.mockResolvedValue({
+      data: {
+        data: [
+          part("logo", "inline"),
+          part("train", "attachment"),
+          part("hotel", "attachment"),
+        ],
+      },
+      error: null,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => new Response(`%PDF-1.4 ${url.split("/").pop()}`)),
+    );
+    mockExtractReceipt.mockImplementation(async (bytes: Buffer) =>
+      bytes.toString().includes("train")
+        ? { description: "LNER", amountPounds: "45.20", confidence: "partial" }
+        : { description: "Premier Inn", amountPounds: "89.00", confidence: "partial" },
+    );
+
+    const { jobId } = await enqueueInboundEmailJob({
+      email_id: "email-multi",
+      from: "founder@example.com",
+      to: [mailbox("founder")],
+      subject: "This week's receipts",
+    });
+    if (!jobId) throw new Error("expected job");
+
+    const result = await processInboundEmailJob(jobId);
+    expect(result.ok).toBe(true);
+    expect(result.expenseIds).toHaveLength(2);
+
+    const rows = await db.select().from(expenses).where(eq(expenses.inboundEmailJobId, jobId));
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const [train, hotel] = result.expenseIds!.map((id) => byId.get(id)!);
+    expect(train.description).toBe("LNER");
+    expect(train.amountPence).toBe(4520);
+    expect(hotel.description).toBe("Premier Inn");
+    expect(hotel.amountPence).toBe(8900);
+
+    const receipts = await db.select().from(expenseReceipts);
+    expect(receipts.map((r) => [r.expenseId, r.filename]).sort()).toEqual(
+      [
+        [train.id, "train.pdf"],
+        [hotel.id, "hotel.pdf"],
+      ].sort(),
+    );
+
+    const [job] = await db.select().from(inboundEmailJobs).where(eq(inboundEmailJobs.id, jobId));
+    expect(job.expenseId).toBe(train.id);
+    const [listed] = await listInboundEmailJobs({ companyId });
+    expect(listed.expenseCount).toBe(2);
+
+    // Re-running a processed job reports every expense without creating more.
+    const again = await processInboundEmailJob(jobId);
+    expect(again.expenseIds).toEqual(result.expenseIds);
+    expect(await db.select().from(expenses)).toHaveLength(2);
   });
 
   it("creates one expense when two workers process the same job concurrently", async () => {
