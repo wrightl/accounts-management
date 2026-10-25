@@ -7,6 +7,7 @@ import { mutate, mutateWide } from "@/lib/mutate";
 import { getDb } from "@/db";
 import { companies } from "@/db/schema";
 import { getBankFeedAdapter } from "@/lib/bank/adapters";
+import { setBankAccountCards } from "@/lib/bank/company-cards";
 import { parseCsvTable } from "@/lib/bank/csv";
 import { parseGenericCsvMapping, isGenericCsvMapping } from "@/lib/bank/generic-csv";
 import {
@@ -763,6 +764,25 @@ export async function deleteIncomeCategoryAction(
         entityId: categoryId,
       },
       paths: ["/settings", "/settings/business", "/transactions"],
+    },
+  );
+}
+
+/** Card endings for a bank account, so emailed receipts paid by them read as company paid. */
+export async function updateBankAccountCardsAction(
+  accountId: string,
+  cards: string,
+): Promise<ActionResult> {
+  return mutate(
+    "accounts:write",
+    async ({ companyId }) => setBankAccountCards(companyId, accountId, cards),
+    {
+      audit: {
+        action: "bank.update_account_cards",
+        entityType: "bank_account",
+        entityId: accountId,
+      },
+      paths: ["/transactions", "/expenses"],
     },
   );
 }

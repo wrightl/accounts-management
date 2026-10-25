@@ -49,6 +49,18 @@ import { getReceiptOcrSettings } from "@/lib/platform-settings";
 import { getStorage, type StoredObject } from "@/lib/storage";
 import { findUserByEmail, getUser, normalizeEmail } from "@/lib/users";
 import { refreshExpenseBankSuggestion } from "@/lib/bank/expense-match";
+import {
+  detectStatedPaymentSource,
+  parsePaymentQuestionRef,
+  paymentSourceListLabel,
+  type PaymentSource,
+} from "@/lib/expenses/payment-source";
+import { getPaymentSourceSuggestions } from "@/lib/expenses/payment-source-queries";
+import {
+  applyPaymentAnswer,
+  findQuestionedJob,
+  maybeAskHowPaid,
+} from "@/lib/expenses/payment-question";
 
 const MAX_ATTEMPTS = 8;
 /** How long a worker owns a claimed job (OCR can be slow) before another may retry. */
@@ -275,7 +287,11 @@ export async function processInboundEmailJob(
   }
 
   try {
-    const { expenseIds, skipped, unscanned } = await deliverInboundEmail(job);
+    const delivered = await deliverInboundEmail(job);
+    if (delivered.kind === "answer") {
+      return await finishPaymentAnswer(job, delivered);
+    }
+    const { expenseIds, skipped, unscanned } = delivered;
     const expenseId = expenseIds[0];
     const many = expenseIds.length > 1;
     // Kept on the processed job as a note; it does not flag the job for attention.
@@ -300,6 +316,21 @@ export async function processInboundEmailJob(
         lockedUntil: null,
       })
       .where(eq(inboundEmailJobs.id, jobId));
+
+    if (!delivered.paymentStated) {
+      try {
+        await maybeAskHowPaid({ job, senderEmail: delivered.senderEmail, expenseIds });
+      } catch (askErr) {
+        console.warn(
+          JSON.stringify({
+            level: "warn",
+            msg: "inbound-email.payment_question_skipped",
+            jobId,
+            error: askErr instanceof Error ? askErr.message : String(askErr),
+          }),
+        );
+      }
+    }
 
     try {
       const { notify } = await import("@/lib/notifications");
@@ -424,13 +455,32 @@ export async function drainInboundEmailJobs(
   return { processed, sent, failed };
 }
 
+type DeliveredClaim = {
+  kind: "claim";
+  expenseIds: string[];
+  skipped: string[];
+  unscanned: string[];
+  /** The sender said how they paid, so there is no need to ask. */
+  paymentStated: boolean;
+  senderEmail: string;
+};
+
+type DeliveredAnswer = {
+  kind: "answer";
+  answeredJobId: string;
+  source: PaymentSource | undefined;
+  expenseIds: string[];
+};
+
 /**
  * Creates the email's expenses and returns their ids, first attachment first,
  * plus the attachments that were skipped and why, and those OCR didn't reach.
+ * A reply to our "how did you pay?" question, with no receipts attached,
+ * records the answer on that claim instead of creating expenses.
  */
 async function deliverInboundEmail(
   job: typeof inboundEmailJobs.$inferSelect,
-): Promise<{ expenseIds: string[]; skipped: string[]; unscanned: string[] }> {
+): Promise<DeliveredClaim | DeliveredAnswer> {
   const recipient = await resolveInboundRecipient(job.toEmail);
   if (!recipient || !isFounderRole(recipient.role)) {
     throw new Error("REJECTED: Inbound mailbox is not an authorised founder");
@@ -470,10 +520,9 @@ async function deliverInboundEmail(
     ? providerRaw
     : "local";
 
-  const bodyExtraction = parseEmailBodyText(
-    email.subject ?? job.subject ?? "",
-    email.text ?? "",
-  );
+  const subject = email.subject ?? job.subject ?? "";
+  const bodyExtraction = parseEmailBodyText(subject, email.text ?? "");
+  const statedPaymentSource = detectStatedPaymentSource(subject, email.text ?? "");
 
   let attachmentList;
   try {
@@ -490,6 +539,32 @@ async function deliverInboundEmail(
   }
 
   const candidates = pickReceiptAttachments(attachmentList?.data ?? []);
+
+  const questionRef = parsePaymentQuestionRef(subject);
+  if (questionRef && candidates.length === 0) {
+    const answered = await findQuestionedJob({
+      companyId,
+      toEmail: job.toEmail,
+      ref: questionRef,
+      excludeJobId: job.id,
+    });
+    if (answered) {
+      const expenseIds = statedPaymentSource
+        ? await applyPaymentAnswer({
+            companyId,
+            answeredJobId: answered.id,
+            source: statedPaymentSource,
+            actorUserId: sender.id,
+          })
+        : [];
+      return {
+        kind: "answer",
+        answeredJobId: answered.id,
+        source: statedPaymentSource,
+        expenseIds,
+      };
+    }
+  }
   // Per attachment, in order: its receipt, or why it was skipped.
   const downloads: (InboundReceipt | string)[] = candidates.map(() => "");
   await mapWithConcurrency(candidates, TRANSFER_CONCURRENCY, async (attachment, i) => {
@@ -615,6 +690,9 @@ async function deliverInboundEmail(
           detectedCurrency: isForeignCurrency(merged.currency)
             ? merged.currency!.toUpperCase()
             : null,
+          statedPaymentSource: statedPaymentSource ?? null,
+          statedPaymentSourceVia: statedPaymentSource ? "email" : null,
+          receiptCardLast4: merged.cardLast4 ?? null,
         });
 
         const receipt = receipts[i];
@@ -671,7 +749,67 @@ async function deliverInboundEmail(
     }
   }
 
-  return { expenseIds, skipped, unscanned };
+  return {
+    kind: "claim",
+    expenseIds,
+    skipped,
+    unscanned,
+    paymentStated: Boolean(statedPaymentSource),
+    senderEmail: sender.email,
+  };
+}
+
+/** Close a reply to our payment question; it creates no expenses of its own. */
+async function finishPaymentAnswer(
+  job: typeof inboundEmailJobs.$inferSelect,
+  answer: DeliveredAnswer,
+): Promise<InboundEmailJobResult> {
+  const note = !answer.source
+    ? "Reply to a payment question, but it didn't say how the expenses were paid"
+    : answer.expenseIds.length
+      ? `Reply to a payment question: ${answer.source === "personal" ? "paid personally" : "paid by the company"}`
+      : "Reply to a payment question, but the expenses were already reviewed";
+  await getDb()
+    .update(inboundEmailJobs)
+    .set({
+      status: "processed",
+      answersJobId: answer.answeredJobId,
+      expenseId: answer.expenseIds[0] ?? null,
+      processedAt: new Date(),
+      lastError: note,
+      lockedUntil: null,
+    })
+    .where(eq(inboundEmailJobs.id, job.id));
+
+  if (answer.source && answer.expenseIds.length) {
+    try {
+      const { notify } = await import("@/lib/notifications");
+      const many = answer.expenseIds.length > 1;
+      await notify({
+        companyId: job.companyId,
+        type: "expense.inbound.processed",
+        title: "Expense payment confirmed",
+        body: `The sender says ${many ? "these expenses were" : "this expense was"} ${
+          answer.source === "personal" ? "paid personally" : "paid by the company"
+        }.`,
+        href: many
+          ? `/inbound-email/${answer.answeredJobId}`
+          : `/expenses/${answer.expenseIds[0]}`,
+        entityType: "expense",
+        entityId: answer.expenseIds[0],
+      });
+    } catch (notifyErr) {
+      console.warn(
+        JSON.stringify({
+          level: "warn",
+          msg: "notification.payment_answer_failed",
+          error: notifyErr instanceof Error ? notifyErr.message : String(notifyErr),
+        }),
+      );
+    }
+  }
+
+  return { ok: true, expenseId: answer.expenseIds[0], expenseIds: answer.expenseIds };
 }
 
 type InboundReceipt = {
@@ -780,10 +918,15 @@ export async function listPendingExpenses(companyId: string, limit = 5) {
     .orderBy(desc(expenses.createdAt))
     .limit(limit);
 
+  const sources = await getPaymentSourceSuggestions(
+    companyId,
+    rows.map((r) => r.id),
+  );
   return rows.map((r) => ({
     ...r,
     amountFormatted: formatExpenseAmount(r.amountPence, r.detectedCurrency),
     submitterLabel: r.submitterName || r.submitterEmail || "Unknown",
+    paymentSourceLabel: paymentSourceListLabel(sources.get(r.id)),
   }));
 }
 

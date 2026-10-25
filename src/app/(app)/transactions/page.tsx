@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { countBankAccounts, listBankTransactions } from "@/lib/bank/queries";
+import { listBankAccountCards } from "@/lib/bank/company-cards";
 import { getBankTransactionSummary } from "@/lib/bank/summary";
 import { parseBankListParams, hasActiveBankFilters, BANK_PAGE_SIZE, resolveBankListDateRange } from "@/lib/bank/list-params";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
@@ -69,12 +70,14 @@ export default async function TransactionsPage({
     customCategories,
     incomeCategories,
     bankAccountCount,
+    accountCards,
   ] = await Promise.all([
     listBankTransactions(companyId, listFilters),
     getBankTransactionSummary(companyId, summaryFilters),
     listBankSpendingCategoriesWithUsage(companyId),
     listIncomeCategoryNames(companyId),
     countBankAccounts(companyId),
+    listBankAccountCards(companyId),
   ]);
 
   const customCategoryNames = customCategories.map((c) => c.name);
@@ -101,7 +104,11 @@ export default async function TransactionsPage({
             </p>
           ) : null}
         </div>
-        <BankToolbar canWrite={canWrite} customCategories={customCategories} />
+        <BankToolbar
+          canWrite={canWrite}
+          customCategories={customCategories}
+          accountCards={accountCards}
+        />
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_280px] xl:grid-cols-[1fr_320px]">

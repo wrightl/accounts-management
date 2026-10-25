@@ -3,6 +3,7 @@ import {
   isExpenseCategory,
   type ExpenseCategory,
 } from "@/lib/expenses/categories";
+import { parseCardLast4 } from "@/lib/expenses/payment-source";
 
 export type ReceiptExtraction = {
   description?: string;
@@ -12,6 +13,8 @@ export type ReceiptExtraction = {
   merchant?: string;
   /** ISO-ish currency code detected on the receipt, e.g. GBP, USD, EUR. */
   currency?: string;
+  /** Last four digits of the card the receipt was paid with, when shown. */
+  cardLast4?: string;
   confidence: "high" | "partial" | "none";
 };
 
@@ -287,6 +290,7 @@ export function parseReceiptText(text: string): ReceiptExtraction {
   const spentAt = parseReceiptDate(text);
   const category = inferReceiptCategory(text);
   const currency = detectReceiptCurrency(text);
+  const cardLast4 = parseCardLast4(text);
   const description = merchant;
 
   const fields = [description, amountPounds, spentAt, category].filter(Boolean);
@@ -301,6 +305,7 @@ export function parseReceiptText(text: string): ReceiptExtraction {
     category,
     merchant,
     currency,
+    cardLast4,
     confidence,
   };
 }
@@ -312,6 +317,7 @@ export function normalizeAiExtraction(raw: {
   category?: string | null;
   merchant?: string | null;
   currency?: string | null;
+  cardLast4?: string | null;
 }): ReceiptExtraction {
   const description = raw.description?.trim() || raw.merchant?.trim() || undefined;
   const amountPounds = raw.amountPounds?.trim() || undefined;
@@ -319,6 +325,8 @@ export function normalizeAiExtraction(raw: {
   const category =
     raw.category && isExpenseCategory(raw.category) ? raw.category : undefined;
   const currency = normalizeCurrencyCode(raw.currency);
+  const cardDigits = raw.cardLast4?.replace(/\D/g, "") ?? "";
+  const cardLast4 = cardDigits.length === 4 ? cardDigits : undefined;
 
   const fields = [description, amountPounds, spentAt, category].filter(Boolean);
   let confidence: ReceiptExtraction["confidence"] = "none";
@@ -332,6 +340,7 @@ export function normalizeAiExtraction(raw: {
     category,
     merchant: raw.merchant?.trim() || undefined,
     currency,
+    cardLast4,
     confidence,
   };
 }

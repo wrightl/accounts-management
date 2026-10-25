@@ -5,6 +5,8 @@ import { getDb } from "@/db";
 import { clients, expenseReceipts, expenses, users } from "@/db/schema";
 import { clientDisplayName } from "@/lib/clients/display";
 import { toMobileExpense } from "@/lib/mobile/expense-payload";
+import { getPaymentSourceSuggestions } from "@/lib/expenses/payment-source-queries";
+import type { PaymentSourceSuggestion } from "@/lib/expenses/payment-source";
 
 type ReceiptRow = typeof expenseReceipts.$inferSelect;
 
@@ -24,6 +26,15 @@ export async function receiptsByExpense(
     grouped.set(row.expenseId, list);
   }
   return grouped;
+}
+
+/** Payment source suggestions for the pending expenses among these rows. */
+export async function pendingPaymentSources(
+  companyId: string,
+  rows: { id: string; status: string }[],
+): Promise<Map<string, PaymentSourceSuggestion>> {
+  const pending = rows.filter((r) => r.status === "pending").map((r) => r.id);
+  return getPaymentSourceSuggestions(companyId, pending);
 }
 
 /** One expense in the mobile payload shape, or null when not in this company. */
@@ -48,7 +59,9 @@ export async function loadMobileExpense(companyId: string, id: string) {
   if (!row) return null;
 
   const receipts = (await receiptsByExpense([id])).get(id) ?? [];
+  const paymentSources = await pendingPaymentSources(companyId, [row.expense]);
   return toMobileExpense({
+    paymentSource: paymentSources.get(id) ?? null,
     ...row.expense,
     paidByName: row.paidByName || row.paidByEmail,
     createdByName: row.createdByName || row.createdByEmail,

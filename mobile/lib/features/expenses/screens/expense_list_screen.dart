@@ -381,6 +381,16 @@ class _ApproveSheetState extends State<_ApproveSheet> {
   void initState() {
     super.initState();
     _paidByUserId = widget.expense.paidByUserId;
+    // Start from the server's suggestion; the reviewer can still change it.
+    final suggested = widget.expense.paymentSource?.suggestedStatus;
+    if (suggested != null) {
+      _status = suggested;
+      if (suggested == 'company_paid') {
+        _paidByUserId = null;
+      } else {
+        _paidByUserId ??= widget.defaultPayerId;
+      }
+    }
   }
 
   @override
@@ -427,6 +437,18 @@ class _ApproveSheetState extends State<_ApproveSheet> {
                   ),
                 ],
               ),
+            ],
+            if (widget.expense.paymentSource case final source?
+                when source.notes.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                source.conflict
+                    ? 'The clues about how this was paid disagree:'
+                    : 'How it was paid:',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              for (final note in source.notes)
+                Text('• $note', style: Theme.of(context).textTheme.bodySmall),
             ],
             const SizedBox(height: 16),
             ExpensePaymentFields(

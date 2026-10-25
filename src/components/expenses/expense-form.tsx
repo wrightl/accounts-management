@@ -60,6 +60,7 @@ export function ExpenseForm({
   linkedToBank = false,
   listHref = "/expenses",
   receiptCount,
+  suggestedApproveStatus = null,
 }: {
   mode: "create" | "edit";
   expense?: {
@@ -112,6 +113,8 @@ export function ExpenseForm({
   listHref?: string;
   /** Receipts on the expense; approving one with none asks for confirmation. */
   receiptCount?: number;
+  /** How a pending emailed expense was probably paid, to pre-select on approval. */
+  suggestedApproveStatus?: "reimbursable" | "company_paid" | null;
 }) {
   const router = useRouter();
   const { confirm } = useAlert();
@@ -161,9 +164,14 @@ export function ExpenseForm({
   // Only guess who paid when there's a single founder to choose from;
   // otherwise the reviewer must pick, so a wrong payee isn't reimbursed.
   const defaultPayee = founders.length === 1 ? founders[0].id : "";
-  const [paidByUserId, setPaidByUserId] = useState(
-    expense?.paidByUserId ?? defaultPayee,
-  );
+  const [paidByUserId, setPaidByUserId] = useState(() => {
+    if (expense?.status === "pending" && suggestedApproveStatus === "company_paid") return "";
+    // The sender says they paid, so they are the one to pay back.
+    if (expense?.status === "pending" && suggestedApproveStatus === "reimbursable") {
+      return expense.paidByUserId ?? expense.submittedByUserId ?? defaultPayee;
+    }
+    return expense?.paidByUserId ?? defaultPayee;
+  });
   const isPending = expense?.status === "pending";
   const isEmailSubmission = expense?.source === "email";
   // A wrongly detected receipt currency can be corrected to GBP.
@@ -173,6 +181,7 @@ export function ExpenseForm({
   const [currency, setCurrency] = useState(detectedForeignCurrency ?? "GBP");
   const currencySymbol = expenseCurrencySymbol(currency);
   const [approveStatus, setApproveStatus] = useState<ExpenseStatusOption>(() => {
+    if (suggestedApproveStatus) return suggestedApproveStatus;
     if (expense?.submittedByUserId) return "reimbursable";
     return "recorded";
   });
