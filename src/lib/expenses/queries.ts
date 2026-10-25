@@ -1,6 +1,6 @@
 import "server-only";
 import { alias } from "drizzle-orm/pg-core";
-import { and, asc, count, desc, eq, gte, lte, sql, sum, type AnyColumn, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, lte, or, sql, sum, type AnyColumn, type SQL } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   clients,
@@ -14,8 +14,11 @@ import { formatExpenseAmount, formatGBP } from "@/lib/money";
 import type { ExpenseStatus } from "@/lib/expenses/categories";
 import type { ExpenseSortColumn } from "@/lib/expenses/list-sort";
 import type { TableSort } from "@/lib/table-sort";
+import { bankSearchPattern } from "@/lib/bank/list-params";
 
 export interface ExpenseFilters {
+  /** Matches description or client name. */
+  q?: string;
   from?: string;
   to?: string;
   category?: string;
@@ -83,6 +86,11 @@ export async function listExpenses(companyId: string, filters: ExpenseFilters = 
   const createdBy = alias(users, "created_by");
   const submittedBy = alias(users, "submitted_by");
   const conditions = [eq(expenses.companyId, companyId)];
+  const pattern = filters.q ? bankSearchPattern(filters.q) : null;
+  if (pattern) {
+    const search = or(ilike(expenses.description, pattern), ilike(clientDisplayNameSql, pattern));
+    if (search) conditions.push(search);
+  }
   if (filters.from) conditions.push(gte(expenses.spentAt, filters.from));
   if (filters.to) conditions.push(lte(expenses.spentAt, filters.to));
   if (filters.category) conditions.push(eq(expenses.category, filters.category));

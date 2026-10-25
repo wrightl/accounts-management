@@ -58,6 +58,7 @@ export function ExpenseForm({
   defaultVatRate = 0,
   fromBankTransaction,
   linkedToBank = false,
+  listHref = "/expenses",
 }: {
   mode: "create" | "edit";
   expense?: {
@@ -106,6 +107,8 @@ export function ExpenseForm({
   } | null;
   /** Settled by a confirmed bank match: amount, date and status are fixed. */
   linkedToBank?: boolean;
+  /** The remembered (filtered) expenses list to return to after delete or reject. */
+  listHref?: string;
 }) {
   const router = useRouter();
   const { confirm } = useAlert();
@@ -418,7 +421,7 @@ export function ExpenseForm({
           return;
         }
         clearAll();
-        router.push("/expenses");
+        router.push(listHref);
         router.refresh();
       });
     })();
@@ -912,7 +915,7 @@ export function ExpenseForm({
                     return;
                   }
                   clearAll();
-                  router.push("/expenses");
+                  router.push(listHref);
                   router.refresh();
                 });
               }}
