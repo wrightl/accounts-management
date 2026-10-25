@@ -8,6 +8,7 @@ import {
   parseEmailAddressHeader,
   parseEmailBodyText,
   parseInboundMailbox,
+  resolveInboundSpentAt,
   slugifyInbound,
   tokenizedInboundSlug,
 } from "@/lib/expenses/inbound-merge";
@@ -143,6 +144,33 @@ describe("mergeReceiptExtractions", () => {
     expect(merged.amountPounds).toBe("9.99");
     expect(merged.description).toBe("Taxi receipt");
     expect(merged.confidence).toBe("partial");
+  });
+});
+
+describe("resolveInboundSpentAt", () => {
+  const body = { confidence: "high" as const, spentAt: "2026-10-20" };
+  const receipt = { confidence: "partial" as const, spentAt: "2026-10-18" };
+
+  it("prefers the attachment's date over the email body's", () => {
+    expect(resolveInboundSpentAt(body, [receipt], "2026-10-21T09:00:00Z")).toBe("2026-10-18");
+  });
+
+  it("falls back to the email body's date", () => {
+    expect(
+      resolveInboundSpentAt(body, [{ confidence: "none" }], "2026-10-21T09:00:00Z"),
+    ).toBe("2026-10-20");
+  });
+
+  it("falls back to the London day the email arrived", () => {
+    // 23:30 UTC in BST is already the next day in London.
+    expect(
+      resolveInboundSpentAt({ confidence: "none" }, [], "2026-07-14T23:30:00Z"),
+    ).toBe("2026-07-15");
+  });
+
+  it("returns undefined with nothing to go on", () => {
+    expect(resolveInboundSpentAt({ confidence: "none" }, [], "not a date")).toBeUndefined();
+    expect(resolveInboundSpentAt({ confidence: "none" }, [], null)).toBeUndefined();
   });
 });
 

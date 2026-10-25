@@ -17,6 +17,7 @@ import {
   parseEmailAddressHeader,
   parseEmailBodyText,
   parseInboundMailbox,
+  resolveInboundSpentAt,
 } from "@/lib/expenses/inbound-merge";
 import {
   describeFetchError,
@@ -482,6 +483,13 @@ async function deliverInboundEmail(
     email.subject ?? job.subject ?? "",
   );
 
+  const spentAt =
+    resolveInboundSpentAt(
+      bodyExtraction,
+      attachmentExtractions,
+      email.created_at || job.createdAt,
+    ) ?? null;
+
   let amountPence = 0;
   if (merged.amountPounds) {
     try {
@@ -499,7 +507,7 @@ async function deliverInboundEmail(
         companyId,
         description,
         category: merged.category ?? null,
-        spentAt: merged.spentAt ?? null,
+        spentAt,
         amountPence,
         vatPence: 0,
         status: "pending",

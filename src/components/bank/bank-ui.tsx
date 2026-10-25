@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Check, MoreHorizontal, X } from "lucide-react";
+import { Check, MoreHorizontal, Receipt, X, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAlert } from "@/components/ui/alert-dialog";
 import { Dialog, DialogActions } from "@/components/ui/dialog";
@@ -813,10 +813,12 @@ function RowActionsMenu({
   items,
   disabled,
   label = "More actions",
+  icon: Icon = MoreHorizontal,
 }: {
   items: RowMenuItem[];
   disabled?: boolean;
   label?: string;
+  icon?: LucideIcon;
 }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLUListElement>(null);
@@ -883,7 +885,7 @@ function RowActionsMenu({
         aria-expanded={position !== null}
         onClick={() => (position ? close() : open())}
       >
-        <MoreHorizontal className="h-4 w-4" aria-hidden />
+        <Icon className="h-4 w-4" aria-hidden />
       </button>
       {position && triggerRef.current
         ? createPortal(
@@ -918,8 +920,8 @@ function RowActionsMenu({
 
 /**
  * Status badge, match detail and row actions in a single compact cell:
- * ✓/✕ for suggestions, Explain for unreconciled credits, Attach (expense)
- * for unreconciled debits, ⋯ for the rest (e.g. unlinking a matched expense).
+ * ✓/✕ for suggestions, Explain for unreconciled credits, an expense menu
+ * (attach/create, or view/unlink once matched) for debits, ⋯ for the rest.
  */
 export function ReconciliationCell({
   row,
@@ -943,7 +945,7 @@ export function ReconciliationCell({
   const badge = RECONCILIATION_BADGE[state];
   const detail = reconciliationDetail(row);
   const isIncoming = row.amountPence > 0;
-  const { matchId } = row;
+  const { matchId, matchHref } = row;
 
   const run = (action: () => Promise<ActionResult>) => {
     setError(null);
@@ -991,6 +993,7 @@ export function ReconciliationCell({
           </button>
           <RowActionsMenu
             disabled={pending}
+            {...(isIncoming ? {} : { label: "Expense actions", icon: Receipt })}
             items={
               isIncoming
                 ? [{ key: "explain", label: "Explain instead…", onSelect: () => setExplainOpen(true) }]
@@ -1008,18 +1011,15 @@ export function ReconciliationCell({
       );
     } else if (state === "unreconciled" && !isIncoming) {
       actions = (
-        <>
-          <Button
-            type="button"
-            variant="ghost"
-            className="px-3 py-1"
-            disabled={pending}
-            onClick={() => setAttachOpen(true)}
-          >
-            Attach
-          </Button>
-          <RowActionsMenu disabled={pending} items={[createExpenseItem]} />
-        </>
+        <RowActionsMenu
+          disabled={pending}
+          label="Expense actions"
+          icon={Receipt}
+          items={[
+            { key: "attach", label: "Attach…", onSelect: () => setAttachOpen(true) },
+            createExpenseItem,
+          ]}
+        />
       );
     } else if (state === "unreconciled" && isIncoming) {
       actions = (
@@ -1037,7 +1037,12 @@ export function ReconciliationCell({
       actions = (
         <RowActionsMenu
           disabled={pending}
+          label="Expense actions"
+          icon={Receipt}
           items={[
+            ...(matchHref
+              ? [{ key: "view", label: "View expense", onSelect: () => router.push(matchHref) }]
+              : []),
             {
               key: "unlink",
               label: "Unlink expense",

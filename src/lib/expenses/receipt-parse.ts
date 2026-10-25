@@ -135,22 +135,35 @@ function toIsoDate(year: number, month: number, day: number): string | undefined
   return `${year}-${pad2(month)}-${pad2(day)}`;
 }
 
-function parseDmyMatch(match: RegExpMatchArray): string | undefined {
-  const day = Number(match[1]);
-  const month = Number(match[2]);
+/**
+ * Numeric `a/b/yyyy`. A part over 12 can only be the day, which settles the
+ * order; otherwise (e.g. 03/04/2026) fall back to `monthFirst`.
+ */
+function parseNumericMatch(match: RegExpMatchArray, monthFirst: boolean): string | undefined {
+  const first = Number(match[1]);
+  const second = Number(match[2]);
   let year = Number(match[3]);
   if (year < 100) year += 2000;
-  return toIsoDate(year, month, day);
+  if (first > 12) return toIsoDate(year, second, first);
+  if (second > 12) return toIsoDate(year, first, second);
+  return monthFirst ? toIsoDate(year, first, second) : toIsoDate(year, second, first);
 }
 
+/**
+ * First receipt date in the text as YYYY-MM-DD. Numeric dates are read day
+ * first (UK) unless only month-first fits, or the receipt is in dollars and the
+ * date is ambiguous. Named months work either way round ("20 Oct 2026",
+ * "Oct 20, 2026").
+ */
 export function parseReceiptDate(text: string): string | undefined {
+  const monthFirst = detectReceiptCurrency(text) === "USD";
   const labeled = text.match(
     /(?:Document Date|Invoice Date|Tax Invoice Date|Transaction Date|Date)[:\s]*(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4})/i,
   );
   if (labeled?.[1]) {
-    const dmy = labeled[1].match(/(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})/);
-    if (dmy) {
-      const iso = parseDmyMatch(dmy);
+    const numeric = labeled[1].match(/(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})/);
+    if (numeric) {
+      const iso = parseNumericMatch(numeric, monthFirst);
       if (iso) return iso;
     }
   }
@@ -158,9 +171,9 @@ export function parseReceiptDate(text: string): string | undefined {
   const lines = text.split(/\r?\n/);
 
   for (const line of lines) {
-    const dmy = line.match(/\b(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})\b/);
-    if (dmy) {
-      const iso = parseDmyMatch(dmy);
+    const numeric = line.match(/\b(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})\b/);
+    if (numeric) {
+      const iso = parseNumericMatch(numeric, monthFirst);
       if (iso) return iso;
     }
 
@@ -170,7 +183,7 @@ export function parseReceiptDate(text: string): string | undefined {
       if (iso) return iso;
     }
 
-    const named = line.match(/\b(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{2,4})\b/i);
+    const named = line.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]{3,9})\.?,?\s+(\d{2,4})\b/i);
     if (named) {
       const day = Number(named[1]);
       const month = MONTHS[named[2].toLowerCase()];
@@ -180,6 +193,15 @@ export function parseReceiptDate(text: string): string | undefined {
         const iso = toIsoDate(year, month, day);
         if (iso) return iso;
       }
+    }
+
+    for (const monthNamed of line.matchAll(
+      /\b([A-Za-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})\b/gi,
+    )) {
+      const month = MONTHS[monthNamed[1].toLowerCase()];
+      if (!month) continue;
+      const iso = toIsoDate(Number(monthNamed[3]), month, Number(monthNamed[2]));
+      if (iso) return iso;
     }
   }
 

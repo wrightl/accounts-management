@@ -10,6 +10,7 @@ import { FormStickyActions } from "@/components/ui/form-sticky-actions";
 import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
 import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
 import { useFieldErrors } from "@/components/ui/use-field-errors";
+import { useUnsavedChangesGuard } from "@/components/ui/use-unsaved-changes-guard";
 import { EXPENSE_CATEGORIES } from "@/lib/expenses/categories";
 import { mileageAmountPence } from "@/lib/expenses/mileage";
 import {
@@ -185,6 +186,30 @@ export function ExpenseForm({
     return fromBankTransaction ? "company_paid" : defaultStatus;
   });
 
+  // Everything a save sends, so the form can tell when it differs from what
+  // was loaded (or last saved). The approve-as choice is excluded: it only
+  // applies on Approve, which is always available.
+  const snapshot = JSON.stringify([
+    description,
+    spentAt,
+    category,
+    status,
+    paidByUserId,
+    billable,
+    projectClientId,
+    projectOrderId,
+    useMileage,
+    mileageMiles,
+    mileageRatePence,
+    amountPounds,
+    vatRate,
+    currency,
+    pendingReceipt !== null,
+  ]);
+  const [savedSnapshot, setSavedSnapshot] = useState(snapshot);
+  const dirty = canWrite && snapshot !== savedSnapshot;
+  useUnsavedChangesGuard(dirty);
+
   const computedMileagePence = useMemo(() => {
     if (!useMileage) return null;
     const miles = Number(mileageMiles);
@@ -278,6 +303,8 @@ export function ExpenseForm({
   }
 
   function onSubmit(formData: FormData) {
+    // Enter in a field submits even while the save button is disabled.
+    if (mode === "edit" && !dirty) return;
     formData.set("description", description);
     formData.set("spentAt", spentAt);
     formData.set("status", status);
@@ -315,6 +342,7 @@ export function ExpenseForm({
         return;
       }
       clearAll();
+      setSavedSnapshot(snapshot);
 
       let targetUrl = `/expenses/${result.id}`;
       if (result.bankLinkError) {
@@ -350,6 +378,7 @@ export function ExpenseForm({
         return;
       }
       clearAll();
+      setSavedSnapshot(snapshot);
       router.refresh();
     });
   }
@@ -367,6 +396,7 @@ export function ExpenseForm({
         return;
       }
       clearAll();
+      setSavedSnapshot(snapshot);
       router.push(`/expenses/${result.id}`);
       router.refresh();
     });
@@ -849,7 +879,12 @@ export function ExpenseForm({
               <Button type="button" disabled={pending} onClick={onApprove}>
                 {pending ? "Approving…" : "Approve"}
               </Button>
-              <Button type="button" variant="secondary" disabled={pending} onClick={onSaveDraft}>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={pending || !dirty}
+                onClick={onSaveDraft}
+              >
                 {pending ? "Saving…" : "Save draft"}
               </Button>
               <Button type="button" variant="ghost" disabled={pending} onClick={onReject}>
@@ -857,7 +892,7 @@ export function ExpenseForm({
               </Button>
             </>
           ) : (
-            <Button type="submit" disabled={pending}>
+            <Button type="submit" disabled={pending || (mode === "edit" && !dirty)}>
               {pending ? "Saving…" : mode === "create" ? "Create expense" : "Save changes"}
             </Button>
           )}
