@@ -5,12 +5,32 @@ import { ClientImportButton } from "@/components/clients/client-import-panel";
 import { buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
+import { sortHeaders } from "@/components/ui/sortable-th";
+import { defineTableSort, parseTableSort, sortRows } from "@/lib/table-sort";
 
-export default async function ClientsPage() {
+const SORT = defineTableSort({
+  columns: ["name", "company", "email"],
+  fallback: { sort: "name", dir: "asc" },
+  descFirst: [],
+});
+
+export default async function ClientsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
+  const sp = await searchParams;
+  const sort = parseTableSort(sp, SORT);
+  const th = sortHeaders("/clients", sp, SORT, sort);
 
-  const rows = await listClients(companyId);
+  // Sorted here too, so name order is case-insensitive like the other columns.
+  const rows = sortRows(await listClients(companyId), sort, {
+    name: (r) => r.name,
+    company: (r) => r.companyName,
+    email: (r) => r.email,
+  });
 
   return (
     <div>
@@ -41,9 +61,9 @@ export default async function ClientsPage() {
           <Table>
             <THead>
               <TR>
-                <TH>Name</TH>
-                <TH>Company</TH>
-                <TH>Email</TH>
+                {th("Name", "name")}
+                {th("Company", "company")}
+                {th("Email", "email")}
                 <TH>Notes</TH>
               </TR>
             </THead>

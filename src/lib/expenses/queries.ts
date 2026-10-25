@@ -1,6 +1,6 @@
 import "server-only";
 import { alias } from "drizzle-orm/pg-core";
-import { and, count, desc, eq, gte, lte, sql, sum } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, lte, sql, sum, type AnyColumn, type SQL } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   clients,
@@ -11,6 +11,8 @@ import {
 import { clientDisplayNameSql } from "@/lib/clients/sql";
 import { formatExpenseAmount, formatGBP } from "@/lib/money";
 import type { ExpenseStatus } from "@/lib/expenses/categories";
+import type { ExpenseSortColumn } from "@/lib/expenses/list-sort";
+import type { TableSort } from "@/lib/table-sort";
 
 export interface ExpenseFilters {
   from?: string;
@@ -19,6 +21,7 @@ export interface ExpenseFilters {
   paidByUserId?: string;
   billable?: "true" | "false" | "";
   status?: string;
+  sort?: TableSort<ExpenseSortColumn>;
 }
 
 export async function listFounders(companyId: string) {
@@ -33,6 +36,44 @@ export async function listFounders(companyId: string) {
       ),
     )
     .orderBy(users.name);
+}
+
+/**
+ * ORDER BY for the expenses table. Newest-first breaks ties, then id. Status
+ * sorts in workflow order (pending review first), not alphabetically.
+ */
+function expenseListOrderBy(
+  sort: TableSort<ExpenseSortColumn> = { sort: "date", dir: "desc" },
+  joined: { paidBy: AnyColumn; createdBy: SQL },
+): SQL[] {
+  const by = (expr: SQL | AnyColumn) =>
+    sort.dir === "asc" ? sql`${expr} asc nulls last` : sql`${expr} desc nulls last`;
+  const tiebreak = [desc(expenses.spentAt), desc(expenses.createdAt), desc(expenses.id)];
+  switch (sort.sort) {
+    case "description":
+      return [by(sql`lower(${expenses.description})`), ...tiebreak];
+    case "category":
+      return [by(expenses.category), ...tiebreak];
+    case "paidBy":
+      return [by(sql`lower(${joined.paidBy})`), ...tiebreak];
+    case "createdBy":
+      return [by(sql`lower(${joined.createdBy})`), ...tiebreak];
+    case "status":
+      // Explicit order: 'pending' was appended to the enum, so its own order is wrong.
+      return [
+        by(sql`case ${expenses.status}
+          when 'pending' then 0 when 'recorded' then 1 when 'reimbursable' then 2
+          when 'reimbursed' then 3 when 'company_paid' then 4 end`),
+        ...tiebreak,
+      ];
+    case "amount":
+      return [by(expenses.amountPence), ...tiebreak];
+    case "date":
+      // Undated expenses keep their current place at the top of newest-first.
+      return sort.dir === "asc"
+        ? [asc(expenses.spentAt), asc(expenses.createdAt), asc(expenses.id)]
+        : tiebreak;
+  }
 }
 
 export async function listExpenses(companyId: string, filters: ExpenseFilters = {}) {
@@ -78,7 +119,12 @@ export async function listExpenses(companyId: string, filters: ExpenseFilters = 
     .leftJoin(submittedBy, eq(expenses.submittedByUserId, submittedBy.id))
     .leftJoin(clients, eq(expenses.clientId, clients.id))
     .where(and(...conditions))
-    .orderBy(desc(expenses.spentAt), desc(expenses.createdAt));
+    .orderBy(
+      ...expenseListOrderBy(filters.sort, {
+        paidBy: paidBy.name,
+        createdBy: sql`coalesce(${createdBy.name}, ${createdBy.email}, ${submittedBy.name}, ${submittedBy.email})`,
+      }),
+    );
 
   return rows.map((r) => {
     const createdByDisplay =
@@ -188,4 +234,21 @@ export async function listReimbursableExpenses(
     .from(expenses)
     .where(and(...conditions))
     .orderBy(desc(expenses.spentAt));
+}
+
+/**
+ * Cheap change marker for expenses that arrived by email. The expenses list
+ * polls this and refreshes when it changes, so new email submissions appear
+ * without a manual reload.
+ */
+export async function getEmailExpensesFingerprint(companyId: string): Promise<string> {
+  const db = getDb();
+  const [row] = await db
+    .select({
+      total: count(),
+      latest: sql<string | null>`max(${expenses.createdAt})::text`,
+    })
+    .from(expenses)
+    .where(and(eq(expenses.companyId, companyId), eq(expenses.source, "email")));
+  return `${row?.total ?? 0}:${row?.latest ?? ""}`;
 }

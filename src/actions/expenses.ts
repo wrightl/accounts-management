@@ -17,7 +17,8 @@ import {
   type ParsedExpenseImportRow,
 } from "@/lib/expenses/import-csv";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
-import { listFounders } from "@/lib/expenses/queries";
+import { getEmailExpensesFingerprint, listFounders } from "@/lib/expenses/queries";
+import { requireActionPermission } from "@/lib/auth";
 import {
   expenseRawFromFormData,
   normalizeExpensePaymentFields,
@@ -33,6 +34,11 @@ import type { ActionResult } from "@/actions/result";
 import { periodLockError } from "@/lib/period-lock";
 import { checkPeriodOpen, getBooksLockedThrough } from "@/lib/period-lock-queries";
 import { refreshExpenseBankSuggestion } from "@/lib/bank/expense-match";
+import {
+  bankDebitLinkError,
+  ExpenseLinkError,
+  linkExpenseToBankTx,
+} from "@/lib/bank/expense-link";
 import { resolveExpenseProject } from "@/lib/expenses/project";
 import { getExpenseRebill } from "@/lib/profitability/queries";
 import { createExpenseRecord } from "@/lib/expenses/create";
@@ -50,7 +56,12 @@ export type ExpenseImportPreviewResult =
   | { ok: true; rows: ParsedExpenseImportRow[] }
   | { ok: false; error: string; fieldErrors?: Record<string, string> };
 
-export async function createExpense(formData: FormData): Promise<ActionResult> {
+export type CreateExpenseResult = ActionResult & {
+  /** Set when the expense saved but its bank transaction couldn't be linked. */
+  bankLinkError?: string;
+};
+
+export async function createExpense(formData: FormData): Promise<CreateExpenseResult> {
   const parsed = parseExpenseInput(expenseRawFromFormData(formData));
   if (!parsed.ok) {
     return {
@@ -60,12 +71,54 @@ export async function createExpense(formData: FormData): Promise<ActionResult> {
     };
   }
 
-  return mutate(
+  const rawTxId = formData.get("bankTransactionId");
+  const bankTransactionId = typeof rawTxId === "string" && rawTxId ? rawTxId : null;
+  if (bankTransactionId) {
+    if (parsed.data.useMileage) {
+      return { ok: false, error: "A mileage claim can't be created from a bank transaction" };
+    }
+    if (parsed.data.status === "reimbursable") {
+      const message = "A bank payment was made by the company, so it can't be reimbursable";
+      return { ok: false, error: message, fieldErrors: { status: message } };
+    }
+  }
+
+  return mutateWide<CreateExpenseResult>(
     "accounts:write",
-    ({ companyId, localUserId }) =>
-      createExpenseRecord({ companyId, localUserId }, parsed.data),
+    async ({ companyId, localUserId }) => {
+      if (bankTransactionId) {
+        // Check first so a stale link doesn't leave an extra expense behind.
+        const linkError = await bankDebitLinkError(companyId, bankTransactionId);
+        if (linkError) return { ok: false, error: linkError };
+      }
+      const created = await createExpenseRecord({ companyId, localUserId }, parsed.data);
+      if (!created.ok || !bankTransactionId || !created.id) return created;
+      try {
+        const { matchId } = await linkExpenseToBankTx(companyId, {
+          expenseId: created.id,
+          bankTransactionId,
+        });
+        await writeAudit({
+          companyId,
+          actorUserId: localUserId,
+          action: "bank.link_expense",
+          entityType: "reconciliation_match",
+          entityId: matchId,
+          meta: { expenseId: created.id, bankTransactionId },
+        });
+      } catch (e) {
+        // Lost a race with another link; the expense stands and can be linked later.
+        if (!(e instanceof ExpenseLinkError)) throw e;
+        return { ...created, bankLinkError: e.message };
+      }
+      return created;
+    },
     {
-      audit: { action: "expense.create", entityType: "expense" },
+      audit: {
+        action: "expense.create",
+        entityType: "expense",
+        meta: bankTransactionId ? { bankTransactionId } : undefined,
+      },
       paths: ["/expenses", "/reimbursements", "/dashboard", "/transactions"],
     },
   );
@@ -516,4 +569,19 @@ export async function commitExpenseImport(
     },
     { paths: ["/expenses", "/reimbursements", "/dashboard", "/transactions"] },
   );
+}
+
+/** Change marker the expenses list polls to pick up new email submissions. */
+export async function fetchEmailExpensesFingerprint(): Promise<
+  { ok: true; fingerprint: string } | { ok: false; error: string }
+> {
+  const authz = await requireActionPermission("accounts:read");
+  if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding first." };
+  }
+  return {
+    ok: true,
+    fingerprint: await getEmailExpensesFingerprint(authz.user.companyId),
+  };
 }

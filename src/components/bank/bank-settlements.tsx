@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import type { BankSettlement } from "@/lib/bank/settlements";
 
@@ -6,9 +7,12 @@ import type { BankSettlement } from "@/lib/bank/settlements";
 export function BankSettlements({
   settlements,
   className = "mb-6",
+  action,
 }: {
   settlements: BankSettlement[];
   className?: string;
+  /** Extra control after each row's link, e.g. Unlink on an expense. */
+  action?: ReactNode;
 }) {
   if (settlements.length === 0) return null;
   return (
@@ -28,6 +32,7 @@ export function BankSettlements({
             >
               View transaction →
             </Link>
+            {action ? <> · {action}</> : null}
           </li>
         ))}
       </ul>

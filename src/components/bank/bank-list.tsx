@@ -1,22 +1,19 @@
 import Link from 'next/link';
 import { CategoryCell, ReconciliationCell } from '@/components/bank/bank-ui';
+import { SortableTH } from '@/components/ui/sortable-th';
 import { BankPageSizeSelect } from '@/components/bank/bank-page-size-select';
-import { BankPeriodRangeSelect } from '@/components/period/bank-period-range-select';
 import { Card } from '@/components/ui/card';
 import { buttonClasses } from '@/components/ui/button';
-import { Input, Label, Select } from '@/components/ui/form';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
+import { formatBankCategory } from '@/lib/bank/categories';
 import {
-    bankCategorySelectOptions,
-    formatBankCategory,
-} from '@/lib/bank/categories';
-import {
-    BANK_PAGE_SIZE,
     bankListHref,
     groupByBookedAt,
-    hasActiveBankFilters,
+    BANK_SORT,
     type BankListParams,
+    type BankSortColumn,
 } from '@/lib/bank/list-params';
+import { nextTableSort } from '@/lib/table-sort';
 import type { BankTransactionListItem } from '@/lib/bank/queries';
 import { friendlyDayLabel } from '@/lib/dates';
 import { cn } from '@/lib/utils';
@@ -44,98 +41,6 @@ function CategoryDisplay({
         <span className="text-sm">
             {formatBankCategory(row.spendingCategory)}
         </span>
-    );
-}
-
-export function BankFilters({
-    params,
-    customCategories,
-}: {
-    params: BankListParams;
-    customCategories: readonly string[];
-}) {
-    const categoryOptions = bankCategorySelectOptions(customCategories);
-    return (
-        <form
-            method="get"
-            action="/transactions"
-            className="grid gap-3 rounded-xl border border-border bg-surface p-4 sm:grid-cols-2 lg:grid-cols-6"
-        >
-            <input type="hidden" name="view" value={params.view} />
-            {params.pageSize !== BANK_PAGE_SIZE ? (
-                <input type="hidden" name="pageSize" value={params.pageSize} />
-            ) : null}
-            <div className="sm:col-span-2 lg:col-span-2">
-                <Label htmlFor="q">Search</Label>
-                <Input
-                    id="q"
-                    name="q"
-                    type="search"
-                    placeholder="Counterparty, reference…"
-                    defaultValue={params.q}
-                />
-            </div>
-            <div>
-                <Label htmlFor="type">Type</Label>
-                <Select id="type" name="type" defaultValue={params.type}>
-                    <option value="">All</option>
-                    <option value="incoming">Incoming</option>
-                    <option value="outgoing">Outgoing</option>
-                </Select>
-            </div>
-            <div>
-                <Label htmlFor="reconciliation">Reconciliation</Label>
-                <Select
-                    id="reconciliation"
-                    name="reconciliation"
-                    defaultValue={params.reconciliation}
-                >
-                    <option value="">All</option>
-                    <option value="reconciled">Reconciled</option>
-                    <option value="unreconciled">Unreconciled</option>
-                </Select>
-            </div>
-            <div>
-                <Label htmlFor="category">Category</Label>
-                <Select
-                    id="category"
-                    name="category"
-                    defaultValue={params.category}
-                >
-                    <option value="">All</option>
-                    {categoryOptions.map((c) => (
-                        <option key={c.value} value={c.value}>
-                            {c.label}
-                        </option>
-                    ))}
-                </Select>
-            </div>
-            <div>
-                <BankPeriodRangeSelect params={params} />
-            </div>
-            <div className="flex flex-wrap items-end gap-3 sm:col-span-2 lg:col-span-6">
-                <button type="submit" className={buttonClasses('secondary')}>
-                    Filter
-                </button>
-                {hasActiveBankFilters(params) ? (
-                    <Link
-                        href={bankListHref(params, {
-                            q: '',
-                            type: '',
-                            category: '',
-                            reconciliation: '',
-                            period: '',
-                            from: '',
-                            to: '',
-                            page: 1,
-                        })}
-                        className="text-sm text-muted hover:text-foreground hover:underline"
-                    >
-                        Clear
-                    </Link>
-                ) : null}
-            </div>
-        </form>
     );
 }
 
@@ -248,28 +153,46 @@ function TagsLine({ tags }: { tags: string[] }) {
 }
 
 export function BankTransactionTable({
+    params,
     rows,
     customCategories,
     incomeCategories,
     canWrite,
     showAccount = false,
 }: {
+    params: BankListParams;
     rows: BankTransactionListItem[];
     customCategories: readonly string[];
     incomeCategories: readonly string[];
     canWrite: boolean;
     showAccount?: boolean;
 }) {
+    const sortHeader = (
+        label: string,
+        column: BankSortColumn,
+        align?: 'start' | 'end',
+    ) => (
+        <SortableTH
+            label={label}
+            href={bankListHref(params, {
+                ...nextTableSort(BANK_SORT, params, column),
+                page: 1,
+            })}
+            active={params.sort === column}
+            dir={params.dir}
+            align={align}
+        />
+    );
     return (
         <Table>
             <THead>
                 <TR>
-                    <TH>Date</TH>
-                    <TH>Counterparty</TH>
+                    {sortHeader('Date', 'date')}
+                    {sortHeader('Counterparty', 'counterparty')}
                     {showAccount ? <TH>Account</TH> : null}
-                    <TH>Reference</TH>
-                    <TH>Category</TH>
-                    <TH className="text-right">Amount</TH>
+                    {sortHeader('Reference', 'reference')}
+                    {sortHeader('Category', 'category')}
+                    {sortHeader('Amount', 'amount', 'end')}
                     <TH>Reconciliation</TH>
                 </TR>
             </THead>

@@ -9,6 +9,7 @@ import {
   updateExpense,
 } from "@/actions/expenses";
 import { isAuthorisedExpenseSender } from "@/lib/expenses/inbound-email";
+import { getEmailExpensesFingerprint } from "@/lib/expenses/queries";
 import { seedCompany } from "@/lib/test/seed-company";
 
 vi.mock("server-only", () => ({}));
@@ -147,5 +148,31 @@ describe("pending expense approval", () => {
 
     const rows = await db.select().from(expenses).where(eq(expenses.id, expense.id));
     expect(rows).toHaveLength(0);
+  });
+});
+
+describe("getEmailExpensesFingerprint", () => {
+  it("changes when an email expense arrives, not for manual ones", async () => {
+    const empty = await getEmailExpensesFingerprint(companyId);
+
+    await db.insert(expenses).values({
+      companyId,
+      description: "Manual",
+      amountPence: 500,
+      status: "recorded",
+      source: "manual",
+    });
+    expect(await getEmailExpensesFingerprint(companyId)).toBe(empty);
+
+    await db.insert(expenses).values({
+      companyId,
+      description: "Emailed receipt",
+      amountPence: 0,
+      status: "pending",
+      source: "email",
+    });
+    const afterEmail = await getEmailExpensesFingerprint(companyId);
+    expect(afterEmail).not.toBe(empty);
+    expect(await getEmailExpensesFingerprint(companyId)).toBe(afterEmail);
   });
 });

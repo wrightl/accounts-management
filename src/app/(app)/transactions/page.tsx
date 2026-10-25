@@ -5,8 +5,8 @@ import { getBankTransactionSummary } from "@/lib/bank/summary";
 import { parseBankListParams, hasActiveBankFilters, BANK_PAGE_SIZE, resolveBankListDateRange } from "@/lib/bank/list-params";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { BankToolbar } from "@/components/bank/bank-ui";
+import { BankFilters } from "@/components/bank/bank-filters";
 import {
-  BankFilters,
   BankPagination,
   BankTransactionTable,
   BankViewToggle,
@@ -50,6 +50,8 @@ export default async function TransactionsPage({
           to: dateRange.to,
           page: params.page,
           pageSize: params.pageSize,
+          sort: params.sort,
+          dir: params.dir,
         };
 
   const summaryFilters = {
@@ -143,6 +145,7 @@ export default async function TransactionsPage({
               />
             ) : (
               <BankTransactionTable
+                params={params}
                 rows={rows}
                 customCategories={customCategoryNames}
                 incomeCategories={incomeCategories}

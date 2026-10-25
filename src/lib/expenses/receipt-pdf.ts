@@ -1,6 +1,17 @@
+/**
+ * Load pdf.js with its worker pre-registered. In Node pdf.js otherwise
+ * imports `./pdf.worker.mjs` by a computed path, which output file tracing
+ * misses, so every PDF fails on Vercel while working locally. The worker
+ * module sets `globalThis.pdfjsWorker`, which pdf.js uses instead.
+ */
+async function loadPdfjs() {
+  await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
+  return import("pdfjs-dist/legacy/build/pdf.mjs");
+}
+
 /** Extract visible text from every page of a PDF via pdf.js. */
 export async function extractPdfText(bytes: Buffer): Promise<string> {
-  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const pdfjs = await loadPdfjs();
   const pdf = await pdfjs.getDocument({
     data: new Uint8Array(bytes),
     useSystemFonts: true,
@@ -23,7 +34,7 @@ export async function extractPdfText(bytes: Buffer): Promise<string> {
 /** Rasterise page 1 for Tesseract when the PDF has no text layer. */
 export async function renderPdfFirstPagePng(bytes: Buffer): Promise<Buffer> {
   const { createCanvas } = await import("@napi-rs/canvas");
-  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const pdfjs = await loadPdfjs();
   const pdf = await pdfjs.getDocument({
     data: new Uint8Array(bytes),
     useSystemFonts: true,

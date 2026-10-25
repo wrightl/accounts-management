@@ -4,6 +4,12 @@ import {
   resolvePeriod,
   type PeriodPreset,
 } from "@/lib/dates";
+import {
+  defineTableSort,
+  parseTableSort,
+  setTableSortParams,
+  type SortDir,
+} from "@/lib/table-sort";
 
 export const BANK_PAGE_SIZE = 25;
 
@@ -13,6 +19,13 @@ export type BankPageSize = (typeof BANK_PAGE_SIZE_OPTIONS)[number];
 export type BankTxType = "incoming" | "outgoing";
 export type BankReconciliationFilter = "reconciled" | "unreconciled";
 export type BankView = "table" | "cards";
+
+export const BANK_SORT = defineTableSort({
+  columns: ["date", "counterparty", "reference", "category", "amount"],
+  fallback: { sort: "date", dir: "desc" },
+  descFirst: ["date", "amount"],
+});
+export type BankSortColumn = (typeof BANK_SORT.columns)[number];
 
 export interface BankListParams {
   q: string;
@@ -25,6 +38,9 @@ export interface BankListParams {
   page: number;
   pageSize: BankPageSize;
   view: BankView;
+  /** Table view only; cards are grouped by day so always run newest first. */
+  sort: BankSortColumn;
+  dir: SortDir;
 }
 
 export function parseBankPageSize(raw: string): BankPageSize {
@@ -72,6 +88,7 @@ export function parseBankListParams(
     page,
     pageSize: parseBankPageSize(first(sp, "pageSize")),
     view: viewRaw === "cards" ? "cards" : "table",
+    ...parseTableSort(sp, BANK_SORT),
   };
 }
 
@@ -112,6 +129,7 @@ export function bankListHref(
   if (next.page > 1) qs.set("page", String(next.page));
   if (next.pageSize !== BANK_PAGE_SIZE) qs.set("pageSize", String(next.pageSize));
   if (next.view !== "table") qs.set("view", next.view);
+  setTableSortParams(qs, BANK_SORT, { sort: next.sort, dir: next.dir });
   const s = qs.toString();
   return s ? `/transactions?${s}` : "/transactions";
 }

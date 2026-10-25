@@ -53,6 +53,15 @@ import {
   type SuggestedMatch,
 } from "@/lib/bank/queries";
 import {
+  ExpenseLinkError,
+  linkExpenseToBankTx,
+  listBankDebitCandidatesForExpense,
+  listExpenseCandidatesForBankTx,
+  unlinkExpenseMatch,
+  type BankDebitLinkCandidate,
+  type ExpenseLinkCandidate,
+} from "@/lib/bank/expense-link";
+import {
   isCreditExplainType,
   type CreditExplainType,
 } from "@/lib/bank/credit-explain";
@@ -602,6 +611,95 @@ export async function explainBankCreditAction(input: {
   );
 }
 
+export async function findExpensesForBankTransactionAction(
+  bankTransactionId: string,
+  query?: string,
+): Promise<{ ok: true; candidates: ExpenseLinkCandidate[] } | { ok: false; error: string }> {
+  const authz = await requireActionPermission("accounts:read");
+  if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const candidates = await listExpenseCandidatesForBankTx(
+    authz.user.companyId,
+    bankTransactionId,
+    query,
+  );
+  return { ok: true, candidates };
+}
+
+export async function findBankTransactionsForExpenseAction(
+  expenseId: string,
+  query?: string,
+): Promise<{ ok: true; candidates: BankDebitLinkCandidate[] } | { ok: false; error: string }> {
+  const authz = await requireActionPermission("accounts:read");
+  if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const candidates = await listBankDebitCandidatesForExpense(
+    authz.user.companyId,
+    expenseId,
+    query,
+  );
+  return { ok: true, candidates };
+}
+
+export async function linkExpenseToBankTransactionAction(input: {
+  expenseId: string;
+  bankTransactionId: string;
+}): Promise<ActionResult> {
+  return mutate(
+    "accounts:write",
+    async ({ companyId }) => {
+      try {
+        const { matchId } = await linkExpenseToBankTx(companyId, input);
+        return { ok: true, id: matchId };
+      } catch (e) {
+        if (e instanceof ExpenseLinkError) return { ok: false, error: e.message };
+        throw e;
+      }
+    },
+    {
+      audit: {
+        action: "bank.link_expense",
+        entityType: "reconciliation_match",
+        meta: { expenseId: input.expenseId, bankTransactionId: input.bankTransactionId },
+      },
+      paths: ["/transactions", "/expenses", "/dashboard"],
+    },
+  );
+}
+
+export async function unlinkExpenseAction(
+  target: { matchId: string } | { expenseId: string },
+): Promise<ActionResult> {
+  return mutate(
+    "accounts:write",
+    async ({ companyId, localUserId }) => {
+      try {
+        const unlinked = await unlinkExpenseMatch(companyId, target);
+        await writeAudit({
+          companyId,
+          actorUserId: localUserId,
+          action: "bank.unlink_expense",
+          entityType: "reconciliation_match",
+          entityId: unlinked.matchId,
+          meta: {
+            expenseId: unlinked.expenseId,
+            bankTransactionId: unlinked.bankTransactionId,
+          },
+        });
+        return { ok: true, id: unlinked.matchId };
+      } catch (e) {
+        if (e instanceof ExpenseLinkError) return { ok: false, error: e.message };
+        throw e;
+      }
+    },
+    { paths: ["/transactions", "/expenses", "/dashboard"] },
+  );
+}
+
 export async function clearBankCreditExplanationAction(
   matchId: string,
 ): Promise<ActionResult> {
@@ -669,4 +767,4 @@ export async function deleteIncomeCategoryAction(
   );
 }
 
-export type { SuggestedMatch, InvoiceBankMatch };
+export type { SuggestedMatch, InvoiceBankMatch, ExpenseLinkCandidate, BankDebitLinkCandidate };

@@ -9,7 +9,22 @@ import { clientDisplayName } from "@/lib/clients/display";
 import { buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Label, Select } from "@/components/ui/form";
-import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
+import { Table, THead, TBody, TR, TD } from "@/components/ui/table";
+import { sortHeaders } from "@/components/ui/sortable-th";
+import {
+  defineTableSort,
+  parseTableSort,
+  rankIn,
+  setTableSortParams,
+  sortRows,
+} from "@/lib/table-sort";
+
+/** "created" is the loaded order (newest first) and has no header. */
+const SORT = defineTableSort({
+  columns: ["created", "number", "version", "client", "status", "total"],
+  fallback: { sort: "created", dir: "desc" },
+  descFirst: ["created", "version", "total"],
+});
 
 export default async function QuotesPage({
   searchParams,
@@ -19,19 +34,31 @@ export default async function QuotesPage({
   const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
   const sp = await searchParams;
+  const sort = parseTableSort(sp, SORT);
+  const th = sortHeaders("/quotes", sp, SORT, sort);
+  // Hidden inputs so applying a filter keeps the current sort.
+  const sortParams = new URLSearchParams();
+  setTableSortParams(sortParams, SORT, sort);
 
   const filters = {
     status: sp.status,
     clientId: sp.client,
   };
 
-  const [rows, clients, summary] = await Promise.all([
+  const [loaded, clients, summary] = await Promise.all([
     listQuotes(companyId, filters),
     listClients(companyId),
     getQuotesSummary(companyId, filters),
   ]);
 
   const filtersActive = Boolean(sp.status || sp.client);
+  const rows = sortRows(loaded, sort, {
+    number: (r) => r.number,
+    version: (r) => r.version,
+    client: (r) => r.clientName,
+    status: (r) => rankIn(QUOTE_STATUSES, r.status),
+    total: (r) => r.grossPence,
+  });
 
   return (
     <div>
@@ -53,6 +80,9 @@ export default async function QuotesPage({
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_280px] xl:grid-cols-[1fr_320px]">
         <div>
           <form className="grid gap-3 rounded-xl border border-border p-4 sm:grid-cols-2">
+            {[...sortParams].map(([name, value]) => (
+              <input key={name} type="hidden" name={name} value={value} />
+            ))}
             <div>
               <Label htmlFor="status">Status</Label>
               <Select id="status" name="status" defaultValue={sp.status ?? ""}>
@@ -98,11 +128,11 @@ export default async function QuotesPage({
               <Table>
                 <THead>
                   <TR>
-                    <TH>Number</TH>
-                    <TH>Version</TH>
-                    <TH>Client</TH>
-                    <TH>Status</TH>
-                    <TH className="text-right">Total</TH>
+                    {th("Number", "number")}
+                    {th("Version", "version")}
+                    {th("Client", "client")}
+                    {th("Status", "status")}
+                    {th("Total", "total", "end")}
                   </TR>
                 </THead>
                 <TBody>
