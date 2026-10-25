@@ -96,6 +96,27 @@ describe("parseReceiptDate", () => {
   it("parses labeled invoice dates", () => {
     expect(parseReceiptDate("Document Date\n\n09/07/2026")).toBe("2026-07-09");
   });
+
+  it("reads ambiguous numeric dates day first by default", () => {
+    expect(parseReceiptDate("Date: 03/04/2026 Total £10.00")).toBe("2026-04-03");
+  });
+
+  it("reads US month-first dates when only that order fits", () => {
+    expect(parseReceiptDate("Date: 10/25/2026")).toBe("2026-10-25");
+  });
+
+  it("reads ambiguous numeric dates month first on dollar receipts", () => {
+    expect(parseReceiptDate("Date: 03/04/2026 Total $10.00")).toBe("2026-03-04");
+  });
+
+  it("parses month-first named dates", () => {
+    expect(parseReceiptDate("Paid on Oct 20, 2026")).toBe("2026-10-20");
+    expect(parseReceiptDate("Ref 12 2026 - October 3rd, 2026")).toBe("2026-10-03");
+  });
+
+  it("parses ordinal day-first named dates", () => {
+    expect(parseReceiptDate("20th October 2026")).toBe("2026-10-20");
+  });
 });
 
 describe("parseReceiptMerchant", () => {

@@ -1,3 +1,4 @@
+import { todayIsoDate } from "@/lib/dates";
 import type { ReceiptExtraction } from "@/lib/expenses/receipt-parse";
 import {
   detectReceiptCurrency,
@@ -170,6 +171,26 @@ export function mergeReceiptExtractions(
     currency,
     confidence,
   };
+}
+
+/**
+ * Spend date for an emailed expense. A date on an attached receipt beats one
+ * found in the email text (often a forward header's "Date:" line); the day the
+ * email arrived (London calendar) is the last resort.
+ */
+export function resolveInboundSpentAt(
+  body: ReceiptExtraction,
+  attachments: ReceiptExtraction[],
+  receivedAt: string | Date | null | undefined,
+): string | undefined {
+  const fromAttachments = attachments.length
+    ? mergeReceiptExtractions(...attachments).spentAt
+    : undefined;
+  if (fromAttachments) return fromAttachments;
+  if (body.spentAt) return body.spentAt;
+  if (!receivedAt) return undefined;
+  const received = new Date(receivedAt);
+  return Number.isNaN(received.getTime()) ? undefined : todayIsoDate(received);
 }
 
 /** Heuristic extraction from email subject + plain body. */
