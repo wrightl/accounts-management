@@ -6,6 +6,7 @@ import {
   clients,
   expenseReceipts,
   expenses,
+  reconciliationMatches,
   users,
 } from "@/db/schema";
 import { clientDisplayNameSql } from "@/lib/clients/sql";
@@ -112,6 +113,11 @@ export async function listExpenses(companyId: string, filters: ExpenseFilters = 
       submittedByName: submittedBy.name,
       submittedByEmail: submittedBy.email,
       clientName: clientDisplayNameSql.as("client_name"),
+      bankLinked: sql<boolean>`exists (
+        select 1 from ${reconciliationMatches}
+        where ${reconciliationMatches.expenseId} = ${expenses.id}
+          and ${reconciliationMatches.confirmed}
+      )`.mapWith(Boolean),
     })
     .from(expenses)
     .leftJoin(paidBy, eq(expenses.paidByUserId, paidBy.id))
@@ -147,6 +153,8 @@ export async function listExpenses(companyId: string, filters: ExpenseFilters = 
       paidByName: r.paidByName,
       createdByName: createdByDisplay,
       clientName: r.clientName,
+      /** Confirmed against a bank transaction. */
+      bankLinked: r.bankLinked,
       amountFormatted: formatExpenseAmount(r.amountPence, r.detectedCurrency),
     };
   });
