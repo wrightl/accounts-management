@@ -16,6 +16,11 @@ import {
 } from "@/db/schema";
 import { seedCompany } from "@/lib/test/seed-company";
 import {
+  countPlatformActivity,
+  countPlatformCompanies,
+  countPlatformInboundJobs,
+  countPlatformLogs,
+  countPlatformSendJobs,
   getLatestCronRuns,
   getPlatformCompanyDetail,
   getPlatformOverviewStats,
@@ -125,6 +130,9 @@ describe("listPlatformCompanies filters and paging", () => {
     expect(await names({ filter: "canceled" })).toEqual(["Gamma"]);
     expect(await names({ q: "gam" })).toEqual(["Gamma"]);
     expect(await names({ limit: 2, offset: 1 })).toEqual(["Beta", "Gamma"]);
+    expect(await countPlatformCompanies()).toBe(3);
+    expect(await countPlatformCompanies({ filter: "active" })).toBe(1);
+    expect(await countPlatformCompanies({ q: "a" })).toBe(3);
 
     const [alphaRow] = await listPlatformCompanies({ q: "alpha" });
     expect(alphaRow).toMatchObject({
@@ -200,10 +208,14 @@ describe("other platform queries", () => {
     expect(inbound.map((j) => j.status).sort()).toEqual(["failed", "pending"]);
     expect(await listPlatformInboundJobs({ status: "processed" })).toHaveLength(1);
     expect(await listPlatformInboundJobs({ limit: 1, offset: 1 })).toHaveLength(1);
+    expect(await countPlatformInboundJobs()).toBe(2);
+    expect(await countPlatformInboundJobs({ status: "processed" })).toBe(1);
 
     const send = await listPlatformSendJobs();
     expect(send).toMatchObject([{ status: "failed", invoiceNumber: "INV-001" }]);
     expect(await listPlatformSendJobs({ status: "sent" })).toHaveLength(1);
+    expect(await countPlatformSendJobs()).toBe(1);
+    expect(await countPlatformSendJobs({ status: "all" })).toBe(1);
   });
 
   it("filters activity by company and action prefix", async () => {
@@ -222,6 +234,8 @@ describe("other platform queries", () => {
     const platformOnly = await listPlatformActivity({ actionPrefix: "platform." });
     expect(platformOnly).toHaveLength(2);
     expect(platformOnly.every((r) => r.companyName)).toBe(true);
+    expect(await countPlatformActivity({ companyId: alpha.id })).toBe(2);
+    expect(await countPlatformActivity({ actionPrefix: "platform." })).toBe(2);
   });
 
   it("filters logs by level, text and window, and finds the latest cron runs", async () => {
@@ -236,6 +250,8 @@ describe("other platform queries", () => {
     expect(await listPlatformLogs({ level: "info" })).toHaveLength(2);
     expect(await listPlatformLogs({ q: "signature" })).toHaveLength(1);
     expect(await listPlatformLogs({ source: "stripe" })).toHaveLength(1);
+    expect(await countPlatformLogs()).toBe(2);
+    expect(await countPlatformLogs({ level: "info" })).toBe(2);
 
     const runs = await getLatestCronRuns();
     expect(runs.daily?.source).toBe("cron.daily.manual");

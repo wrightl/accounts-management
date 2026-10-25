@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { requirePlatformAdmin } from "@/lib/platform";
 import { hasDatabaseClient } from "@/db";
-import { listCompanyOptions, listPlatformActivity } from "@/lib/platform/queries";
+import {
+  countPlatformActivity,
+  listCompanyOptions,
+  listPlatformActivity,
+} from "@/lib/platform/queries";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { ExpandableText } from "@/components/platform/expandable-text";
 import { ClearFilters, Pager, parseOffset } from "@/components/platform/pager";
@@ -31,16 +35,15 @@ export default async function PlatformActivityPage({
     );
   }
 
-  const [fetched, companyOptions] = await Promise.all([
-    listPlatformActivity({
-      companyId: params.companyId || undefined,
-      actionPrefix: params.action || undefined,
-      limit: PAGE_SIZE + 1,
-      offset,
-    }),
+  const filters = {
+    companyId: params.companyId || undefined,
+    actionPrefix: params.action || undefined,
+  };
+  const [rows, total, companyOptions] = await Promise.all([
+    listPlatformActivity({ ...filters, limit: PAGE_SIZE, offset }),
+    countPlatformActivity(filters),
     listCompanyOptions(),
   ]);
-  const rows = fetched.slice(0, PAGE_SIZE);
 
   return (
     <div>
@@ -133,9 +136,11 @@ export default async function PlatformActivityPage({
         offset={offset}
         pageSize={PAGE_SIZE}
         shown={rows.length}
-        hasMore={fetched.length > PAGE_SIZE}
+        total={total}
+        firstLabel="« Newest"
         newerLabel="← Newer"
         olderLabel="Older →"
+        lastLabel="Oldest »"
       />
     </div>
   );

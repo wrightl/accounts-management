@@ -3,6 +3,7 @@ import { requirePlatformAdmin } from "@/lib/platform";
 import { hasDatabaseClient } from "@/db";
 import {
   isCompanyListFilter,
+  countPlatformCompanies,
   listPlatformCompanies,
 } from "@/lib/platform/queries";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
@@ -41,14 +42,10 @@ export default async function PlatformCompaniesPage({
     );
   }
 
-  const fetched = await listPlatformCompanies({
-    q,
-    filter,
-    limit: PAGE_SIZE + 1,
-    offset,
-  });
-  const hasMore = fetched.length > PAGE_SIZE;
-  const rows = fetched.slice(0, PAGE_SIZE);
+  const [rows, total] = await Promise.all([
+    listPlatformCompanies({ q, filter, limit: PAGE_SIZE, offset }),
+    countPlatformCompanies({ q, filter }),
+  ]);
 
   return (
     <div>
@@ -172,7 +169,7 @@ export default async function PlatformCompaniesPage({
           offset={offset}
           pageSize={PAGE_SIZE}
           shown={rows.length}
-          hasMore={hasMore}
+          total={total}
         />
       </div>
     </div>

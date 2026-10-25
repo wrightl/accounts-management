@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requirePlatformAdmin } from "@/lib/platform";
 import { hasDatabaseClient } from "@/db";
-import { listPlatformLogs } from "@/lib/platform/queries";
+import { countPlatformLogs, listPlatformLogs } from "@/lib/platform/queries";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { ExpandableText } from "@/components/platform/expandable-text";
 import { StatusPill } from "@/components/platform/status-pill";
@@ -35,15 +35,16 @@ export default async function PlatformLogsPage({
     );
   }
 
-  const fetched = await listPlatformLogs({
+  const filters = {
     level: params.level,
     source: params.source,
     q: params.q,
     sinceHours: hours,
-    limit: PAGE_SIZE + 1,
-    offset,
-  });
-  const rows = fetched.slice(0, PAGE_SIZE);
+  };
+  const [rows, total] = await Promise.all([
+    listPlatformLogs({ ...filters, limit: PAGE_SIZE, offset }),
+    countPlatformLogs(filters),
+  ]);
 
   return (
     <div>
@@ -174,9 +175,11 @@ export default async function PlatformLogsPage({
           offset={offset}
           pageSize={PAGE_SIZE}
           shown={rows.length}
-          hasMore={fetched.length > PAGE_SIZE}
+          total={total}
+          firstLabel="« Newest"
           newerLabel="← Newer"
           olderLabel="Older →"
+          lastLabel="Oldest »"
         />
       </div>
     </div>
