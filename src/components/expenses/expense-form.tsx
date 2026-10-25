@@ -58,6 +58,7 @@ export function ExpenseForm({
   defaultVatRate = 0,
   fromBankTransaction,
   linkedToBank = false,
+  receiptCount,
 }: {
   mode: "create" | "edit";
   expense?: {
@@ -106,6 +107,8 @@ export function ExpenseForm({
   } | null;
   /** Settled by a confirmed bank match: amount, date and status are fixed. */
   linkedToBank?: boolean;
+  /** Receipts on the expense; approving one with none asks for confirmation. */
+  receiptCount?: number;
 }) {
   const router = useRouter();
   const { confirm } = useAlert();
@@ -385,18 +388,29 @@ export function ExpenseForm({
     const formData = buildFormData(approveStatus);
     clearAll();
     if (!validateClient(formData, { allowZeroAmount: false })) return;
-    startTransition(async () => {
-      const result = await approveExpense(expense.id, formData);
-      if (!result.ok) {
-        applyFail(result);
-        scheduleFocusFirstFieldError(formRef.current, result.fieldErrors);
-        return;
+    void (async () => {
+      if (receiptCount === 0) {
+        const ok = await confirm({
+          title: "No receipt attached",
+          message:
+            "This expense has no receipt. You may need one to claim VAT or to back up the cost if HMRC asks. Approve it anyway?",
+          confirmLabel: "Approve without receipt",
+        });
+        if (!ok) return;
       }
-      clearAll();
-      setSavedSnapshot(snapshot);
-      router.push(`/expenses/${result.id}`);
-      router.refresh();
-    });
+      startTransition(async () => {
+        const result = await approveExpense(expense.id, formData);
+        if (!result.ok) {
+          applyFail(result);
+          scheduleFocusFirstFieldError(formRef.current, result.fieldErrors);
+          return;
+        }
+        clearAll();
+        setSavedSnapshot(snapshot);
+        router.push(`/expenses/${result.id}`);
+        router.refresh();
+      });
+    })();
   }
 
   function onReject() {

@@ -131,7 +131,14 @@ export default async function InboundEmailPage({
                         >
                           Details
                         </Link>
-                        {job.expenseId ? (
+                        {job.expenseCount > 1 ? (
+                          <Link
+                            href={`/inbound-email/${job.id}`}
+                            className={buttonClasses("ghost", "text-sm")}
+                          >
+                            {job.expenseCount} expenses
+                          </Link>
+                        ) : job.expenseId ? (
                           <Link
                             href={`/expenses/${job.expenseId}`}
                             className={buttonClasses("ghost", "text-sm")}
