@@ -17,7 +17,8 @@ import {
   type ParsedExpenseImportRow,
 } from "@/lib/expenses/import-csv";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
-import { listFounders } from "@/lib/expenses/queries";
+import { getEmailExpensesFingerprint, listFounders } from "@/lib/expenses/queries";
+import { requireActionPermission } from "@/lib/auth";
 import {
   expenseRawFromFormData,
   normalizeExpensePaymentFields,
@@ -93,7 +94,18 @@ export async function createExpense(formData: FormData): Promise<CreateExpenseRe
       const created = await createExpenseRecord({ companyId, localUserId }, parsed.data);
       if (!created.ok || !bankTransactionId || !created.id) return created;
       try {
-        await linkExpenseToBankTx(companyId, { expenseId: created.id, bankTransactionId });
+        const { matchId } = await linkExpenseToBankTx(companyId, {
+          expenseId: created.id,
+          bankTransactionId,
+        });
+        await writeAudit({
+          companyId,
+          actorUserId: localUserId,
+          action: "bank.link_expense",
+          entityType: "reconciliation_match",
+          entityId: matchId,
+          meta: { expenseId: created.id, bankTransactionId },
+        });
       } catch (e) {
         // Lost a race with another link; the expense stands and can be linked later.
         if (!(e instanceof ExpenseLinkError)) throw e;
@@ -557,4 +569,19 @@ export async function commitExpenseImport(
     },
     { paths: ["/expenses", "/reimbursements", "/dashboard", "/transactions"] },
   );
+}
+
+/** Change marker the expenses list polls to pick up new email submissions. */
+export async function fetchEmailExpensesFingerprint(): Promise<
+  { ok: true; fingerprint: string } | { ok: false; error: string }
+> {
+  const authz = await requireActionPermission("accounts:read");
+  if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding first." };
+  }
+  return {
+    ok: true,
+    fingerprint: await getEmailExpensesFingerprint(authz.user.companyId),
+  };
 }

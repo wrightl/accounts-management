@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { guardTenantPage, hasPermission, requireUser } from "@/lib/auth";
-import { listExpenses, listFounders, getReimbursableSummary } from "@/lib/expenses/queries";
+import {
+  getEmailExpensesFingerprint,
+  getReimbursableSummary,
+  listExpenses,
+  listFounders,
+} from "@/lib/expenses/queries";
 import {
   EXPENSE_CATEGORIES,
   expenseStatusLabel,
@@ -13,6 +18,7 @@ import { Table, THead, TBody, TR, TD } from "@/components/ui/table";
 import { findLocalUser } from "@/lib/users";
 import { getCompany } from "@/lib/tenant";
 import { ExpenseImportButton } from "@/components/expenses/expense-import-panel";
+import { ExpenseLiveRefresh } from "@/components/expenses/expense-live-refresh";
 import { CopyButton } from "@/components/ui/copy-button";
 import { sortHeaders } from "@/components/ui/sortable-th";
 import { EXPENSE_SORT } from "@/lib/expenses/list-sort";
@@ -33,7 +39,7 @@ export default async function ExpensesPage({
   const myReimbursable = sp.mine === "1" && localUserId;
   const sort = parseTableSort(sp, EXPENSE_SORT);
 
-  const [rows, founders, reimbSummary, company] = await Promise.all([
+  const [rows, founders, reimbSummary, company, emailFingerprint] = await Promise.all([
     listExpenses(companyId, {
       from: sp.from,
       to: sp.to,
@@ -46,6 +52,7 @@ export default async function ExpensesPage({
     listFounders(companyId),
     getReimbursableSummary(companyId),
     getCompany(companyId),
+    getEmailExpensesFingerprint(companyId),
   ]);
 
   const inboundAddress =
@@ -74,6 +81,7 @@ export default async function ExpensesPage({
 
   return (
     <div>
+      <ExpenseLiveRefresh initialFingerprint={emailFingerprint} />
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl font-semibold">Expenses</h1>

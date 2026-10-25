@@ -235,3 +235,20 @@ export async function listReimbursableExpenses(
     .where(and(...conditions))
     .orderBy(desc(expenses.spentAt));
 }
+
+/**
+ * Cheap change marker for expenses that arrived by email. The expenses list
+ * polls this and refreshes when it changes, so new email submissions appear
+ * without a manual reload.
+ */
+export async function getEmailExpensesFingerprint(companyId: string): Promise<string> {
+  const db = getDb();
+  const [row] = await db
+    .select({
+      total: count(),
+      latest: sql<string | null>`max(${expenses.createdAt})::text`,
+    })
+    .from(expenses)
+    .where(and(eq(expenses.companyId, companyId), eq(expenses.source, "email")));
+  return `${row?.total ?? 0}:${row?.latest ?? ""}`;
+}

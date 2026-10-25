@@ -157,6 +157,9 @@ export default async function ExpenseDetailPage({
 
       <div className="mt-8 grid gap-10 lg:grid-cols-2">
         <ExpenseForm
+          // Remount when the status changes (e.g. a pending email expense is
+          // approved) so the form's status state re-derives from the saved row.
+          key={`${detail.expense.id}:${detail.expense.status}`}
           mode="edit"
           expense={detail.expense}
           founders={founders}

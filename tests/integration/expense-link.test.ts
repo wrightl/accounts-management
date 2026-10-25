@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
 import {
+  auditLog,
   bankAccounts,
   bankTransactions,
   companies,
@@ -350,6 +351,17 @@ describe("createExpense from a bank transaction", () => {
     expect(match).toMatchObject({ confirmed: true, matchType: "expense" });
     const [created] = await db.select().from(expenses).where(eq(expenses.id, match.expenseId!));
     expect(created).toMatchObject({ description: "Figma", status: "company_paid" });
+
+    const [audit] = await db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.action, "bank.link_expense"));
+    expect(audit).toMatchObject({
+      companyId,
+      entityType: "reconciliation_match",
+      entityId: match.id,
+      meta: { expenseId: created.id, bankTransactionId: tx.id },
+    });
   });
 
   it("refuses a reimbursable status", async () => {
