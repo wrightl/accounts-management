@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { listClients } from "@/lib/clients/queries";
@@ -16,6 +17,7 @@ import { periodLockError } from "@/lib/period-lock";
 import { ExpenseForm } from "@/components/expenses/expense-form";
 import { ReceiptPanel } from "@/components/expenses/receipt-panel";
 import { buttonClasses } from "@/components/ui/button";
+import { EXPENSE_LIST_COOKIE, expenseListReturnHref } from "@/lib/expenses/list-params";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { isForeignCurrency } from "@/lib/expenses/receipt-parse";
@@ -56,10 +58,12 @@ export default async function ExpenseDetailPage({
     ? detail.expense.detectedCurrency!.toUpperCase()
     : null;
 
+  const listHref = expenseListReturnHref((await cookies()).get(EXPENSE_LIST_COOKIE)?.value);
+
   return (
     <div>
       <div className="mb-6">
-        <Link href="/expenses" className={buttonClasses("ghost")}>
+        <Link href={listHref} className={buttonClasses("ghost")}>
           ← Expenses
         </Link>
       </div>
@@ -157,6 +161,7 @@ export default async function ExpenseDetailPage({
 
       <div className="mt-8 grid gap-10 lg:grid-cols-2">
         <ExpenseForm
+          listHref={listHref}
           // Remount when the status changes (e.g. a pending email expense is
           // approved) so the form's status state re-derives from the saved row.
           key={`${detail.expense.id}:${detail.expense.status}`}

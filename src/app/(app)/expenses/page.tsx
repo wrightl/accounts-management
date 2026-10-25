@@ -14,7 +14,7 @@ import {
 } from "@/lib/expenses/categories";
 import { expenseInboundAddress } from "@/lib/expenses/inbound-mailbox";
 import { buttonClasses } from "@/components/ui/button";
-import { Input, Label, Select } from "@/components/ui/form";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { findLocalUser } from "@/lib/users";
 import { getCompany } from "@/lib/tenant";
@@ -23,7 +23,15 @@ import { ExpenseLiveRefresh } from "@/components/expenses/expense-live-refresh";
 import { CopyButton } from "@/components/ui/copy-button";
 import { sortHeaders } from "@/components/ui/sortable-th";
 import { EXPENSE_SORT } from "@/lib/expenses/list-sort";
-import { parseTableSort, setTableSortParams } from "@/lib/table-sort";
+import {
+  expenseListHref,
+  expenseListSearchParams,
+  hasActiveExpenseFilters,
+  parseExpenseListParams,
+  resolveExpenseListDateRange,
+} from "@/lib/expenses/list-params";
+import { ExpenseFilters } from "@/components/expenses/expense-filters";
+import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 
 export default async function ExpensesPage({
   searchParams,
@@ -33,22 +41,28 @@ export default async function ExpensesPage({
   const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
   const user = await requireUser();
-  const sp = await searchParams;
+  const parsed = parseExpenseListParams(await searchParams);
 
-  const localUser = await findLocalUser(user.userId);
+  const [localUser, settings] = await Promise.all([
+    findLocalUser(user.userId),
+    getOrCreateCompanySettings(companyId),
+  ]);
   const localUserId = localUser?.id ?? null;
-  const myReimbursable = sp.mine === "1" && localUserId;
-  const sort = parseTableSort(sp, EXPENSE_SORT);
+  const params = { ...parsed, mine: parsed.mine && Boolean(localUserId) };
+  const myReimbursable = params.mine;
+  const dateRange = resolveExpenseListDateRange(params, settings.financialYearEndMonth);
+  const filtered = hasActiveExpenseFilters(params);
 
   const [rows, founders, reimbSummary, company, emailFingerprint] = await Promise.all([
     listExpenses(companyId, {
-      from: sp.from,
-      to: sp.to,
-      category: sp.category,
-      paidByUserId: myReimbursable ? localUserId! : sp.paidBy,
-      billable: (sp.billable as "true" | "false" | "") || "",
-      status: myReimbursable ? "reimbursable" : sp.status,
-      sort,
+      q: params.q,
+      from: dateRange.from,
+      to: dateRange.to,
+      category: params.category,
+      paidByUserId: myReimbursable ? localUserId! : params.paidBy,
+      billable: params.billable,
+      status: myReimbursable ? "reimbursable" : params.status,
+      sort: { sort: params.sort, dir: params.dir },
     }),
     listFounders(companyId),
     getReimbursableSummary(companyId),
@@ -63,21 +77,11 @@ export default async function ExpensesPage({
       ? expenseInboundAddress(company.slug, localUser.expenseInboundSlug)
       : null;
 
-  const filterParams = new URLSearchParams();
-  if (sp.from) filterParams.set("from", sp.from);
-  if (sp.to) filterParams.set("to", sp.to);
-  if (sp.category) filterParams.set("category", sp.category);
-  if (sp.paidBy) filterParams.set("paidBy", sp.paidBy);
-  if (sp.billable) filterParams.set("billable", sp.billable);
-  if (sp.status) filterParams.set("status", sp.status);
-  // Filters and the All / My reimbursable toggle keep the current sort.
-  setTableSortParams(filterParams, EXPENSE_SORT, sort);
-
   const sortHeader = sortHeaders(
     "/expenses",
-    { ...Object.fromEntries(filterParams), ...(myReimbursable ? { mine: "1" } : {}) },
+    Object.fromEntries(expenseListSearchParams(params)),
     EXPENSE_SORT,
-    sort,
+    { sort: params.sort, dir: params.dir },
   );
 
   return (
@@ -124,90 +128,55 @@ export default async function ExpensesPage({
         </div>
       )}
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <nav aria-label="Whose expenses" className="mt-4 flex flex-wrap gap-2">
         <Link
-          href={`/expenses?${filterParams.toString()}`}
-          className={buttonClasses(myReimbursable ? "secondary" : "ghost", "text-sm")}
+          href={expenseListHref(params, { mine: false })}
+          aria-current={myReimbursable ? undefined : "page"}
+          scroll={false}
+          className={buttonClasses(myReimbursable ? "ghost" : "secondary", "text-sm")}
         >
           All
         </Link>
         {localUserId && (
           <Link
-            href={`/expenses?mine=1&${filterParams.toString()}`}
-            className={buttonClasses(myReimbursable ? "primary" : "secondary", "text-sm")}
+            // Status and payer are fixed by this view, so drop them rather than hide them.
+            href={expenseListHref(params, { mine: true, status: "", paidBy: "" })}
+            aria-current={myReimbursable ? "page" : undefined}
+            scroll={false}
+            className={buttonClasses(myReimbursable ? "secondary" : "ghost", "text-sm")}
           >
             My reimbursable
           </Link>
         )}
-      </div>
+      </nav>
 
-      <form className="mt-6 grid gap-3 rounded-xl border border-border p-4 sm:grid-cols-2 lg:grid-cols-6">
-        {filterParams.get("sort") ? (
-          <input type="hidden" name="sort" value={filterParams.get("sort")!} />
-        ) : null}
-        {filterParams.get("dir") ? (
-          <input type="hidden" name="dir" value={filterParams.get("dir")!} />
-        ) : null}
-        <div>
-          <Label htmlFor="from">From</Label>
-          <Input id="from" name="from" type="date" defaultValue={sp.from ?? ""} />
-        </div>
-        <div>
-          <Label htmlFor="to">To</Label>
-          <Input id="to" name="to" type="date" defaultValue={sp.to ?? ""} />
-        </div>
-        <div>
-          <Label htmlFor="category">Category</Label>
-          <Select id="category" name="category" defaultValue={sp.category ?? ""}>
-            <option value="">All</option>
-            {EXPENSE_CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div>
-          <Label htmlFor="status">Status</Label>
-          <Select id="status" name="status" defaultValue={sp.status ?? ""}>
-            <option value="">All</option>
-            <option value="pending">Pending review</option>
-            <option value="recorded">Recorded</option>
-            <option value="reimbursable">Reimbursable</option>
-            <option value="reimbursed">Reimbursed</option>
-            <option value="company_paid">Company paid</option>
-          </Select>
-        </div>
-        <div>
-          <Label htmlFor="paidBy">Paid by</Label>
-          <Select id="paidBy" name="paidBy" defaultValue={sp.paidBy ?? ""}>
-            <option value="">All</option>
-            {founders.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.name || f.email}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div>
-          <Label htmlFor="billable">Rebillable</Label>
-          <Select id="billable" name="billable" defaultValue={sp.billable ?? ""}>
-            <option value="">All</option>
-            <option value="true">Yes</option>
-            <option value="false">No</option>
-          </Select>
-        </div>
-        <div className="sm:col-span-2 lg:col-span-6">
-          <button type="submit" className={buttonClasses("secondary")}>
-            Filter
-          </button>
-        </div>
-      </form>
+      <div className="mt-4">
+        <ExpenseFilters
+          params={params}
+          categories={EXPENSE_CATEGORIES}
+          founders={founders.map((f) => ({ id: f.id, label: f.name || f.email }))}
+        />
+      </div>
 
       <div className="mt-6">
         {rows.length === 0 ? (
-          <p className="text-sm text-muted">No expenses match.</p>
+          filtered || myReimbursable ? (
+            <p className="text-sm text-muted">No expenses match these filters.</p>
+          ) : (
+            <EmptyState
+              title="No expenses yet"
+              description="Log spend with New expense, import a CSV, or email a receipt."
+              actionHref={canWrite ? "/expenses/new" : undefined}
+              actionLabel={canWrite ? "New expense" : undefined}
+            />
+          )
         ) : (
+          <>
+          {filtered ? (
+            <p className="mb-2 text-sm text-muted" aria-live="polite">
+              {rows.length} {rows.length === 1 ? "expense" : "expenses"} match these filters.
+            </p>
+          ) : null}
           <Table>
             <THead>
               <TR>
@@ -260,6 +229,7 @@ export default async function ExpensesPage({
               ))}
             </TBody>
           </Table>
+          </>
         )}
       </div>
     </div>

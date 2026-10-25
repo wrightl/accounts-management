@@ -24,7 +24,9 @@ function defaultCustomRange(): { from: string; to: string } {
   return { from, to: today };
 }
 
-function periodButtonLabel(params: BankListParams): string {
+type PeriodRange = { period: PeriodPreset | ""; from: string; to: string };
+
+function periodButtonLabel(params: PeriodRange): string {
   if (!params.period) return ALL_TIME.label;
   if (params.period === "custom" && params.from && params.to) {
     return formatPeriodRangeLabel(params.from, params.to);
@@ -34,6 +36,22 @@ function periodButtonLabel(params: BankListParams): string {
 
 export function BankPeriodRangeSelect({ params }: { params: BankListParams }) {
   const router = useRouter();
+  return (
+    <PeriodRangeSelect
+      value={params}
+      onSelect={(range) => router.push(bankListHref(params, { ...range, page: 1 }))}
+    />
+  );
+}
+
+/** "Date range" dropdown of presets plus a custom from–to dialog. */
+export function PeriodRangeSelect({
+  value: params,
+  onSelect,
+}: {
+  value: PeriodRange;
+  onSelect: (range: PeriodRange) => void;
+}) {
   const uid = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -50,8 +68,8 @@ export function BankPeriodRangeSelect({ params }: { params: BankListParams }) {
     return () => document.removeEventListener("mousedown", onDoc);
   }, [open]);
 
-  const navigate = (overrides: Partial<BankListParams>) => {
-    router.push(bankListHref(params, { ...overrides, page: 1 }));
+  const navigate = (range: PeriodRange) => {
+    onSelect(range);
     setOpen(false);
   };
 

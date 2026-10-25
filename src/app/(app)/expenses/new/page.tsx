@@ -1,9 +1,11 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { listClients } from "@/lib/clients/queries";
 import { listFounders } from "@/lib/expenses/queries";
 import { ExpenseForm } from "@/components/expenses/expense-form";
 import { buttonClasses } from "@/components/ui/button";
+import { EXPENSE_LIST_COOKIE, expenseListReturnHref } from "@/lib/expenses/list-params";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { getReceiptOcrSettings } from "@/lib/platform-settings";
 import { listOrderOptions } from "@/lib/profitability/queries";
@@ -48,10 +50,12 @@ export default async function NewExpensePage({
         }
       : null;
 
+  const listHref = expenseListReturnHref((await cookies()).get(EXPENSE_LIST_COOKIE)?.value);
+
   return (
     <div>
       <div className="mb-6">
-        <Link href="/expenses" className={buttonClasses("ghost")}>
+        <Link href={listHref} className={buttonClasses("ghost")}>
           ← Expenses
         </Link>
       </div>
@@ -62,6 +66,7 @@ export default async function NewExpensePage({
         </div>
       ) : null}
       <ExpenseForm
+        listHref={listHref}
         mode="create"
         founders={founders}
         clients={clients}
