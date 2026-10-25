@@ -11,13 +11,12 @@ import {
 import { writeAudit } from "@/lib/audit";
 import { safeFilename } from "@/lib/files";
 import {
-  buildInboundExpenseDescription,
   matchesInboundMailboxPattern,
-  mergeReceiptExtractions,
   parseEmailAddressHeader,
   parseEmailBodyText,
   parseInboundMailbox,
-  resolveInboundSpentAt,
+  pickReceiptAttachments,
+  planInboundExpenses,
 } from "@/lib/expenses/inbound-merge";
 import {
   describeFetchError,
@@ -25,10 +24,16 @@ import {
   sanitizeUrlForLog,
 } from "@/lib/expenses/inbound-errors";
 import {
+  createSharedImageOcr,
   extractReceiptFromBytes,
   type ReceiptOcrProvider,
 } from "@/lib/expenses/receipt-ocr";
-import { isReceiptOcrProvider } from "@/lib/expenses/receipt-parse";
+import { mapWithConcurrency } from "@/lib/concurrency";
+import {
+  isForeignCurrency,
+  isReceiptOcrProvider,
+  type ReceiptExtraction,
+} from "@/lib/expenses/receipt-parse";
 import {
   MAX_RECEIPT_BYTES,
   resolveReceiptContentType,
@@ -41,14 +46,37 @@ import {
 import { formatExpenseAmount, poundsToPence } from "@/lib/money";
 import { getResendClient } from "@/lib/resend/client";
 import { getReceiptOcrSettings } from "@/lib/platform-settings";
-import { getStorage } from "@/lib/storage";
+import { getStorage, type StoredObject } from "@/lib/storage";
 import { findUserByEmail, getUser, normalizeEmail } from "@/lib/users";
-import { isForeignCurrency } from "@/lib/expenses/receipt-parse";
 import { refreshExpenseBankSuggestion } from "@/lib/bank/expense-match";
 
 const MAX_ATTEMPTS = 8;
 /** How long a worker owns a claimed job (OCR can be slow) before another may retry. */
 const JOB_LEASE_MS = 10 * 60 * 1000;
+
+/*
+ * Vercel kills a function at 300s without letting it record a failure, so an
+ * email with many attachments used to time out on every retry. Each job now
+ * stays well inside that: OCR gets a fixed budget, downloads and uploads run
+ * a few at a time, and drains only start a job that can finish in time.
+ */
+/** Wall-clock limit on one email's OCR; attachments not read by then still get an expense. */
+const OCR_BUDGET_MS = 150_000;
+/** AI Gateway reads in flight at once. */
+const AI_OCR_CONCURRENCY = 4;
+/** Local Tesseract workers; each takes a CPU and its own copy of the language data. */
+const LOCAL_OCR_WORKERS = 2;
+const TRANSFER_CONCURRENCY = 4;
+const DOWNLOAD_TIMEOUT_MS = 30_000;
+/** Generous upper bound for one job (downloads + OCR budget + uploads + inserts). */
+const JOB_WORST_CASE_MS = 210_000;
+/** Matches `maxDuration` on the routes that process jobs, less a safety margin. */
+const ROUTE_BUDGET_MS = 280_000;
+
+/** When a route that started at `startedAt` must stop starting inbound jobs. */
+export function inboundRouteDeadline(startedAt = Date.now()): number {
+  return startedAt + ROUTE_BUDGET_MS;
+}
 
 function logInboundJobFailure(
   job: typeof inboundEmailJobs.$inferSelect,
@@ -93,7 +121,7 @@ async function fetchAttachmentDownload(
 ): Promise<Response> {
   const urlForLog = sanitizeUrlForLog(downloadUrl);
   try {
-    return await fetch(downloadUrl);
+    return await fetch(downloadUrl, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
   } catch (err) {
     throw inboundStepError("attachment.download", err, {
       attachment: label,
@@ -184,9 +212,18 @@ export async function enqueueInboundEmailJob(
   return { jobId: created.id, skipped: false };
 }
 
+export type InboundEmailJobResult = {
+  ok: boolean;
+  busy?: boolean;
+  error?: string;
+  /** The first expense created; see `expenseIds` for all of them. */
+  expenseId?: string;
+  expenseIds?: string[];
+};
+
 export async function processInboundEmailJob(
   jobId: string,
-): Promise<{ ok: boolean; busy?: boolean; error?: string; expenseId?: string }> {
+): Promise<InboundEmailJobResult> {
   const db = getDb();
   const [job] = await db
     .select()
@@ -196,7 +233,7 @@ export async function processInboundEmailJob(
 
   if (!job) return { ok: false, error: "Inbound email job not found" };
   if (job.status === "processed") {
-    return { ok: true, expenseId: job.expenseId ?? undefined };
+    return processedJobResult(job);
   }
   if (job.status === "rejected") {
     return { ok: false, error: job.lastError ?? "Rejected" };
@@ -238,14 +275,28 @@ export async function processInboundEmailJob(
   }
 
   try {
-    const expenseId = await deliverInboundEmail(job);
+    const { expenseIds, skipped, unscanned } = await deliverInboundEmail(job);
+    const expenseId = expenseIds[0];
+    const many = expenseIds.length > 1;
+    // Kept on the processed job as a note; it does not flag the job for attention.
+    const skippedNote =
+      [
+        skipped.length
+          ? `Skipped ${skipped.length === 1 ? "an attachment" : `${skipped.length} attachments`}: ${skipped.join(", ")}`
+          : null,
+        unscanned.length
+          ? `Not scanned in time, so their details need filling in: ${unscanned.join(", ")}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(". ") || null;
     await db
       .update(inboundEmailJobs)
       .set({
         status: "processed",
         expenseId,
         processedAt: new Date(),
-        lastError: null,
+        lastError: skippedNote,
         lockedUntil: null,
       })
       .where(eq(inboundEmailJobs.id, jobId));
@@ -257,8 +308,15 @@ export async function processInboundEmailJob(
         companyId: job.companyId,
         type: "expense.inbound.processed",
         title: "Expense email processed",
-        body: "An expense submitted by email was processed successfully.",
-        href: `/expenses/${expenseId}`,
+        body: [
+          many
+            ? `${expenseIds.length} expenses submitted by email were processed successfully.`
+            : "An expense submitted by email was processed successfully.",
+          skippedNote ? `${skippedNote}.` : null,
+        ]
+          .filter(Boolean)
+          .join(" "),
+        href: many ? `/inbound-email/${jobId}` : `/expenses/${expenseId}`,
         entityType: "expense",
         entityId: expenseId,
         extraUserIds: recipient?.userId ? [recipient.userId] : [],
@@ -274,7 +332,7 @@ export async function processInboundEmailJob(
       );
     }
 
-    return { ok: true, expenseId };
+    return { ok: true, expenseId, expenseIds };
   } catch (err) {
     const message = logInboundJobFailure(job, err);
     const rejected = message.startsWith("REJECTED:");
@@ -328,7 +386,10 @@ export async function processInboundEmailJob(
   }
 }
 
-export async function drainInboundEmailJobs(limit = 20): Promise<{
+export async function drainInboundEmailJobs(
+  limit = 20,
+  options: { deadline?: number } = {},
+): Promise<{
   processed: number;
   sent: number;
   failed: number;
@@ -349,19 +410,27 @@ export async function drainInboundEmailJobs(limit = 20): Promise<{
     .orderBy(inboundEmailJobs.createdAt)
     .limit(limit);
 
+  let processed = 0;
   let sent = 0;
   let failed = 0;
   for (const job of jobs) {
+    // The rest wait for the next webhook or cron run rather than being cut off mid-job.
+    if (options.deadline && Date.now() + JOB_WORST_CASE_MS > options.deadline) break;
+    processed++;
     const result = await processInboundEmailJob(job.id);
     if (result.ok) sent++;
     else failed++;
   }
-  return { processed: jobs.length, sent, failed };
+  return { processed, sent, failed };
 }
 
+/**
+ * Creates the email's expenses and returns their ids, first attachment first,
+ * plus the attachments that were skipped and why, and those OCR didn't reach.
+ */
 async function deliverInboundEmail(
   job: typeof inboundEmailJobs.$inferSelect,
-): Promise<string> {
+): Promise<{ expenseIds: string[]; skipped: string[]; unscanned: string[] }> {
   const recipient = await resolveInboundRecipient(job.toEmail);
   if (!recipient || !isFounderRole(recipient.role)) {
     throw new Error("REJECTED: Inbound mailbox is not an authorised founder");
@@ -420,23 +489,23 @@ async function deliverInboundEmail(
     });
   }
 
-  const attachmentExtractions = [];
-  const storedAttachments: {
-    bytes: Buffer;
-    contentType: string;
-    filename: string;
-  }[] = [];
-
-  for (const attachment of attachmentList?.data ?? []) {
-    if (!attachment.download_url) continue;
+  const candidates = pickReceiptAttachments(attachmentList?.data ?? []);
+  // Per attachment, in order: its receipt, or why it was skipped.
+  const downloads: (InboundReceipt | string)[] = candidates.map(() => "");
+  await mapWithConcurrency(candidates, TRANSFER_CONCURRENCY, async (attachment, i) => {
+    const label = attachment.filename ?? attachment.id;
+    if (!attachment.download_url) {
+      downloads[i] = `${label} (no download link)`;
+      return;
+    }
     if (attachment.size > MAX_RECEIPT_BYTES) {
       console.warn(
         `[inbound-email] Skipping oversized attachment ${attachment.filename} (${attachment.size} bytes)`,
       );
-      continue;
+      downloads[i] = `${label} (too large)`;
+      return;
     }
 
-    const label = attachment.filename ?? attachment.id;
     const response = await fetchAttachmentDownload(attachment.download_url, label);
     if (!response.ok) {
       throw new Error(
@@ -445,122 +514,237 @@ async function deliverInboundEmail(
     }
 
     const bytes = Buffer.from(await response.arrayBuffer());
-    if (bytes.length > MAX_RECEIPT_BYTES) continue;
+    if (bytes.length > MAX_RECEIPT_BYTES) {
+      downloads[i] = `${label} (too large)`;
+      return;
+    }
 
     const contentType = resolveReceiptContentType(bytes);
     if (!contentType) {
-      console.warn(
-        `[inbound-email] Skipping unsupported attachment ${attachment.filename ?? attachment.id}`,
-      );
-      continue;
+      console.warn(`[inbound-email] Skipping unsupported attachment ${label}`);
+      downloads[i] = `${label} (not a PDF or image)`;
+      return;
     }
 
+    downloads[i] = {
+      bytes,
+      contentType,
+      filename: safeFilename(attachment.filename ?? `attachment-${attachment.id}`),
+      extraction: null,
+    };
+  });
+  const receipts = downloads.filter((d): d is InboundReceipt => typeof d !== "string");
+  /** Attachments that got no expense, with why, so the job can say so. */
+  const skipped = downloads.filter((d): d is string => typeof d === "string");
+
+  const { extractions, unread } = await readReceipts(receipts, {
+    provider,
+    model: ocr.model,
+    jobId: job.id,
+  });
+  extractions.forEach((extraction, i) => {
+    receipts[i]!.extraction = extraction;
+  });
+  const unscanned = unread.map((i) => receipts[i]!.filename);
+
+  // One expense per receipt attachment; an email without any still makes one.
+  const drafts = planInboundExpenses(
+    bodyExtraction,
+    receipts.map((r) => r.extraction),
+    email.subject ?? job.subject ?? "",
+    email.created_at || job.createdAt,
+  );
+
+  const db = getDb();
+  const storage = getStorage();
+  // Ids are chosen up front so receipts can be uploaded before the
+  // transaction: storage is not rolled back with it, so uploads made by a
+  // failed attempt are deleted rather than left orphaned.
+  const plannedIds = drafts.map(() => globalThis.crypto.randomUUID());
+  const uploaded: (StoredObject | null)[] = plannedIds.map(() => null);
+  let expenseIds: string[];
+  try {
+    // Let every started upload settle before failing, so the cleanup below sees it.
+    let uploadError: unknown = null;
+    await mapWithConcurrency(plannedIds, TRANSFER_CONCURRENCY, async (id, i) => {
+      const receipt = receipts[i];
+      if (!receipt || uploadError) return;
+      try {
+        uploaded[i] = await storage.put(
+          `receipts/${id}/${Date.now()}-${receipt.filename}`,
+          receipt.bytes,
+          receipt.contentType,
+        );
+      } catch (err) {
+        uploadError ??= err;
+      }
+    });
+    if (uploadError) throw uploadError;
+
+    // All-or-nothing, so a retry after a failure cannot leave some expenses behind.
+    // now() is fixed within a transaction; step createdAt so attachment order survives.
+    const createdBase = Date.now();
+    expenseIds = await db.transaction(async (tx) => {
+      for (const [i, draft] of drafts.entries()) {
+        const merged = draft.extraction;
+        let amountPence = 0;
+        if (merged.amountPounds) {
+          try {
+            amountPence = poundsToPence(merged.amountPounds);
+          } catch {
+            amountPence = 0;
+          }
+        }
+
+        await tx.insert(expenses).values({
+          id: plannedIds[i],
+          companyId,
+          description: draft.description,
+          category: merged.category ?? null,
+          spentAt: draft.spentAt ?? null,
+          amountPence,
+          vatPence: 0,
+          status: "pending",
+          source: "email",
+          billable: false,
+          paidByUserId: null,
+          submittedByUserId: sender.id,
+          createdByUserId: sender.id,
+          inboundEmailJobId: job.id,
+          createdAt: new Date(createdBase + i),
+          detectedCurrency: isForeignCurrency(merged.currency)
+            ? merged.currency!.toUpperCase()
+            : null,
+        });
+
+        const receipt = receipts[i];
+        const stored = uploaded[i];
+        if (receipt && stored) {
+          await tx.insert(expenseReceipts).values({
+            expenseId: plannedIds[i],
+            blobPath: stored.path,
+            filename: receipt.filename,
+            contentType: receipt.contentType,
+            sizeBytes: stored.size,
+          });
+        }
+      }
+      return plannedIds;
+    });
+  } catch (err) {
+    await Promise.all(
+      uploaded.map(async (stored) => {
+        if (!stored) return;
+        try {
+          await storage.delete(stored.path);
+        } catch (cleanupErr) {
+          console.error(
+            `[inbound-email] Could not delete orphaned receipt ${stored.path}:`,
+            cleanupErr instanceof Error ? cleanupErr.message : cleanupErr,
+          );
+        }
+      }),
+    );
+    throw err;
+  }
+
+  for (const [i, expenseId] of expenseIds.entries()) {
+    await writeAudit({
+      companyId,
+      actorUserId: sender.id,
+      action: "expense.inbound_create",
+      entityType: "expense",
+      entityId: expenseId,
+      meta: {
+        resendEmailId: job.resendEmailId,
+        from: job.fromEmail,
+        attachmentCount: receipts[i] ? 1 : 0,
+        expensesFromEmail: expenseIds.length,
+        skippedAttachments: skipped,
+      },
+    });
+
+    try {
+      await refreshExpenseBankSuggestion(companyId, expenseId);
+    } catch (err) {
+      console.error("expense bank suggestion failed after inbound create", err);
+    }
+  }
+
+  return { expenseIds, skipped, unscanned };
+}
+
+type InboundReceipt = {
+  bytes: Buffer;
+  contentType: string;
+  filename: string;
+  extraction: ReceiptExtraction | null;
+};
+
+/**
+ * OCR each receipt within OCR_BUDGET_MS, several at a time. Returns an
+ * extraction per receipt (null when OCR failed or ran out of time) and the
+ * indexes of those it didn't reach.
+ */
+async function readReceipts(
+  receipts: InboundReceipt[],
+  { provider, model, jobId }: { provider: ReceiptOcrProvider; model?: string; jobId: string },
+): Promise<{ extractions: (ReceiptExtraction | null)[]; unread: number[] }> {
+  const extractions: (ReceiptExtraction | null)[] = receipts.map(() => null);
+  const finished = receipts.map(() => false);
+  if (!receipts.length) return { extractions, unread: [] };
+
+  const budget = new AbortController();
+  const timer = setTimeout(() => budget.abort(), OCR_BUDGET_MS);
+  const sharedOcr = provider === "local" ? createSharedImageOcr(LOCAL_OCR_WORKERS) : null;
+  const concurrency = provider === "local" ? LOCAL_OCR_WORKERS : AI_OCR_CONCURRENCY;
+
+  const work = mapWithConcurrency(receipts, concurrency, async (receipt, i) => {
+    if (budget.signal.aborted) return;
     try {
       const extraction = await extractReceiptFromBytes(
-        bytes,
-        contentType,
+        receipt.bytes,
+        receipt.contentType,
         provider,
-        ocr.model,
+        model,
+        { ocrImage: sharedOcr?.ocrImage, abortSignal: budget.signal },
       );
-      attachmentExtractions.push(extraction);
+      if (budget.signal.aborted) return;
+      extractions[i] = extraction;
+      finished[i] = true;
     } catch (error) {
+      if (budget.signal.aborted) return;
+      finished[i] = true;
       console.error(
         "[inbound-email] OCR failed for attachment:",
         error instanceof Error ? error.message : error,
       );
     }
-
-    storedAttachments.push({
-      bytes,
-      contentType,
-      filename: safeFilename(attachment.filename ?? `attachment-${attachment.id}`),
-    });
-  }
-
-  const merged = mergeReceiptExtractions(bodyExtraction, ...attachmentExtractions);
-  const description = buildInboundExpenseDescription(
-    merged,
-    email.subject ?? job.subject ?? "",
+  });
+  // Local OCR can't be interrupted mid-image, so stop waiting at the deadline.
+  const timedOut = new Promise<void>((resolve) =>
+    budget.signal.addEventListener("abort", () => resolve(), { once: true }),
   );
+  await Promise.race([work, timedOut]);
+  clearTimeout(timer);
+  budget.abort();
+  await sharedOcr?.close();
 
-  const spentAt =
-    resolveInboundSpentAt(
-      bodyExtraction,
-      attachmentExtractions,
-      email.created_at || job.createdAt,
-    ) ?? null;
-
-  let amountPence = 0;
-  if (merged.amountPounds) {
-    try {
-      amountPence = poundsToPence(merged.amountPounds);
-    } catch {
-      amountPence = 0;
-    }
+  // Copy so reads still in flight can't change the result after this returns.
+  const result = [...extractions];
+  const unread = finished.flatMap((done, i) => (done ? [] : [i]));
+  if (unread.length) {
+    console.info(
+      JSON.stringify({
+        level: "info",
+        msg: "inbound-email.ocr_budget_exhausted",
+        jobId,
+        receipts: receipts.length,
+        unread: unread.length,
+      }),
+    );
   }
-
-  const db = getDb();
-  const expenseId = await db.transaction(async (tx) => {
-    const [expense] = await tx
-      .insert(expenses)
-      .values({
-        companyId,
-        description,
-        category: merged.category ?? null,
-        spentAt,
-        amountPence,
-        vatPence: 0,
-        status: "pending",
-        source: "email",
-        billable: false,
-        paidByUserId: null,
-        submittedByUserId: sender.id,
-        createdByUserId: sender.id,
-        detectedCurrency: isForeignCurrency(merged.currency)
-          ? merged.currency!.toUpperCase()
-          : null,
-      })
-      .returning({ id: expenses.id });
-
-    const storage = getStorage();
-    for (const attachment of storedAttachments) {
-      const stored = await storage.put(
-        `receipts/${expense.id}/${Date.now()}-${attachment.filename}`,
-        attachment.bytes,
-        attachment.contentType,
-      );
-      await tx.insert(expenseReceipts).values({
-        expenseId: expense.id,
-        blobPath: stored.path,
-        filename: attachment.filename,
-        contentType: attachment.contentType,
-        sizeBytes: stored.size,
-      });
-    }
-
-    return expense.id;
-  });
-
-  await writeAudit({
-    companyId,
-    actorUserId: sender.id,
-    action: "expense.inbound_create",
-    entityType: "expense",
-    entityId: expenseId,
-    meta: {
-      resendEmailId: job.resendEmailId,
-      from: job.fromEmail,
-      attachmentCount: storedAttachments.length,
-    },
-  });
-
-  try {
-    await refreshExpenseBankSuggestion(companyId, expenseId);
-  } catch (err) {
-    console.error("expense bank suggestion failed after inbound create", err);
-  }
-
-  return expenseId;
+  return { extractions: result, unread };
 }
 
 /** Whether a user email belongs to an authorised founder (admin or user role). */
@@ -690,11 +874,47 @@ export async function listInboundEmailJobs(input: {
       createdAt: inboundEmailJobs.createdAt,
       processedAt: inboundEmailJobs.processedAt,
       expenseId: inboundEmailJobs.expenseId,
+      // Qualified by hand: Drizzle leaves columns unqualified in a one-table select.
+      expenseCount: sql<number>`(select count(*)::int from "expenses" e where e."inbound_email_job_id" = "inbound_email_jobs"."id")`,
     })
     .from(inboundEmailJobs)
     .where(and(...conditions))
     .orderBy(desc(inboundEmailJobs.createdAt))
     .limit(limit);
+}
+
+/** Expenses an inbound email created, in the order of its attachments. */
+export async function listInboundEmailJobExpenses(companyId: string, jobId: string) {
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: expenses.id,
+      description: expenses.description,
+      amountPence: expenses.amountPence,
+      detectedCurrency: expenses.detectedCurrency,
+      status: expenses.status,
+    })
+    .from(expenses)
+    .where(
+      and(eq(expenses.companyId, companyId), eq(expenses.inboundEmailJobId, jobId)),
+    )
+    .orderBy(expenses.createdAt, expenses.id);
+  return rows.map((r) => ({
+    ...r,
+    amountFormatted: formatExpenseAmount(r.amountPence, r.detectedCurrency),
+  }));
+}
+
+async function processedJobResult(
+  job: typeof inboundEmailJobs.$inferSelect,
+): Promise<InboundEmailJobResult> {
+  const rows = await listInboundEmailJobExpenses(job.companyId, job.id);
+  const expenseIds = rows.length
+    ? rows.map((r) => r.id)
+    : job.expenseId
+      ? [job.expenseId]
+      : [];
+  return { ok: true, expenseId: job.expenseId ?? expenseIds[0], expenseIds };
 }
 
 export async function getInboundEmailJob(companyId: string, jobId: string) {
@@ -712,7 +932,7 @@ export async function getInboundEmailJob(companyId: string, jobId: string) {
 /** Admin: reset a failed job and retry processing immediately. */
 export async function adminRetryInboundEmailJob(
   jobId: string,
-): Promise<{ ok: boolean; error?: string; expenseId?: string }> {
+): Promise<InboundEmailJobResult> {
   const db = getDb();
   const [job] = await db
     .select()
@@ -722,7 +942,7 @@ export async function adminRetryInboundEmailJob(
 
   if (!job) return { ok: false, error: "Inbound email job not found" };
   if (job.status === "processed") {
-    return { ok: true, expenseId: job.expenseId ?? undefined };
+    return processedJobResult(job);
   }
 
   await db
@@ -785,22 +1005,26 @@ export async function adminRetryAllInboundEmailIssues(): Promise<{
     .orderBy(inboundEmailJobs.createdAt)
     .limit(20);
 
+  const deadline = inboundRouteDeadline();
+  let retried = 0;
   let succeeded = 0;
   let failed = 0;
   for (const job of jobs) {
+    if (Date.now() + JOB_WORST_CASE_MS > deadline) break;
+    retried++;
     const result = await adminRetryInboundEmailJob(job.id);
     if (result.ok) succeeded++;
     else failed++;
   }
 
-  return { retried: jobs.length, succeeded, failed };
+  return { retried, succeeded, failed };
 }
 
 /** Tenant: retry a job only if it belongs to the caller's company. */
 export async function retryInboundEmailJobForCompany(
   companyId: string,
   jobId: string,
-): Promise<{ ok: boolean; error?: string; expenseId?: string }> {
+): Promise<InboundEmailJobResult> {
   const job = await getInboundEmailJob(companyId, jobId);
   if (!job) return { ok: false, error: "Inbound email job not found" };
   return adminRetryInboundEmailJob(jobId);
@@ -833,13 +1057,17 @@ export async function retryAllInboundEmailIssuesForCompany(
     .orderBy(inboundEmailJobs.createdAt)
     .limit(20);
 
+  const deadline = inboundRouteDeadline();
+  let retried = 0;
   let succeeded = 0;
   let failed = 0;
   for (const job of jobs) {
+    if (Date.now() + JOB_WORST_CASE_MS > deadline) break;
+    retried++;
     const result = await adminRetryInboundEmailJob(job.id);
     if (result.ok) succeeded++;
     else failed++;
   }
 
-  return { retried: jobs.length, succeeded, failed };
+  return { retried, succeeded, failed };
 }

@@ -2,19 +2,28 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
-import { companyMemberships, inboundEmailJobs, expenses, users } from "@/db/schema";
+import {
+  companyMemberships,
+  expenseReceipts,
+  inboundEmailJobs,
+  expenses,
+  users,
+} from "@/db/schema";
 import {
   adminDismissInboundEmailJob,
   adminRetryInboundEmailJob,
   enqueueInboundEmailJob,
+  listInboundEmailJobs,
   processInboundEmailJob,
 } from "@/lib/expenses/inbound-email";
+import { getStorage } from "@/lib/storage";
 import { seedCompany } from "@/lib/test/seed-company";
 
 vi.mock("server-only", () => ({}));
 
 const mockReceivingGet = vi.fn();
 const mockAttachmentsList = vi.fn();
+const mockExtractReceipt = vi.fn();
 let mockInboundDomain = "dotanddashconsulting.com";
 let mockInboundPrefix = "expenses";
 
@@ -38,6 +47,11 @@ vi.mock("@/lib/platform-settings", () => ({
     model: "google/gemini-2.5-flash",
   })),
   updatePlatformSettings: vi.fn(),
+}));
+
+vi.mock("@/lib/expenses/receipt-ocr", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/expenses/receipt-ocr")>()),
+  extractReceiptFromBytes: (...args: unknown[]) => mockExtractReceipt(...args),
 }));
 
 vi.mock("@/lib/resend/client", () => ({
@@ -82,9 +96,12 @@ beforeEach(async () => {
   mockInboundPrefix = "expenses";
   mockReceivingGet.mockReset();
   mockAttachmentsList.mockReset();
+  mockExtractReceipt.mockReset();
 });
 
 afterEach(async () => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   setTestDb(null);
   await ctx.client.close();
 });
@@ -310,6 +327,160 @@ describe("inbound email jobs", () => {
     expect(expense.detectedCurrency).toBeNull();
   });
 
+  it("creates one expense per attachment and ignores inline images", async () => {
+    await insertMailboxUser({
+      companyId,
+      email: "founder@example.com",
+      role: "user",
+      expenseInboundSlug: "founder",
+    });
+    mockReceivingGet.mockResolvedValue({
+      data: { subject: "This week's receipts", text: "Total £99.00", html: null },
+      error: null,
+    });
+    const part = (id: string, disposition: "inline" | "attachment") => ({
+      id,
+      filename: `${id}.pdf`,
+      size: 100,
+      content_disposition: disposition,
+      download_url: `https://files.example/${id}`,
+    });
+    mockAttachmentsList.mockResolvedValue({
+      data: {
+        data: [
+          part("logo", "inline"),
+          part("train", "attachment"),
+          part("hotel", "attachment"),
+        ],
+      },
+      error: null,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => new Response(`%PDF-1.4 ${url.split("/").pop()}`)),
+    );
+    mockExtractReceipt.mockImplementation(async (bytes: Buffer) =>
+      bytes.toString().includes("train")
+        ? { description: "LNER", amountPounds: "45.20", confidence: "partial" }
+        : { description: "Premier Inn", amountPounds: "89.00", confidence: "partial" },
+    );
+
+    const { jobId } = await enqueueInboundEmailJob({
+      email_id: "email-multi",
+      from: "founder@example.com",
+      to: [mailbox("founder")],
+      subject: "This week's receipts",
+    });
+    if (!jobId) throw new Error("expected job");
+
+    const result = await processInboundEmailJob(jobId);
+    expect(result.ok).toBe(true);
+    expect(result.expenseIds).toHaveLength(2);
+
+    const rows = await db.select().from(expenses).where(eq(expenses.inboundEmailJobId, jobId));
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const [train, hotel] = result.expenseIds!.map((id) => byId.get(id)!);
+    expect(train.description).toBe("LNER");
+    expect(train.amountPence).toBe(4520);
+    expect(hotel.description).toBe("Premier Inn");
+    expect(hotel.amountPence).toBe(8900);
+
+    const receipts = await db.select().from(expenseReceipts);
+    expect(receipts.map((r) => [r.expenseId, r.filename]).sort()).toEqual(
+      [
+        [train.id, "train.pdf"],
+        [hotel.id, "hotel.pdf"],
+      ].sort(),
+    );
+
+    const [job] = await db.select().from(inboundEmailJobs).where(eq(inboundEmailJobs.id, jobId));
+    expect(job.expenseId).toBe(train.id);
+    const [listed] = await listInboundEmailJobs({ companyId });
+    expect(listed.expenseCount).toBe(2);
+
+    // Re-running a processed job reports every expense without creating more.
+    const again = await processInboundEmailJob(jobId);
+    expect(again.expenseIds).toEqual(result.expenseIds);
+    expect(await db.select().from(expenses)).toHaveLength(2);
+  });
+
+  async function enqueueTwoAttachmentEmail(
+    emailId: string,
+    sizes: { train: number; hotel: number } = { train: 100, hotel: 100 },
+  ) {
+    await insertMailboxUser({
+      companyId,
+      email: "founder@example.com",
+      role: "user",
+      expenseInboundSlug: "founder",
+    });
+    mockReceivingGet.mockResolvedValue({
+      data: { subject: "Receipts", text: "", html: null },
+      error: null,
+    });
+    mockAttachmentsList.mockResolvedValue({
+      data: {
+        data: (["train", "hotel"] as const).map((id) => ({
+          id,
+          filename: `${id}.pdf`,
+          size: sizes[id],
+          content_disposition: "attachment",
+          download_url: `https://files.example/${id}`,
+        })),
+      },
+      error: null,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => new Response(`%PDF-1.4 ${url.split("/").pop()}`)),
+    );
+    mockExtractReceipt.mockResolvedValue({ confidence: "none" });
+    const { jobId } = await enqueueInboundEmailJob({
+      email_id: emailId,
+      from: "founder@example.com",
+      to: [mailbox("founder")],
+      subject: "Receipts",
+    });
+    if (!jobId) throw new Error("expected job");
+    return jobId;
+  }
+
+  it("deletes receipts already uploaded when a later upload fails", async () => {
+    const jobId = await enqueueTwoAttachmentEmail("email-upload-fails");
+    const storage = getStorage();
+    const put = storage.put.bind(storage);
+    const uploadedPaths: string[] = [];
+    vi.spyOn(storage, "put").mockImplementation(async (path, data, type) => {
+      if (uploadedPaths.length) throw new Error("blob store down");
+      uploadedPaths.push(path);
+      return put(path, data, type);
+    });
+    const deleteSpy = vi.spyOn(storage, "delete");
+
+    const result = await processInboundEmailJob(jobId);
+    expect(result.ok).toBe(false);
+    expect(deleteSpy).toHaveBeenCalledWith(uploadedPaths[0]);
+    await expect(storage.get(uploadedPaths[0])).rejects.toThrow();
+    expect(await db.select().from(expenses)).toHaveLength(0);
+    expect(await db.select().from(expenseReceipts)).toHaveLength(0);
+    const [job] = await db.select().from(inboundEmailJobs).where(eq(inboundEmailJobs.id, jobId));
+    expect(job.status).toBe("pending");
+  });
+
+  it("notes skipped attachments on the processed job", async () => {
+    const jobId = await enqueueTwoAttachmentEmail("email-oversized", {
+      train: 100,
+      hotel: 50 * 1024 * 1024,
+    });
+
+    const result = await processInboundEmailJob(jobId);
+    expect(result.ok).toBe(true);
+    expect(result.expenseIds).toHaveLength(1);
+    const [job] = await db.select().from(inboundEmailJobs).where(eq(inboundEmailJobs.id, jobId));
+    expect(job.status).toBe("processed");
+    expect(job.lastError).toBe("Skipped an attachment: hotel.pdf (too large)");
+  });
+
   it("creates one expense when two workers process the same job concurrently", async () => {
     await insertMailboxUser({
       companyId,
@@ -470,5 +641,65 @@ describe("inbound email jobs", () => {
     const [job] = await db.select().from(inboundEmailJobs).where(eq(inboundEmailJobs.id, jobId));
     expect(job.status).toBe("rejected");
     expect(job.lastError).toBe("Dismissed by admin: Not needed");
+  });
+
+  describe("emails with many attachments", () => {
+    const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+
+    it("makes an expense per attachment, reading several at once", async () => {
+      await insertMailboxUser({
+        companyId,
+        email: "founder@example.com",
+        role: "user",
+        expenseInboundSlug: "founder",
+      });
+      mockReceivingGet.mockResolvedValue({
+        data: { subject: "Receipts", text: "", html: null },
+        error: null,
+      });
+      mockAttachmentsList.mockResolvedValue({
+        data: {
+          data: Array.from({ length: 31 }, (_, i) => ({
+            id: `att-${i}`,
+            filename: `receipt-${i}.png`,
+            size: PNG.length,
+            // The first few are signature images embedded in the body.
+            content_disposition: i < 3 ? "inline" : "attachment",
+            download_url: `https://resend.test/att-${i}`,
+          })),
+        },
+        error: null,
+      });
+      vi.stubGlobal("fetch", vi.fn(async () => new Response(new Uint8Array(PNG))));
+      let inFlight = 0;
+      let peak = 0;
+      mockExtractReceipt.mockImplementation(async () => {
+        inFlight++;
+        peak = Math.max(peak, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 2));
+        inFlight--;
+        return { confidence: "partial", description: "Pret", amountPounds: "5.20" };
+      });
+
+      const { jobId } = await enqueueInboundEmailJob({
+        email_id: "email-31",
+        from: "vendor@shop.com",
+        to: [mailbox("founder")],
+        subject: "Receipts",
+      });
+      if (!jobId) throw new Error("expected job");
+      const result = await processInboundEmailJob(jobId);
+
+      expect(result.ok).toBe(true);
+      expect(result.expenseIds).toHaveLength(28);
+      expect(mockExtractReceipt).toHaveBeenCalledTimes(28);
+      expect(peak).toBeGreaterThan(1);
+      const receipts = await db.select().from(expenseReceipts);
+      expect(receipts).toHaveLength(28);
+      const rows = await db.select().from(expenses).where(eq(expenses.inboundEmailJobId, jobId));
+      expect(rows.every((r) => r.amountPence === 520)).toBe(true);
+      const [job] = await db.select().from(inboundEmailJobs).where(eq(inboundEmailJobs.id, jobId));
+      expect(job.lastError).toBeNull();
+    });
   });
 });

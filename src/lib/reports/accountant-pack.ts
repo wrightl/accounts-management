@@ -1,6 +1,7 @@
 import "server-only";
 import { and, eq, gte, inArray, lte, ne } from "drizzle-orm";
 import { getDb } from "@/db";
+import { mapWithConcurrency } from "@/lib/concurrency";
 import {
   bankAccounts,
   bankTransactions,
@@ -1016,24 +1017,6 @@ function crc32(buf: Uint8Array): number {
     }
   }
   return (c ^ 0xffffffff) >>> 0;
-}
-
-async function mapWithConcurrency<T>(
-  items: T[],
-  concurrency: number,
-  fn: (item: T) => Promise<void>,
-) {
-  let index = 0;
-  const workers = Array.from(
-    { length: Math.min(concurrency, items.length) },
-    async () => {
-      while (index < items.length) {
-        const i = index++;
-        await fn(items[i]!);
-      }
-    },
-  );
-  await Promise.all(workers);
 }
 
 function formatError(err: unknown): string {

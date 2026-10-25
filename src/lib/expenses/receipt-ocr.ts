@@ -1,4 +1,5 @@
 import { generateText, Output } from "ai";
+import type { Worker as TesseractWorker } from "tesseract.js";
 import { z } from "zod";
 import { serverEnv } from "@/env";
 import { EXPENSE_CATEGORIES } from "@/lib/expenses/categories";
@@ -16,6 +17,15 @@ import {
 
 export type ReceiptOcrProvider = "local" | "ai_gateway";
 
+/** Turns an image into text; lets a batch share one Tesseract worker. */
+export type ImageOcr = (imageBytes: Buffer) => Promise<string>;
+
+export type ReceiptOcrOptions = {
+  ocrImage?: ImageOcr;
+  /** Cancels an AI Gateway request (e.g. when a job's time budget runs out). */
+  abortSignal?: AbortSignal;
+};
+
 function isPdfContent(bytes: Buffer, contentType: string): boolean {
   return contentType === "application/pdf" || isPdfBytes(bytes);
 }
@@ -31,7 +41,62 @@ async function runTesseractOnImage(imageBytes: Buffer): Promise<string> {
   }
 }
 
-async function extractPdfTextWithFallback(bytes: Buffer): Promise<string> {
+/**
+ * Tesseract workers shared across many images. Starting a worker loads the
+ * language data, which costs more than recognising a typical receipt, so a
+ * batch (an email's attachments) reuses up to `size` of them, started as
+ * needed. Call `close` when done.
+ */
+export function createSharedImageOcr(size = 1): {
+  ocrImage: ImageOcr;
+  close: () => Promise<void>;
+} {
+  type Slot = { worker: Promise<TesseractWorker>; busy: number };
+  const slots: Slot[] = [];
+  let tesseract: Promise<typeof import("tesseract.js")> | null = null;
+  const pickSlot = (): Slot => {
+    const idle = slots.find((slot) => slot.busy === 0);
+    if (idle) return idle;
+    if (slots.length < size) {
+      const slot: Slot = {
+        worker: (tesseract ??= import("tesseract.js")).then(({ createWorker }) =>
+          createWorker("eng"),
+        ),
+        busy: 0,
+      };
+      slots.push(slot);
+      return slot;
+    }
+    // All busy: queue on the least loaded worker.
+    return slots.reduce((a, b) => (b.busy < a.busy ? b : a));
+  };
+  return {
+    ocrImage: async (imageBytes) => {
+      const slot = pickSlot();
+      slot.busy++;
+      try {
+        const result = await (await slot.worker).recognize(imageBytes);
+        return result.data.text;
+      } finally {
+        slot.busy--;
+      }
+    },
+    close: async () => {
+      const closing = slots.splice(0);
+      await Promise.all(
+        closing.map(async (slot) => {
+          try {
+            await (await slot.worker).terminate();
+          } catch {
+            // Worker failed to start; nothing to stop.
+          }
+        }),
+      );
+    },
+  };
+}
+
+async function extractPdfTextWithFallback(bytes: Buffer, ocrImage: ImageOcr): Promise<string> {
   let text = "";
   try {
     text = await extractPdfText(bytes);
@@ -55,7 +120,7 @@ async function extractPdfTextWithFallback(bytes: Buffer): Promise<string> {
 
   try {
     const png = await renderPdfFirstPagePng(bytes);
-    return runTesseractOnImage(png);
+    return await ocrImage(png);
   } catch (error) {
     console.error(
       "[receipt-ocr] PDF OCR fallback failed:",
@@ -65,14 +130,18 @@ async function extractPdfTextWithFallback(bytes: Buffer): Promise<string> {
   }
 }
 
-async function runLocalOcr(bytes: Buffer, contentType: string): Promise<ReceiptExtraction> {
+async function runLocalOcr(
+  bytes: Buffer,
+  contentType: string,
+  ocrImage: ImageOcr,
+): Promise<ReceiptExtraction> {
   let text = "";
 
   if (isPdfContent(bytes, contentType)) {
-    text = await extractPdfTextWithFallback(bytes);
+    text = await extractPdfTextWithFallback(bytes, ocrImage);
   } else {
     try {
-      text = await runTesseractOnImage(bytes);
+      text = await ocrImage(bytes);
     } catch (error) {
       console.error(
         "[receipt-ocr] Image OCR failed:",
@@ -93,6 +162,7 @@ async function runAiGatewayOcr(
   bytes: Buffer,
   contentType: string,
   model: string,
+  abortSignal?: AbortSignal,
 ): Promise<ReceiptExtraction> {
   const apiKey = serverEnv().AI_GATEWAY_API_KEY;
   if (!apiKey) {
@@ -118,6 +188,7 @@ async function runAiGatewayOcr(
 
   const { output } = await generateText({
     model,
+    abortSignal,
     output: Output.object({ schema }),
     messages: [
       {
@@ -148,9 +219,15 @@ export async function extractReceiptFromBytes(
   contentType: string,
   provider: ReceiptOcrProvider,
   model?: string,
+  options: ReceiptOcrOptions = {},
 ): Promise<ReceiptExtraction> {
   if (provider === "ai_gateway") {
-    return runAiGatewayOcr(bytes, contentType, normalizeReceiptOcrModel(model));
+    return runAiGatewayOcr(
+      bytes,
+      contentType,
+      normalizeReceiptOcrModel(model),
+      options.abortSignal,
+    );
   }
-  return runLocalOcr(bytes, contentType);
+  return runLocalOcr(bytes, contentType, options.ocrImage ?? runTesseractOnImage);
 }

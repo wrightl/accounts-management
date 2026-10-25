@@ -4,13 +4,17 @@ import { requireEnv } from "@/env";
 import {
   drainInboundEmailJobs,
   enqueueInboundEmailJob,
+  inboundRouteDeadline,
   processInboundEmailJob,
 } from "@/lib/expenses/inbound-email";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+/** Inbound jobs budget their work against this (see `inboundRouteDeadline`). */
+export const maxDuration = 300;
 
 export async function POST(request: Request) {
+  const deadline = inboundRouteDeadline();
   const webhookSecret = process.env.RESEND_WEBHOOK_SECRET;
   if (!webhookSecret) {
     return NextResponse.json({ error: "Webhook is not configured" }, { status: 503 });
@@ -78,13 +82,14 @@ export async function POST(request: Request) {
   }
 
   // Opportunistic drain so other pending/failed jobs clear when mail is flowing.
-  const drained = await drainInboundEmailJobs(5);
+  const drained = await drainInboundEmailJobs(5, { deadline });
 
   return NextResponse.json({
     ok: true,
     jobId,
     processed: result.ok,
     expenseId: result.expenseId ?? null,
+    expenseIds: result.expenseIds ?? [],
     drained,
   });
 }

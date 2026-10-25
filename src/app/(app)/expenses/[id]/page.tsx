@@ -172,6 +172,7 @@ export default async function ExpenseDetailPage({
           orders={orders}
           rebilledOn={rebill}
           linkedToBank={settlements.length > 0}
+          receiptCount={detail.receipts.length}
           canWrite={canWrite}
           defaultMileageRatePence={settings.defaultMileageRatePence}
           vatRegistered={settings.vatRegistered}
