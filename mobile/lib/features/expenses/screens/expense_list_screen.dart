@@ -2,6 +2,7 @@ import 'package:flutter/material.dart' hide DateUtils;
 import 'package:provider/provider.dart';
 import '../expense_provider.dart';
 import '../../auth/auth_provider.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../data/models/expense.dart';
 import 'expense_capture_screen.dart' show ExpensePaymentFields;
@@ -407,6 +408,26 @@ class _ApproveSheetState extends State<_ApproveSheet> {
               '${CurrencyUtils.formatPence(widget.expense.amountPence)}',
               style: Theme.of(context).textTheme.bodySmall,
             ),
+            if (widget.expense.receipts.isEmpty) ...[
+              const SizedBox(height: 12),
+              const Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    color: AppTheme.warningColor,
+                    size: 20,
+                  ),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'No receipt attached. You may need one to claim VAT '
+                      'or to back up the cost if HMRC asks.',
+                    ),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 16),
             ExpensePaymentFields(
               status: _status,
