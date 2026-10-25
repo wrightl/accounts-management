@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
-import { companyMemberships, inboundEmailJobs, expenses, users } from "@/db/schema";
+import { companyMemberships, expenseReceipts, inboundEmailJobs, expenses, users } from "@/db/schema";
 import {
   adminDismissInboundEmailJob,
   adminRetryInboundEmailJob,
@@ -14,6 +14,7 @@ import { seedCompany } from "@/lib/test/seed-company";
 vi.mock("server-only", () => ({}));
 
 const mockReceivingGet = vi.fn();
+const mockExtractReceipt = vi.hoisted(() => vi.fn());
 const mockAttachmentsList = vi.fn();
 let mockInboundDomain = "dotanddashconsulting.com";
 let mockInboundPrefix = "expenses";
@@ -38,6 +39,11 @@ vi.mock("@/lib/platform-settings", () => ({
     model: "google/gemini-2.5-flash",
   })),
   updatePlatformSettings: vi.fn(),
+}));
+
+vi.mock("@/lib/expenses/receipt-ocr", () => ({
+  extractReceiptFromBytes: mockExtractReceipt,
+  createSharedImageOcr: () => ({ ocrImage: vi.fn(), close: vi.fn(async () => {}) }),
 }));
 
 vi.mock("@/lib/resend/client", () => ({
@@ -82,6 +88,8 @@ beforeEach(async () => {
   mockInboundPrefix = "expenses";
   mockReceivingGet.mockReset();
   mockAttachmentsList.mockReset();
+  mockExtractReceipt.mockReset();
+  mockExtractReceipt.mockResolvedValue({ confidence: "none" });
 });
 
 afterEach(async () => {
@@ -470,5 +478,81 @@ describe("inbound email jobs", () => {
     const [job] = await db.select().from(inboundEmailJobs).where(eq(inboundEmailJobs.id, jobId));
     expect(job.status).toBe("rejected");
     expect(job.lastError).toBe("Dismissed by admin: Not needed");
+  });
+
+  describe("emails with many attachments", () => {
+    const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+
+    beforeEach(async () => {
+      await insertMailboxUser({
+        companyId,
+        email: "founder@example.com",
+        role: "user",
+        expenseInboundSlug: "founder",
+      });
+      mockReceivingGet.mockResolvedValue({
+        data: { subject: "Receipts", text: "", html: null },
+        error: null,
+      });
+      mockAttachmentsList.mockResolvedValue({
+        data: {
+          data: Array.from({ length: 31 }, (_, i) => ({
+            id: `att-${i}`,
+            filename: `receipt-${i}.png`,
+            size: PNG.length,
+            content_type: "image/png",
+            // The first few are signature images embedded in the body.
+            content_disposition: i < 3 ? "inline" : "attachment",
+            download_url: `https://resend.test/att-${i}`,
+          })),
+        },
+        error: null,
+      });
+      vi.stubGlobal("fetch", vi.fn(async () => new Response(new Uint8Array(PNG))));
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    async function process(emailId: string) {
+      const { jobId } = await enqueueInboundEmailJob({
+        email_id: emailId,
+        from: "vendor@shop.com",
+        to: [mailbox("founder")],
+        subject: "Receipts",
+      });
+      if (!jobId) throw new Error("expected job");
+      return processInboundEmailJob(jobId);
+    }
+
+    it("stores every attachment but stops reading once one is a confident match", async () => {
+      mockExtractReceipt.mockResolvedValue({
+        confidence: "high",
+        description: "Pret",
+        amountPounds: "5.20",
+        spentAt: "2026-10-01",
+        category: "Meals",
+      });
+
+      const result = await process("email-31");
+      expect(result.ok).toBe(true);
+
+      const receipts = await db
+        .select()
+        .from(expenseReceipts)
+        .where(eq(expenseReceipts.expenseId, result.expenseId!));
+      expect(receipts).toHaveLength(31);
+      // Only the first batch of concurrent reads runs, all real attachments.
+      expect(mockExtractReceipt.mock.calls.length).toBeLessThanOrEqual(3);
+      const [expense] = await db.select().from(expenses).where(eq(expenses.id, result.expenseId!));
+      expect(expense.amountPence).toBe(520);
+    });
+
+    it("reads every attachment when none is conclusive", async () => {
+      const result = await process("email-31-unclear");
+      expect(result.ok).toBe(true);
+      expect(mockExtractReceipt).toHaveBeenCalledTimes(31);
+    });
   });
 });

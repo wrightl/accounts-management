@@ -25,10 +25,12 @@ import {
   sanitizeUrlForLog,
 } from "@/lib/expenses/inbound-errors";
 import {
+  createSharedImageOcr,
   extractReceiptFromBytes,
   type ReceiptOcrProvider,
 } from "@/lib/expenses/receipt-ocr";
-import { isReceiptOcrProvider } from "@/lib/expenses/receipt-parse";
+import { isReceiptOcrProvider, type ReceiptExtraction } from "@/lib/expenses/receipt-parse";
+import { mapWithConcurrency } from "@/lib/concurrency";
 import {
   MAX_RECEIPT_BYTES,
   resolveReceiptContentType,
@@ -49,6 +51,27 @@ import { refreshExpenseBankSuggestion } from "@/lib/bank/expense-match";
 const MAX_ATTEMPTS = 8;
 /** How long a worker owns a claimed job (OCR can be slow) before another may retry. */
 const JOB_LEASE_MS = 10 * 60 * 1000;
+
+/*
+ * Vercel kills a function at 300s without letting it record a failure, so an
+ * email with many attachments used to time out on every retry. Each job now
+ * stays well inside that: OCR gets a fixed budget, downloads and uploads run
+ * a few at a time, and drains only start a job that can finish in time.
+ */
+/** Wall-clock limit on one email's OCR; attachments not read by then are still stored. */
+const OCR_BUDGET_MS = 90_000;
+const OCR_CONCURRENCY = 3;
+const TRANSFER_CONCURRENCY = 4;
+const DOWNLOAD_TIMEOUT_MS = 30_000;
+/** Generous upper bound for one job (downloads + OCR budget + uploads). */
+const JOB_WORST_CASE_MS = 150_000;
+/** Matches `maxDuration` on the routes that process jobs, less a safety margin. */
+const ROUTE_BUDGET_MS = 280_000;
+
+/** When a route that started at `startedAt` must stop starting inbound jobs. */
+export function inboundRouteDeadline(startedAt = Date.now()): number {
+  return startedAt + ROUTE_BUDGET_MS;
+}
 
 function logInboundJobFailure(
   job: typeof inboundEmailJobs.$inferSelect,
@@ -93,7 +116,7 @@ async function fetchAttachmentDownload(
 ): Promise<Response> {
   const urlForLog = sanitizeUrlForLog(downloadUrl);
   try {
-    return await fetch(downloadUrl);
+    return await fetch(downloadUrl, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
   } catch (err) {
     throw inboundStepError("attachment.download", err, {
       attachment: label,
@@ -328,7 +351,10 @@ export async function processInboundEmailJob(
   }
 }
 
-export async function drainInboundEmailJobs(limit = 20): Promise<{
+export async function drainInboundEmailJobs(
+  limit = 20,
+  options: { deadline?: number } = {},
+): Promise<{
   processed: number;
   sent: number;
   failed: number;
@@ -349,14 +375,18 @@ export async function drainInboundEmailJobs(limit = 20): Promise<{
     .orderBy(inboundEmailJobs.createdAt)
     .limit(limit);
 
+  let processed = 0;
   let sent = 0;
   let failed = 0;
   for (const job of jobs) {
+    // The rest wait for the next webhook or cron run rather than being cut off mid-job.
+    if (options.deadline && Date.now() + JOB_WORST_CASE_MS > options.deadline) break;
+    processed++;
     const result = await processInboundEmailJob(job.id);
     if (result.ok) sent++;
     else failed++;
   }
-  return { processed: jobs.length, sent, failed };
+  return { processed, sent, failed };
 }
 
 async function deliverInboundEmail(
@@ -420,22 +450,19 @@ async function deliverInboundEmail(
     });
   }
 
-  const attachmentExtractions = [];
-  const storedAttachments: {
-    bytes: Buffer;
-    contentType: string;
-    filename: string;
-  }[] = [];
-
-  for (const attachment of attachmentList?.data ?? []) {
-    if (!attachment.download_url) continue;
+  const candidates = (attachmentList?.data ?? []).filter((attachment) => {
+    if (!attachment.download_url) return false;
     if (attachment.size > MAX_RECEIPT_BYTES) {
       console.warn(
         `[inbound-email] Skipping oversized attachment ${attachment.filename} (${attachment.size} bytes)`,
       );
-      continue;
+      return false;
     }
+    return true;
+  });
 
+  const downloaded: (InboundAttachment | null)[] = candidates.map(() => null);
+  await mapWithConcurrency(candidates, TRANSFER_CONCURRENCY, async (attachment, i) => {
     const label = attachment.filename ?? attachment.id;
     const response = await fetchAttachmentDownload(attachment.download_url, label);
     if (!response.ok) {
@@ -445,37 +472,28 @@ async function deliverInboundEmail(
     }
 
     const bytes = Buffer.from(await response.arrayBuffer());
-    if (bytes.length > MAX_RECEIPT_BYTES) continue;
+    if (bytes.length > MAX_RECEIPT_BYTES) return;
 
     const contentType = resolveReceiptContentType(bytes);
     if (!contentType) {
-      console.warn(
-        `[inbound-email] Skipping unsupported attachment ${attachment.filename ?? attachment.id}`,
-      );
-      continue;
+      console.warn(`[inbound-email] Skipping unsupported attachment ${label}`);
+      return;
     }
 
-    try {
-      const extraction = await extractReceiptFromBytes(
-        bytes,
-        contentType,
-        provider,
-        ocr.model,
-      );
-      attachmentExtractions.push(extraction);
-    } catch (error) {
-      console.error(
-        "[inbound-email] OCR failed for attachment:",
-        error instanceof Error ? error.message : error,
-      );
-    }
-
-    storedAttachments.push({
+    downloaded[i] = {
       bytes,
       contentType,
       filename: safeFilename(attachment.filename ?? `attachment-${attachment.id}`),
-    });
-  }
+      inline: attachment.content_disposition === "inline",
+    };
+  });
+  const storedAttachments = downloaded.filter((a): a is InboundAttachment => a !== null);
+
+  const attachmentExtractions = await extractAttachmentReceipts(storedAttachments, {
+    provider,
+    model: ocr.model,
+    jobId: job.id,
+  });
 
   const merged = mergeReceiptExtractions(bodyExtraction, ...attachmentExtractions);
   const description = buildInboundExpenseDescription(
@@ -499,11 +517,24 @@ async function deliverInboundEmail(
     }
   }
 
+  // Upload before the transaction so it isn't held open for every file.
+  const expenseId = crypto.randomUUID();
+  const storage = getStorage();
+  const uploaded: { path: string; size: number }[] = [];
+  await mapWithConcurrency(storedAttachments, TRANSFER_CONCURRENCY, async (attachment, i) => {
+    uploaded[i] = await storage.put(
+      `receipts/${expenseId}/${Date.now()}-${i}-${attachment.filename}`,
+      attachment.bytes,
+      attachment.contentType,
+    );
+  });
+
   const db = getDb();
-  const expenseId = await db.transaction(async (tx) => {
-    const [expense] = await tx
+  await db.transaction(async (tx) => {
+    await tx
       .insert(expenses)
       .values({
+        id: expenseId,
         companyId,
         description,
         category: merged.category ?? null,
@@ -519,26 +550,19 @@ async function deliverInboundEmail(
         detectedCurrency: isForeignCurrency(merged.currency)
           ? merged.currency!.toUpperCase()
           : null,
-      })
-      .returning({ id: expenses.id });
-
-    const storage = getStorage();
-    for (const attachment of storedAttachments) {
-      const stored = await storage.put(
-        `receipts/${expense.id}/${Date.now()}-${attachment.filename}`,
-        attachment.bytes,
-        attachment.contentType,
-      );
-      await tx.insert(expenseReceipts).values({
-        expenseId: expense.id,
-        blobPath: stored.path,
-        filename: attachment.filename,
-        contentType: attachment.contentType,
-        sizeBytes: stored.size,
       });
-    }
 
-    return expense.id;
+    if (storedAttachments.length) {
+      await tx.insert(expenseReceipts).values(
+        storedAttachments.map((attachment, i) => ({
+          expenseId,
+          blobPath: uploaded[i]!.path,
+          filename: attachment.filename,
+          contentType: attachment.contentType,
+          sizeBytes: uploaded[i]!.size,
+        })),
+      );
+    }
   });
 
   await writeAudit({
@@ -561,6 +585,84 @@ async function deliverInboundEmail(
   }
 
   return expenseId;
+}
+
+type InboundAttachment = {
+  bytes: Buffer;
+  contentType: string;
+  filename: string;
+  /** Embedded in the body (logos, signatures) rather than attached. */
+  inline: boolean;
+};
+
+/**
+ * OCR an email's attachments within OCR_BUDGET_MS, a few at a time. Real
+ * attachments go before inline images, and reading stops once one comes back
+ * with high confidence: the merge takes that one's fields first anyway.
+ * Returns extractions in that priority order.
+ */
+async function extractAttachmentReceipts(
+  attachments: InboundAttachment[],
+  { provider, model, jobId }: { provider: ReceiptOcrProvider; model?: string; jobId: string },
+): Promise<ReceiptExtraction[]> {
+  if (!attachments.length) return [];
+  const order = attachments
+    .map((_, i) => i)
+    .sort((a, b) => Number(attachments[a]!.inline) - Number(attachments[b]!.inline));
+  const results: (ReceiptExtraction | undefined)[] = [];
+  const budget = new AbortController();
+  const timer = setTimeout(() => budget.abort(), OCR_BUDGET_MS);
+  const sharedOcr = provider === "local" ? createSharedImageOcr() : null;
+  const done = () =>
+    budget.signal.aborted || results.some((r) => r?.confidence === "high");
+
+  const work = mapWithConcurrency(order, OCR_CONCURRENCY, async (index) => {
+    if (done()) return;
+    const attachment = attachments[index]!;
+    try {
+      results[index] = await extractReceiptFromBytes(
+        attachment.bytes,
+        attachment.contentType,
+        provider,
+        model,
+        { ocrImage: sharedOcr?.ocrImage, abortSignal: budget.signal },
+      );
+    } catch (error) {
+      if (budget.signal.aborted) return;
+      console.error(
+        "[inbound-email] OCR failed for attachment:",
+        error instanceof Error ? error.message : error,
+      );
+    }
+  });
+  // Local OCR can't be interrupted mid-image, so stop waiting at the deadline.
+  const timedOut = new Promise<void>((resolve) =>
+    budget.signal.addEventListener("abort", () => resolve(), { once: true }),
+  );
+  await Promise.race([work, timedOut]);
+  clearTimeout(timer);
+  const outOfTime = budget.signal.aborted;
+  budget.abort();
+  await sharedOcr?.close();
+
+  const read = order.filter((i) => results[i] !== undefined);
+  if (read.length < attachments.length) {
+    console.info(
+      JSON.stringify({
+        level: "info",
+        msg: "inbound-email.ocr_partial",
+        jobId,
+        attachments: attachments.length,
+        read: read.length,
+        reason: outOfTime
+          ? "budget"
+          : results.some((r) => r?.confidence === "high")
+            ? "confident_match"
+            : "ocr_errors",
+      }),
+    );
+  }
+  return read.map((i) => results[i]!);
 }
 
 /** Whether a user email belongs to an authorised founder (admin or user role). */
@@ -785,15 +887,19 @@ export async function adminRetryAllInboundEmailIssues(): Promise<{
     .orderBy(inboundEmailJobs.createdAt)
     .limit(20);
 
+  const deadline = inboundRouteDeadline();
+  let retried = 0;
   let succeeded = 0;
   let failed = 0;
   for (const job of jobs) {
+    if (Date.now() + JOB_WORST_CASE_MS > deadline) break;
+    retried++;
     const result = await adminRetryInboundEmailJob(job.id);
     if (result.ok) succeeded++;
     else failed++;
   }
 
-  return { retried: jobs.length, succeeded, failed };
+  return { retried, succeeded, failed };
 }
 
 /** Tenant: retry a job only if it belongs to the caller's company. */
@@ -833,13 +939,17 @@ export async function retryAllInboundEmailIssuesForCompany(
     .orderBy(inboundEmailJobs.createdAt)
     .limit(20);
 
+  const deadline = inboundRouteDeadline();
+  let retried = 0;
   let succeeded = 0;
   let failed = 0;
   for (const job of jobs) {
+    if (Date.now() + JOB_WORST_CASE_MS > deadline) break;
+    retried++;
     const result = await adminRetryInboundEmailJob(job.id);
     if (result.ok) succeeded++;
     else failed++;
   }
 
-  return { retried: jobs.length, succeeded, failed };
+  return { retried, succeeded, failed };
 }
