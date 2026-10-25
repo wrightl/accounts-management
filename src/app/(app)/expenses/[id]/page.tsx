@@ -18,7 +18,11 @@ import { ExpenseForm } from "@/components/expenses/expense-form";
 import { ReceiptPanel } from "@/components/expenses/receipt-panel";
 import { buttonClasses } from "@/components/ui/button";
 import { EXPENSE_LIST_COOKIE, expenseListReturnHref } from "@/lib/expenses/list-params";
-import { Card, CardTitle, CardValue } from "@/components/ui/card";
+import {
+  ExpenseAmountCard,
+  ExpenseSummaryProvider,
+  ExpenseTitle,
+} from "@/components/expenses/expense-summary";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { isForeignCurrency } from "@/lib/expenses/receipt-parse";
 import { getExpenseRebill, listOrderOptions } from "@/lib/profitability/queries";
@@ -142,48 +146,49 @@ export default async function ExpenseDetailPage({
         </div>
       )}
 
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-semibold">
-            {detail.expense.description}
-          </h1>
-          <p className="mt-1 text-muted">
-            {expenseStatusLabel(detail.expense.status as ExpenseStatus)}
-            {detail.expense.spentAt ? ` · ${detail.expense.spentAt}` : null}
-            {detail.paidBy ? ` · Paid by ${detail.paidBy.name || detail.paidBy.email}` : null}
-          </p>
+      <ExpenseSummaryProvider
+        initialDescription={detail.expense.description}
+        initialPence={detail.expense.amountPence}
+        initialCurrency={foreignCurrency ?? "GBP"}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <ExpenseTitle fallback={detail.expense.description} />
+            <p className="mt-1 text-muted">
+              {expenseStatusLabel(detail.expense.status as ExpenseStatus)}
+              {detail.expense.spentAt ? ` · ${detail.expense.spentAt}` : null}
+              {detail.paidBy ? ` · Paid by ${detail.paidBy.name || detail.paidBy.email}` : null}
+            </p>
+          </div>
+          <ExpenseAmountCard />
         </div>
-        <Card className="min-w-[140px]">
-          <CardTitle>Amount</CardTitle>
-          <CardValue>{detail.expense.amountFormatted}</CardValue>
-        </Card>
-      </div>
 
-      <div className="mt-8 grid gap-10 lg:grid-cols-2">
-        <ExpenseForm
-          listHref={listHref}
-          // Remount when the status changes (e.g. a pending email expense is
-          // approved) so the form's status state re-derives from the saved row.
-          key={`${detail.expense.id}:${detail.expense.status}`}
-          mode="edit"
-          expense={detail.expense}
-          founders={founders}
-          clients={clients}
-          orders={orders}
-          rebilledOn={rebill}
-          linkedToBank={settlements.length > 0}
-          receiptCount={detail.receipts.length}
-          canWrite={canWrite}
-          defaultMileageRatePence={settings.defaultMileageRatePence}
-          vatRegistered={settings.vatRegistered}
-          defaultVatRate={settings.vatRegistered ? settings.defaultVatRate : 0}
-        />
-        <ReceiptPanel
-          expenseId={detail.expense.id}
-          receipts={detail.receipts}
-          canWrite={canWrite}
-        />
-      </div>
+        <div className="mt-8 grid gap-10 lg:grid-cols-2">
+          <ExpenseForm
+            listHref={listHref}
+            // Remount when the status changes (e.g. a pending email expense is
+            // approved) so the form's status state re-derives from the saved row.
+            key={`${detail.expense.id}:${detail.expense.status}`}
+            mode="edit"
+            expense={detail.expense}
+            founders={founders}
+            clients={clients}
+            orders={orders}
+            rebilledOn={rebill}
+            linkedToBank={settlements.length > 0}
+            receiptCount={detail.receipts.length}
+            canWrite={canWrite}
+            defaultMileageRatePence={settings.defaultMileageRatePence}
+            vatRegistered={settings.vatRegistered}
+            defaultVatRate={settings.vatRegistered ? settings.defaultVatRate : 0}
+          />
+          <ReceiptPanel
+            expenseId={detail.expense.id}
+            receipts={detail.receipts}
+            canWrite={canWrite}
+          />
+        </div>
+      </ExpenseSummaryProvider>
     </div>
   );
 }

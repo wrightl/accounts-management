@@ -22,7 +22,8 @@ import {
   rejectExpense,
   type CreateExpenseResult,
 } from "@/actions/expenses";
-import { expenseCurrencySymbol, formatGBP, penceToPounds } from "@/lib/money";
+import { expenseCurrencySymbol, formatGBP, penceToPounds, poundsToPence } from "@/lib/money";
+import { useReportExpenseSummary } from "@/components/expenses/expense-summary";
 import { clientDisplayName } from "@/lib/clients/display";
 import { ReceiptUploadField } from "@/components/expenses/receipt-upload-field";
 import { isForeignCurrency, type ReceiptExtraction } from "@/lib/expenses/receipt-parse";
@@ -226,6 +227,16 @@ export function ExpenseForm({
       return null;
     }
   }, [useMileage, mileageMiles, mileageRatePence]);
+
+  let livePence: number | null = computedMileagePence;
+  if (!useMileage) {
+    try {
+      livePence = amountPounds.trim() ? poundsToPence(amountPounds) : null;
+    } catch {
+      livePence = null;
+    }
+  }
+  useReportExpenseSummary(description, livePence, useMileage ? "GBP" : currency);
 
   if (!canWrite && mode === "create") {
     return <p className="text-sm text-muted">You do not have permission to create expenses.</p>;
