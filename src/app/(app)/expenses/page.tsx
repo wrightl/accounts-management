@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Link2 } from "lucide-react";
 import { guardTenantPage, hasPermission, requireUser } from "@/lib/auth";
 import {
   getEmailExpensesFingerprint,
@@ -14,7 +15,7 @@ import {
 import { expenseInboundAddress } from "@/lib/expenses/inbound-mailbox";
 import { buttonClasses } from "@/components/ui/button";
 import { Input, Label, Select } from "@/components/ui/form";
-import { Table, THead, TBody, TR, TD } from "@/components/ui/table";
+import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { findLocalUser } from "@/lib/users";
 import { getCompany } from "@/lib/tenant";
 import { ExpenseImportButton } from "@/components/expenses/expense-import-panel";
@@ -216,6 +217,7 @@ export default async function ExpensesPage({
                 {sortHeader("Paid by", "paidBy")}
                 {sortHeader("Created by", "createdBy")}
                 {sortHeader("Status", "status")}
+                <TH>Bank</TH>
                 {sortHeader("Amount", "amount", "end")}
               </TR>
             </THead>
@@ -241,6 +243,18 @@ export default async function ExpensesPage({
                   <TD>{e.paidByName ?? "—"}</TD>
                   <TD>{e.createdByName ?? "—"}</TD>
                   <TD>{expenseStatusLabel(e.status as ExpenseStatus)}</TD>
+                  <TD>
+                    {e.bankLinked ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2.5 py-0.5 text-xs font-medium text-success">
+                        <Link2 className="h-3 w-3" aria-hidden />
+                        Linked
+                      </span>
+                    ) : (
+                      <span className="text-muted" title="Not linked to a bank transaction">
+                        —
+                      </span>
+                    )}
+                  </TD>
                   <TD className="text-right font-medium">{e.amountFormatted}</TD>
                 </TR>
               ))}

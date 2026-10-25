@@ -129,7 +129,7 @@ async function runAiGatewayOcr(
 - merchant: store or vendor name
 - description: short expense description (merchant + brief context)
 - amountPounds: total paid as a decimal string e.g. "12.50" (numeric amount only)
-- spentAt: transaction date as YYYY-MM-DD if visible
+- spentAt: transaction date as YYYY-MM-DD if visible. Read numeric dates in the receipt's own convention: US receipts are month first (MM/DD/YYYY), UK and most others day first.
 - category: best match from ${EXPENSE_CATEGORIES.join(", ")}
 - currency: ISO 4217 currency code of the total (e.g. GBP, USD, EUR). Use null if unclear.
 Use null for any field you cannot determine confidently.`,

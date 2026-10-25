@@ -19,6 +19,7 @@ import {
   unlinkExpenseMatch,
 } from "@/lib/bank/expense-link";
 import { createExpense } from "@/actions/expenses";
+import { listExpenses } from "@/lib/expenses/queries";
 import { seedCompany } from "@/lib/test/seed-company";
 
 vi.mock("server-only", () => ({}));
@@ -260,6 +261,29 @@ describe("linkExpenseToBankTx", () => {
     await expect(
       linkExpenseToBankTx(otherCompany.id, { expenseId: theirs.id, bankTransactionId: tx.id }),
     ).rejects.toThrow("Bank transaction not found");
+  });
+});
+
+describe("listExpenses bankLinked", () => {
+  it("flags only expenses with a confirmed bank match", async () => {
+    const linked = await expense({ description: "Linked" });
+    const suggested = await expense({ description: "Suggested" });
+    await expense({ description: "Unlinked" });
+    await linkExpenseToBankTx(companyId, {
+      expenseId: linked.id,
+      bankTransactionId: (await debit("2026-04-03", -1500)).id,
+    });
+    await db.insert(reconciliationMatches).values({
+      bankTransactionId: (await debit("2026-04-03", -1500)).id,
+      matchType: "expense",
+      expenseId: suggested.id,
+      confirmed: false,
+    });
+
+    const flags = Object.fromEntries(
+      (await listExpenses(companyId)).map((e) => [e.description, e.bankLinked]),
+    );
+    expect(flags).toEqual({ Linked: true, Suggested: false, Unlinked: false });
   });
 });
 
