@@ -35,7 +35,7 @@ vi.mock("@/lib/expenses/receipt-pdf", () => ({
   isPdfBytes: mockIsPdfBytes,
 }));
 
-import { extractReceiptFromBytes } from "@/lib/expenses/receipt-ocr";
+import { createSharedImageOcr, extractReceiptFromBytes } from "@/lib/expenses/receipt-ocr";
 
 const MICROSOFT_INVOICE_TEXT = `Billing Summary
 
@@ -127,5 +127,47 @@ describe("extractReceiptFromBytes", () => {
     );
     expect(result.amountPounds).toBe("5.20");
     expect(result.category).toBe("Meals");
+  });
+});
+
+describe("createSharedImageOcr", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockIsPdfBytes.mockReturnValue(false);
+  });
+
+  it("starts one worker for a batch of images and stops it on close", async () => {
+    const shared = createSharedImageOcr();
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    const results = await Promise.all(
+      [png, png, png].map((bytes) =>
+        extractReceiptFromBytes(bytes, "image/png", "local", undefined, {
+          ocrImage: shared.ocrImage,
+        }),
+      ),
+    );
+    await shared.close();
+
+    expect(results.every((r) => r.amountPounds === "5.20")).toBe(true);
+    expect(mockCreateWorker).toHaveBeenCalledTimes(1);
+    expect(mockRecognize).toHaveBeenCalledTimes(3);
+    expect(mockTerminate).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts no more workers than its size, reusing idle ones", async () => {
+    const shared = createSharedImageOcr(2);
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    await Promise.all([1, 2, 3, 4].map(() => shared.ocrImage(png)));
+    await shared.ocrImage(png);
+    await shared.close();
+
+    expect(mockCreateWorker).toHaveBeenCalledTimes(2);
+    expect(mockRecognize).toHaveBeenCalledTimes(5);
+    expect(mockTerminate).toHaveBeenCalledTimes(2);
+  });
+
+  it("closes cleanly when no image was read", async () => {
+    await createSharedImageOcr().close();
+    expect(mockCreateWorker).not.toHaveBeenCalled();
   });
 });

@@ -642,4 +642,64 @@ describe("inbound email jobs", () => {
     expect(job.status).toBe("rejected");
     expect(job.lastError).toBe("Dismissed by admin: Not needed");
   });
+
+  describe("emails with many attachments", () => {
+    const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+
+    it("makes an expense per attachment, reading several at once", async () => {
+      await insertMailboxUser({
+        companyId,
+        email: "founder@example.com",
+        role: "user",
+        expenseInboundSlug: "founder",
+      });
+      mockReceivingGet.mockResolvedValue({
+        data: { subject: "Receipts", text: "", html: null },
+        error: null,
+      });
+      mockAttachmentsList.mockResolvedValue({
+        data: {
+          data: Array.from({ length: 31 }, (_, i) => ({
+            id: `att-${i}`,
+            filename: `receipt-${i}.png`,
+            size: PNG.length,
+            // The first few are signature images embedded in the body.
+            content_disposition: i < 3 ? "inline" : "attachment",
+            download_url: `https://resend.test/att-${i}`,
+          })),
+        },
+        error: null,
+      });
+      vi.stubGlobal("fetch", vi.fn(async () => new Response(new Uint8Array(PNG))));
+      let inFlight = 0;
+      let peak = 0;
+      mockExtractReceipt.mockImplementation(async () => {
+        inFlight++;
+        peak = Math.max(peak, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 2));
+        inFlight--;
+        return { confidence: "partial", description: "Pret", amountPounds: "5.20" };
+      });
+
+      const { jobId } = await enqueueInboundEmailJob({
+        email_id: "email-31",
+        from: "vendor@shop.com",
+        to: [mailbox("founder")],
+        subject: "Receipts",
+      });
+      if (!jobId) throw new Error("expected job");
+      const result = await processInboundEmailJob(jobId);
+
+      expect(result.ok).toBe(true);
+      expect(result.expenseIds).toHaveLength(28);
+      expect(mockExtractReceipt).toHaveBeenCalledTimes(28);
+      expect(peak).toBeGreaterThan(1);
+      const receipts = await db.select().from(expenseReceipts);
+      expect(receipts).toHaveLength(28);
+      const rows = await db.select().from(expenses).where(eq(expenses.inboundEmailJobId, jobId));
+      expect(rows.every((r) => r.amountPence === 520)).toBe(true);
+      const [job] = await db.select().from(inboundEmailJobs).where(eq(inboundEmailJobs.id, jobId));
+      expect(job.lastError).toBeNull();
+    });
+  });
 });
