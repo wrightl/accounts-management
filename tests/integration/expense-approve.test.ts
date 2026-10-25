@@ -140,6 +140,42 @@ describe("pending expense approval", () => {
     expect(saved.description).toBe("Updated draft");
   });
 
+  it("approveExpense clears a wrongly detected foreign currency", async () => {
+    const { founder, expense } = await seedPendingExpense();
+    await db.update(expenses).set({ detectedCurrency: "USD" }).where(eq(expenses.id, expense.id));
+
+    const form = new FormData();
+    form.set("description", "Team coffee");
+    form.set("spentAt", "2026-03-10");
+    form.set("amountPounds", "12.50");
+    form.set("status", "reimbursable");
+    form.set("paidByUserId", founder.id);
+    form.set("currency", "GBP");
+
+    expect((await approveExpense(expense.id, form)).ok).toBe(true);
+    const [saved] = await db.select().from(expenses).where(eq(expenses.id, expense.id));
+    expect(saved.detectedCurrency).toBeNull();
+  });
+
+  it("updateExpense keeps the detected currency unless GBP is chosen", async () => {
+    const { expense } = await seedPendingExpense();
+    await db.update(expenses).set({ detectedCurrency: "EUR" }).where(eq(expenses.id, expense.id));
+
+    const form = new FormData();
+    form.set("description", "Updated draft");
+    form.set("amountPounds", "0");
+    form.set("status", "recorded");
+    form.set("currency", "EUR");
+    expect((await updateExpense(expense.id, form)).ok).toBe(true);
+    let [saved] = await db.select().from(expenses).where(eq(expenses.id, expense.id));
+    expect(saved.detectedCurrency).toBe("EUR");
+
+    form.set("currency", "GBP");
+    expect((await updateExpense(expense.id, form)).ok).toBe(true);
+    [saved] = await db.select().from(expenses).where(eq(expenses.id, expense.id));
+    expect(saved.detectedCurrency).toBeNull();
+  });
+
   it("rejectExpense deletes pending expense", async () => {
     const { expense } = await seedPendingExpense();
 

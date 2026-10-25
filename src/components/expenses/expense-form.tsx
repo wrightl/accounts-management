@@ -25,7 +25,7 @@ import {
 import { expenseCurrencySymbol, formatGBP, penceToPounds } from "@/lib/money";
 import { clientDisplayName } from "@/lib/clients/display";
 import { ReceiptUploadField } from "@/components/expenses/receipt-upload-field";
-import type { ReceiptExtraction } from "@/lib/expenses/receipt-parse";
+import { isForeignCurrency, type ReceiptExtraction } from "@/lib/expenses/receipt-parse";
 import {
   VatRateField,
   choiceFromVatRate,
@@ -58,6 +58,7 @@ export function ExpenseForm({
   rebilledOn,
   defaultVatRate = 0,
   fromBankTransaction,
+  linkedToBank = false,
 }: {
   mode: "create" | "edit";
   expense?: {
@@ -105,6 +106,8 @@ export function ExpenseForm({
     amountPence: number;
     summary: string;
   } | null;
+  /** Settled by a confirmed bank match: amount, date and status are fixed. */
+  linkedToBank?: boolean;
 }) {
   const router = useRouter();
   const { confirm } = useAlert();
@@ -160,7 +163,12 @@ export function ExpenseForm({
   const [paidByUserId, setPaidByUserId] = useState(initialPaidBy);
   const isPending = expense?.status === "pending";
   const isEmailSubmission = expense?.source === "email";
-  const currencySymbol = expenseCurrencySymbol(expense?.detectedCurrency);
+  // A wrongly detected receipt currency can be corrected to GBP.
+  const detectedForeignCurrency = isForeignCurrency(expense?.detectedCurrency)
+    ? expense!.detectedCurrency!.toUpperCase()
+    : null;
+  const [currency, setCurrency] = useState(detectedForeignCurrency ?? "GBP");
+  const currencySymbol = expenseCurrencySymbol(currency);
   const [approveStatus, setApproveStatus] = useState<ExpenseStatusOption>(() => {
     if (expense?.submittedByUserId) return "reimbursable";
     return "recorded";
@@ -195,6 +203,7 @@ export function ExpenseForm({
     mileageRatePence,
     amountPounds,
     vatRate,
+    currency,
     pendingReceipt !== null,
   ]);
   const [savedSnapshot, setSavedSnapshot] = useState(snapshot);
@@ -248,6 +257,7 @@ export function ExpenseForm({
     if (billable) formData.set("billable", "true");
     formData.set("clientId", projectClientId);
     formData.set("orderId", projectOrderId);
+    formData.set("currency", currency);
     if (useMileage && !isEmailSubmission) {
       formData.set("useMileage", "true");
       formData.set("mileageMiles", mileageMiles);
@@ -299,6 +309,7 @@ export function ExpenseForm({
     formData.set("spentAt", spentAt);
     formData.set("status", status);
     formData.set("paidByUserId", status === "company_paid" ? "" : paidByUserId);
+    formData.set("currency", currency);
     if (useMileage) {
       formData.set("useMileage", "true");
       formData.set("mileageMiles", mileageMiles);
@@ -491,7 +502,7 @@ export function ExpenseForm({
               setSpentAt(e.target.value);
               clearField("spentAt");
             }}
-            disabled={!canWrite || pending}
+            disabled={!canWrite || pending || linkedToBank}
             aria-invalid={Boolean(fieldErrors.spentAt)}
             aria-describedby={fieldErrors.spentAt ? "spentAt-error" : undefined}
           />
@@ -499,7 +510,7 @@ export function ExpenseForm({
         </div>
       </div>
 
-      {category === "Travel" && !isEmailSubmission && !fromBankTransaction && (
+      {category === "Travel" && !isEmailSubmission && !fromBankTransaction && !linkedToBank && (
         <div className="space-y-3 rounded-lg border border-border p-4">
           <div className="flex items-center gap-2">
             <input
@@ -598,7 +609,7 @@ export function ExpenseForm({
                 setAmountPounds(e.target.value);
                 clearField("amountPounds");
               }}
-              disabled={!canWrite || pending}
+              disabled={!canWrite || pending || linkedToBank}
               aria-invalid={Boolean(fieldErrors.amountPounds)}
               aria-describedby={
                 fieldErrors.amountPounds ? "amountPounds-error" : undefined
@@ -609,6 +620,26 @@ export function ExpenseForm({
             </FieldError>
           </div>
         )}
+        {detectedForeignCurrency && !useMileage ? (
+          <div>
+            <Label htmlFor="currency">Currency</Label>
+            <Select
+              id="currency"
+              name="currency"
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+              disabled={!canWrite || pending}
+            >
+              <option value={detectedForeignCurrency}>
+                {detectedForeignCurrency} (detected on receipt)
+              </option>
+              <option value="GBP">GBP</option>
+            </Select>
+            <p className="mt-1 text-xs text-muted">
+              Choose GBP if the receipt was wrongly read as foreign currency.
+            </p>
+          </div>
+        ) : null}
         {vatRegistered && !useMileage ? (
           <div>
             <VatRateField
@@ -696,7 +727,9 @@ export function ExpenseForm({
                     setPaidByUserId(defaultPaidByUserId ?? founders[0]?.id ?? "");
                   }
                 }}
-                disabled={!canWrite || pending || expense?.status === "reimbursed"}
+                disabled={
+                  !canWrite || pending || expense?.status === "reimbursed" || linkedToBank
+                }
                 aria-invalid={Boolean(fieldErrors.status)}
                 aria-describedby={fieldErrors.status ? "status-error" : undefined}
               >
@@ -833,6 +866,12 @@ export function ExpenseForm({
           . Remove it from that invoice to change the amount or client.
         </p>
       ) : null}
+      {linkedToBank ? (
+        <p className="text-sm text-muted">
+          Linked to a bank transaction. Unlink it to change the amount, date or status, or
+          to delete the expense.
+        </p>
+      ) : null}
       {canWrite && (
         <FormStickyActions error={error}>
           {isPending ? (
@@ -857,7 +896,7 @@ export function ExpenseForm({
               {pending ? "Saving…" : mode === "create" ? "Create expense" : "Save changes"}
             </Button>
           )}
-          {mode === "edit" && expense?.status !== "reimbursed" && !isPending && (
+          {mode === "edit" && expense?.status !== "reimbursed" && !isPending && !linkedToBank && (
             <Button
               type="button"
               variant="ghost"
