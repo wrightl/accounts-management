@@ -1,3 +1,8 @@
+import {
+  paymentSourceSummary,
+  type PaymentSourceSuggestion,
+} from "@/lib/expenses/payment-source";
+
 type ReceiptInput = {
   id: string;
   filename?: string | null;
@@ -28,6 +33,8 @@ export type MobileExpenseInput = {
   createdAt?: Date | string | null;
   createdByName?: string | null;
   receipts?: ReceiptInput[];
+  /** How a pending expense was probably paid; omitted for reviewed ones. */
+  paymentSource?: PaymentSourceSuggestion | null;
 };
 
 function isoDate(value: Date | string | null | undefined): string {
@@ -71,6 +78,9 @@ export function toMobileExpense(expense: MobileExpenseInput) {
       uploadedAt: isoDate(receipt.uploadedAt),
     })),
     createdByName: expense.createdByName ?? null,
+    paymentSource: expense.paymentSource
+      ? paymentSourceSummary(expense.paymentSource)
+      : null,
     createdAt,
     updatedAt: createdAt,
   };

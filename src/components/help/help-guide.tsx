@@ -759,7 +759,8 @@ export function HelpGuide({
               </>,
               <>
                 <strong>When you spend:</strong> photo or email the receipt the
-                same day.
+                same day. Add #personal or #company to the email subject to say
+                how you paid; if you don&apos;t, we&apos;ll email to ask.
               </>,
               <>
                 <strong>Once a week (~15 min):</strong> import the bank CSV,

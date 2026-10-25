@@ -32,6 +32,8 @@ import {
 } from "@/lib/expenses/list-params";
 import { ExpenseFilters } from "@/components/expenses/expense-filters";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
+import { getPaymentSourceSuggestions } from "@/lib/expenses/payment-source-queries";
+import { paymentSourceListLabel } from "@/lib/expenses/payment-source";
 
 export default async function ExpensesPage({
   searchParams,
@@ -70,6 +72,11 @@ export default async function ExpensesPage({
     getEmailExpensesFingerprint(companyId),
   ]);
 
+  const paymentSources = await getPaymentSourceSuggestions(
+    companyId,
+    rows.filter((r) => r.status === "pending").map((r) => r.id),
+  );
+
   const inboundAddress =
     localUser &&
     (localUser.role === "admin" || localUser.role === "user") &&
@@ -107,6 +114,7 @@ export default async function ExpensesPage({
           <span className="text-muted">
             Email receipts to{" "}
             <span className="font-medium text-foreground break-all">{inboundAddress}</span>
+            . Add #personal or #company to the subject to say how you paid.
           </span>
           <CopyButton value={inboundAddress} />
         </div>
@@ -211,7 +219,14 @@ export default async function ExpensesPage({
                   <TD>{e.category ?? "—"}</TD>
                   <TD>{e.paidByName ?? "—"}</TD>
                   <TD>{e.createdByName ?? "—"}</TD>
-                  <TD>{expenseStatusLabel(e.status as ExpenseStatus)}</TD>
+                  <TD>
+                    {expenseStatusLabel(e.status as ExpenseStatus)}
+                    {paymentSourceListLabel(paymentSources.get(e.id)) ? (
+                      <span className="block text-xs text-muted">
+                        {paymentSourceListLabel(paymentSources.get(e.id))}
+                      </span>
+                    ) : null}
+                  </TD>
                   <TD>
                     {e.bankLinked ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2.5 py-0.5 text-xs font-medium text-success">
