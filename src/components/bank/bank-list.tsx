@@ -96,9 +96,8 @@ export function BankPagination({
     if (total === 0) return null;
     const from = (page - 1) * pageSize + 1;
     const to = Math.min(page * pageSize, total);
-    const prevHref = page > 1 ? bankListHref(params, { page: page - 1 }) : null;
-    const nextHref =
-        page < pageCount ? bankListHref(params, { page: page + 1 }) : null;
+    const hasPrev = page > 1;
+    const hasNext = page < pageCount;
 
     return (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
@@ -109,39 +108,53 @@ export function BankPagination({
                 <BankPageSizeSelect params={params} />
             </div>
             <div className="flex items-center gap-2">
-                {prevHref ? (
-                    <Link href={prevHref} className={buttonClasses('ghost')}>
-                        Previous
-                    </Link>
-                ) : (
-                    <span
-                        className={cn(
-                            buttonClasses('ghost'),
-                            'pointer-events-none opacity-40',
-                        )}
-                    >
-                        Previous
-                    </span>
-                )}
+                <PageLink href={hasPrev ? bankListHref(params, { page: 1 }) : null}>
+                    First
+                </PageLink>
+                <PageLink
+                    href={hasPrev ? bankListHref(params, { page: page - 1 }) : null}
+                >
+                    Previous
+                </PageLink>
                 <span>
                     Page {page} of {pageCount}
                 </span>
-                {nextHref ? (
-                    <Link href={nextHref} className={buttonClasses('ghost')}>
-                        Next
-                    </Link>
-                ) : (
-                    <span
-                        className={cn(
-                            buttonClasses('ghost'),
-                            'pointer-events-none opacity-40',
-                        )}
-                    >
-                        Next
-                    </span>
-                )}
+                <PageLink
+                    href={hasNext ? bankListHref(params, { page: page + 1 }) : null}
+                >
+                    Next
+                </PageLink>
+                <PageLink
+                    href={hasNext ? bankListHref(params, { page: pageCount }) : null}
+                >
+                    Last
+                </PageLink>
             </div>
         </div>
+    );
+}
+
+/** A pager button, shown dimmed when there's no page to go to. */
+function PageLink({
+    href,
+    children,
+}: {
+    href: string | null;
+    children: React.ReactNode;
+}) {
+    if (href) {
+        return (
+            <Link href={href} className={buttonClasses('ghost')}>
+                {children}
+            </Link>
+        );
+    }
+    return (
+        <span
+            className={cn(buttonClasses('ghost'), 'pointer-events-none opacity-40')}
+        >
+            {children}
+        </span>
     );
 }
 

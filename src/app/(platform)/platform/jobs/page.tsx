@@ -1,6 +1,8 @@
 import { requirePlatformAdmin } from "@/lib/platform";
 import { hasDatabaseClient } from "@/db";
 import {
+  countPlatformInboundJobs,
+  countPlatformSendJobs,
   listPlatformInboundJobs,
   listPlatformSendJobs,
 } from "@/lib/platform/queries";
@@ -70,20 +72,20 @@ export default async function PlatformJobsPage({
     );
   }
 
-  const [inboundFetched, sendFetched] = await Promise.all([
+  const [inbound, inboundTotal, send, sendTotal] = await Promise.all([
     listPlatformInboundJobs({
       status: params.inboundStatus,
-      limit: PAGE_SIZE + 1,
+      limit: PAGE_SIZE,
       offset: inboundOffset,
     }),
+    countPlatformInboundJobs({ status: params.inboundStatus }),
     listPlatformSendJobs({
       status: params.sendStatus,
-      limit: PAGE_SIZE + 1,
+      limit: PAGE_SIZE,
       offset: sendOffset,
     }),
+    countPlatformSendJobs({ status: params.sendStatus }),
   ]);
-  const inbound = inboundFetched.slice(0, PAGE_SIZE);
-  const send = sendFetched.slice(0, PAGE_SIZE);
   // Paging one table keeps the other table's filter and page.
   const keep = {
     inboundStatus: params.inboundStatus,
@@ -123,7 +125,7 @@ export default async function PlatformJobsPage({
           offsetKey="inboundOffset"
           pageSize={PAGE_SIZE}
           shown={inbound.length}
-          hasMore={inboundFetched.length > PAGE_SIZE}
+          total={inboundTotal}
         />
       </section>
 
@@ -150,7 +152,7 @@ export default async function PlatformJobsPage({
           offsetKey="sendOffset"
           pageSize={PAGE_SIZE}
           shown={send.length}
-          hasMore={sendFetched.length > PAGE_SIZE}
+          total={sendTotal}
         />
       </section>
     </div>

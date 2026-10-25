@@ -1,12 +1,11 @@
 import Link from "next/link";
-import { guardTenantPage, hasPermission, requireUser } from "@/lib/auth";
+import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { listClients } from "@/lib/clients/queries";
 import { listFounders } from "@/lib/expenses/queries";
 import { ExpenseForm } from "@/components/expenses/expense-form";
 import { buttonClasses } from "@/components/ui/button";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { getReceiptOcrSettings } from "@/lib/platform-settings";
-import { findLocalUserId } from "@/lib/users";
 import { listOrderOptions } from "@/lib/profitability/queries";
 import { getBankTransactionById } from "@/lib/bank/queries";
 import { bankDebitLinkError } from "@/lib/bank/expense-link";
@@ -20,13 +19,11 @@ export default async function NewExpensePage({
   const { status, clientId, orderId, bankTransactionId } = await searchParams;
   const { companyId } = await guardTenantPage("accounts:write");
   const canWrite = await hasPermission("accounts:write");
-  const user = await requireUser();
 
-  const [founders, clients, orders, localUserId, settings, ocr] = await Promise.all([
+  const [founders, clients, orders, settings, ocr] = await Promise.all([
     listFounders(companyId),
     listClients(companyId),
     listOrderOptions(companyId),
-    findLocalUserId(user.userId),
     getOrCreateCompanySettings(companyId),
     getReceiptOcrSettings(),
   ]);
@@ -75,7 +72,6 @@ export default async function NewExpensePage({
           (clients.some((c) => c.id === clientId) ? clientId : null)
         }
         canWrite={canWrite}
-        defaultPaidByUserId={localUserId}
         defaultStatus={status === "reimbursable" ? "reimbursable" : ""}
         defaultMileageRatePence={settings.defaultMileageRatePence}
         receiptOcrProvider={ocr.provider ?? "local"}

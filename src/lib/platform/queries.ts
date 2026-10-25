@@ -66,13 +66,10 @@ export async function listCompanyOptions() {
     .orderBy(asc(companies.name));
 }
 
-export async function listPlatformCompanies(opts?: {
-  q?: string;
-  filter?: CompanyListFilter;
-  limit?: number;
-  offset?: number;
-}): Promise<PlatformCompanyListItem[]> {
-  const db = getDb();
+type CompanyListOptions = { q?: string; filter?: CompanyListFilter };
+
+/** Conditions on `companies` left-joined to `companyBilling`. */
+function companyListWhere(opts?: CompanyListOptions): SQL | undefined {
   const q = opts?.q?.trim();
   const conditions: SQL[] = [];
   if (q) {
@@ -100,7 +97,23 @@ export async function listPlatformCompanies(opts?: {
       conditions.push(eq(companyBilling.status, opts.filter));
       break;
   }
-  const where = conditions.length ? and(...conditions) : undefined;
+  return conditions.length ? and(...conditions) : undefined;
+}
+
+export async function countPlatformCompanies(opts?: CompanyListOptions): Promise<number> {
+  const [row] = await getDb()
+    .select({ count: count() })
+    .from(companies)
+    .leftJoin(companyBilling, eq(companyBilling.companyId, companies.id))
+    .where(companyListWhere(opts));
+  return Number(row?.count ?? 0);
+}
+
+export async function listPlatformCompanies(
+  opts?: CompanyListOptions & { limit?: number; offset?: number },
+): Promise<PlatformCompanyListItem[]> {
+  const db = getDb();
+  const where = companyListWhere(opts);
 
   // Qualify the outer reference explicitly: Drizzle leaves columns
   // unqualified in single-table selects, and the subquery would then bind it
@@ -328,15 +341,9 @@ export async function getPlatformUserMemberships(userId: string) {
     .orderBy(asc(companies.name));
 }
 
-export async function listPlatformActivity(opts?: {
-  companyId?: string;
-  actionPrefix?: string;
-  limit?: number;
-  offset?: number;
-}) {
-  const db = getDb();
-  const limit = Math.min(opts?.limit ?? 50, 200);
-  const offset = opts?.offset ?? 0;
+type ActivityOptions = { companyId?: string; actionPrefix?: string };
+
+function activityWhere(opts?: ActivityOptions): SQL | undefined {
   const conditions: SQL[] = [];
   if (opts?.companyId) {
     conditions.push(eq(auditLog.companyId, opts.companyId));
@@ -344,7 +351,24 @@ export async function listPlatformActivity(opts?: {
   if (opts?.actionPrefix?.trim()) {
     conditions.push(ilike(auditLog.action, `${opts.actionPrefix.trim()}%`));
   }
-  const where = conditions.length ? and(...conditions) : undefined;
+  return conditions.length ? and(...conditions) : undefined;
+}
+
+export async function countPlatformActivity(opts?: ActivityOptions): Promise<number> {
+  const [row] = await getDb()
+    .select({ count: count() })
+    .from(auditLog)
+    .where(activityWhere(opts));
+  return Number(row?.count ?? 0);
+}
+
+export async function listPlatformActivity(
+  opts?: ActivityOptions & { limit?: number; offset?: number },
+) {
+  const db = getDb();
+  const limit = Math.min(opts?.limit ?? 50, 200);
+  const offset = opts?.offset ?? 0;
+  const where = activityWhere(opts);
 
   const rows = await db
     .select({
@@ -370,17 +394,14 @@ export async function listPlatformActivity(opts?: {
   return rows;
 }
 
-export async function listPlatformLogs(opts?: {
+type LogOptions = {
   level?: string;
   source?: string;
   q?: string;
   sinceHours?: number;
-  limit?: number;
-  offset?: number;
-}) {
-  const db = getDb();
-  const limit = Math.min(opts?.limit ?? 100, 200);
-  const offset = opts?.offset ?? 0;
+};
+
+function logsWhere(opts?: LogOptions): SQL | undefined {
   const sinceHours = opts?.sinceHours ?? 24;
   const since = new Date(Date.now() - sinceHours * 60 * 60 * 1000);
   const conditions: SQL[] = [gte(platformLogs.createdAt, since)];
@@ -397,7 +418,23 @@ export async function listPlatformLogs(opts?: {
   if (opts?.q?.trim()) {
     conditions.push(ilike(platformLogs.message, `%${opts.q.trim()}%`));
   }
+  return and(...conditions);
+}
 
+export async function countPlatformLogs(opts?: LogOptions): Promise<number> {
+  const [row] = await getDb()
+    .select({ count: count() })
+    .from(platformLogs)
+    .where(logsWhere(opts));
+  return Number(row?.count ?? 0);
+}
+
+export async function listPlatformLogs(
+  opts?: LogOptions & { limit?: number; offset?: number },
+) {
+  const db = getDb();
+  const limit = Math.min(opts?.limit ?? 100, 200);
+  const offset = opts?.offset ?? 0;
   return db
     .select({
       id: platformLogs.id,
@@ -412,36 +449,42 @@ export async function listPlatformLogs(opts?: {
     })
     .from(platformLogs)
     .leftJoin(companies, eq(platformLogs.companyId, companies.id))
-    .where(and(...conditions))
+    .where(logsWhere(opts))
     .orderBy(desc(platformLogs.createdAt))
     .limit(limit)
     .offset(offset);
 }
 
-export async function listPlatformInboundJobs(opts?: {
-  status?: string;
-  limit?: number;
-  offset?: number;
-}) {
-  const db = getDb();
-  const limit = Math.min(opts?.limit ?? 50, 200);
-  const conditions: SQL[] = [];
+type JobOptions = { status?: string };
+
+function inboundJobsWhere(opts?: JobOptions): SQL {
   if (opts?.status && opts.status !== "all") {
-    conditions.push(
-      eq(
-        inboundEmailJobs.status,
-        opts.status as "pending" | "processed" | "rejected" | "failed",
-      ),
-    );
-  } else {
-    conditions.push(
-      or(
-        eq(inboundEmailJobs.status, "failed"),
-        eq(inboundEmailJobs.status, "pending"),
-        eq(inboundEmailJobs.status, "rejected"),
-      )!,
+    return eq(
+      inboundEmailJobs.status,
+      opts.status as "pending" | "processed" | "rejected" | "failed",
     );
   }
+  return or(
+    eq(inboundEmailJobs.status, "failed"),
+    eq(inboundEmailJobs.status, "pending"),
+    eq(inboundEmailJobs.status, "rejected"),
+  )!;
+}
+
+export async function countPlatformInboundJobs(opts?: JobOptions): Promise<number> {
+  const [row] = await getDb()
+    .select({ count: count() })
+    .from(inboundEmailJobs)
+    .innerJoin(companies, eq(companies.id, inboundEmailJobs.companyId))
+    .where(inboundJobsWhere(opts));
+  return Number(row?.count ?? 0);
+}
+
+export async function listPlatformInboundJobs(
+  opts?: JobOptions & { limit?: number; offset?: number },
+) {
+  const db = getDb();
+  const limit = Math.min(opts?.limit ?? 50, 200);
   return db
     .select({
       id: inboundEmailJobs.id,
@@ -457,29 +500,33 @@ export async function listPlatformInboundJobs(opts?: {
     })
     .from(inboundEmailJobs)
     .innerJoin(companies, eq(companies.id, inboundEmailJobs.companyId))
-    .where(and(...conditions))
+    .where(inboundJobsWhere(opts))
     .orderBy(desc(inboundEmailJobs.createdAt))
     .limit(limit)
     .offset(opts?.offset ?? 0);
 }
 
-export async function listPlatformSendJobs(opts?: {
-  status?: string;
-  limit?: number;
-  offset?: number;
-}) {
+function sendJobsWhere(opts?: JobOptions): SQL {
+  if (opts?.status && opts.status !== "all") {
+    return eq(sendJobs.status, opts.status as "pending" | "sent" | "failed");
+  }
+  return or(eq(sendJobs.status, "failed"), eq(sendJobs.status, "pending"))!;
+}
+
+export async function countPlatformSendJobs(opts?: JobOptions): Promise<number> {
+  const [row] = await getDb()
+    .select({ count: count() })
+    .from(sendJobs)
+    .innerJoin(companies, eq(companies.id, sendJobs.companyId))
+    .where(sendJobsWhere(opts));
+  return Number(row?.count ?? 0);
+}
+
+export async function listPlatformSendJobs(
+  opts?: JobOptions & { limit?: number; offset?: number },
+) {
   const db = getDb();
   const limit = Math.min(opts?.limit ?? 50, 200);
-  const conditions: SQL[] = [];
-  if (opts?.status && opts.status !== "all") {
-    conditions.push(
-      eq(sendJobs.status, opts.status as "pending" | "sent" | "failed"),
-    );
-  } else {
-    conditions.push(
-      or(eq(sendJobs.status, "failed"), eq(sendJobs.status, "pending"))!,
-    );
-  }
   return db
     .select({
       id: sendJobs.id,
@@ -496,7 +543,7 @@ export async function listPlatformSendJobs(opts?: {
     .from(sendJobs)
     .innerJoin(companies, eq(companies.id, sendJobs.companyId))
     .leftJoin(invoices, eq(invoices.id, sendJobs.invoiceId))
-    .where(and(...conditions))
+    .where(sendJobsWhere(opts))
     .orderBy(desc(sendJobs.createdAt))
     .limit(limit)
     .offset(opts?.offset ?? 0);
