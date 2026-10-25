@@ -46,7 +46,6 @@ export function ExpenseForm({
   founders,
   clients,
   canWrite,
-  defaultPaidByUserId,
   defaultStatus = "",
   defaultMileageRatePence,
   receiptOcrProvider = "local",
@@ -90,7 +89,6 @@ export function ExpenseForm({
   /** The invoice that recharges this expense, if any. */
   rebilledOn?: { invoiceId: string; number: string } | null;
   canWrite: boolean;
-  defaultPaidByUserId?: string | null;
   /** Pre-selected status for a new expense, e.g. "reimbursable" when a founder paid. */
   defaultStatus?: ExpenseStatusOption;
   defaultMileageRatePence: number;
@@ -154,13 +152,12 @@ export function ExpenseForm({
   const [vatRate, setVatRate] = useState(
     expense?.vatRate ?? (vatRegistered ? defaultVatRate : 0),
   );
-  const initialPaidBy =
-    expense?.paidByUserId ??
-    expense?.submittedByUserId ??
-    defaultPaidByUserId ??
-    founders[0]?.id ??
-    "";
-  const [paidByUserId, setPaidByUserId] = useState(initialPaidBy);
+  // Only guess who paid when there's a single founder to choose from;
+  // otherwise the reviewer must pick, so a wrong payee isn't reimbursed.
+  const defaultPayee = founders.length === 1 ? founders[0].id : "";
+  const [paidByUserId, setPaidByUserId] = useState(
+    expense?.paidByUserId ?? defaultPayee,
+  );
   const isPending = expense?.status === "pending";
   const isEmailSubmission = expense?.source === "email";
   // A wrongly detected receipt currency can be corrected to GBP.
@@ -687,12 +684,7 @@ export function ExpenseForm({
                   clearField("status");
                   if (next === "company_paid") setPaidByUserId("");
                   else if (next === "reimbursable" && !paidByUserId) {
-                    setPaidByUserId(
-                      expense?.submittedByUserId ??
-                        defaultPaidByUserId ??
-                        founders[0]?.id ??
-                        "",
-                    );
+                    setPaidByUserId(defaultPayee);
                   }
                 }}
                 disabled={!canWrite || pending}
@@ -724,7 +716,7 @@ export function ExpenseForm({
                   clearField("status");
                   if (next === "company_paid") setPaidByUserId("");
                   else if (next === "reimbursable" && !paidByUserId) {
-                    setPaidByUserId(defaultPaidByUserId ?? founders[0]?.id ?? "");
+                    setPaidByUserId(defaultPayee);
                   }
                 }}
                 disabled={
