@@ -7,6 +7,12 @@ import { expenseStatusLabel, type ExpenseStatus } from "@/lib/expenses/categorie
 import { getReimbursementForExpense } from "@/lib/reimbursements/queries";
 import { listBankSettlements } from "@/lib/bank/settlements";
 import { BankSettlements } from "@/components/bank/bank-settlements";
+import {
+  LinkBankTransactionButton,
+  UnlinkExpenseButton,
+} from "@/components/bank/expense-link-dialog";
+import { isExpenseLinkable } from "@/lib/bank/expense-link";
+import { periodLockError } from "@/lib/period-lock";
 import { ExpenseForm } from "@/components/expenses/expense-form";
 import { ReceiptPanel } from "@/components/expenses/receipt-panel";
 import { buttonClasses } from "@/components/ui/button";
@@ -20,12 +26,12 @@ export default async function ExpenseDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ receiptUploadFailed?: string }>;
+  searchParams: Promise<{ receiptUploadFailed?: string; bankLinkFailed?: string }>;
 }) {
   const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
   const { id } = await params;
-  const { receiptUploadFailed } = await searchParams;
+  const { receiptUploadFailed, bankLinkFailed } = await searchParams;
 
   const detail = await getExpenseDetail(companyId, id);
   if (!detail) notFound();
@@ -41,6 +47,11 @@ export default async function ExpenseDetailPage({
   ]);
 
   const payeeId = detail.expense.paidByUserId;
+  const booksLocked = settlements.some((s) =>
+    Boolean(periodLockError(settings.booksLockedThrough, s.bookedAt)),
+  );
+  const canLinkBank =
+    canWrite && settlements.length === 0 && isExpenseLinkable(detail.expense);
   const foreignCurrency = isForeignCurrency(detail.expense.detectedCurrency)
     ? detail.expense.detectedCurrency!.toUpperCase()
     : null;
@@ -107,7 +118,25 @@ export default async function ExpenseDetailPage({
         </div>
       )}
 
-      <BankSettlements settlements={settlements} />
+      {bankLinkFailed && (
+        <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+          Expense saved, but it couldn&apos;t be linked to the bank transaction: {bankLinkFailed}
+        </div>
+      )}
+
+      <BankSettlements
+        settlements={settlements}
+        action={
+          canWrite && !booksLocked ? <UnlinkExpenseButton expenseId={detail.expense.id} /> : null
+        }
+      />
+
+      {canLinkBank && (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-wash/50 px-4 py-3 text-sm">
+          <span className="text-muted">Not linked to a bank transaction yet.</span>
+          <LinkBankTransactionButton expenseId={detail.expense.id} />
+        </div>
+      )}
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>

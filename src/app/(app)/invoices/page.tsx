@@ -6,14 +6,39 @@ import { buttonClasses } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { InvoiceDueDate } from "@/components/invoices/invoice-due-date";
-import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
+import { Table, THead, TBody, TR, TD } from "@/components/ui/table";
+import { sortHeaders } from "@/components/ui/sortable-th";
 import type { InvoiceStatus } from "@/lib/invoices/status";
+import { defineTableSort, parseTableSort, rankIn, sortRows } from "@/lib/table-sort";
 
-export default async function InvoicesPage() {
+/** "created" is the loaded order (newest first) and has no header. */
+const SORT = defineTableSort({
+  columns: ["created", "number", "client", "order", "status", "issued", "due", "total"],
+  fallback: { sort: "created", dir: "desc" },
+  descFirst: ["created", "issued", "total"],
+});
+const STATUS_ORDER: InvoiceStatus[] = ["draft", "sent", "overdue", "paid", "void"];
+
+export default async function InvoicesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
+  const sp = await searchParams;
+  const sort = parseTableSort(sp, SORT);
+  const th = sortHeaders("/invoices", sp, SORT, sort);
 
-  const rows = await listInvoices(companyId);
+  const rows = sortRows(await listInvoices(companyId), sort, {
+    number: (r) => r.number,
+    client: (r) => r.clientName,
+    order: (r) => r.orderNumber,
+    status: (r) => rankIn(STATUS_ORDER, r.status),
+    issued: (r) => r.issueDate,
+    due: (r) => r.dueDate,
+    total: (r) => r.grossPence,
+  });
 
   return (
     <div>
@@ -49,13 +74,13 @@ export default async function InvoicesPage() {
           <Table>
             <THead>
               <TR>
-                <TH>Number</TH>
-                <TH>Client</TH>
-                <TH>Order</TH>
-                <TH>Status</TH>
-                <TH>Issue date</TH>
-                <TH>Due</TH>
-                <TH className="text-right">Total</TH>
+                {th("Number", "number")}
+                {th("Client", "client")}
+                {th("Order", "order")}
+                {th("Status", "status")}
+                {th("Issue date", "issued")}
+                {th("Due", "due")}
+                {th("Total", "total", "end")}
               </TR>
             </THead>
             <TBody>

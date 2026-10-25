@@ -10,6 +10,20 @@ import { ReimbursementActions } from "@/components/reimbursements/actions";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { buttonClasses } from "@/components/ui/button";
+import { sortHeaders } from "@/components/ui/sortable-th";
+import {
+  defineTableSort,
+  parseTableSort,
+  rankIn,
+  setTableSortParams,
+  sortRows,
+} from "@/lib/table-sort";
+
+const SORT = defineTableSort({
+  columns: ["payee", "status", "reference", "created", "total"],
+  fallback: { sort: "created", dir: "desc" },
+  descFirst: ["created", "total"],
+});
 
 const WORKFLOW_STEPS = [
   "Log expenses as reimbursable when you pay personally",
@@ -27,6 +41,15 @@ export default async function ReimbursementsPage({
   const canWrite = await hasPermission("accounts:write");
   const sp = await searchParams;
   const runFilter = sp.filter === "paid" ? "paid" : sp.filter === "pending" ? "pending" : "all";
+  const sort = parseTableSort(sp, SORT);
+  const th = sortHeaders("/reimbursements", sp, SORT, sort);
+  /** All / Pending / Paid links keep the current sort. */
+  const filterHref = (filter: "all" | "pending" | "paid") => {
+    const qs = new URLSearchParams(filter === "all" ? {} : { filter });
+    setTableSortParams(qs, SORT, sort);
+    const query = qs.toString();
+    return query ? `/reimbursements?${query}` : "/reimbursements";
+  };
 
   const [allRuns, balances, founders, reimbursable] = await Promise.all([
     listReimbursements(companyId),
@@ -35,10 +58,17 @@ export default async function ReimbursementsPage({
     listReimbursableExpenses(companyId),
   ]);
 
-  const runs =
-    runFilter === "all"
-      ? allRuns
-      : allRuns.filter((r) => r.status === runFilter);
+  const runs = sortRows(
+    runFilter === "all" ? allRuns : allRuns.filter((r) => r.status === runFilter),
+    sort,
+    {
+      payee: (r) => r.payeeName || r.payeeEmail,
+      status: (r) => rankIn(["pending", "paid"], r.status),
+      reference: (r) => r.reference,
+      created: (r) => r.createdAt.getTime(),
+      total: (r) => r.totalPence,
+    },
+  );
 
   const initialPayee =
     sp.payee && founders.some((f) => f.id === sp.payee) ? sp.payee : undefined;
@@ -83,19 +113,19 @@ export default async function ReimbursementsPage({
           <h2 className="font-display text-lg font-semibold">Runs</h2>
           <div className="flex gap-2">
             <Link
-              href="/reimbursements"
+              href={filterHref("all")}
               className={buttonClasses(runFilter === "all" ? "primary" : "secondary", "text-sm")}
             >
               All
             </Link>
             <Link
-              href="/reimbursements?filter=pending"
+              href={filterHref("pending")}
               className={buttonClasses(runFilter === "pending" ? "primary" : "secondary", "text-sm")}
             >
               Pending
             </Link>
             <Link
-              href="/reimbursements?filter=paid"
+              href={filterHref("paid")}
               className={buttonClasses(runFilter === "paid" ? "primary" : "secondary", "text-sm")}
             >
               Paid
@@ -108,11 +138,11 @@ export default async function ReimbursementsPage({
           <Table>
             <THead>
               <TR>
-                <TH>Payee</TH>
-                <TH>Status</TH>
-                <TH>Reference</TH>
-                <TH>Created</TH>
-                <TH className="text-right">Total</TH>
+                {th("Payee", "payee")}
+                {th("Status", "status")}
+                {th("Reference", "reference")}
+                {th("Created", "created")}
+                {th("Total", "total", "end")}
                 {canWrite ? <TH className="text-right">Actions</TH> : null}
               </TR>
             </THead>

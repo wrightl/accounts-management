@@ -9,11 +9,14 @@ import {
 import { expenseInboundAddress } from "@/lib/expenses/inbound-mailbox";
 import { buttonClasses } from "@/components/ui/button";
 import { Input, Label, Select } from "@/components/ui/form";
-import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
+import { Table, THead, TBody, TR, TD } from "@/components/ui/table";
 import { findLocalUser } from "@/lib/users";
 import { getCompany } from "@/lib/tenant";
 import { ExpenseImportButton } from "@/components/expenses/expense-import-panel";
 import { CopyButton } from "@/components/ui/copy-button";
+import { sortHeaders } from "@/components/ui/sortable-th";
+import { EXPENSE_SORT } from "@/lib/expenses/list-sort";
+import { parseTableSort, setTableSortParams } from "@/lib/table-sort";
 
 export default async function ExpensesPage({
   searchParams,
@@ -28,6 +31,7 @@ export default async function ExpensesPage({
   const localUser = await findLocalUser(user.userId);
   const localUserId = localUser?.id ?? null;
   const myReimbursable = sp.mine === "1" && localUserId;
+  const sort = parseTableSort(sp, EXPENSE_SORT);
 
   const [rows, founders, reimbSummary, company] = await Promise.all([
     listExpenses(companyId, {
@@ -37,6 +41,7 @@ export default async function ExpensesPage({
       paidByUserId: myReimbursable ? localUserId! : sp.paidBy,
       billable: (sp.billable as "true" | "false" | "") || "",
       status: myReimbursable ? "reimbursable" : sp.status,
+      sort,
     }),
     listFounders(companyId),
     getReimbursableSummary(companyId),
@@ -57,6 +62,15 @@ export default async function ExpensesPage({
   if (sp.paidBy) filterParams.set("paidBy", sp.paidBy);
   if (sp.billable) filterParams.set("billable", sp.billable);
   if (sp.status) filterParams.set("status", sp.status);
+  // Filters and the All / My reimbursable toggle keep the current sort.
+  setTableSortParams(filterParams, EXPENSE_SORT, sort);
+
+  const sortHeader = sortHeaders(
+    "/expenses",
+    { ...Object.fromEntries(filterParams), ...(myReimbursable ? { mine: "1" } : {}) },
+    EXPENSE_SORT,
+    sort,
+  );
 
   return (
     <div>
@@ -119,6 +133,12 @@ export default async function ExpensesPage({
       </div>
 
       <form className="mt-6 grid gap-3 rounded-xl border border-border p-4 sm:grid-cols-2 lg:grid-cols-6">
+        {filterParams.get("sort") ? (
+          <input type="hidden" name="sort" value={filterParams.get("sort")!} />
+        ) : null}
+        {filterParams.get("dir") ? (
+          <input type="hidden" name="dir" value={filterParams.get("dir")!} />
+        ) : null}
         <div>
           <Label htmlFor="from">From</Label>
           <Input id="from" name="from" type="date" defaultValue={sp.from ?? ""} />
@@ -182,13 +202,13 @@ export default async function ExpensesPage({
           <Table>
             <THead>
               <TR>
-                <TH>Date</TH>
-                <TH>Description</TH>
-                <TH>Category</TH>
-                <TH>Paid by</TH>
-                <TH>Created by</TH>
-                <TH>Status</TH>
-                <TH className="text-right">Amount</TH>
+                {sortHeader("Date", "date")}
+                {sortHeader("Description", "description")}
+                {sortHeader("Category", "category")}
+                {sortHeader("Paid by", "paidBy")}
+                {sortHeader("Created by", "createdBy")}
+                {sortHeader("Status", "status")}
+                {sortHeader("Amount", "amount", "end")}
               </TR>
             </THead>
             <TBody>
@@ -202,11 +222,6 @@ export default async function ExpensesPage({
                     >
                       {e.description}
                     </Link>
-                    {e.status === "pending" ? (
-                      <span className="ml-2 text-xs font-medium text-amber-700 dark:text-amber-300">
-                        Review
-                      </span>
-                    ) : null}
                     {e.clientName ? (
                       <span className="ml-2 text-xs text-muted">
                         {e.billable ? "Rebill → " : "For "}

@@ -3,13 +3,36 @@ import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { listOrders } from "@/lib/orders/queries";
 import { buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
+import { Table, THead, TBody, TR, TD } from "@/components/ui/table";
+import { sortHeaders } from "@/components/ui/sortable-th";
+import { defineTableSort, parseTableSort, rankIn, sortRows } from "@/lib/table-sort";
 
-export default async function OrdersPage() {
+/** "created" is the loaded order (newest first) and has no header. */
+const SORT = defineTableSort({
+  columns: ["created", "number", "client", "quote", "status", "total"],
+  fallback: { sort: "created", dir: "desc" },
+  descFirst: ["created", "total"],
+});
+const STATUS_ORDER = ["draft", "active", "completed", "cancelled"] as const;
+
+export default async function OrdersPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
+  const sp = await searchParams;
+  const sort = parseTableSort(sp, SORT);
+  const th = sortHeaders("/orders", sp, SORT, sort);
 
-  const rows = await listOrders(companyId);
+  const rows = sortRows(await listOrders(companyId), sort, {
+    number: (r) => r.number,
+    client: (r) => r.clientName,
+    quote: (r) => r.quoteNumber,
+    status: (r) => rankIn(STATUS_ORDER, r.status),
+    total: (r) => r.grossPence,
+  });
 
   return (
     <div>
@@ -39,11 +62,11 @@ export default async function OrdersPage() {
           <Table>
             <THead>
               <TR>
-                <TH>Number</TH>
-                <TH>Client</TH>
-                <TH>Quote</TH>
-                <TH>Status</TH>
-                <TH className="text-right">Total</TH>
+                {th("Number", "number")}
+                {th("Client", "client")}
+                {th("Quote", "quote")}
+                {th("Status", "status")}
+                {th("Total", "total", "end")}
               </TR>
             </THead>
             <TBody>

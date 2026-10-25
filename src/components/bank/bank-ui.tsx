@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, useTransition, type ReactNode } from "reac
 import { createPortal } from "react-dom";
 import { Check, MoreHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAlert } from "@/components/ui/alert-dialog";
 import { Dialog, DialogActions } from "@/components/ui/dialog";
 import { overlayPortalTarget } from "@/components/ui/portal-target";
 import { FieldError, Input, Label, Select, Textarea } from "@/components/ui/form";
@@ -20,10 +21,12 @@ import {
   explainBankCreditAction,
   renameBankSpendingCategoryAction,
   runSuggestMatches,
+  unlinkExpenseAction,
   updateBankCategory,
   type SuggestedMatch,
 } from "@/actions/bank";
 import { BankImportForm } from "@/components/bank/bank-import-form";
+import { AttachExpenseDialog } from "@/components/bank/expense-link-dialog";
 import {
   bankCategorySelectOptions,
   formatBankCategory,
@@ -915,7 +918,8 @@ function RowActionsMenu({
 
 /**
  * Status badge, match detail and row actions in a single compact cell:
- * ✓/✕ for suggestions, Explain for unreconciled credits, ⋯ for the rest.
+ * ✓/✕ for suggestions, Explain for unreconciled credits, Attach (expense)
+ * for unreconciled debits, ⋯ for the rest (e.g. unlinking a matched expense).
  */
 export function ReconciliationCell({
   row,
@@ -930,8 +934,10 @@ export function ReconciliationCell({
   align?: "start" | "end";
 }) {
   const router = useRouter();
+  const { confirm } = useAlert();
   const [pending, startTransition] = useTransition();
   const [explainOpen, setExplainOpen] = useState(false);
+  const [attachOpen, setAttachOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const state = reconciliationState(row);
   const badge = RECONCILIATION_BADGE[state];
@@ -949,6 +955,13 @@ export function ReconciliationCell({
       }
       router.refresh();
     });
+  };
+
+  const createExpenseItem: RowMenuItem = {
+    key: "create-expense",
+    label: "Create expense…",
+    onSelect: () =>
+      router.push(`/expenses/new?bankTransactionId=${encodeURIComponent(row.id)}`),
   };
 
   let actions: ReactNode = null;
@@ -976,14 +989,36 @@ export function ReconciliationCell({
           >
             <X className="h-4 w-4" aria-hidden />
           </button>
-          {isIncoming ? (
-            <RowActionsMenu
-              disabled={pending}
-              items={[
-                { key: "explain", label: "Explain instead…", onSelect: () => setExplainOpen(true) },
-              ]}
-            />
-          ) : null}
+          <RowActionsMenu
+            disabled={pending}
+            items={
+              isIncoming
+                ? [{ key: "explain", label: "Explain instead…", onSelect: () => setExplainOpen(true) }]
+                : [
+                    {
+                      key: "attach",
+                      label: "Attach a different expense…",
+                      onSelect: () => setAttachOpen(true),
+                    },
+                    { ...createExpenseItem, label: "Create expense instead…" },
+                  ]
+            }
+          />
+        </>
+      );
+    } else if (state === "unreconciled" && !isIncoming) {
+      actions = (
+        <>
+          <Button
+            type="button"
+            variant="ghost"
+            className="px-3 py-1"
+            disabled={pending}
+            onClick={() => setAttachOpen(true)}
+          >
+            Attach
+          </Button>
+          <RowActionsMenu disabled={pending} items={[createExpenseItem]} />
         </>
       );
     } else if (state === "unreconciled" && isIncoming) {
@@ -997,6 +1032,28 @@ export function ReconciliationCell({
         >
           Explain
         </Button>
+      );
+    } else if (state === "matched" && row.matchType === "expense" && matchId) {
+      actions = (
+        <RowActionsMenu
+          disabled={pending}
+          items={[
+            {
+              key: "unlink",
+              label: "Unlink expense",
+              onSelect: () => {
+                void confirm({
+                  title: "Unlink expense",
+                  message:
+                    "Remove the link between this payment and its expense? Both stay in your books; the payment goes back to unreconciled.",
+                  confirmLabel: "Unlink",
+                }).then((ok) => {
+                  if (ok) run(() => unlinkExpenseAction({ matchId }));
+                });
+              },
+            },
+          ]}
+        />
       );
     } else if (state === "explained" && matchId) {
       actions = (
@@ -1059,6 +1116,13 @@ export function ReconciliationCell({
           onClose={() => setExplainOpen(false)}
           transactionId={row.id}
           incomeCategories={incomeCategories}
+        />
+      ) : null}
+      {attachOpen ? (
+        <AttachExpenseDialog
+          open={attachOpen}
+          onClose={() => setAttachOpen(false)}
+          transactionId={row.id}
         />
       ) : null}
     </div>

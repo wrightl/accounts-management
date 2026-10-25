@@ -19,6 +19,7 @@ import {
   uploadReceipt,
   approveExpense,
   rejectExpense,
+  type CreateExpenseResult,
 } from "@/actions/expenses";
 import { expenseCurrencySymbol, formatGBP, penceToPounds } from "@/lib/money";
 import { clientDisplayName } from "@/lib/clients/display";
@@ -55,6 +56,7 @@ export function ExpenseForm({
   defaultOrderId,
   rebilledOn,
   defaultVatRate = 0,
+  fromBankTransaction,
 }: {
   mode: "create" | "edit";
   expense?: {
@@ -94,6 +96,14 @@ export function ExpenseForm({
   receiptOcrModel?: string;
   vatRegistered?: boolean;
   defaultVatRate?: number;
+  /** New expense for a bank debit: pre-filled from it and linked on save. */
+  fromBankTransaction?: {
+    id: string;
+    description: string;
+    bookedAt: string;
+    amountPence: number;
+    summary: string;
+  } | null;
 }) {
   const router = useRouter();
   const { confirm } = useAlert();
@@ -107,8 +117,12 @@ export function ExpenseForm({
   const formRef = useRef<HTMLFormElement>(null);
   const [pending, startTransition] = useTransition();
   const today = new Date().toISOString().slice(0, 10);
-  const [description, setDescription] = useState(expense?.description ?? "");
-  const [spentAt, setSpentAt] = useState(expense?.spentAt ?? today);
+  const [description, setDescription] = useState(
+    expense?.description ?? fromBankTransaction?.description ?? "",
+  );
+  const [spentAt, setSpentAt] = useState(
+    expense?.spentAt ?? fromBankTransaction?.bookedAt ?? today,
+  );
   const [pendingReceipt, setPendingReceipt] = useState<File | null>(null);
   const [billable, setBillable] = useState(expense?.billable ?? false);
   const [projectClientId, setProjectClientId] = useState(
@@ -128,9 +142,11 @@ export function ExpenseForm({
   const [mileageRatePence, setMileageRatePence] = useState(
     String(expense?.mileageRatePence ?? defaultMileageRatePence),
   );
-  const [amountPounds, setAmountPounds] = useState(
-    expense ? String(penceToPounds(expense.amountPence)) : "",
-  );
+  const [amountPounds, setAmountPounds] = useState(() => {
+    if (expense) return String(penceToPounds(expense.amountPence));
+    if (fromBankTransaction) return String(penceToPounds(fromBankTransaction.amountPence));
+    return "";
+  });
   const [vatRate, setVatRate] = useState(
     expense?.vatRate ?? (vatRegistered ? defaultVatRate : 0),
   );
@@ -157,7 +173,8 @@ export function ExpenseForm({
     ) {
       return expense.status;
     }
-    return expense ? "" : defaultStatus;
+    if (expense) return "";
+    return fromBankTransaction ? "company_paid" : defaultStatus;
   });
 
   const computedMileagePence = useMemo(() => {
@@ -272,10 +289,13 @@ export function ExpenseForm({
       "vatRate",
       String(useMileage || !vatRegistered ? 0 : vatRate),
     );
+    if (mode === "create" && fromBankTransaction) {
+      formData.set("bankTransactionId", fromBankTransaction.id);
+    }
     clearAll();
     if (!validateClient(formData)) return;
     startTransition(async () => {
-      const result =
+      const result: CreateExpenseResult =
         mode === "create"
           ? await createExpense(formData)
           : await updateExpense(expense!.id, formData);
@@ -287,12 +307,16 @@ export function ExpenseForm({
       clearAll();
 
       let targetUrl = `/expenses/${result.id}`;
+      if (result.bankLinkError) {
+        targetUrl = `/expenses/${result.id}?bankLinkFailed=${encodeURIComponent(result.bankLinkError)}`;
+      }
       if (mode === "create" && pendingReceipt && result.id) {
         const receiptForm = new FormData();
         receiptForm.set("receipt", pendingReceipt);
         const uploadResult = await uploadReceipt(result.id, receiptForm);
         if (!uploadResult.ok) {
-          targetUrl = `/expenses/${result.id}?receiptUploadFailed=${encodeURIComponent(uploadResult.error)}`;
+          const sep = targetUrl.includes("?") ? "&" : "?";
+          targetUrl = `${targetUrl}${sep}receiptUploadFailed=${encodeURIComponent(uploadResult.error)}`;
         }
       }
 
@@ -365,6 +389,14 @@ export function ExpenseForm({
 
   return (
     <form ref={formRef} noValidate onSubmit={preventResetSubmit(onSubmit)} className="mx-auto max-w-xl space-y-4">
+      {mode === "create" && fromBankTransaction && (
+        <div className="rounded-lg border border-border bg-wash/50 px-4 py-3 text-sm">
+          <p className="font-medium">From bank transaction</p>
+          <p className="mt-0.5 text-muted">
+            {fromBankTransaction.summary}. Saving links the expense to this payment.
+          </p>
+        </div>
+      )}
       {mode === "create" && (
         <ReceiptUploadField
           disabled={!canWrite || pending}
@@ -438,7 +470,7 @@ export function ExpenseForm({
         </div>
       </div>
 
-      {category === "Travel" && !isEmailSubmission && (
+      {category === "Travel" && !isEmailSubmission && !fromBankTransaction && (
         <div className="space-y-3 rounded-lg border border-border p-4">
           <div className="flex items-center gap-2">
             <input
@@ -641,7 +673,9 @@ export function ExpenseForm({
               >
                 {mode === "create" && <option value="">Select status…</option>}
                 <option value="recorded">Recorded</option>
-                <option value="reimbursable">Reimbursable</option>
+                {fromBankTransaction ? null : (
+                  <option value="reimbursable">Reimbursable</option>
+                )}
                 <option value="company_paid">Company paid</option>
               </Select>
               <p className="mt-1 text-xs text-muted">

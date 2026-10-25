@@ -4,11 +4,34 @@ import { listCreditNotes } from "@/lib/credit-notes/queries";
 import { CreditNoteStatusBadge } from "@/components/credit-notes/credit-note-status-badge";
 import { buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
+import { Table, THead, TBody, TR, TD } from "@/components/ui/table";
+import { sortHeaders } from "@/components/ui/sortable-th";
+import { defineTableSort, parseTableSort, rankIn, sortRows } from "@/lib/table-sort";
 
-export default async function CreditNotesPage() {
+/** "created" is the loaded order (newest first) and has no header. */
+const SORT = defineTableSort({
+  columns: ["created", "number", "client", "invoice", "status", "issued", "total"],
+  fallback: { sort: "created", dir: "desc" },
+  descFirst: ["created", "issued", "total"],
+});
+
+export default async function CreditNotesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   const { companyId } = await guardTenantPage("accounts:read");
-  const rows = await listCreditNotes(companyId);
+  const sp = await searchParams;
+  const sort = parseTableSort(sp, SORT);
+  const th = sortHeaders("/credit-notes", sp, SORT, sort);
+  const rows = sortRows(await listCreditNotes(companyId), sort, {
+    number: (r) => r.number,
+    client: (r) => r.clientName,
+    invoice: (r) => r.invoiceNumber,
+    status: (r) => rankIn(["issued", "void"], r.status),
+    issued: (r) => r.issueDate,
+    total: (r) => r.grossPence,
+  });
 
   return (
     <div>
@@ -32,12 +55,12 @@ export default async function CreditNotesPage() {
           <Table>
             <THead>
               <TR>
-                <TH>Number</TH>
-                <TH>Client</TH>
-                <TH>Invoice</TH>
-                <TH>Status</TH>
-                <TH>Issue date</TH>
-                <TH className="text-right">Total</TH>
+                {th("Number", "number")}
+                {th("Client", "client")}
+                {th("Invoice", "invoice")}
+                {th("Status", "status")}
+                {th("Issue date", "issued")}
+                {th("Total", "total", "end")}
               </TR>
             </THead>
             <TBody>

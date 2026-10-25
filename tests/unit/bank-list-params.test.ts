@@ -20,6 +20,8 @@ describe("parseBankListParams", () => {
       page: 1,
       pageSize: 25,
       view: "table",
+      sort: "date",
+      dir: "desc",
     });
   });
 
@@ -79,6 +81,24 @@ describe("parseBankListParams", () => {
 });
 
 describe("bankListHref", () => {
+  it("writes a non-default sort and drops it again at the default", () => {
+    const base = parseBankListParams({ q: "acme" });
+    expect(bankListHref(base, { sort: "amount", dir: "desc" })).toBe(
+      "/transactions?q=acme&sort=amount",
+    );
+    expect(bankListHref(base, { sort: "amount", dir: "asc" })).toBe(
+      "/transactions?q=acme&sort=amount&dir=asc",
+    );
+    expect(bankListHref(base, { sort: "date", dir: "desc" })).toBe("/transactions?q=acme");
+  });
+
+  it("keeps the sort when a filter changes", () => {
+    const base = parseBankListParams({ sort: "counterparty", dir: "desc" });
+    expect(bankListHref(base, { type: "outgoing", page: 1 })).toBe(
+      "/transactions?type=outgoing&sort=counterparty&dir=desc",
+    );
+  });
+
   it("omits default table view and page 1", () => {
     const base = parseBankListParams({ q: "starling", view: "table" });
     expect(bankListHref(base)).toBe("/transactions?q=starling");

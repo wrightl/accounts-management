@@ -1,6 +1,7 @@
 import 'server-only';
 import {
     and,
+    asc,
     count,
     desc,
     eq,
@@ -14,13 +15,16 @@ import {
     or,
     sql,
     sum,
+    type AnyColumn,
     type SQL,
 } from 'drizzle-orm';
 import {
     BANK_PAGE_SIZE,
     bankSearchPattern,
     type BankListParams,
+    type BankSortColumn,
 } from '@/lib/bank/list-params';
+import type { SortDir } from '@/lib/table-sort';
 import { getDb } from '@/db';
 import {
     bankAccounts,
@@ -497,6 +501,44 @@ async function buildMatchLabels(
     return matchLabels;
 }
 
+/**
+ * ORDER BY for the transactions table. Newest-first breaks ties, then id,
+ * so rows never swap between pages.
+ */
+export function bankListOrderBy(
+    column: BankSortColumn = 'date',
+    dir: SortDir = 'desc',
+): SQL[] {
+    const by = (expr: SQL | AnyColumn) =>
+        dir === 'asc' ? sql`${expr} asc nulls last` : sql`${expr} desc nulls last`;
+    const tiebreak = [
+        desc(bankTransactions.bookedAt),
+        desc(bankTransactions.createdAt),
+        desc(bankTransactions.id),
+    ];
+    switch (column) {
+        case 'counterparty':
+            return [
+                by(sql`lower(coalesce(${bankTransactions.counterparty}, ${bankTransactions.description}))`),
+                ...tiebreak,
+            ];
+        case 'reference':
+            return [by(sql`lower(${bankTransactions.reference})`), ...tiebreak];
+        case 'category':
+            return [by(sql`lower(${bankTransactions.spendingCategory})`), ...tiebreak];
+        case 'amount':
+            return [by(bankTransactions.amountPence), ...tiebreak];
+        case 'date':
+            return dir === 'asc'
+                ? [
+                      asc(bankTransactions.bookedAt),
+                      asc(bankTransactions.createdAt),
+                      asc(bankTransactions.id),
+                  ]
+                : tiebreak;
+    }
+}
+
 export async function listBankTransactions(
     companyId: string,
     filters: Partial<
@@ -509,6 +551,8 @@ export async function listBankTransactions(
             | 'from'
             | 'to'
             | 'page'
+            | 'sort'
+            | 'dir'
         >
     > & {
         pageSize?: number;
@@ -531,10 +575,7 @@ export async function listBankTransactions(
         .select()
         .from(bankTransactions)
         .where(where)
-        .orderBy(
-            desc(bankTransactions.bookedAt),
-            desc(bankTransactions.createdAt),
-        )
+        .orderBy(...bankListOrderBy(filters.sort, filters.dir))
         .limit(pageSize)
         .offset(offset);
 
