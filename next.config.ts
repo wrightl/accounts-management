@@ -62,6 +62,25 @@ const nextConfig: NextConfig = {
         'pg',
         'tesseract.js',
     ],
+    // tesseract.js runs OCR in a worker thread started from a file path, so
+    // tracing ships worker-script/node/index.js but none of its requires.
+    // OCR is reachable from server actions on any page, hence every route.
+    outputFileTracingIncludes: {
+        '/**': [
+            './node_modules/tesseract.js/src/**/*',
+            './node_modules/tesseract.js-core/**/*',
+            './node_modules/wasm-feature-detect/**/*',
+            './node_modules/regenerator-runtime/**/*',
+            './node_modules/bmp-js/**/*',
+            './node_modules/is-url/**/*',
+            './node_modules/zlibjs/**/*',
+            './node_modules/idb-keyval/**/*',
+            './node_modules/node-fetch/**/*',
+            './node_modules/whatwg-url/**/*',
+            './node_modules/tr46/**/*',
+            './node_modules/webidl-conversions/**/*',
+        ],
+    },
     ...(devOrigin ? { allowedDevOrigins: [devOrigin] } : {}),
     experimental: {
         serverActions: {
