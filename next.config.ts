@@ -60,6 +60,7 @@ const nextConfig: NextConfig = {
         '@vercel/blob',
         '@vercel/oidc',
         'pg',
+        'tesseract.js',
     ],
     ...(devOrigin ? { allowedDevOrigins: [devOrigin] } : {}),
     experimental: {

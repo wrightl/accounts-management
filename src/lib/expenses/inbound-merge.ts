@@ -223,6 +223,59 @@ export function parseEmailBodyText(subject: string, body: string): ReceiptExtrac
   };
 }
 
+/**
+ * Attachments to treat as receipts. Inline parts are usually signature logos,
+ * so they only count when the email has no real attachments (e.g. a photo
+ * pasted into the body).
+ */
+export function pickReceiptAttachments<
+  T extends { content_disposition?: string | null },
+>(attachments: T[]): T[] {
+  const attached = attachments.filter((a) => a.content_disposition !== "inline");
+  return attached.length ? attached : attachments;
+}
+
+export type InboundExpenseDraft = {
+  extraction: ReceiptExtraction;
+  description: string;
+  spentAt: string | undefined;
+};
+
+/**
+ * One expense per receipt, or a single expense when the email has none.
+ * The body is merged in only when there is at most one receipt: with several,
+ * an amount or date in the email text cannot be pinned to any one of them.
+ * A null receipt is an attachment whose OCR failed; it still gets an expense.
+ */
+export function planInboundExpenses(
+  body: ReceiptExtraction,
+  receipts: (ReceiptExtraction | null)[],
+  subject: string,
+  receivedAt: string | Date | null | undefined,
+): InboundExpenseDraft[] {
+  if (receipts.length <= 1) {
+    const read = receipts.filter((r): r is ReceiptExtraction => r !== null);
+    const extraction = mergeReceiptExtractions(body, ...read);
+    return [
+      {
+        extraction,
+        description: buildInboundExpenseDescription(extraction, subject),
+        spentAt: resolveInboundSpentAt(body, read, receivedAt),
+      },
+    ];
+  }
+
+  const noBody: ReceiptExtraction = { confidence: "none" };
+  return receipts.map((receipt) => {
+    const extraction = mergeReceiptExtractions(receipt ?? noBody);
+    return {
+      extraction,
+      description: buildInboundExpenseDescription(extraction, subject),
+      spentAt: resolveInboundSpentAt(noBody, receipt ? [receipt] : [], receivedAt),
+    };
+  });
+}
+
 /** Build expense description from merged extraction and email subject. */
 export function buildInboundExpenseDescription(
   merged: ReceiptExtraction,

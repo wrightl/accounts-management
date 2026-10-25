@@ -1,4 +1,5 @@
 import { generateText, Output } from "ai";
+import type { Worker as TesseractWorker } from "tesseract.js";
 import { z } from "zod";
 import { serverEnv } from "@/env";
 import { EXPENSE_CATEGORIES } from "@/lib/expenses/categories";
@@ -41,31 +42,56 @@ async function runTesseractOnImage(imageBytes: Buffer): Promise<string> {
 }
 
 /**
- * One Tesseract worker for many images. Starting a worker loads the language
- * data, which costs more than recognising a typical receipt, so batches (an
- * email's attachments) share one. Call `close` when done.
+ * Tesseract workers shared across many images. Starting a worker loads the
+ * language data, which costs more than recognising a typical receipt, so a
+ * batch (an email's attachments) reuses up to `size` of them, started as
+ * needed. Call `close` when done.
  */
-export function createSharedImageOcr(): { ocrImage: ImageOcr; close: () => Promise<void> } {
-  let workerPromise: Promise<import("tesseract.js").Worker> | null = null;
-  const getWorker = () => {
-    workerPromise ??= import("tesseract.js").then(({ createWorker }) => createWorker("eng"));
-    return workerPromise;
+export function createSharedImageOcr(size = 1): {
+  ocrImage: ImageOcr;
+  close: () => Promise<void>;
+} {
+  type Slot = { worker: Promise<TesseractWorker>; busy: number };
+  const slots: Slot[] = [];
+  let tesseract: Promise<typeof import("tesseract.js")> | null = null;
+  const pickSlot = (): Slot => {
+    const idle = slots.find((slot) => slot.busy === 0);
+    if (idle) return idle;
+    if (slots.length < size) {
+      const slot: Slot = {
+        worker: (tesseract ??= import("tesseract.js")).then(({ createWorker }) =>
+          createWorker("eng"),
+        ),
+        busy: 0,
+      };
+      slots.push(slot);
+      return slot;
+    }
+    // All busy: queue on the least loaded worker.
+    return slots.reduce((a, b) => (b.busy < a.busy ? b : a));
   };
   return {
     ocrImage: async (imageBytes) => {
-      const worker = await getWorker();
-      const result = await worker.recognize(imageBytes);
-      return result.data.text;
+      const slot = pickSlot();
+      slot.busy++;
+      try {
+        const result = await (await slot.worker).recognize(imageBytes);
+        return result.data.text;
+      } finally {
+        slot.busy--;
+      }
     },
     close: async () => {
-      if (!workerPromise) return;
-      const pending = workerPromise;
-      workerPromise = null;
-      try {
-        await (await pending).terminate();
-      } catch {
-        // Worker failed to start; nothing to stop.
-      }
+      const closing = slots.splice(0);
+      await Promise.all(
+        closing.map(async (slot) => {
+          try {
+            await (await slot.worker).terminate();
+          } catch {
+            // Worker failed to start; nothing to stop.
+          }
+        }),
+      );
     },
   };
 }

@@ -154,6 +154,18 @@ describe("createSharedImageOcr", () => {
     expect(mockTerminate).toHaveBeenCalledTimes(1);
   });
 
+  it("starts no more workers than its size, reusing idle ones", async () => {
+    const shared = createSharedImageOcr(2);
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    await Promise.all([1, 2, 3, 4].map(() => shared.ocrImage(png)));
+    await shared.ocrImage(png);
+    await shared.close();
+
+    expect(mockCreateWorker).toHaveBeenCalledTimes(2);
+    expect(mockRecognize).toHaveBeenCalledTimes(5);
+    expect(mockTerminate).toHaveBeenCalledTimes(2);
+  });
+
   it("closes cleanly when no image was read", async () => {
     await createSharedImageOcr().close();
     expect(mockCreateWorker).not.toHaveBeenCalled();

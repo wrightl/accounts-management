@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { guardTenantPage } from "@/lib/auth";
-import { getInboundEmailJob } from "@/lib/expenses/inbound-email";
+import {
+  getInboundEmailJob,
+  listInboundEmailJobExpenses,
+} from "@/lib/expenses/inbound-email";
 import {
   inboundJobNeedsAttention,
   type InboundEmailJobStatus,
@@ -27,7 +30,10 @@ export default async function InboundEmailJobPage({
   const { companyId } = await guardTenantPage("users:manage");
   const { id } = await params;
 
-  const job = await getInboundEmailJob(companyId, id);
+  const [job, jobExpenses] = await Promise.all([
+    getInboundEmailJob(companyId, id),
+    listInboundEmailJobExpenses(companyId, id),
+  ]);
   if (!job) notFound();
 
   const status = job.status as InboundEmailJobStatus;
@@ -72,7 +78,28 @@ export default async function InboundEmailJobPage({
               <dt className="text-muted">Processed</dt>
               <dd>{formatWhen(job.processedAt)}</dd>
             </div>
-            {job.expenseId ? (
+            {jobExpenses.length > 1 ? (
+              <div className="grid grid-cols-[8rem_1fr] gap-2">
+                <dt className="text-muted">Expenses</dt>
+                <dd>
+                  <ul className="grid gap-1">
+                    {jobExpenses.map((expense) => (
+                      <li key={expense.id} className="flex flex-wrap gap-x-2">
+                        <Link
+                          href={`/expenses/${expense.id}`}
+                          className="font-medium text-brand hover:underline"
+                        >
+                          {expense.description}
+                        </Link>
+                        <span className="tabular-nums text-muted">
+                          {expense.amountFormatted}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </dd>
+              </div>
+            ) : job.expenseId ? (
               <div className="grid grid-cols-[8rem_1fr] gap-2">
                 <dt className="text-muted">Expense</dt>
                 <dd>
