@@ -14,10 +14,11 @@ import {
   reconciliationMatches,
 } from "@/db/schema";
 import { bankSearchPattern } from "@/lib/bank/list-params";
+import { buildFxAmountBand } from "@/lib/bank/fx";
 import { dateDiffDays } from "@/lib/bank/match";
 import { isForeignCurrency } from "@/lib/expenses/receipt-parse";
 import { addDays } from "@/lib/ledger/corporation-tax";
-import { formatGBP } from "@/lib/money";
+import { formatExpenseAmount, formatGBP } from "@/lib/money";
 import { periodLockError } from "@/lib/period-lock";
 import { getBooksLockedThrough } from "@/lib/period-lock-queries";
 
@@ -57,7 +58,13 @@ export type BankDebitLinkCandidate = {
   counterparty: string | null;
   reference: string | null;
   bankAccountName: string;
+  /**
+   * Expense minus bank amount in pence. For a foreign-currency expense it's
+   * measured against the receipt converted at the Bank of England rate.
+   */
   amountDeltaPence: number | null;
+  /** The receipt currency when the delta is an FX estimate. */
+  fxCurrency: string | null;
   dateGapDays: number | null;
 };
 
@@ -151,7 +158,7 @@ export async function listExpenseCandidatesForBankTx(
       expenseId: e.id,
       description: e.description,
       spentAt: e.spentAt,
-      amountFormatted: formatGBP(e.amountPence),
+      amountFormatted: formatExpenseAmount(e.amountPence, e.detectedCurrency),
       foreignCurrency: isForeignCurrency(e.detectedCurrency)
         ? e.detectedCurrency!.toUpperCase()
         : null,
@@ -175,6 +182,22 @@ export async function listBankDebitCandidatesForExpense(
     .where(and(eq(expenses.id, expenseId), eq(expenses.companyId, companyId)))
     .limit(1);
   if (!expense || !isExpenseLinkable(expense)) return [];
+
+  // Rank a foreign receipt by its sterling value, otherwise only the date
+  // orders the candidates and a busy account can push the payment off the list.
+  const fxCurrency = isForeignCurrency(expense.detectedCurrency)
+    ? expense.detectedCurrency!.toUpperCase()
+    : null;
+  const fxBand =
+    fxCurrency && expense.spentAt
+      ? await buildFxAmountBand(expense.amountPence, fxCurrency, expense.spentAt).catch(
+          () => null,
+        )
+      : null;
+  const amountDelta = (bankAmountPence: number) =>
+    fxBand
+      ? fxBand.expectedGbpPence - Math.abs(bankAmountPence)
+      : linkAmountDelta(expense, bankAmountPence);
 
   const conditions: SQL[] = [
     eq(bankAccounts.companyId, companyId),
@@ -222,7 +245,8 @@ export async function listBankDebitCandidatesForExpense(
       counterparty: t.counterparty ?? t.description,
       reference: t.reference,
       bankAccountName: t.bankAccountName,
-      amountDeltaPence: linkAmountDelta(expense, t.amountPence),
+      amountDeltaPence: amountDelta(t.amountPence),
+      fxCurrency: fxBand ? fxCurrency : null,
       dateGapDays: dateGap(expense.spentAt, t.bookedAt),
     }))
     .sort(compareLinkCandidates)

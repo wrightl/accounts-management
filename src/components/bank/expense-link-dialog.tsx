@@ -29,6 +29,14 @@ function amountDeltaLabel(deltaPence: number | null, foreignCurrency?: string | 
   return deltaPence > 0 ? `Expense ${diff} more` : `Expense ${diff} less`;
 }
 
+/** How far a foreign receipt, converted to sterling, is from the bank payment. */
+function fxDeltaLabel(deltaPence: number | null, currency: string): string {
+  if (deltaPence == null) return `Receipt in ${currency}`;
+  if (deltaPence === 0) return `Matches ${currency} at BoE rate`;
+  const diff = formatGBP(Math.abs(deltaPence));
+  return `Payment ${diff} ${deltaPence > 0 ? "less" : "more"} than ${currency} at BoE rate`;
+}
+
 function dateGapLabel(days: number | null): string {
   if (days == null) return "";
   if (days === 0) return "same day";
@@ -280,7 +288,13 @@ export function LinkBankTransactionDialog({
           </div>
           <div className="text-right">
             <p className="font-medium tabular-nums">{c.amountFormatted}</p>
-            <CandidateMeta parts={[amountDeltaLabel(c.amountDeltaPence)]} />
+            <CandidateMeta
+              parts={[
+                c.fxCurrency
+                  ? fxDeltaLabel(c.amountDeltaPence, c.fxCurrency)
+                  : amountDeltaLabel(c.amountDeltaPence),
+              ]}
+            />
           </div>
         </div>
       )}

@@ -8,6 +8,7 @@ import {
   bankTransactions,
   companies,
   expenses,
+  fxRates,
   reconciliationMatches,
   users,
 } from "@/db/schema";
@@ -138,6 +139,18 @@ describe("listExpenseCandidatesForBankTx", () => {
     expect(candidates.map((c) => c.expenseId)).toEqual([old.id]);
   });
 
+  it("shows a foreign receipt in its own currency", async () => {
+    const tx = await debit("2026-04-03", -1700);
+    await expense({ description: "GitHub", amountPence: 2000, detectedCurrency: "USD" });
+
+    const [candidate] = await listExpenseCandidatesForBankTx(companyId, tx.id);
+    expect(candidate).toMatchObject({
+      amountFormatted: "US$20.00",
+      foreignCurrency: "USD",
+      amountDeltaPence: null,
+    });
+  });
+
   it("returns nothing for a credit or another company's transaction", async () => {
     const credit = await debit("2026-04-03", 1700);
     await expense({ description: "Taxi", amountPence: 1700 });
@@ -175,6 +188,20 @@ describe("listBankDebitCandidatesForExpense", () => {
     expect(ids).toEqual([suggested.id, open.id]);
     expect(ids).not.toContain(locked.id);
     expect(candidates[1].amountDeltaPence).toBe(-50);
+  });
+
+  it("ranks debits for a foreign receipt by its sterling value", async () => {
+    await db
+      .insert(fxRates)
+      .values({ currency: "USD", observationDate: "2026-04-03", foreignPerGbp: 1.25 });
+    // US$20.00 at 1.25 is £16.00.
+    const e = await expense({ description: "GitHub", amountPence: 2000, detectedCurrency: "USD" });
+    const sameDay = await debit("2026-04-03", -900);
+    const payment = await debit("2026-04-05", -1620);
+
+    const candidates = await listBankDebitCandidatesForExpense(companyId, e.id);
+    expect(candidates.map((c) => c.bankTransactionId)).toEqual([payment.id, sameDay.id]);
+    expect(candidates[0]).toMatchObject({ amountDeltaPence: -20, fxCurrency: "USD" });
   });
 
   it("returns nothing for an expense that can't be linked", async () => {
