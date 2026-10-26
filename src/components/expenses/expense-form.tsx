@@ -32,6 +32,7 @@ import {
   EXPENSE_CURRENCIES,
   expectedGbpPenceFromForeign,
   expenseOriginalAmount,
+  needsAmountCheck,
 } from "@/lib/expenses/currency";
 import {
   VatRateField,
@@ -543,6 +544,18 @@ export function ExpenseForm({
     })();
   }
 
+  // Saved before receipt and GBP amounts were separate, and still unchanged.
+  const checkAmounts =
+    foreign &&
+    expense != null &&
+    needsAmountCheck({
+      status: expense.status,
+      amountPence: expense.amountPence,
+      detectedCurrency: expense.detectedCurrency ?? null,
+      originalAmountMinor: expense.originalAmountMinor ?? null,
+    }) &&
+    parsePence(sterlingPounds) === originalMinor;
+
   // An email receipt can be in a currency the form doesn't otherwise offer.
   const receiptCurrency = isEmailSubmission ? (savedOriginal?.currency ?? null) : null;
   const currencyOptions = EXPENSE_CURRENCIES.includes(currency)
@@ -739,6 +752,8 @@ export function ExpenseForm({
                 value={currency}
                 onChange={(e) => changeCurrency(e.target.value)}
                 disabled={!canWrite || pending || linkedToBank}
+                aria-invalid={Boolean(fieldErrors.currency)}
+                aria-describedby={fieldErrors.currency ? "currency-error" : undefined}
               >
                 {currencyOptions.map((code) => (
                   <option key={code} value={code}>
@@ -752,6 +767,7 @@ export function ExpenseForm({
                   Choose GBP if the receipt was wrongly read as foreign currency.
                 </p>
               ) : null}
+              <FieldError id="currency-error">{fieldErrors.currency}</FieldError>
             </div>
             {foreign ? (
               <div>
@@ -811,6 +827,12 @@ export function ExpenseForm({
               {foreign ? (
                 <p id="amountPounds-rate" className="mt-1 text-xs text-muted">
                   {rateHint}
+                </p>
+              ) : null}
+              {checkAmounts ? (
+                <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                  This expense was saved with one amount for both. Check the receipt
+                  amount and the GBP amount before approving.
                 </p>
               ) : null}
               <FieldError id="amountPounds-error">

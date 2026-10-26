@@ -52,3 +52,39 @@ export function expenseOriginalAmount(expense: {
     amountMinor: expense.originalAmountMinor,
   };
 }
+
+/**
+ * A pending foreign expense saved before the receipt and sterling amounts
+ * were stored separately has the same figure in both, and nobody can tell
+ * which it is. A person has to confirm both before it's approved.
+ */
+export function needsAmountCheck(expense: {
+  status: string;
+  amountPence: number;
+  detectedCurrency: string | null;
+  originalAmountMinor: number | null;
+}): boolean {
+  return (
+    expense.status === "pending" &&
+    expenseOriginalAmount(expense) !== null &&
+    expense.amountPence > 0 &&
+    expense.amountPence === expense.originalAmountMinor
+  );
+}
+
+/**
+ * Currencies the server accepts: the supported list, plus the one already
+ * on the expense (an email receipt can be in any currency).
+ */
+export function isAllowedExpenseCurrency(
+  code: string,
+  existingCurrency?: string | null,
+): boolean {
+  const upper = code.toUpperCase();
+  return (
+    EXPENSE_CURRENCIES.includes(upper) ||
+    (existingCurrency != null && existingCurrency.toUpperCase() === upper)
+  );
+}
+
+export const UNSUPPORTED_CURRENCY_ERROR = "Choose one of the listed currencies";

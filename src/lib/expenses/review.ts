@@ -5,6 +5,12 @@ import { expenseReceipts, expenses } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
 import { refreshExpenseBankSuggestion } from "@/lib/bank/expense-match";
 import { sterlingFromForeign } from "@/lib/expenses/convert";
+import {
+  isAllowedExpenseCurrency,
+  needsAmountCheck,
+  UNSUPPORTED_CURRENCY_ERROR,
+} from "@/lib/expenses/currency";
+import { FORM_FIELD_ERROR_SUMMARY } from "@/lib/validation/field-errors";
 import { safeFilename } from "@/lib/files";
 import { parseReceiptFileAsync } from "@/lib/expenses/receipt-file";
 import { normalizeExpensePaymentFields } from "@/lib/expenses/schema";
@@ -60,6 +66,25 @@ export async function approvePendingExpense(
     return { ok: false, error: "Only pending expenses can be approved" };
   }
 
+  if (
+    input.fields?.foreignCurrency &&
+    !isAllowedExpenseCurrency(input.fields.foreignCurrency, existing.detectedCurrency)
+  ) {
+    return {
+      ok: false,
+      error: FORM_FIELD_ERROR_SUMMARY,
+      fieldErrors: { currency: UNSUPPORTED_CURRENCY_ERROR },
+    };
+  }
+  // Approving as stored (the mobile app) can't confirm an ambiguous amount.
+  if (!input.fields && needsAmountCheck(existing)) {
+    return {
+      ok: false,
+      error:
+        "Check the receipt amount and the GBP amount on the web before approving this expense",
+    };
+  }
+
   const foreignCurrency = input.fields
     ? input.fields.foreignCurrency
     : existing.detectedCurrency;
@@ -71,6 +96,10 @@ export async function approvePendingExpense(
   if (amountPence <= 0 && foreignCurrency && originalAmountMinor && originalAmountMinor > 0) {
     amountPence =
       (await sterlingFromForeign(foreignCurrency, originalAmountMinor, spentAt)) ?? 0;
+    if (amountPence <= 0) {
+      const message = `Couldn't get a ${foreignCurrency} exchange rate. Enter the amount in GBP.`;
+      return { ok: false, error: message, fieldErrors: { amountPounds: message } };
+    }
   }
   if (amountPence <= 0) {
     return {

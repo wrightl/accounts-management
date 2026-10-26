@@ -222,15 +222,68 @@ describe("pending expense approval", () => {
 
   it("approveExpense asks for the sterling amount when there's no rate", async () => {
     const { founder, expense } = await seedPendingExpense();
-    // No Bank of England series for HKD.
+    // No cached USD rate, and the Bank of England can't be reached.
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("unavailable", { status: 503 })));
+    try {
+      const form = foreignApproveForm(founder.id, {
+        currency: "USD",
+        originalAmount: "12.50",
+        amountPounds: "",
+      });
+      const result = await approveExpense(expense.id, form);
+      expect(result.ok).toBe(false);
+      expect(result.ok ? null : result.fieldErrors?.amountPounds).toMatch(/exchange rate/);
+      const [saved] = await db.select().from(expenses).where(eq(expenses.id, expense.id));
+      expect(saved.status).toBe("pending");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("refuses a currency that isn't listed or already on the receipt", async () => {
+    const { founder, expense } = await seedPendingExpense();
     const form = foreignApproveForm(founder.id, {
       currency: "HKD",
       originalAmount: "100",
-      amountPounds: "",
+      amountPounds: "10",
     });
     const result = await approveExpense(expense.id, form);
+    expect(result.ok ? null : result.fieldErrors?.currency).toBe(
+      "Choose one of the listed currencies",
+    );
+
+    // An email receipt in HKD can keep its own currency.
+    await db.update(expenses).set({ detectedCurrency: "HKD" }).where(eq(expenses.id, expense.id));
+    expect((await approveExpense(expense.id, form)).ok).toBe(true);
+  });
+
+  it("updateExpense refuses an unlisted currency", async () => {
+    const { expense } = await seedPendingExpense();
+    const form = new FormData();
+    form.set("description", "Draft");
+    form.set("status", "recorded");
+    form.set("currency", "XYZ");
+    form.set("originalAmount", "10");
+    const result = await updateExpense(expense.id, form);
+    expect(result.ok ? null : result.fieldErrors?.currency).toBeTruthy();
+  });
+
+  it("approving without edits (mobile) refuses amounts that need checking", async () => {
+    const { founder, expense } = await seedPendingExpense();
+    // Saved before the receipt and GBP amounts were stored separately.
+    await db
+      .update(expenses)
+      .set({ detectedCurrency: "USD", amountPence: 1200, originalAmountMinor: 1200 })
+      .where(eq(expenses.id, expense.id));
+
+    const result = await approvePendingExpense(
+      { companyId, localUserId: founder.id },
+      expense.id,
+      { status: "company_paid" },
+    );
     expect(result.ok).toBe(false);
-    expect(result.ok ? null : result.fieldErrors?.amountPounds).toBeTruthy();
+    const [saved] = await db.select().from(expenses).where(eq(expenses.id, expense.id));
+    expect(saved.status).toBe("pending");
   });
 
   it("approving without edits (mobile) converts a stored foreign amount", async () => {

@@ -18,6 +18,11 @@ import {
 } from "@/lib/expenses/import-csv";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { withSterlingAmount } from "@/lib/expenses/convert";
+import {
+  isAllowedExpenseCurrency,
+  UNSUPPORTED_CURRENCY_ERROR,
+} from "@/lib/expenses/currency";
+import { FORM_FIELD_ERROR_SUMMARY } from "@/lib/validation/field-errors";
 import { getEmailExpensesFingerprint, listFounders } from "@/lib/expenses/queries";
 import { requireActionPermission } from "@/lib/auth";
 import {
@@ -159,6 +164,14 @@ export async function updateExpense(
         return { ok: false, error: "Cannot edit a reimbursed expense" };
       }
 
+      const currency = input.data.foreignCurrency;
+      if (currency && !isAllowedExpenseCurrency(currency, existing.detectedCurrency)) {
+        return {
+          ok: false,
+          error: FORM_FIELD_ERROR_SUMMARY,
+          fieldErrors: { currency: UNSUPPORTED_CURRENCY_ERROR },
+        };
+      }
       const parsed = await withSterlingAmount(input.data, {
         required: existing.status !== "pending",
       });

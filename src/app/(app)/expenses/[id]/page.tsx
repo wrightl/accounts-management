@@ -24,7 +24,7 @@ import {
   ExpenseTitle,
 } from "@/components/expenses/expense-summary";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
-import { expenseOriginalAmount } from "@/lib/expenses/currency";
+import { expenseOriginalAmount, needsAmountCheck } from "@/lib/expenses/currency";
 import { getExpenseRebill, listOrderOptions } from "@/lib/profitability/queries";
 import { getPaymentSourceSuggestion } from "@/lib/expenses/payment-source-queries";
 import { paymentSourceSummary } from "@/lib/expenses/payment-source";
@@ -131,9 +131,9 @@ export default async function ExpenseDetailPage({
 
       {originalAmount && detail.expense.status === "pending" ? (
         <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
-          The receipt is in {originalAmount.currency}. The GBP amount is converted at
-          the Bank of England rate; change it to what your bank charged if you know
-          it. If the receipt is actually in sterling, set the currency to GBP.
+          {needsAmountCheck(detail.expense)
+            ? `The receipt is in ${originalAmount.currency}, and this expense was saved with one amount for both the receipt and GBP. Check both amounts before approving. If the receipt is actually in sterling, set the currency to GBP.`
+            : `The receipt is in ${originalAmount.currency}. The GBP amount is converted at the Bank of England rate; change it to what your bank charged if you know it. If the receipt is actually in sterling, set the currency to GBP.`}
         </div>
       ) : null}
 

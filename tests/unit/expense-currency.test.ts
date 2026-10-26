@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { expenseOriginalAmount } from "@/lib/expenses/currency";
+import {
+  expenseOriginalAmount,
+  isAllowedExpenseCurrency,
+  needsAmountCheck,
+} from "@/lib/expenses/currency";
 import { formatExpenseAmount } from "@/lib/money";
 
 describe("formatExpenseAmount", () => {
@@ -27,5 +31,35 @@ describe("expenseOriginalAmount", () => {
   it("treats an older expense with no original amount as sterling", () => {
     expect(expenseOriginalAmount({ detectedCurrency: "USD", originalAmountMinor: null })).toBeNull();
     expect(expenseOriginalAmount({ detectedCurrency: "GBP", originalAmountMinor: 500 })).toBeNull();
+  });
+});
+
+describe("needsAmountCheck", () => {
+  const pending = {
+    status: "pending",
+    amountPence: 1200,
+    detectedCurrency: "USD",
+    originalAmountMinor: 1200,
+  };
+
+  it("flags a pending foreign expense with the same figure in both amounts", () => {
+    expect(needsAmountCheck(pending)).toBe(true);
+  });
+
+  it("doesn't flag converted, unconverted, approved or sterling expenses", () => {
+    expect(needsAmountCheck({ ...pending, amountPence: 960 })).toBe(false);
+    expect(needsAmountCheck({ ...pending, amountPence: 0 })).toBe(false);
+    expect(needsAmountCheck({ ...pending, status: "recorded" })).toBe(false);
+    expect(needsAmountCheck({ ...pending, detectedCurrency: null })).toBe(false);
+  });
+});
+
+describe("isAllowedExpenseCurrency", () => {
+  it("accepts the listed currencies, and the one already on the expense", () => {
+    expect(isAllowedExpenseCurrency("USD")).toBe(true);
+    expect(isAllowedExpenseCurrency("GBP")).toBe(true);
+    expect(isAllowedExpenseCurrency("HKD")).toBe(false);
+    expect(isAllowedExpenseCurrency("HKD", "hkd")).toBe(true);
+    expect(isAllowedExpenseCurrency("HKD", "USD")).toBe(false);
   });
 });

@@ -3,6 +3,11 @@ import { getDb } from "@/db";
 import { expenses } from "@/db/schema";
 import { refreshExpenseBankSuggestion } from "@/lib/bank/expense-match";
 import { withSterlingAmount } from "@/lib/expenses/convert";
+import {
+  isAllowedExpenseCurrency,
+  UNSUPPORTED_CURRENCY_ERROR,
+} from "@/lib/expenses/currency";
+import { FORM_FIELD_ERROR_SUMMARY } from "@/lib/validation/field-errors";
 import { appendMileageDescription } from "@/lib/expenses/mileage";
 import { resolveExpenseProject } from "@/lib/expenses/project";
 import type { ReviewContext } from "@/lib/expenses/review";
@@ -26,6 +31,13 @@ export async function createExpenseRecord(
   input: ExpenseParsed,
 ): Promise<ActionResult> {
   const { companyId, localUserId } = ctx;
+  if (input.foreignCurrency && !isAllowedExpenseCurrency(input.foreignCurrency)) {
+    return {
+      ok: false,
+      error: FORM_FIELD_ERROR_SUMMARY,
+      fieldErrors: { currency: UNSUPPORTED_CURRENCY_ERROR },
+    };
+  }
   const converted = await withSterlingAmount(input, { required: true });
   if (!converted.ok) return converted;
   const data = converted.data;
