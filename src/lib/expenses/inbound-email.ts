@@ -475,6 +475,11 @@ type DeliveredAnswer = {
   expenseIds: string[];
 };
 
+/** Postgres text can't hold NUL characters; they never render, so drop them. */
+function withoutNul(value: string): string {
+  return value.replaceAll("\u0000", "");
+}
+
 /**
  * Creates the email's expenses and returns their ids, first attachment first,
  * plus the attachments that were skipped and why, and those OCR didn't reach.
@@ -517,12 +522,26 @@ async function deliverInboundEmail(
   }
 
   // Keep the body as sent so reviewers can read it. A retry writes the same values.
-  const bodyHtml =
-    email.html && Buffer.byteLength(email.html) <= MAX_EMAIL_HTML_BYTES ? email.html : null;
-  await getDb()
-    .update(inboundEmailJobs)
-    .set({ bodyHtml, bodyText: email.text ?? null })
-    .where(eq(inboundEmailJobs.id, job.id));
+  // It's only for reading, so failing to keep it must never stop the claim.
+  try {
+    const bodyHtml =
+      email.html && Buffer.byteLength(email.html) <= MAX_EMAIL_HTML_BYTES
+        ? withoutNul(email.html)
+        : null;
+    await getDb()
+      .update(inboundEmailJobs)
+      .set({ bodyHtml, bodyText: email.text == null ? null : withoutNul(email.text) })
+      .where(eq(inboundEmailJobs.id, job.id));
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        level: "error",
+        msg: "inbound-email.body",
+        jobId: job.id,
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    );
+  }
 
   const companyId = job.companyId;
   const ocr = await getReceiptOcrSettings();

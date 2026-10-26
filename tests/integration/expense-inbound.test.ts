@@ -755,6 +755,14 @@ describe("inbound email body", () => {
     expect(job.bodyText).toBe("Total £24.00");
   });
 
+  it("still creates the expense when the body has NUL characters, which Postgres can't store", async () => {
+    const job = await receive({ html: "<p>Total\u0000 £24.00</p>", text: "Total\u0000 £24.00" });
+    expect(job.status).toBe("processed");
+    expect(job.expenseId).toBeTruthy();
+    expect(job.bodyHtml).toBe("<p>Total £24.00</p>");
+    expect(job.bodyText).toBe("Total £24.00");
+  });
+
   it("drops HTML too large to keep, but keeps the text", async () => {
     const html = `<p>${"x".repeat(5 * 1024 * 1024)}</p>`;
     const job = await receive({ html, text: "Total £24.00" });
