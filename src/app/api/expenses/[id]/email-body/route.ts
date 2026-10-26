@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { unframeableJsonError } from "@/lib/frameable-route";
 import { requirePermission, ForbiddenError } from "@/lib/auth";
 import { getExpenseEmailBody } from "@/lib/expenses/inbound-email";
 
@@ -30,12 +31,12 @@ export async function GET(
     user = await requirePermission("accounts:read");
   } catch (e) {
     if (e instanceof ForbiddenError) {
-      return NextResponse.json({ error: e.message }, { status: 403 });
+      return unframeableJsonError(e.message, 403);
     }
     throw e;
   }
   if (!user.companyId) {
-    return NextResponse.json({ error: "Complete onboarding first" }, { status: 403 });
+    return unframeableJsonError("Complete onboarding first", 403);
   }
 
   const { id } = await context.params;
@@ -45,7 +46,7 @@ export async function GET(
   const text = body?.text ?? null;
 
   if (html == null && text == null) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return unframeableJsonError("Not found", 404);
   }
 
   return new NextResponse(html ?? text, {

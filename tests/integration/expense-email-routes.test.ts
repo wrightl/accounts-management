@@ -113,10 +113,13 @@ describe("email body route", () => {
     expect((await getBody(expense.id)).status).toBe(404);
   });
 
-  it("returns 404 for another company's expense", async () => {
+  it("returns 404 for another company's expense, and the error can't be framed", async () => {
     const other = (await seedCompany(db, { name: "Co B" })).id;
     const expense = await emailedExpense({ bodyText: "Secret" }, other);
-    expect((await getBody(expense.id)).status).toBe(404);
+    const res = await getBody(expense.id);
+    expect(res.status).toBe(404);
+    expect(res.headers.get("x-frame-options")).toBe("DENY");
+    expect(res.headers.get("content-security-policy")).toBe("frame-ancestors 'none'");
   });
 });
 
@@ -148,9 +151,16 @@ describe("receipt preview", () => {
       const res = await getReceipt(r.id, "?inline=1");
       expect(res.status).toBe(200);
       expect(res.headers.get("content-disposition")).toMatch(/^inline;/);
-      expect(res.headers.get("content-security-policy")).toContain("frame-ancestors 'self'");
+      expect(res.headers.get("content-security-policy")).toBe("frame-ancestors 'self'");
       expect(res.headers.get("x-frame-options")).toBe("SAMEORIGIN");
     }
+  });
+
+  it("won't let an error be framed", async () => {
+    const res = await getReceipt(crypto.randomUUID(), "?inline=1");
+    expect(res.status).toBe(404);
+    expect(res.headers.get("x-frame-options")).toBe("DENY");
+    expect(res.headers.get("content-security-policy")).toBe("frame-ancestors 'none'");
   });
 
   it("still downloads by default, and for types a browser shouldn't render", async () => {

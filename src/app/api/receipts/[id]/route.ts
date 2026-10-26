@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { unframeableJsonError } from "@/lib/frameable-route";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { expenseReceipts, expenses } from "@/db/schema";
@@ -24,12 +25,12 @@ export async function GET(
     user = await requirePermission("accounts:read");
   } catch (e) {
     if (e instanceof ForbiddenError) {
-      return NextResponse.json({ error: e.message }, { status: 403 });
+      return unframeableJsonError(e.message, 403);
     }
     throw e;
   }
   if (!user.companyId) {
-    return NextResponse.json({ error: "Complete onboarding first" }, { status: 403 });
+    return unframeableJsonError("Complete onboarding first", 403);
   }
   const companyId = user.companyId;
 
@@ -43,7 +44,7 @@ export async function GET(
     .limit(1);
 
   if (!row) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return unframeableJsonError("Not found", 404);
   }
 
   const { receipt } = row;
@@ -61,11 +62,13 @@ export async function GET(
           : contentDispositionAttachment(receipt.filename),
         "Cache-Control": "private, no-store",
         // next.config leaves these to us so the expense page can frame a preview.
-        "Content-Security-Policy": "default-src 'none'; frame-ancestors 'self'",
+        // Nothing stricter: Chrome's PDF viewer is an embedded object that
+        // default-src 'none' would block. Only sniffed PDFs/images are inline.
+        "Content-Security-Policy": "frame-ancestors 'self'",
         "X-Frame-Options": "SAMEORIGIN",
       },
     });
   } catch {
-    return NextResponse.json({ error: "File unavailable" }, { status: 404 });
+    return unframeableJsonError("File unavailable", 404);
   }
 }
