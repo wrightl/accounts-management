@@ -14,6 +14,7 @@ import {
   reconciliationMatches,
 } from "@/db/schema";
 import { bankSearchPattern } from "@/lib/bank/list-params";
+import { expenseSettlementFields } from "@/lib/bank/expense-settle";
 import { dateDiffDays } from "@/lib/bank/match";
 import { expenseOriginalAmount } from "@/lib/expenses/currency";
 import { addDays } from "@/lib/ledger/corporation-tax";
@@ -389,7 +390,7 @@ export async function linkExpenseToBankTx(
 
     await db
       .update(expenses)
-      .set({ status: "company_paid", paidByUserId: null })
+      .set(await expenseSettlementFields(db, companyId, expense, tx.amountPence))
       .where(and(eq(expenses.id, expenseId), eq(expenses.companyId, companyId)));
 
     return { matchId: created.id };

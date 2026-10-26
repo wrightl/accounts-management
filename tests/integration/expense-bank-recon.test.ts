@@ -176,6 +176,51 @@ describe("expense bank reconciliation", () => {
     expect(updated.paidByUserId).toBeNull();
   });
 
+  it("accepting a foreign expense suggestion takes the sterling amount the bank paid", async () => {
+    const [account] = await db
+      .insert(bankAccounts)
+      .values({ companyId, name: "Starling", provider: "starling" })
+      .returning();
+    await db.insert(fxRates).values({
+      currency: "USD",
+      observationDate: "2026-04-01",
+      foreignPerGbp: 1.27,
+    });
+    const [expense] = await db
+      .insert(expenses)
+      .values({
+        companyId,
+        description: "Starbucks Seattle",
+        spentAt: "2026-04-01",
+        amountPence: 7874,
+        vatRate: 20,
+        originalAmountMinor: 10000,
+        detectedCurrency: "USD",
+        status: "recorded",
+      })
+      .returning();
+    await db.insert(bankTransactions).values({
+      bankAccountId: account.id,
+      externalId: "tx-fx-paid",
+      bookedAt: "2026-04-02",
+      amountPence: -8000,
+      counterparty: "Starbucks Seattle",
+      reference: "CARD",
+    });
+
+    const suggestions = await suggestMatches(companyId);
+    expect(suggestions).toHaveLength(1);
+    await confirmMatch(companyId, suggestions[0].matchId);
+
+    const [updated] = await db.select().from(expenses).where(eq(expenses.id, expense.id));
+    expect(updated).toMatchObject({
+      status: "company_paid",
+      amountPence: 8000,
+      vatPence: 1333,
+      originalAmountMinor: 10000,
+    });
+  });
+
   it("does not suggest reimbursable expenses", async () => {
     const [account] = await db
       .insert(bankAccounts)

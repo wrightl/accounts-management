@@ -57,6 +57,7 @@ import {
     formatExpenseMatchTarget,
 } from '@/lib/bank/expense-match';
 import { upsertBankSpendingCategory } from '@/lib/bank/spending-categories';
+import { expenseSettlementFields } from '@/lib/bank/expense-settle';
 import {
     effectiveStatus,
     todayIsoDate,
@@ -1304,9 +1305,33 @@ export async function confirmMatch(companyId: string, matchId: string) {
                 .set({ confirmed: true })
                 .where(eq(reconciliationMatches.id, matchId));
         } else if (match.matchType === 'expense' && match.expenseId) {
+            const [expense] = await tx
+                .select()
+                .from(expenses)
+                .where(
+                    and(
+                        eq(expenses.id, match.expenseId),
+                        eq(expenses.companyId, companyId),
+                    ),
+                )
+                .limit(1);
+            const [bankTx] = await tx
+                .select({ amountPence: bankTransactions.amountPence })
+                .from(bankTransactions)
+                .where(eq(bankTransactions.id, match.bankTransactionId))
+                .limit(1);
+            if (!expense || !bankTx)
+                throw new ReconciliationError('Match not found');
             await tx
                 .update(expenses)
-                .set({ status: 'company_paid', paidByUserId: null })
+                .set(
+                    await expenseSettlementFields(
+                        tx,
+                        companyId,
+                        expense,
+                        bankTx.amountPence,
+                    ),
+                )
                 .where(
                     and(
                         eq(expenses.id, match.expenseId),
