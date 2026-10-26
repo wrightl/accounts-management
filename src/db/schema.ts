@@ -1213,6 +1213,9 @@ export const inboundEmailJobs = pgTable(
     answersJobId: uuid("answers_job_id").references((): AnyPgColumn => inboundEmailJobs.id, {
       onDelete: "set null",
     }),
+    /** The email body exactly as sent, so reviewers can read it. Either may be null. */
+    bodyHtml: text("body_html"),
+    bodyText: text("body_text"),
   },
   (t) => [
     index("idx_inbound_email_jobs_company").on(t.companyId),

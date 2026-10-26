@@ -9,3 +9,8 @@ export function contentDispositionAttachment(filename: string): string {
   const ascii = safeFilename(filename).replace(/"/g, "");
   return `attachment; filename="${ascii}"`;
 }
+
+export function contentDispositionInline(filename: string): string {
+  const ascii = safeFilename(filename).replace(/"/g, "");
+  return `inline; filename="${ascii}"`;
+}

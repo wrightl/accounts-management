@@ -8,6 +8,7 @@ import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-
 import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
 import { useFieldErrors } from "@/components/ui/use-field-errors";
 import { deleteReceipt, uploadReceipt } from "@/actions/expenses";
+import { isPreviewableReceipt } from "@/lib/expenses/receipt-file";
 
 export function ReceiptPanel({
   expenseId,
@@ -45,37 +46,40 @@ export function ReceiptPanel({
           {receipts.map((r) => (
             <li
               key={r.id}
-              className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm"
+              className="rounded-lg border border-border px-3 py-2 text-sm"
             >
-              <a
-                href={`/api/receipts/${r.id}`}
-                className="text-foreground hover:underline"
-              >
-                {r.filename}
-              </a>
-              {canWrite && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  disabled={pending}
-                  onClick={() => {
-                    clearAll();
-                    startTransition(async () => {
-                      const result = await deleteReceipt(r.id);
-                      if (applyActionResult(result)) {
-                        router.refresh();
-                      } else if (!result.ok) {
-                        scheduleFocusFirstFieldError(
-                          formRef.current,
-                          result.fieldErrors,
-                        );
-                      }
-                    });
-                  }}
+              <div className="flex items-center justify-between gap-3">
+                <a
+                  href={`/api/receipts/${r.id}`}
+                  className="text-foreground hover:underline"
                 >
-                  Remove
-                </Button>
-              )}
+                  {r.filename}
+                </a>
+                {canWrite && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={pending}
+                    onClick={() => {
+                      clearAll();
+                      startTransition(async () => {
+                        const result = await deleteReceipt(r.id);
+                        if (applyActionResult(result)) {
+                          router.refresh();
+                        } else if (!result.ok) {
+                          scheduleFocusFirstFieldError(
+                            formRef.current,
+                            result.fieldErrors,
+                          );
+                        }
+                      });
+                    }}
+                  >
+                    Remove
+                  </Button>
+                )}
+              </div>
+              <ReceiptPreview receipt={r} />
             </li>
           ))}
         </ul>
@@ -138,4 +142,34 @@ export function ReceiptPanel({
       <FieldError>{error}</FieldError>
     </div>
   );
+}
+
+/** The receipt shown in the page; the filename link above still downloads it. */
+function ReceiptPreview({
+  receipt,
+}: {
+  receipt: { id: string; filename: string; contentType: string | null };
+}) {
+  const src = `/api/receipts/${receipt.id}?inline=1`;
+  if (receipt.contentType === "application/pdf") {
+    return (
+      <iframe
+        src={src}
+        title={`Preview of ${receipt.filename}`}
+        className="mt-2 h-[32rem] w-full rounded border border-border bg-white"
+      />
+    );
+  }
+  if (isPreviewableReceipt(receipt.contentType)) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- private, auth-gated file; next/image can't fetch it
+      <img
+        src={src}
+        alt={`Preview of ${receipt.filename}`}
+        loading="lazy"
+        className="mt-2 max-h-[32rem] w-full rounded border border-border object-contain"
+      />
+    );
+  }
+  return null;
 }

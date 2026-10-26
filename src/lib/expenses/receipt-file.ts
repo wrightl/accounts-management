@@ -10,6 +10,11 @@ export const ALLOWED_RECEIPT_TYPES = new Set([
   "application/pdf",
 ]);
 
+/** A browser can show these in the page without running anything (no SVG or HTML). */
+export function isPreviewableReceipt(contentType: string | null): boolean {
+  return contentType != null && ALLOWED_RECEIPT_TYPES.has(contentType);
+}
+
 /** Detect receipt MIME type from file magic bytes. */
 export function sniffReceiptContentType(bytes: Buffer): string | null {
   if (bytes.length < 12) return null;

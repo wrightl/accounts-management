@@ -81,6 +81,8 @@ const AI_OCR_CONCURRENCY = 4;
 const LOCAL_OCR_WORKERS = 2;
 const TRANSFER_CONCURRENCY = 4;
 const DOWNLOAD_TIMEOUT_MS = 30_000;
+/** Inline images arrive as data: URIs; past this the HTML is dropped and the text kept. */
+const MAX_EMAIL_HTML_BYTES = 5 * 1024 * 1024;
 /** Generous upper bound for one job (downloads + OCR budget + uploads + inserts). */
 const JOB_WORST_CASE_MS = 210_000;
 /** Matches `maxDuration` on the routes that process jobs, less a safety margin. */
@@ -513,6 +515,14 @@ async function deliverInboundEmail(
       resendEmailId: job.resendEmailId,
     });
   }
+
+  // Keep the body as sent so reviewers can read it. A retry writes the same values.
+  const bodyHtml =
+    email.html && Buffer.byteLength(email.html) <= MAX_EMAIL_HTML_BYTES ? email.html : null;
+  await getDb()
+    .update(inboundEmailJobs)
+    .set({ bodyHtml, bodyText: email.text ?? null })
+    .where(eq(inboundEmailJobs.id, job.id));
 
   const companyId = job.companyId;
   const ocr = await getReceiptOcrSettings();
@@ -1090,6 +1100,36 @@ export async function getInboundEmailJob(companyId: string, jobId: string) {
     )
     .limit(1);
   return job ?? null;
+}
+
+/** What the expense page shows about the email a claim came from; bodies are served separately. */
+export async function getInboundEmailSummary(companyId: string, jobId: string) {
+  const [row] = await getDb()
+    .select({
+      fromEmail: inboundEmailJobs.fromEmail,
+      subject: inboundEmailJobs.subject,
+      createdAt: inboundEmailJobs.createdAt,
+      paymentQuestionSentAt: inboundEmailJobs.paymentQuestionSentAt,
+      hasHtml: sql<boolean>`${inboundEmailJobs.bodyHtml} is not null`,
+      hasText: sql<boolean>`${inboundEmailJobs.bodyText} is not null`,
+    })
+    .from(inboundEmailJobs)
+    .where(
+      and(eq(inboundEmailJobs.id, jobId), eq(inboundEmailJobs.companyId, companyId)),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
+/** The stored body of the email an expense came from, scoped to the company. */
+export async function getExpenseEmailBody(companyId: string, expenseId: string) {
+  const [row] = await getDb()
+    .select({ html: inboundEmailJobs.bodyHtml, text: inboundEmailJobs.bodyText })
+    .from(expenses)
+    .innerJoin(inboundEmailJobs, eq(expenses.inboundEmailJobId, inboundEmailJobs.id))
+    .where(and(eq(expenses.id, expenseId), eq(expenses.companyId, companyId)))
+    .limit(1);
+  return row ?? null;
 }
 
 /** Admin: reset a failed job and retry processing immediately. */

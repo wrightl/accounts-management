@@ -28,7 +28,9 @@ import { expenseOriginalAmount, needsAmountCheck } from "@/lib/expenses/currency
 import { getExpenseRebill, listOrderOptions } from "@/lib/profitability/queries";
 import { getPaymentSourceSuggestion } from "@/lib/expenses/payment-source-queries";
 import { paymentSourceSummary } from "@/lib/expenses/payment-source";
-import { getInboundEmailJob } from "@/lib/expenses/inbound-email";
+import { formatDateTimeUk } from "@/lib/dates";
+import { getInboundEmailSummary } from "@/lib/expenses/inbound-email";
+import { EmailBodyPanel } from "@/components/expenses/email-body-panel";
 
 export default async function ExpenseDetailPage({
   params,
@@ -56,14 +58,12 @@ export default async function ExpenseDetailPage({
   ]);
 
   const isPending = detail.expense.status === "pending";
-  const [paymentSuggestion, inboundJob] = isPending
-    ? await Promise.all([
-        getPaymentSourceSuggestion(companyId, id),
-        detail.expense.inboundEmailJobId
-          ? getInboundEmailJob(companyId, detail.expense.inboundEmailJobId)
-          : null,
-      ])
-    : [null, null];
+  const [paymentSuggestion, inboundJob] = await Promise.all([
+    isPending ? getPaymentSourceSuggestion(companyId, id) : null,
+    detail.expense.inboundEmailJobId
+      ? getInboundEmailSummary(companyId, detail.expense.inboundEmailJobId)
+      : null,
+  ]);
   const paymentSource = paymentSuggestion ? paymentSourceSummary(paymentSuggestion) : null;
   const askedHowPaid =
     Boolean(inboundJob?.paymentQuestionSentAt) && !detail.expense.statedPaymentSource;
@@ -230,11 +230,25 @@ export default async function ExpenseDetailPage({
             vatRegistered={settings.vatRegistered}
             defaultVatRate={settings.vatRegistered ? settings.defaultVatRate : 0}
           />
-          <ReceiptPanel
-            expenseId={detail.expense.id}
-            receipts={detail.receipts}
-            canWrite={canWrite}
-          />
+          <div className="space-y-10">
+            <ReceiptPanel
+              expenseId={detail.expense.id}
+              receipts={detail.receipts}
+              canWrite={canWrite}
+            />
+            {inboundJob ? (
+              <EmailBodyPanel
+                expenseId={detail.expense.id}
+                email={{
+                  fromEmail: inboundJob.fromEmail,
+                  subject: inboundJob.subject,
+                  receivedAt: formatDateTimeUk(inboundJob.createdAt),
+                  hasHtml: inboundJob.hasHtml,
+                  hasText: inboundJob.hasText,
+                }}
+              />
+            ) : null}
+          </div>
         </div>
       </ExpenseSummaryProvider>
     </div>
