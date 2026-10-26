@@ -50,6 +50,9 @@ const securityHeaders = [
     { key: 'Content-Security-Policy', value: cspDirectives },
 ];
 
+/** Routes the app frames itself: receipt previews and the stored email body. */
+const FRAMEABLE_PATHS = ['api/receipts/[^/]+', 'api/expenses/[^/]+/email-body'];
+
 const nextConfig: NextConfig = {
     reactStrictMode: true,
     poweredByHeader: false,
@@ -88,7 +91,22 @@ const nextConfig: NextConfig = {
         },
     },
     async headers() {
-        return [{ source: '/:path*', headers: securityHeaders }];
+        return [
+            {
+                source: `/((?!(?:${FRAMEABLE_PATHS.join('|')})$).*)`,
+                headers: securityHeaders,
+            },
+            // Framed by the expense page. These routes set their own
+            // Content-Security-Policy and X-Frame-Options (same origin only).
+            {
+                source: `/(${FRAMEABLE_PATHS.join('|')})`,
+                headers: securityHeaders.filter(
+                    (h) =>
+                        h.key !== 'Content-Security-Policy' &&
+                        h.key !== 'X-Frame-Options',
+                ),
+            },
+        ];
     },
     async redirects() {
         return [

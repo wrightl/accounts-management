@@ -712,3 +712,61 @@ describe("inbound email jobs", () => {
     });
   });
 });
+
+describe("inbound email body", () => {
+  async function receive(body: { html: string | null; text: string | null }) {
+    await insertMailboxUser({
+      companyId,
+      email: "founder@example.com",
+      role: "user",
+      clerkUserId: "clerk-founder",
+      name: "Founder",
+      expenseInboundSlug: "founder",
+    });
+    mockReceivingGet.mockResolvedValue({
+      data: { subject: "Lunch receipt", ...body },
+      error: null,
+    });
+    mockAttachmentsList.mockResolvedValue({ data: { data: [] }, error: null });
+    const { jobId } = await enqueueInboundEmailJob({
+      email_id: `email-body-${crypto.randomUUID()}`,
+      from: "founder@example.com",
+      to: [mailbox("founder")],
+      subject: "Lunch receipt",
+    });
+    if (!jobId) throw new Error("expected job");
+    const result = await processInboundEmailJob(jobId);
+    expect(result.ok).toBe(true);
+    const [job] = await db.select().from(inboundEmailJobs).where(eq(inboundEmailJobs.id, jobId));
+    return job;
+  }
+
+  it("keeps the HTML and plain text exactly as sent", async () => {
+    const html = '<div style="color:red">Total <b>£24.00</b><img src="data:image/png;base64,AAAA"></div>\r\n';
+    const text = "  Total £24.00\r\n\r\nThanks  ";
+    const job = await receive({ html, text });
+    expect(job.bodyHtml).toBe(html);
+    expect(job.bodyText).toBe(text);
+  });
+
+  it("keeps a plain-text-only email as plain text", async () => {
+    const job = await receive({ html: null, text: "Total £24.00" });
+    expect(job.bodyHtml).toBeNull();
+    expect(job.bodyText).toBe("Total £24.00");
+  });
+
+  it("still creates the expense when the body has NUL characters, which Postgres can't store", async () => {
+    const job = await receive({ html: "<p>Total\u0000 £24.00</p>", text: "Total\u0000 £24.00" });
+    expect(job.status).toBe("processed");
+    expect(job.expenseId).toBeTruthy();
+    expect(job.bodyHtml).toBe("<p>Total £24.00</p>");
+    expect(job.bodyText).toBe("Total £24.00");
+  });
+
+  it("drops HTML too large to keep, but keeps the text", async () => {
+    const html = `<p>${"x".repeat(5 * 1024 * 1024)}</p>`;
+    const job = await receive({ html, text: "Total £24.00" });
+    expect(job.bodyHtml).toBeNull();
+    expect(job.bodyText).toBe("Total £24.00");
+  });
+});
