@@ -5,7 +5,11 @@ import { listExpenses } from "@/lib/expenses/queries";
 import { parseExpenseInput } from "@/lib/expenses/schema";
 import { requireMobileAuth } from "@/lib/mobile-auth";
 import { toMobileExpense } from "@/lib/mobile/expense-payload";
-import { loadMobileExpense, receiptsByExpense } from "@/lib/mobile/expenses";
+import {
+  loadMobileExpense,
+  pendingPaymentSources,
+  receiptsByExpense,
+} from "@/lib/mobile/expenses";
 import { ensureLocalUser } from "@/lib/users";
 
 export async function GET(request: NextRequest) {
@@ -19,7 +23,10 @@ export async function GET(request: NextRequest) {
     const limit = searchParams.get("limit") ? parseInt(searchParams.get("limit")!) : 50;
 
     const rows = (await listExpenses(user.companyId, { status })).slice(0, limit);
-    const receipts = await receiptsByExpense(rows.map((row) => row.id));
+    const [receipts, paymentSources] = await Promise.all([
+      receiptsByExpense(rows.map((row) => row.id)),
+      pendingPaymentSources(user.companyId, rows),
+    ]);
 
     return NextResponse.json({
       success: true,
@@ -27,6 +34,7 @@ export async function GET(request: NextRequest) {
         toMobileExpense({
           ...row,
           companyId: user.companyId,
+          paymentSource: paymentSources.get(row.id) ?? null,
           receipts: (receipts.get(row.id) ?? []).map((r) => ({
             id: r.id,
             filename: r.filename,

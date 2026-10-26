@@ -189,6 +189,7 @@ export function AttentionPanel({
                     </span>
                     <span className="mt-0.5 block text-muted">
                       {expense.submitterLabel}
+                      {expense.paymentSourceLabel ? ` · ${expense.paymentSourceLabel}` : null}
                     </span>
                     <span className="mt-1 block tabular-nums text-brand">
                       {expense.amountFormatted}

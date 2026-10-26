@@ -27,6 +27,8 @@ import {
 } from "@/actions/bank";
 import { BankImportForm } from "@/components/bank/bank-import-form";
 import { AttachExpenseDialog } from "@/components/bank/expense-link-dialog";
+import { CompanyCardsDialog } from "@/components/bank/company-cards-dialog";
+import type { BankAccountCards } from "@/lib/bank/company-cards";
 import {
   bankCategorySelectOptions,
   formatBankCategory,
@@ -258,13 +260,17 @@ export function SuggestMatchesDialog({
 export function BankToolbar({
   canWrite,
   customCategories,
+  accountCards = [],
 }: {
   canWrite: boolean;
   customCategories: BankSpendingCategoryRow[];
+  /** Bank accounts with their card endings, for the Company cards dialog. */
+  accountCards?: BankAccountCards[];
 }) {
   const router = useRouter();
   const [importOpen, setImportOpen] = useState(false);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const [cardsOpen, setCardsOpen] = useState(false);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [suggestions, setSuggestions] = useState<SuggestedMatch[]>([]);
   const [pending, startTransition] = useTransition();
@@ -300,11 +306,19 @@ export function BankToolbar({
         <Button type="button" variant="secondary" onClick={() => setCategoriesOpen(true)}>
           Categories
         </Button>
+        <Button type="button" variant="secondary" onClick={() => setCardsOpen(true)}>
+          Company cards
+        </Button>
       </div>
       <CustomCategoriesDialog
         open={categoriesOpen}
         categories={customCategories}
         onClose={() => setCategoriesOpen(false)}
+      />
+      <CompanyCardsDialog
+        open={cardsOpen}
+        accounts={accountCards}
+        onClose={() => setCardsOpen(false)}
       />
       <Dialog
         open={importOpen}

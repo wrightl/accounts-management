@@ -26,6 +26,9 @@ import {
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { expenseOriginalAmount } from "@/lib/expenses/currency";
 import { getExpenseRebill, listOrderOptions } from "@/lib/profitability/queries";
+import { getPaymentSourceSuggestion } from "@/lib/expenses/payment-source-queries";
+import { paymentSourceSummary } from "@/lib/expenses/payment-source";
+import { getInboundEmailJob } from "@/lib/expenses/inbound-email";
 
 export default async function ExpenseDetailPage({
   params,
@@ -51,6 +54,19 @@ export default async function ExpenseDetailPage({
     getOrCreateCompanySettings(companyId),
     listBankSettlements(companyId, { expenseId: id }),
   ]);
+
+  const isPending = detail.expense.status === "pending";
+  const [paymentSuggestion, inboundJob] = isPending
+    ? await Promise.all([
+        getPaymentSourceSuggestion(companyId, id),
+        detail.expense.inboundEmailJobId
+          ? getInboundEmailJob(companyId, detail.expense.inboundEmailJobId)
+          : null,
+      ])
+    : [null, null];
+  const paymentSource = paymentSuggestion ? paymentSourceSummary(paymentSuggestion) : null;
+  const askedHowPaid =
+    Boolean(inboundJob?.paymentQuestionSentAt) && !detail.expense.statedPaymentSource;
 
   const payeeId = detail.expense.paidByUserId;
   const booksLocked = settlements.some((s) =>
@@ -80,6 +96,38 @@ export default async function ExpenseDetailPage({
           ) : null}
         </div>
       )}
+
+      {paymentSource && (paymentSource.notes.length > 0 || askedHowPaid) ? (
+        <div
+          className={
+            paymentSource.conflict
+              ? "mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
+              : "mb-6 rounded-lg border border-border bg-wash/50 px-4 py-3 text-sm"
+          }
+        >
+          <p className="font-medium">
+            {paymentSource.conflict
+              ? "The clues about how this was paid disagree. Check before approving."
+              : paymentSource.suggestion === "personal"
+                ? "Looks like the sender paid personally, so it is set to approve as Reimbursable."
+                : paymentSource.suggestion === "company"
+                  ? "Looks like the company paid, so it is set to approve as Company paid."
+                  : "We don't know yet how this was paid."}
+          </p>
+          {paymentSource.notes.length > 0 ? (
+            <ul className="mt-1 list-disc pl-5">
+              {paymentSource.notes.map((note) => (
+                <li key={note}>{note}</li>
+              ))}
+            </ul>
+          ) : null}
+          {askedHowPaid ? (
+            <p className="mt-1 text-muted">
+              We emailed the sender to ask how they paid. Their answer will show here.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {originalAmount && detail.expense.status === "pending" ? (
         <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
@@ -165,8 +213,9 @@ export default async function ExpenseDetailPage({
           <ExpenseForm
             listHref={listHref}
             // Remount when the status changes (e.g. a pending email expense is
-            // approved) so the form's status state re-derives from the saved row.
-            key={`${detail.expense.id}:${detail.expense.status}`}
+            // approved, or the sender answers how they paid) so the form's status
+            // state re-derives from the saved row.
+            key={`${detail.expense.id}:${detail.expense.status}:${paymentSource?.suggestedStatus ?? ""}`}
             mode="edit"
             expense={detail.expense}
             founders={founders}
@@ -175,6 +224,7 @@ export default async function ExpenseDetailPage({
             rebilledOn={rebill}
             linkedToBank={settlements.length > 0}
             receiptCount={detail.receipts.length}
+            suggestedApproveStatus={paymentSource?.suggestedStatus ?? null}
             canWrite={canWrite}
             defaultMileageRatePence={settings.defaultMileageRatePence}
             vatRegistered={settings.vatRegistered}

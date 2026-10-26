@@ -44,6 +44,10 @@ export const expenseStatusEnum = pgEnum("expense_status", [
   "company_paid", // paid directly by the company
 ]);
 export const expenseSourceEnum = pgEnum("expense_source", ["manual", "email"]);
+export const expensePaymentSourceEnum = pgEnum("expense_payment_source", [
+  "personal", // the person claiming paid, so the company owes them
+  "company", // paid from a company account or card
+]);
 export const inboundEmailJobStatusEnum = pgEnum("inbound_email_job_status", [
   "pending",
   "processed",
@@ -523,6 +527,15 @@ export const expenses = pgTable(
     detectedCurrency: text("detected_currency"),
     /** The amount in detectedCurrency, in minor units (cents). Null for GBP. */
     originalAmountMinor: integer("original_amount_minor"),
+    /**
+     * How the sender of an emailed claim says it was paid. A hint for the
+     * reviewer, who still picks the status when approving.
+     */
+    statedPaymentSource: expensePaymentSourceEnum("stated_payment_source"),
+    /** "email" (said in the claim) or "reply" (answered our question). */
+    statedPaymentSourceVia: text("stated_payment_source_via"),
+    /** Last four digits of the card shown on the receipt, when it shows one. */
+    receiptCardLast4: text("receipt_card_last4"),
     /** The inbound email this expense came from; one email can create several. */
     inboundEmailJobId: uuid("inbound_email_job_id").references(
       (): AnyPgColumn => inboundEmailJobs.id,
@@ -546,6 +559,10 @@ export const expenses = pgTable(
         'Travel', 'Meals', 'Software', 'Office', 'Marketing',
         'Professional fees', 'Equipment', 'Training', 'Other'
       )`,
+    ),
+    check(
+      "expenses_stated_payment_source_via_known",
+      sql`${t.statedPaymentSourceVia} is null or ${t.statedPaymentSourceVia} in ('email', 'reply')`,
     ),
   ],
 );
@@ -642,6 +659,11 @@ export const bankAccounts = pgTable(
      * Last successful generic CSV column mapping (Other bank only).
      */
     csvMapping: jsonb("csv_mapping").$type<GenericCsvMapping>(),
+    /**
+     * Last four digits of the cards that pay from this account, so a card
+     * shown on an emailed receipt can be recognised as a company card.
+     */
+    cardLast4s: text("card_last4s").array().notNull().default([]),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("idx_bank_accounts_company").on(t.companyId)],
@@ -1185,6 +1207,12 @@ export const inboundEmailJobs = pgTable(
     processedAt: timestamp("processed_at", { withTimezone: true }),
     /** Processing lease: a worker owns the job until this time (crash recovery). */
     lockedUntil: timestamp("locked_until", { withTimezone: true }),
+    /** When we emailed the sender to ask how they paid (no clue found in the claim). */
+    paymentQuestionSentAt: timestamp("payment_question_sent_at", { withTimezone: true }),
+    /** Set on a reply to that question: the claim job it answered. */
+    answersJobId: uuid("answers_job_id").references((): AnyPgColumn => inboundEmailJobs.id, {
+      onDelete: "set null",
+    }),
   },
   (t) => [
     index("idx_inbound_email_jobs_company").on(t.companyId),

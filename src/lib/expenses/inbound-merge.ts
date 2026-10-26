@@ -7,6 +7,7 @@ import {
   parseReceiptDate,
   parseReceiptMerchant,
 } from "@/lib/expenses/receipt-parse";
+import { parseCardLast4 } from "@/lib/expenses/payment-source";
 
 const CONFIDENCE_RANK: Record<ReceiptExtraction["confidence"], number> = {
   high: 3,
@@ -151,6 +152,7 @@ export function mergeReceiptExtractions(
   const spentAt = pick("spentAt");
   const category = pick("category");
   const merchant = pick("merchant");
+  const cardLast4 = pick("cardLast4");
   const currencies = sorted
     .map((ext) => ext.currency?.trim().toUpperCase())
     .filter((c): c is string => Boolean(c));
@@ -169,6 +171,7 @@ export function mergeReceiptExtractions(
     category,
     merchant,
     currency,
+    cardLast4,
     confidence,
   };
 }
@@ -205,6 +208,8 @@ export function parseEmailBodyText(subject: string, body: string): ReceiptExtrac
   const spentAt = parseReceiptDate(combined);
   const category = inferReceiptCategory(combined);
   const currency = detectReceiptCurrency(combined);
+  // Forwarded receipt emails often show the card used, so the whole body counts.
+  const cardLast4 = parseCardLast4(combined);
   const description = merchant ?? (subject.trim() || undefined);
 
   const fields = [description, amountPounds, spentAt, category].filter(Boolean);
@@ -219,6 +224,7 @@ export function parseEmailBodyText(subject: string, body: string): ReceiptExtrac
     category,
     merchant,
     currency,
+    cardLast4,
     confidence,
   };
 }

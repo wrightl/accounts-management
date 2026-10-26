@@ -18,6 +18,7 @@ class Expense {
     required this.source,
     required this.receipts,
     this.createdByName,
+    this.paymentSource,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -38,6 +39,9 @@ class Expense {
   final String source;
   final List<ExpenseReceipt> receipts;
   final String? createdByName;
+
+  /// How a pending emailed expense was probably paid; null once reviewed.
+  final ExpensePaymentSource? paymentSource;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -70,8 +74,34 @@ class Expense {
           .map((e) => ExpenseReceipt.fromJson(asMap(e)))
           .toList(),
       createdByName: json['createdByName'] as String?,
+      paymentSource: json['paymentSource'] is Map
+          ? ExpensePaymentSource.fromJson(asMap(json['paymentSource']))
+          : null,
       createdAt: asDateTime(json['createdAt']),
       updatedAt: asDateTime(json['updatedAt'] ?? json['createdAt']),
+    );
+  }
+}
+
+/// The server's suggestion for how an emailed expense was paid, and why.
+class ExpensePaymentSource {
+  ExpensePaymentSource({
+    this.suggestedStatus,
+    required this.conflict,
+    required this.notes,
+  });
+
+  /// `reimbursable` or `company_paid`; null when unknown or the clues disagree.
+  final String? suggestedStatus;
+  final bool conflict;
+  final List<String> notes;
+
+  factory ExpensePaymentSource.fromJson(Map<String, dynamic> json) {
+    final status = json['suggestedStatus'];
+    return ExpensePaymentSource(
+      suggestedStatus: status is String ? status : null,
+      conflict: json['conflict'] == true,
+      notes: asList(json['notes']).map(asString).toList(),
     );
   }
 }
