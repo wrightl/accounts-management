@@ -66,4 +66,64 @@ describe("parseExpenseInput", () => {
     expect(result.data.category).toBe("");
     expect(result.data.amountPence).toBe(1250);
   });
+
+  describe("foreign currency", () => {
+    const base = { description: "Hotel", status: "recorded", vatRate: "0" };
+
+    it("keeps the original amount and allows a blank sterling amount", () => {
+      const result = parseExpenseInput({
+        ...base,
+        currency: "usd",
+        originalAmount: "120.50",
+        amountPounds: "",
+      });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.data).toMatchObject({
+        foreignCurrency: "USD",
+        originalAmountMinor: 12050,
+        amountPence: 0,
+      });
+    });
+
+    it("requires a positive original amount", () => {
+      const result = parseExpenseInput({ ...base, currency: "EUR", originalAmount: "" });
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.fieldErrors.originalAmount).toBe("Amount must be positive");
+    });
+
+    it("treats GBP and a missing currency as sterling", () => {
+      for (const currency of ["GBP", "", undefined]) {
+        const result = parseExpenseInput({
+          ...base,
+          currency,
+          originalAmount: "99",
+          amountPounds: "12",
+        });
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.data).toMatchObject({
+          foreignCurrency: null,
+          originalAmountMinor: null,
+          amountPence: 1200,
+        });
+      }
+    });
+
+    it("ignores the currency for mileage", () => {
+      const result = parseExpenseInput({
+        ...base,
+        category: "Travel",
+        currency: "USD",
+        originalAmount: "10",
+        useMileage: "true",
+        mileageMiles: "10",
+        mileageRatePence: "45",
+      });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.data.foreignCurrency).toBeNull();
+    });
+  });
 });

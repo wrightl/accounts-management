@@ -44,6 +44,7 @@ import {
   resolveInboundRecipient,
 } from "@/lib/expenses/inbound-mailbox";
 import { formatExpenseAmount, poundsToPence } from "@/lib/money";
+import { sterlingFromForeign } from "@/lib/expenses/convert";
 import { getResendClient } from "@/lib/resend/client";
 import { getReceiptOcrSettings } from "@/lib/platform-settings";
 import { getStorage, type StoredObject } from "@/lib/storage";
@@ -582,19 +583,37 @@ async function deliverInboundEmail(
     if (uploadError) throw uploadError;
 
     // All-or-nothing, so a retry after a failure cannot leave some expenses behind.
+    // Convert foreign receipts before the transaction so it doesn't wait on the
+    // Bank of England. Without a rate the reviewer enters the sterling amount.
+    const amounts = await Promise.all(
+      drafts.map(async (draft) => {
+        const merged = draft.extraction;
+        let receiptAmount = 0;
+        if (merged.amountPounds) {
+          try {
+            receiptAmount = poundsToPence(merged.amountPounds);
+          } catch {
+            receiptAmount = 0;
+          }
+        }
+        if (!isForeignCurrency(merged.currency)) {
+          return { amountPence: receiptAmount, currency: null, originalAmountMinor: null };
+        }
+        const currency = merged.currency!.toUpperCase();
+        const amountPence =
+          receiptAmount > 0
+            ? ((await sterlingFromForeign(currency, receiptAmount, draft.spentAt ?? null)) ?? 0)
+            : 0;
+        return { amountPence, currency, originalAmountMinor: receiptAmount };
+      }),
+    );
+
     // now() is fixed within a transaction; step createdAt so attachment order survives.
     const createdBase = Date.now();
     expenseIds = await db.transaction(async (tx) => {
       for (const [i, draft] of drafts.entries()) {
         const merged = draft.extraction;
-        let amountPence = 0;
-        if (merged.amountPounds) {
-          try {
-            amountPence = poundsToPence(merged.amountPounds);
-          } catch {
-            amountPence = 0;
-          }
-        }
+        const { amountPence, currency, originalAmountMinor } = amounts[i]!;
 
         await tx.insert(expenses).values({
           id: plannedIds[i],
@@ -612,9 +631,8 @@ async function deliverInboundEmail(
           createdByUserId: sender.id,
           inboundEmailJobId: job.id,
           createdAt: new Date(createdBase + i),
-          detectedCurrency: isForeignCurrency(merged.currency)
-            ? merged.currency!.toUpperCase()
-            : null,
+          detectedCurrency: currency,
+          originalAmountMinor,
         });
 
         const receipt = receipts[i];
@@ -770,6 +788,7 @@ export async function listPendingExpenses(companyId: string, limit = 5) {
       description: expenses.description,
       amountPence: expenses.amountPence,
       detectedCurrency: expenses.detectedCurrency,
+      originalAmountMinor: expenses.originalAmountMinor,
       createdAt: expenses.createdAt,
       submitterName: users.name,
       submitterEmail: users.email,
@@ -782,7 +801,7 @@ export async function listPendingExpenses(companyId: string, limit = 5) {
 
   return rows.map((r) => ({
     ...r,
-    amountFormatted: formatExpenseAmount(r.amountPence, r.detectedCurrency),
+    amountFormatted: formatExpenseAmount(r),
     submitterLabel: r.submitterName || r.submitterEmail || "Unknown",
   }));
 }
@@ -892,6 +911,7 @@ export async function listInboundEmailJobExpenses(companyId: string, jobId: stri
       description: expenses.description,
       amountPence: expenses.amountPence,
       detectedCurrency: expenses.detectedCurrency,
+      originalAmountMinor: expenses.originalAmountMinor,
       status: expenses.status,
     })
     .from(expenses)
@@ -901,7 +921,7 @@ export async function listInboundEmailJobExpenses(companyId: string, jobId: stri
     .orderBy(expenses.createdAt, expenses.id);
   return rows.map((r) => ({
     ...r,
-    amountFormatted: formatExpenseAmount(r.amountPence, r.detectedCurrency),
+    amountFormatted: formatExpenseAmount(r),
   }));
 }
 

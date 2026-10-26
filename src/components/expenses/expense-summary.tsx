@@ -2,9 +2,15 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
-import { formatExpenseAmount } from "@/lib/money";
+import { formatCurrencyAmount, formatGBP } from "@/lib/money";
 
-type LiveSummary = { description: string; pence: number | null; currency: string };
+type LiveSummary = {
+  description: string;
+  /** Sterling, or null when the form doesn't have a valid amount yet. */
+  pence: number | null;
+  /** What was paid when it wasn't GBP. */
+  original: { currency: string; amountMinor: number | null } | null;
+};
 
 const ExpenseSummaryContext = createContext<{
   summary: LiveSummary;
@@ -15,18 +21,18 @@ const ExpenseSummaryContext = createContext<{
 export function ExpenseSummaryProvider({
   initialDescription,
   initialPence,
-  initialCurrency,
+  initialOriginal,
   children,
 }: {
   initialDescription: string;
   initialPence: number;
-  initialCurrency: string;
+  initialOriginal: LiveSummary["original"];
   children: ReactNode;
 }) {
   const [summary, setSummary] = useState<LiveSummary>({
     description: initialDescription,
     pence: initialPence,
-    currency: initialCurrency,
+    original: initialOriginal,
   });
   return (
     <ExpenseSummaryContext.Provider value={{ summary, setSummary }}>
@@ -45,11 +51,18 @@ export function ExpenseTitle({ fallback }: { fallback: string }) {
 export function ExpenseAmountCard() {
   const context = useContext(ExpenseSummaryContext);
   if (!context) return null;
-  const { pence, currency } = context.summary;
+  const { pence, original } = context.summary;
   return (
     <Card className="min-w-[140px]">
       <CardTitle>Amount</CardTitle>
-      <CardValue>{pence == null ? "—" : formatExpenseAmount(pence, currency)}</CardValue>
+      <CardValue>{pence == null || (original && pence === 0) ? "—" : formatGBP(pence)}</CardValue>
+      {original ? (
+        <p className="mt-1 text-xs text-muted">
+          {original.amountMinor == null
+            ? `Paid in ${original.currency}`
+            : `${formatCurrencyAmount(original.amountMinor, original.currency)} paid`}
+        </p>
+      ) : null}
     </Card>
   );
 }
@@ -58,10 +71,17 @@ export function ExpenseAmountCard() {
 export function useReportExpenseSummary(
   description: string,
   pence: number | null,
-  currency: string,
+  originalCurrency: string | null,
+  originalAmountMinor: number | null,
 ) {
   const setSummary = useContext(ExpenseSummaryContext)?.setSummary;
   useEffect(() => {
-    setSummary?.({ description, pence, currency });
-  }, [setSummary, description, pence, currency]);
+    setSummary?.({
+      description,
+      pence,
+      original: originalCurrency
+        ? { currency: originalCurrency, amountMinor: originalAmountMinor }
+        : null,
+    });
+  }, [setSummary, description, pence, originalCurrency, originalAmountMinor]);
 }

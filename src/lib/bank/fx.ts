@@ -7,29 +7,18 @@ import { and, desc, eq, lte } from "drizzle-orm";
 import { getDb } from "@/db";
 import { fxRates } from "@/db/schema";
 import { formatGBP } from "@/lib/money";
+import {
+  BOE_SERIES_BY_CURRENCY,
+  expectedGbpPenceFromForeign,
+} from "@/lib/expenses/currency";
+
+export { BOE_SERIES_BY_CURRENCY, expectedGbpPenceFromForeign };
 
 /** Tolerance band around the expected sterling amount (±10%). */
 export const FX_AMOUNT_TOLERANCE = 0.1;
 
 /** Max working-day gap between receipt date and bank booking date. */
 export const FX_WORKING_DAY_WINDOW = 3;
-
-/**
- * BoE series codes for currencies we detect on receipts.
- * Quote convention: units of foreign currency per one pound sterling.
- * Currencies without a series are skipped (no foreign suggestion).
- */
-export const BOE_SERIES_BY_CURRENCY: Record<string, string> = {
-  USD: "XUDLUSD",
-  EUR: "XUDLERD",
-  JPY: "XUDLJYD",
-  CHF: "XUDLSFD",
-  AUD: "XUDLADD",
-  CAD: "XUDLCDD",
-  SEK: "XUDLSKD",
-  NOK: "XUDLNKD",
-  DKK: "XUDLDKD",
-};
 
 export type FxRateObservation = {
   currency: string;
@@ -43,17 +32,6 @@ export type FxAmountBand = {
   maxGbpPence: number;
   rate: FxRateObservation;
 };
-
-/** Convert a foreign receipt amount to expected sterling pence. */
-export function expectedGbpPenceFromForeign(
-  foreignAmountPence: number,
-  foreignPerGbp: number,
-): number {
-  if (!(foreignPerGbp > 0) || !Number.isFinite(foreignPerGbp)) {
-    throw new Error(`Invalid FX rate: ${foreignPerGbp}`);
-  }
-  return Math.round((foreignAmountPence / 100 / foreignPerGbp) * 100);
-}
 
 /** Inclusive ±tolerance band around expected sterling. */
 export function gbpAmountBand(

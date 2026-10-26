@@ -79,7 +79,9 @@ describe("expense bank reconciliation", () => {
       companyId,
       description: "Starbucks Seattle",
       spentAt: "2026-04-01",
-      amountPence: 10000,
+      // US$100.00 at 1.27.
+      amountPence: 7874,
+      originalAmountMinor: 10000,
       status: "pending",
       detectedCurrency: "USD",
     });
@@ -115,7 +117,9 @@ describe("expense bank reconciliation", () => {
       companyId,
       description: "Starbucks Seattle",
       spentAt: "2026-04-01",
-      amountPence: 10000,
+      // US$100.00 at 1.27.
+      amountPence: 7874,
+      originalAmountMinor: 10000,
       status: "pending",
       detectedCurrency: "USD",
     });

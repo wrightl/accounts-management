@@ -24,7 +24,7 @@ import {
   ExpenseTitle,
 } from "@/components/expenses/expense-summary";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
-import { isForeignCurrency } from "@/lib/expenses/receipt-parse";
+import { expenseOriginalAmount } from "@/lib/expenses/currency";
 import { getExpenseRebill, listOrderOptions } from "@/lib/profitability/queries";
 
 export default async function ExpenseDetailPage({
@@ -58,9 +58,7 @@ export default async function ExpenseDetailPage({
   );
   const canLinkBank =
     canWrite && settlements.length === 0 && isExpenseLinkable(detail.expense);
-  const foreignCurrency = isForeignCurrency(detail.expense.detectedCurrency)
-    ? detail.expense.detectedCurrency!.toUpperCase()
-    : null;
+  const originalAmount = expenseOriginalAmount(detail.expense);
 
   const listHref = expenseListReturnHref((await cookies()).get(EXPENSE_LIST_COOKIE)?.value);
 
@@ -83,11 +81,11 @@ export default async function ExpenseDetailPage({
         </div>
       )}
 
-      {foreignCurrency && detail.expense.status === "pending" ? (
+      {originalAmount && detail.expense.status === "pending" ? (
         <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
-          Foreign currency detected on the receipt ({foreignCurrency}). Amounts in
-          this app are recorded in GBP — confirm the sterling amount before
-          approving. If the receipt is actually in sterling, set the currency to GBP.
+          The receipt is in {originalAmount.currency}. The GBP amount is converted at
+          the Bank of England rate; change it to what your bank charged if you know
+          it. If the receipt is actually in sterling, set the currency to GBP.
         </div>
       ) : null}
 
@@ -149,7 +147,7 @@ export default async function ExpenseDetailPage({
       <ExpenseSummaryProvider
         initialDescription={detail.expense.description}
         initialPence={detail.expense.amountPence}
-        initialCurrency={foreignCurrency ?? "GBP"}
+        initialOriginal={originalAmount}
       >
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>

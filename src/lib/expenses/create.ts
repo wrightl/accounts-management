@@ -2,6 +2,7 @@ import "server-only";
 import { getDb } from "@/db";
 import { expenses } from "@/db/schema";
 import { refreshExpenseBankSuggestion } from "@/lib/bank/expense-match";
+import { withSterlingAmount } from "@/lib/expenses/convert";
 import { appendMileageDescription } from "@/lib/expenses/mileage";
 import { resolveExpenseProject } from "@/lib/expenses/project";
 import type { ReviewContext } from "@/lib/expenses/review";
@@ -22,9 +23,12 @@ import type { ActionResult } from "@/actions/result";
  */
 export async function createExpenseRecord(
   ctx: ReviewContext,
-  data: ExpenseParsed,
+  input: ExpenseParsed,
 ): Promise<ActionResult> {
   const { companyId, localUserId } = ctx;
+  const converted = await withSterlingAmount(input, { required: true });
+  if (!converted.ok) return converted;
+  const data = converted.data;
   const {
     amountPence,
     resolvedMileageMiles: mileageMiles,
@@ -84,6 +88,8 @@ export async function createExpenseRecord(
       paidByUserId: normalized.paidByUserId,
       mileageMiles,
       mileageRatePence,
+      detectedCurrency: data.foreignCurrency,
+      originalAmountMinor: data.originalAmountMinor,
       createdByUserId: localUserId,
     })
     .returning({ id: expenses.id });

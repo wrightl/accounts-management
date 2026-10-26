@@ -29,6 +29,17 @@ export const expenseFieldsSchema = z.object({
     .optional()
     .or(z.literal("")),
   amountPounds: z.string().trim().optional().or(z.literal("")).default(""),
+  /** Currency paid in; GBP unless the receipt was in another currency. */
+  currency: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z]{3}$/, "Choose a currency")
+    .optional()
+    .or(z.literal(""))
+    .transform((v) => v || "GBP"),
+  /** The amount in `currency` when that isn't GBP. */
+  originalAmount: z.string().trim().optional().or(z.literal("")).default(""),
   status: z
     .string()
     .refine(
@@ -83,7 +94,12 @@ export const expenseFieldsSchema = z.object({
 export type ExpenseFieldsParsed = z.infer<typeof expenseFieldsSchema>;
 
 export type ExpenseParsed = ExpenseFieldsParsed & {
+  /** Sterling. For a foreign expense, 0 means convert the original amount. */
   amountPence: number;
+  /** The foreign currency, or null for sterling (and always for mileage). */
+  foreignCurrency: string | null;
+  /** The amount in foreignCurrency, in minor units; null for sterling. */
+  originalAmountMinor: number | null;
   resolvedMileageMiles: number | null;
   resolvedMileageRatePence: number | null;
 };
@@ -94,6 +110,8 @@ export function expenseRawFromFormData(formData: FormData): Record<string, unkno
     category: formData.get("category") ?? "",
     spentAt: formData.get("spentAt") ?? "",
     amountPounds: formData.get("amountPounds") ?? "",
+    currency: formData.get("currency") ?? "",
+    originalAmount: formData.get("originalAmount") ?? "",
     status: formData.get("status") ?? "",
     billable: formData.get("billable") ?? "",
     clientId: formData.get("clientId") ?? "",
@@ -113,6 +131,8 @@ function resolveExpenseAmount(
   | {
       ok: true;
       amountPence: number;
+      foreignCurrency: string | null;
+      originalAmountMinor: number | null;
       mileageMiles: number | null;
       mileageRatePence: number | null;
     }
@@ -139,6 +159,8 @@ function resolveExpenseAmount(
       return {
         ok: true,
         amountPence: mileageAmountPence(data.mileageMiles, rate),
+        foreignCurrency: null,
+        originalAmountMinor: null,
         mileageMiles: Math.round(data.mileageMiles),
         mileageRatePence: Math.round(rate),
       };
@@ -152,9 +174,35 @@ function resolveExpenseAmount(
     }
   }
 
+  const foreignCurrency = data.currency === "GBP" ? null : data.currency;
+  let originalAmountMinor: number | null = null;
+  if (foreignCurrency) {
+    try {
+      originalAmountMinor = poundsToPence(data.originalAmount);
+    } catch {
+      return {
+        ok: false,
+        fieldErrors: { originalAmount: "Enter a valid amount" },
+      };
+    }
+    if (originalAmountMinor <= 0 && !opts.allowZero) {
+      return {
+        ok: false,
+        fieldErrors: { originalAmount: "Amount must be positive" },
+      };
+    }
+  }
+
   try {
     const amountPence = poundsToPence(data.amountPounds);
-    if (amountPence <= 0 && !opts.allowZero) {
+    if (amountPence < 0) {
+      return {
+        ok: false,
+        fieldErrors: { amountPounds: "Amount must be positive" },
+      };
+    }
+    // A foreign expense with no sterling amount is converted when saved.
+    if (amountPence === 0 && !opts.allowZero && !foreignCurrency) {
       return {
         ok: false,
         fieldErrors: { amountPounds: "Amount must be positive" },
@@ -163,6 +211,8 @@ function resolveExpenseAmount(
     return {
       ok: true,
       amountPence,
+      foreignCurrency,
+      originalAmountMinor,
       mileageMiles: null,
       mileageRatePence: null,
     };
@@ -221,6 +271,8 @@ export function parseExpenseInput(
     data: {
       ...parsed.data,
       amountPence: amountResult.amountPence,
+      foreignCurrency: amountResult.foreignCurrency,
+      originalAmountMinor: amountResult.originalAmountMinor,
       resolvedMileageMiles: amountResult.mileageMiles,
       resolvedMileageRatePence: amountResult.mileageRatePence,
     },

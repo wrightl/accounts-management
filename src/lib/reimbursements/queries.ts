@@ -88,7 +88,7 @@ export async function getReimbursementDetail(companyId: string, id: string) {
       itemId: i.itemId,
       expense: {
         ...i.expense,
-        amountFormatted: formatExpenseAmount(i.expense.amountPence, i.expense.detectedCurrency),
+        amountFormatted: formatExpenseAmount(i.expense),
       },
     })),
   };

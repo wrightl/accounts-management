@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { useAlert } from "@/components/ui/alert-dialog";
 import { FieldError, Input, Label, Select, Textarea } from "@/components/ui/form";
@@ -20,6 +20,7 @@ import {
   uploadReceipt,
   approveExpense,
   rejectExpense,
+  fetchExpenseExchangeRate,
   type CreateExpenseResult,
 } from "@/actions/expenses";
 import { expenseCurrencySymbol, formatGBP, penceToPounds, poundsToPence } from "@/lib/money";
@@ -27,6 +28,11 @@ import { useReportExpenseSummary } from "@/components/expenses/expense-summary";
 import { clientDisplayName } from "@/lib/clients/display";
 import { ReceiptUploadField } from "@/components/expenses/receipt-upload-field";
 import { isForeignCurrency, type ReceiptExtraction } from "@/lib/expenses/receipt-parse";
+import {
+  EXPENSE_CURRENCIES,
+  expectedGbpPenceFromForeign,
+  expenseOriginalAmount,
+} from "@/lib/expenses/currency";
 import {
   VatRateField,
   choiceFromVatRate,
@@ -70,6 +76,7 @@ export function ExpenseForm({
     spentAt: string | null;
     amountPence: number;
     detectedCurrency?: string | null;
+    originalAmountMinor?: number | null;
     vatRate?: number;
     vatPence?: number;
     status: string;
@@ -167,11 +174,26 @@ export function ExpenseForm({
   );
   const isPending = expense?.status === "pending";
   const isEmailSubmission = expense?.source === "email";
-  // A wrongly detected receipt currency can be corrected to GBP.
-  const detectedForeignCurrency = isForeignCurrency(expense?.detectedCurrency)
-    ? expense!.detectedCurrency!.toUpperCase()
+  const savedOriginal = expense
+    ? expenseOriginalAmount({
+        detectedCurrency: expense.detectedCurrency ?? null,
+        originalAmountMinor: expense.originalAmountMinor ?? null,
+      })
     : null;
-  const [currency, setCurrency] = useState(detectedForeignCurrency ?? "GBP");
+  const [currency, setCurrency] = useState(savedOriginal?.currency ?? "GBP");
+  const [originalAmount, setOriginalAmount] = useState(
+    savedOriginal ? String(penceToPounds(savedOriginal.amountMinor)) : "",
+  );
+  // For a foreign expense the GBP amount follows the exchange rate until it's
+  // typed over; changing the foreign amount, currency or date recalculates it.
+  const [gbpFollowsRate, setGbpFollowsRate] = useState(
+    !expense || expense.amountPence === 0,
+  );
+  const [rate, setRate] = useState<{
+    key: string;
+    foreignPerGbp: number | null;
+    observationDate: string | null;
+  } | null>(null);
   const currencySymbol = expenseCurrencySymbol(currency);
   const [approveStatus, setApproveStatus] = useState<ExpenseStatusOption>(() => {
     if (expense?.submittedByUserId) return "reimbursable";
@@ -190,6 +212,59 @@ export function ExpenseForm({
     return fromBankTransaction ? "company_paid" : defaultStatus;
   });
 
+  const computedMileagePence = useMemo(() => {
+    if (!useMileage) return null;
+    const miles = Number(mileageMiles);
+    const rate = Number(mileageRatePence);
+    if (!Number.isFinite(miles) || miles <= 0 || !Number.isFinite(rate) || rate <= 0) {
+      return null;
+    }
+    try {
+      return mileageAmountPence(miles, rate);
+    } catch {
+      return null;
+    }
+  }, [useMileage, mileageMiles, mileageRatePence]);
+
+  const foreign = currency !== "GBP" && !useMileage;
+  const rateKey = `${currency}:${spentAt}`;
+  useEffect(() => {
+    if (!foreign) return;
+    let cancelled = false;
+    void fetchExpenseExchangeRate(currency, spentAt).then((r) => {
+      if (cancelled) return;
+      setRate({
+        key: rateKey,
+        foreignPerGbp: r.ok ? r.foreignPerGbp : null,
+        observationDate: r.ok ? r.observationDate : null,
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [foreign, currency, spentAt, rateKey]);
+  const currentRate = foreign && rate?.key === rateKey ? rate : null;
+
+  const originalMinor = foreign ? parsePence(originalAmount) : null;
+  const convertedPence =
+    currentRate?.foreignPerGbp && originalMinor && originalMinor > 0
+      ? expectedGbpPenceFromForeign(originalMinor, currentRate.foreignPerGbp)
+      : null;
+  // The GBP amount the form saves.
+  const sterlingPounds =
+    foreign && gbpFollowsRate
+      ? convertedPence != null
+        ? String(penceToPounds(convertedPence))
+        : ""
+      : amountPounds;
+
+  useReportExpenseSummary(
+    description,
+    useMileage ? computedMileagePence : parsePence(sterlingPounds),
+    foreign ? currency : null,
+    originalMinor,
+  );
+
   // Everything a save sends, so the form can tell when it differs from what
   // was loaded (or last saved). The approve-as choice is excluded: it only
   // applies on Approve, which is always available.
@@ -205,38 +280,15 @@ export function ExpenseForm({
     useMileage,
     mileageMiles,
     mileageRatePence,
-    amountPounds,
+    sterlingPounds,
     vatRate,
     currency,
+    originalAmount,
     pendingReceipt !== null,
   ]);
   const [savedSnapshot, setSavedSnapshot] = useState(snapshot);
   const dirty = canWrite && snapshot !== savedSnapshot;
   useUnsavedChangesGuard(dirty);
-
-  const computedMileagePence = useMemo(() => {
-    if (!useMileage) return null;
-    const miles = Number(mileageMiles);
-    const rate = Number(mileageRatePence);
-    if (!Number.isFinite(miles) || miles <= 0 || !Number.isFinite(rate) || rate <= 0) {
-      return null;
-    }
-    try {
-      return mileageAmountPence(miles, rate);
-    } catch {
-      return null;
-    }
-  }, [useMileage, mileageMiles, mileageRatePence]);
-
-  let livePence: number | null = computedMileagePence;
-  if (!useMileage) {
-    try {
-      livePence = amountPounds.trim() ? poundsToPence(amountPounds) : null;
-    } catch {
-      livePence = null;
-    }
-  }
-  useReportExpenseSummary(description, livePence, useMileage ? "GBP" : currency);
 
   if (!canWrite && mode === "create") {
     return <p className="text-sm text-muted">You do not have permission to create expenses.</p>;
@@ -250,8 +302,18 @@ export function ExpenseForm({
     if (extraction.spentAt && spentAt === today) {
       setSpentAt(extraction.spentAt);
     }
-    if (extraction.amountPounds && !amountPounds.trim()) {
-      setAmountPounds(extraction.amountPounds);
+    if (
+      extraction.amountPounds &&
+      !amountPounds.trim() &&
+      !originalAmount.trim()
+    ) {
+      if (isForeignCurrency(extraction.currency)) {
+        setCurrency(extraction.currency!.toUpperCase());
+        setOriginalAmount(extraction.amountPounds);
+        setGbpFollowsRate(true);
+      } else {
+        setAmountPounds(extraction.amountPounds);
+      }
     }
     if (extraction.category && !category) {
       setCategory(extraction.category);
@@ -271,7 +333,7 @@ export function ExpenseForm({
     if (billable) formData.set("billable", "true");
     formData.set("clientId", projectClientId);
     formData.set("orderId", projectOrderId);
-    formData.set("currency", currency);
+    setCurrencyFields(formData);
     if (useMileage && !isEmailSubmission) {
       formData.set("useMileage", "true");
       formData.set("mileageMiles", mileageMiles);
@@ -281,13 +343,33 @@ export function ExpenseForm({
         computedMileagePence != null ? String(penceToPounds(computedMileagePence)) : "",
       );
     } else {
-      formData.set("amountPounds", amountPounds);
+      formData.set("amountPounds", sterlingPounds);
     }
     formData.set(
       "vatRate",
       String(useMileage || !vatRegistered ? 0 : vatRate),
     );
     return formData;
+  }
+
+  function setCurrencyFields(formData: FormData) {
+    formData.set("currency", foreign ? currency : "GBP");
+    if (foreign) formData.set("originalAmount", originalAmount);
+    else formData.delete("originalAmount");
+  }
+
+  function changeCurrency(next: string) {
+    // Carry the amount across: it was typed before the currency was picked,
+    // or a receipt was wrongly read as foreign.
+    if (currency === "GBP" && next !== "GBP" && !originalAmount.trim()) {
+      setOriginalAmount(amountPounds);
+    } else if (currency !== "GBP" && next === "GBP" && originalAmount.trim()) {
+      setAmountPounds(originalAmount);
+    }
+    setCurrency(next);
+    setGbpFollowsRate(true);
+    clearField("originalAmount");
+    clearField("amountPounds");
   }
 
   function validateClient(
@@ -323,7 +405,7 @@ export function ExpenseForm({
     formData.set("spentAt", spentAt);
     formData.set("status", status);
     formData.set("paidByUserId", status === "company_paid" ? "" : paidByUserId);
-    formData.set("currency", currency);
+    setCurrencyFields(formData);
     if (useMileage) {
       formData.set("useMileage", "true");
       formData.set("mileageMiles", mileageMiles);
@@ -334,7 +416,7 @@ export function ExpenseForm({
       );
     } else {
       formData.delete("useMileage");
-      formData.set("amountPounds", amountPounds);
+      formData.set("amountPounds", sterlingPounds);
     }
     formData.set(
       "vatRate",
@@ -452,6 +534,23 @@ export function ExpenseForm({
     })();
   }
 
+  // An email receipt can be in a currency the form doesn't otherwise offer.
+  const receiptCurrency = isEmailSubmission ? (savedOriginal?.currency ?? null) : null;
+  const currencyOptions = EXPENSE_CURRENCIES.includes(currency)
+    ? EXPENSE_CURRENCIES
+    : [...EXPENSE_CURRENCIES, currency];
+  let rateHint: string;
+  if (!currentRate) {
+    rateHint = "Getting the Bank of England exchange rate…";
+  } else if (currentRate.foreignPerGbp == null) {
+    rateHint = `No ${currency} exchange rate is available, so enter the amount in GBP.`;
+  } else {
+    const rateText = `£1 = ${currentRate.foreignPerGbp} ${currency} (Bank of England, ${currentRate.observationDate})`;
+    rateHint = gbpFollowsRate
+      ? `Converted at ${rateText}. Change it to what your bank charged if you know it.`
+      : `The Bank of England rate is ${rateText}.`;
+  }
+
   return (
     <form ref={formRef} noValidate onSubmit={preventResetSubmit(onSubmit)} className="mx-auto max-w-xl space-y-4">
       {mode === "create" && fromBankTransaction && (
@@ -525,6 +624,7 @@ export function ExpenseForm({
             value={spentAt}
             onChange={(e) => {
               setSpentAt(e.target.value);
+              setGbpFollowsRate(true);
               clearField("spentAt");
             }}
             disabled={!canWrite || pending || linkedToBank}
@@ -621,50 +721,95 @@ export function ExpenseForm({
 
       <div className="grid gap-4 sm:grid-cols-2">
         {!useMileage && (
-          <div>
-            <Label htmlFor="amountPounds" required={!isPending}>
-              Amount ({currencySymbol}){vatRegistered ? " (inc. VAT)" : ""}
-            </Label>
-            <Input
-              id="amountPounds"
-              name="amountPounds"
-              required={!isPending}
-              value={amountPounds}
-              onChange={(e) => {
-                setAmountPounds(e.target.value);
-                clearField("amountPounds");
-              }}
-              disabled={!canWrite || pending || linkedToBank}
-              aria-invalid={Boolean(fieldErrors.amountPounds)}
-              aria-describedby={
-                fieldErrors.amountPounds ? "amountPounds-error" : undefined
-              }
-            />
-            <FieldError id="amountPounds-error">
-              {fieldErrors.amountPounds}
-            </FieldError>
-          </div>
+          <>
+            <div>
+              <Label htmlFor="currency">Currency</Label>
+              <Select
+                id="currency"
+                name="currency"
+                value={currency}
+                onChange={(e) => changeCurrency(e.target.value)}
+                disabled={!canWrite || pending || linkedToBank}
+              >
+                {currencyOptions.map((code) => (
+                  <option key={code} value={code}>
+                    {code}
+                    {code === receiptCurrency ? " (on receipt)" : ""}
+                  </option>
+                ))}
+              </Select>
+              {receiptCurrency ? (
+                <p className="mt-1 text-xs text-muted">
+                  Choose GBP if the receipt was wrongly read as foreign currency.
+                </p>
+              ) : null}
+            </div>
+            {foreign ? (
+              <div>
+                <Label htmlFor="originalAmount" required={!isPending}>
+                  Amount ({currencySymbol})
+                </Label>
+                <Input
+                  id="originalAmount"
+                  name="originalAmount"
+                  inputMode="decimal"
+                  required={!isPending}
+                  value={originalAmount}
+                  onChange={(e) => {
+                    setOriginalAmount(e.target.value);
+                    setGbpFollowsRate(true);
+                    clearField("originalAmount");
+                    clearField("amountPounds");
+                  }}
+                  disabled={!canWrite || pending || linkedToBank}
+                  aria-invalid={Boolean(fieldErrors.originalAmount)}
+                  aria-describedby={
+                    fieldErrors.originalAmount ? "originalAmount-error" : undefined
+                  }
+                />
+                <FieldError id="originalAmount-error">
+                  {fieldErrors.originalAmount}
+                </FieldError>
+              </div>
+            ) : null}
+            <div className={foreign ? "sm:col-span-2" : ""}>
+              <Label htmlFor="amountPounds" required={!isPending}>
+                {foreign ? "Amount in GBP (£)" : "Amount (£)"}
+                {vatRegistered ? " (inc. VAT)" : ""}
+              </Label>
+              <Input
+                id="amountPounds"
+                name="amountPounds"
+                inputMode="decimal"
+                required={!isPending}
+                value={sterlingPounds}
+                onChange={(e) => {
+                  setAmountPounds(e.target.value);
+                  setGbpFollowsRate(false);
+                  clearField("amountPounds");
+                }}
+                disabled={!canWrite || pending || linkedToBank}
+                aria-invalid={Boolean(fieldErrors.amountPounds)}
+                aria-describedby={
+                  [
+                    fieldErrors.amountPounds ? "amountPounds-error" : null,
+                    foreign ? "amountPounds-rate" : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" ") || undefined
+                }
+              />
+              {foreign ? (
+                <p id="amountPounds-rate" className="mt-1 text-xs text-muted">
+                  {rateHint}
+                </p>
+              ) : null}
+              <FieldError id="amountPounds-error">
+                {fieldErrors.amountPounds}
+              </FieldError>
+            </div>
+          </>
         )}
-        {detectedForeignCurrency && !useMileage ? (
-          <div>
-            <Label htmlFor="currency">Currency</Label>
-            <Select
-              id="currency"
-              name="currency"
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value)}
-              disabled={!canWrite || pending}
-            >
-              <option value={detectedForeignCurrency}>
-                {detectedForeignCurrency} (detected on receipt)
-              </option>
-              <option value="GBP">GBP</option>
-            </Select>
-            <p className="mt-1 text-xs text-muted">
-              Choose GBP if the receipt was wrongly read as foreign currency.
-            </p>
-          </div>
-        ) : null}
         {vatRegistered && !useMileage ? (
           <div>
             <VatRateField
@@ -684,16 +829,10 @@ export function ExpenseForm({
             <FieldError id="vatRate-error">{fieldErrors.vatRate}</FieldError>
           </div>
         ) : null}
-        {vatRegistered && !useMileage && amountPounds.trim() ? (
+        {vatRegistered && !useMileage && sterlingPounds.trim() ? (
           <p className="text-sm text-muted sm:col-span-2">
             Of which VAT:{" "}
-            {formatGBP(
-              vatFromInclusiveGross(
-                Math.round(Number(amountPounds.replace(/[£,\s]/g, "")) * 100) ||
-                  0,
-                vatRate,
-              ),
-            )}
+            {formatGBP(vatFromInclusiveGross(parsePence(sterlingPounds) ?? 0, vatRate))}
           </p>
         ) : null}
         <div className={useMileage ? "sm:col-span-2" : ""}>
@@ -952,4 +1091,14 @@ export function ExpenseForm({
       )}
     </form>
   );
+}
+
+/** Pence for a typed amount, or null when it's blank or not a number. */
+function parsePence(value: string): number | null {
+  if (!value.trim()) return null;
+  try {
+    return poundsToPence(value);
+  } catch {
+    return null;
+  }
 }

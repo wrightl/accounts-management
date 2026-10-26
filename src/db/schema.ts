@@ -516,10 +516,13 @@ export const expenses = pgTable(
     mileageMiles: integer("mileage_miles"),
     mileageRatePence: integer("mileage_rate_pence"),
     /**
-     * Non-GBP currency detected during OCR (e.g. USD, EUR). Null when
-     * unset or sterling. Used to warn on pending email review.
+     * Currency the expense was paid in when not sterling (e.g. USD, EUR),
+     * detected on the receipt or chosen on the form. Null means GBP.
+     * amountPence is always sterling; the foreign amount is originalAmountMinor.
      */
     detectedCurrency: text("detected_currency"),
+    /** The amount in detectedCurrency, in minor units (cents). Null for GBP. */
+    originalAmountMinor: integer("original_amount_minor"),
     /** The inbound email this expense came from; one email can create several. */
     inboundEmailJobId: uuid("inbound_email_job_id").references(
       (): AnyPgColumn => inboundEmailJobs.id,

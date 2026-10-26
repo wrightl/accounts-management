@@ -111,6 +111,7 @@ export async function listExpenses(companyId: string, filters: ExpenseFilters = 
       spentAt: expenses.spentAt,
       amountPence: expenses.amountPence,
       detectedCurrency: expenses.detectedCurrency,
+      originalAmountMinor: expenses.originalAmountMinor,
       status: expenses.status,
       billable: expenses.billable,
       source: expenses.source,
@@ -154,6 +155,7 @@ export async function listExpenses(companyId: string, filters: ExpenseFilters = 
       spentAt: r.spentAt,
       amountPence: r.amountPence,
       detectedCurrency: r.detectedCurrency,
+      originalAmountMinor: r.originalAmountMinor,
       status: r.status,
       billable: r.billable,
       source: r.source,
@@ -163,7 +165,7 @@ export async function listExpenses(companyId: string, filters: ExpenseFilters = 
       clientName: r.clientName,
       /** Confirmed against a bank transaction. */
       bankLinked: r.bankLinked,
-      amountFormatted: formatExpenseAmount(r.amountPence, r.detectedCurrency),
+      amountFormatted: formatExpenseAmount(r),
     };
   });
 }
@@ -197,7 +199,7 @@ export async function getExpenseDetail(companyId: string, id: string) {
   return {
     expense: {
       ...e,
-      amountFormatted: formatExpenseAmount(e.amountPence, e.detectedCurrency),
+      amountFormatted: formatExpenseAmount(e),
     },
     paidBy: rows[0].paidBy,
     client: rows[0].client,
