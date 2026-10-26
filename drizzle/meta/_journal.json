@@ -442,6 +442,13 @@
       "when": 1790000000000,
       "tag": "0062_expense_payment_source",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1790100000000,
+      "tag": "0063_expense_original_amount",
+      "breakpoints": true
     }
   ]
 }

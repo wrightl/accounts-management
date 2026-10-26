@@ -4,7 +4,8 @@ import { fileURLToPath } from "node:url";
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["tests/unit/**/*.test.ts", "tests/integration/**/*.test.ts"],
+    // Component tests (*.test.tsx) opt into jsdom with a `@vitest-environment` docblock.
+    include: ["tests/unit/**/*.test.{ts,tsx}", "tests/integration/**/*.test.ts"],
     globals: true,
     globalSetup: ["tests/global-setup.ts"],
   },

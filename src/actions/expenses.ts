@@ -17,6 +17,12 @@ import {
   type ParsedExpenseImportRow,
 } from "@/lib/expenses/import-csv";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
+import { withSterlingAmount } from "@/lib/expenses/convert";
+import {
+  isAllowedExpenseCurrency,
+  UNSUPPORTED_CURRENCY_ERROR,
+} from "@/lib/expenses/currency";
+import { FORM_FIELD_ERROR_SUMMARY } from "@/lib/validation/field-errors";
 import { getEmailExpensesFingerprint, listFounders } from "@/lib/expenses/queries";
 import { requireActionPermission } from "@/lib/auth";
 import {
@@ -34,6 +40,7 @@ import type { ActionResult } from "@/actions/result";
 import { periodLockError } from "@/lib/period-lock";
 import { checkPeriodOpen, getBooksLockedThrough } from "@/lib/period-lock-queries";
 import { refreshExpenseBankSuggestion } from "@/lib/bank/expense-match";
+import { resolveFxRate } from "@/lib/bank/fx";
 import {
   bankDebitLinkError,
   ExpenseLinkError,
@@ -63,14 +70,6 @@ export type CreateExpenseResult = ActionResult & {
   /** Set when the expense saved but its bank transaction couldn't be linked. */
   bankLinkError?: string;
 };
-
-/**
- * The form only offers GBP or the currency detected on the receipt, so the
- * one change to apply is marking a wrongly flagged receipt as sterling.
- */
-function marksAsSterling(formData: FormData): boolean {
-  return formData.get("currency") === "GBP";
-}
 
 export async function createExpense(formData: FormData): Promise<CreateExpenseResult> {
   const parsed = parseExpenseInput(expenseRawFromFormData(formData));
@@ -140,14 +139,14 @@ export async function updateExpense(
   formData: FormData,
 ): Promise<ActionResult> {
   // Allow zero until we know whether this is a pending draft (checked inside mutate).
-  const parsed = parseExpenseInput(expenseRawFromFormData(formData), {
+  const input = parseExpenseInput(expenseRawFromFormData(formData), {
     allowZeroAmount: true,
   });
-  if (!parsed.ok) {
+  if (!input.ok) {
     return {
       ok: false,
-      error: parsed.error,
-      fieldErrors: parsed.fieldErrors,
+      error: input.error,
+      fieldErrors: input.fieldErrors,
     };
   }
 
@@ -164,6 +163,19 @@ export async function updateExpense(
       if (existing.status === "reimbursed") {
         return { ok: false, error: "Cannot edit a reimbursed expense" };
       }
+
+      const currency = input.data.foreignCurrency;
+      if (currency && !isAllowedExpenseCurrency(currency, existing.detectedCurrency)) {
+        return {
+          ok: false,
+          error: FORM_FIELD_ERROR_SUMMARY,
+          fieldErrors: { currency: UNSUPPORTED_CURRENCY_ERROR },
+        };
+      }
+      const parsed = await withSterlingAmount(input.data, {
+        required: existing.status !== "pending",
+      });
+      if (!parsed.ok) return parsed;
 
       if (
         existing.status !== "pending" &&
@@ -273,12 +285,14 @@ export async function updateExpense(
                 : existing.paidByUserId,
           mileageMiles,
           mileageRatePence,
-          detectedCurrency: marksAsSterling(formData) ? null : existing.detectedCurrency,
+          detectedCurrency: parsed.data.foreignCurrency,
+          originalAmountMinor: parsed.data.originalAmountMinor,
         })
         .where(and(eq(expenses.id, id), eq(expenses.companyId, companyId)));
 
       const matchFieldsChanged =
-        (marksAsSterling(formData) && existing.detectedCurrency !== null) ||
+        existing.detectedCurrency !== parsed.data.foreignCurrency ||
+        existing.originalAmountMinor !== parsed.data.originalAmountMinor ||
         existing.amountPence !== amountPence ||
         existing.spentAt !== (parsed.data.spentAt || null) ||
         existing.description !== description ||
@@ -330,14 +344,6 @@ export async function approveExpense(
     };
   }
 
-  if (parsed.data.amountPence <= 0) {
-    return {
-      ok: false,
-      error: "Enter a positive amount before approving",
-      fieldErrors: { amountPounds: "Enter a positive amount before approving" },
-    };
-  }
-
   return mutate(
     "accounts:write",
     async (ctx) => {
@@ -351,11 +357,12 @@ export async function approveExpense(
           category: parsed.data.category || null,
           spentAt: parsed.data.spentAt || null,
           amountPence: parsed.data.amountPence,
+          foreignCurrency: parsed.data.foreignCurrency,
+          originalAmountMinor: parsed.data.originalAmountMinor,
           vatRate: parseVatRate(parsed.data.vatRate),
           billable: parsed.data.billable,
           clientId: project.clientId,
           orderId: project.orderId,
-          ...(marksAsSterling(formData) ? { detectedCurrency: null } : {}),
         },
       });
     },
@@ -611,4 +618,21 @@ export async function fetchEmailExpensesFingerprint(): Promise<
     ok: true,
     fingerprint: await getEmailExpensesFingerprint(authz.user.companyId),
   };
+}
+
+/** Bank of England rate (foreign units per £1) the expense form converts with. */
+export async function fetchExpenseExchangeRate(
+  currency: string,
+  onDate: string,
+): Promise<
+  { ok: true; foreignPerGbp: number; observationDate: string } | { ok: false; error: string }
+> {
+  const authz = await requireActionPermission("accounts:read");
+  if (!authz.ok) return authz;
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(onDate)
+    ? onDate
+    : new Date().toISOString().slice(0, 10);
+  const rate = await resolveFxRate(currency, date).catch(() => null);
+  if (!rate) return { ok: false, error: `No ${currency} exchange rate available` };
+  return { ok: true, foreignPerGbp: rate.foreignPerGbp, observationDate: rate.observationDate };
 }

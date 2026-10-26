@@ -18,11 +18,8 @@ export function formatGBP(pence: number): string {
   return gbpFormatter.format(pence / 100);
 }
 
-/**
- * Format an expense amount in its own currency. Foreign-currency expenses
- * store minor units of `currency` (e.g. 1200 + "USD" = $12.00), not GBP pence.
- */
-export function formatExpenseAmount(
+/** Format minor units of any currency, e.g. 1200 + "USD" -> "US$12.00". */
+export function formatCurrencyAmount(
   minorUnits: number,
   currency: string | null | undefined,
 ): string {
@@ -35,6 +32,21 @@ export function formatExpenseAmount(
   } catch {
     return `${(minorUnits / 100).toFixed(2)} ${code}`;
   }
+}
+
+/**
+ * An expense's sterling amount, followed by the amount paid when that was in
+ * another currency, e.g. "£9.60 (US$12.00)".
+ */
+export function formatExpenseAmount(expense: {
+  amountPence: number;
+  detectedCurrency: string | null;
+  originalAmountMinor: number | null;
+}): string {
+  const gbp = formatGBP(expense.amountPence);
+  const code = expense.detectedCurrency?.trim().toUpperCase();
+  if (!code || code === DEFAULT_CURRENCY || expense.originalAmountMinor == null) return gbp;
+  return `${gbp} (${formatCurrencyAmount(expense.originalAmountMinor, code)})`;
 }
 
 /** Symbol for an expense's currency, e.g. "£", "US$", "€". */

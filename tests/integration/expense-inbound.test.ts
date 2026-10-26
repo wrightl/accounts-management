@@ -7,6 +7,7 @@ import {
   expenseReceipts,
   inboundEmailJobs,
   expenses,
+  fxRates,
   users,
 } from "@/db/schema";
 import {
@@ -534,6 +535,12 @@ describe("inbound email jobs", () => {
       error: null,
     });
     mockAttachmentsList.mockResolvedValue({ data: { data: [] }, error: null });
+    // A cached rate for today, so the undated receipt converts without the network.
+    await db.insert(fxRates).values({
+      currency: "USD",
+      observationDate: new Date().toISOString().slice(0, 10),
+      foreignPerGbp: 1.25,
+    });
 
     const { jobId } = await enqueueInboundEmailJob({
       email_id: "email-usd",
@@ -551,6 +558,8 @@ describe("inbound email jobs", () => {
       .from(expenses)
       .where(eq(expenses.id, result.expenseId!));
     expect(expense.detectedCurrency).toBe("USD");
+    expect(expense.originalAmountMinor).toBe(2900);
+    expect(expense.amountPence).toBe(2320);
   });
 
   it("rejects accountant mailboxes", async () => {

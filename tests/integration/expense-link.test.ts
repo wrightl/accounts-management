@@ -6,9 +6,11 @@ import {
   auditLog,
   bankAccounts,
   bankTransactions,
+  clients,
   companies,
   expenses,
-  fxRates,
+  invoiceLineItems,
+  invoices,
   reconciliationMatches,
   users,
 } from "@/db/schema";
@@ -139,15 +141,20 @@ describe("listExpenseCandidatesForBankTx", () => {
     expect(candidates.map((c) => c.expenseId)).toEqual([old.id]);
   });
 
-  it("shows a foreign receipt in its own currency", async () => {
+  it("shows a foreign receipt's sterling and original amounts", async () => {
     const tx = await debit("2026-04-03", -1700);
-    await expense({ description: "GitHub", amountPence: 2000, detectedCurrency: "USD" });
+    await expense({
+      description: "GitHub",
+      amountPence: 1600,
+      originalAmountMinor: 2000,
+      detectedCurrency: "USD",
+    });
 
     const [candidate] = await listExpenseCandidatesForBankTx(companyId, tx.id);
     expect(candidate).toMatchObject({
-      amountFormatted: "US$20.00",
+      amountFormatted: "£16.00 (US$20.00)",
       foreignCurrency: "USD",
-      amountDeltaPence: null,
+      amountDeltaPence: -100,
     });
   });
 
@@ -191,11 +198,13 @@ describe("listBankDebitCandidatesForExpense", () => {
   });
 
   it("ranks debits for a foreign receipt by its sterling value", async () => {
-    await db
-      .insert(fxRates)
-      .values({ currency: "USD", observationDate: "2026-04-03", foreignPerGbp: 1.25 });
-    // US$20.00 at 1.25 is £16.00.
-    const e = await expense({ description: "GitHub", amountPence: 2000, detectedCurrency: "USD" });
+    // US$20.00 converted to £16.00.
+    const e = await expense({
+      description: "GitHub",
+      amountPence: 1600,
+      originalAmountMinor: 2000,
+      detectedCurrency: "USD",
+    });
     const sameDay = await debit("2026-04-03", -900);
     const payment = await debit("2026-04-05", -1620);
 
@@ -232,6 +241,57 @@ describe("linkExpenseToBankTx", () => {
 
     const [updated] = await db.select().from(expenses).where(eq(expenses.id, e.id));
     expect(updated.status).toBe("company_paid");
+    // A sterling expense keeps its own amount; the note records the difference.
+    expect(updated.amountPence).toBe(1500);
+  });
+
+  function foreignExpense(values: Partial<typeof expenses.$inferInsert> = {}) {
+    // US$20.00 estimated at £16.00, 20% VAT.
+    return expense({
+      description: "GitHub",
+      amountPence: 1600,
+      vatRate: 20,
+      vatPence: 267,
+      originalAmountMinor: 2000,
+      detectedCurrency: "USD",
+      ...values,
+    });
+  }
+
+  it("gives a foreign expense the sterling amount the bank paid", async () => {
+    const tx = await debit("2026-04-05", -1620);
+    const e = await foreignExpense();
+    await linkExpenseToBankTx(companyId, { expenseId: e.id, bankTransactionId: tx.id });
+
+    const [updated] = await db.select().from(expenses).where(eq(expenses.id, e.id));
+    expect(updated).toMatchObject({ amountPence: 1620, vatPence: 270, originalAmountMinor: 2000 });
+  });
+
+  it("keeps the estimate on a foreign expense in a locked period", async () => {
+    await db.update(companies).set({ booksLockedThrough: "2026-03-31" }).where(eq(companies.id, companyId));
+    const tx = await debit("2026-04-02", -1620);
+    const e = await foreignExpense({ spentAt: "2026-03-30" });
+    await linkExpenseToBankTx(companyId, { expenseId: e.id, bankTransactionId: tx.id });
+
+    const [updated] = await db.select().from(expenses).where(eq(expenses.id, e.id));
+    expect(updated).toMatchObject({ status: "company_paid", amountPence: 1600 });
+  });
+
+  it("keeps the estimate on a foreign expense recharged on an invoice", async () => {
+    const tx = await debit("2026-04-05", -1620);
+    const e = await foreignExpense({ billable: true });
+    const [client] = await db.insert(clients).values({ companyId, name: "Acme" }).returning();
+    const [invoice] = await db
+      .insert(invoices)
+      .values({ companyId, clientId: client.id, number: "INV-1" })
+      .returning();
+    await db
+      .insert(invoiceLineItems)
+      .values({ invoiceId: invoice.id, description: "GitHub", unitPricePence: 1333, expenseId: e.id });
+
+    await linkExpenseToBankTx(companyId, { expenseId: e.id, bankTransactionId: tx.id });
+    const [updated] = await db.select().from(expenses).where(eq(expenses.id, e.id));
+    expect(updated.amountPence).toBe(1600);
   });
 
   it("leaves no note when the amounts agree", async () => {

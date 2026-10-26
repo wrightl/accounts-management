@@ -14,9 +14,9 @@ import {
   reconciliationMatches,
 } from "@/db/schema";
 import { bankSearchPattern } from "@/lib/bank/list-params";
-import { buildFxAmountBand } from "@/lib/bank/fx";
+import { expenseSettlementFields } from "@/lib/bank/expense-settle";
 import { dateDiffDays } from "@/lib/bank/match";
-import { isForeignCurrency } from "@/lib/expenses/receipt-parse";
+import { expenseOriginalAmount } from "@/lib/expenses/currency";
 import { addDays } from "@/lib/ledger/corporation-tax";
 import { formatExpenseAmount, formatGBP } from "@/lib/money";
 import { periodLockError } from "@/lib/period-lock";
@@ -44,9 +44,9 @@ export type ExpenseLinkCandidate = {
   description: string;
   spentAt: string | null;
   amountFormatted: string;
-  /** Non-GBP receipt currency; the amount difference is not meaningful then. */
+  /** Currency the expense was paid in when not GBP; its sterling amount is an estimate. */
   foreignCurrency: string | null;
-  /** Expense minus bank amount in pence; null for foreign-currency expenses. */
+  /** Expense minus bank amount in pence. */
   amountDeltaPence: number | null;
   dateGapDays: number | null;
 };
@@ -59,11 +59,11 @@ export type BankDebitLinkCandidate = {
   reference: string | null;
   bankAccountName: string;
   /**
-   * Expense minus bank amount in pence. For a foreign-currency expense it's
-   * measured against the receipt converted at the Bank of England rate.
+   * Expense minus bank amount in pence. For a foreign-currency expense the
+   * sterling amount is usually a Bank of England conversion.
    */
   amountDeltaPence: number | null;
-  /** The receipt currency when the delta is an FX estimate. */
+  /** The receipt currency when the delta is against a converted amount. */
   fxCurrency: string | null;
   dateGapDays: number | null;
 };
@@ -80,10 +80,9 @@ export function compareLinkCandidates(a: Rankable, b: Rankable): number {
 }
 
 export function linkAmountDelta(
-  expense: { amountPence: number; detectedCurrency: string | null },
+  expense: { amountPence: number },
   bankAmountPence: number,
 ): number | null {
-  if (isForeignCurrency(expense.detectedCurrency)) return null;
   return expense.amountPence - Math.abs(bankAmountPence);
 }
 
@@ -149,6 +148,7 @@ export async function listExpenseCandidatesForBankTx(
       spentAt: expenses.spentAt,
       amountPence: expenses.amountPence,
       detectedCurrency: expenses.detectedCurrency,
+      originalAmountMinor: expenses.originalAmountMinor,
     })
     .from(expenses)
     .where(and(...conditions));
@@ -158,10 +158,8 @@ export async function listExpenseCandidatesForBankTx(
       expenseId: e.id,
       description: e.description,
       spentAt: e.spentAt,
-      amountFormatted: formatExpenseAmount(e.amountPence, e.detectedCurrency),
-      foreignCurrency: isForeignCurrency(e.detectedCurrency)
-        ? e.detectedCurrency!.toUpperCase()
-        : null,
+      amountFormatted: formatExpenseAmount(e),
+      foreignCurrency: expenseOriginalAmount(e)?.currency ?? null,
       amountDeltaPence: linkAmountDelta(e, tx.amountPence),
       dateGapDays: dateGap(e.spentAt, tx.bookedAt),
     }))
@@ -183,21 +181,7 @@ export async function listBankDebitCandidatesForExpense(
     .limit(1);
   if (!expense || !isExpenseLinkable(expense)) return [];
 
-  // Rank a foreign receipt by its sterling value, otherwise only the date
-  // orders the candidates and a busy account can push the payment off the list.
-  const fxCurrency = isForeignCurrency(expense.detectedCurrency)
-    ? expense.detectedCurrency!.toUpperCase()
-    : null;
-  const fxBand =
-    fxCurrency && expense.spentAt
-      ? await buildFxAmountBand(expense.amountPence, fxCurrency, expense.spentAt).catch(
-          () => null,
-        )
-      : null;
-  const amountDelta = (bankAmountPence: number) =>
-    fxBand
-      ? fxBand.expectedGbpPence - Math.abs(bankAmountPence)
-      : linkAmountDelta(expense, bankAmountPence);
+  const fxCurrency = expenseOriginalAmount(expense)?.currency ?? null;
 
   const conditions: SQL[] = [
     eq(bankAccounts.companyId, companyId),
@@ -245,8 +229,8 @@ export async function listBankDebitCandidatesForExpense(
       counterparty: t.counterparty ?? t.description,
       reference: t.reference,
       bankAccountName: t.bankAccountName,
-      amountDeltaPence: amountDelta(t.amountPence),
-      fxCurrency: fxBand ? fxCurrency : null,
+      amountDeltaPence: linkAmountDelta(expense, t.amountPence),
+      fxCurrency,
       dateGapDays: dateGap(expense.spentAt, t.bookedAt),
     }))
     .sort(compareLinkCandidates)
@@ -406,7 +390,7 @@ export async function linkExpenseToBankTx(
 
     await db
       .update(expenses)
-      .set({ status: "company_paid", paidByUserId: null })
+      .set(await expenseSettlementFields(db, companyId, expense, tx.amountPence))
       .where(and(eq(expenses.id, expenseId), eq(expenses.companyId, companyId)));
 
     return { matchId: created.id };
@@ -415,7 +399,7 @@ export async function linkExpenseToBankTx(
 
 /** Records an amount difference so a reviewer can see why they didn't auto-match. */
 export function manualLinkNote(
-  expense: { amountPence: number; detectedCurrency: string | null },
+  expense: { amountPence: number },
   bankAmountPence: number,
 ): string | null {
   const delta = linkAmountDelta(expense, bankAmountPence);

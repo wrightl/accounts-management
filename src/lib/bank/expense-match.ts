@@ -12,6 +12,7 @@ import {
   expenses,
   reconciliationMatches,
 } from "@/db/schema";
+import { expenseOriginalAmount } from "@/lib/expenses/currency";
 import { isForeignCurrency } from "@/lib/expenses/receipt-parse";
 import {
   bankAmountWithinFxBand,
@@ -43,7 +44,10 @@ export type ExpenseMatchCandidate = {
   amountPence: number;
   date: string;
   description: string | null;
+  /** Foreign currency paid in, or null for sterling. */
   detectedCurrency: string | null;
+  /** The amount in detectedCurrency (minor units); null for sterling. */
+  originalAmountMinor: number | null;
   status: string;
   mileageMiles: number | null;
 };
@@ -249,6 +253,7 @@ async function loadEligibleExpenses(
       date: expenses.spentAt,
       description: expenses.description,
       detectedCurrency: expenses.detectedCurrency,
+      originalAmountMinor: expenses.originalAmountMinor,
       status: expenses.status,
       mileageMiles: expenses.mileageMiles,
     })
@@ -262,7 +267,7 @@ async function loadEligibleExpenses(
       amountPence: r.amountPence,
       date: r.date as string,
       description: r.description,
-      detectedCurrency: r.detectedCurrency,
+      ...candidateCurrency(r),
       status: r.status,
       mileageMiles: r.mileageMiles,
     }));
@@ -289,12 +294,28 @@ async function expenseIdsAlreadyMatched(
   );
 }
 
+/** Older expenses with a currency but no original amount match as sterling. */
+function candidateCurrency(expense: {
+  detectedCurrency: string | null;
+  originalAmountMinor: number | null;
+}): Pick<ExpenseMatchCandidate, "detectedCurrency" | "originalAmountMinor"> {
+  const original = expenseOriginalAmount(expense);
+  return {
+    detectedCurrency: original?.currency ?? null,
+    originalAmountMinor: original?.amountMinor ?? null,
+  };
+}
+
 async function resolveBandForExpense(
   expense: ExpenseMatchCandidate,
 ): Promise<FxAmountBand | null> {
-  if (!isForeignCurrency(expense.detectedCurrency)) return null;
+  if (!isForeignCurrency(expense.detectedCurrency) || expense.originalAmountMinor == null) {
+    return null;
+  }
+  // Match on the receipt amount at the rate on the day, not the sterling
+  // estimate, which the reviewer may have typed in.
   return buildFxAmountBand(
-    expense.amountPence,
+    expense.originalAmountMinor,
     expense.detectedCurrency!,
     expense.date,
   );
@@ -485,6 +506,7 @@ export async function refreshExpenseBankSuggestion(
       date: expenses.spentAt,
       description: expenses.description,
       detectedCurrency: expenses.detectedCurrency,
+      originalAmountMinor: expenses.originalAmountMinor,
       status: expenses.status,
       mileageMiles: expenses.mileageMiles,
     })
@@ -498,7 +520,7 @@ export async function refreshExpenseBankSuggestion(
     amountPence: expense.amountPence,
     date: expense.date,
     description: expense.description,
-    detectedCurrency: expense.detectedCurrency,
+    ...candidateCurrency(expense),
     status: expense.status,
     mileageMiles: expense.mileageMiles,
   };

@@ -24,6 +24,7 @@ type QuestionExpense = {
   description: string;
   amountPence: number;
   detectedCurrency: string | null;
+  originalAmountMinor: number | null;
 };
 
 export function buildPaymentQuestionEmail(params: {
@@ -37,7 +38,7 @@ export function buildPaymentQuestionEmail(params: {
     : "";
   const subject = `How did you pay? [Claim ${ref}]${about}`;
   const items = params.expenses.map(
-    (e) => `${e.description} (${formatExpenseAmount(e.amountPence, e.detectedCurrency)})`,
+    (e) => `${e.description} (${formatExpenseAmount(e)})`,
   );
   const lead =
     params.expenses.length === 1
@@ -93,6 +94,7 @@ export async function maybeAskHowPaid(params: {
       description: expenses.description,
       amountPence: expenses.amountPence,
       detectedCurrency: expenses.detectedCurrency,
+      originalAmountMinor: expenses.originalAmountMinor,
     })
     .from(expenses)
     .where(and(eq(expenses.companyId, job.companyId), inArray(expenses.id, expenseIds)))

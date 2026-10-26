@@ -520,10 +520,13 @@ export const expenses = pgTable(
     mileageMiles: integer("mileage_miles"),
     mileageRatePence: integer("mileage_rate_pence"),
     /**
-     * Non-GBP currency detected during OCR (e.g. USD, EUR). Null when
-     * unset or sterling. Used to warn on pending email review.
+     * Currency the expense was paid in when not sterling (e.g. USD, EUR),
+     * detected on the receipt or chosen on the form. Null means GBP.
+     * amountPence is always sterling; the foreign amount is originalAmountMinor.
      */
     detectedCurrency: text("detected_currency"),
+    /** The amount in detectedCurrency, in minor units (cents). Null for GBP. */
+    originalAmountMinor: integer("original_amount_minor"),
     /**
      * How the sender of an emailed claim says it was paid. A hint for the
      * reviewer, who still picks the status when approving.

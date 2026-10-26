@@ -18,9 +18,13 @@ import { ExpenseForm } from "@/components/expenses/expense-form";
 import { ReceiptPanel } from "@/components/expenses/receipt-panel";
 import { buttonClasses } from "@/components/ui/button";
 import { EXPENSE_LIST_COOKIE, expenseListReturnHref } from "@/lib/expenses/list-params";
-import { Card, CardTitle, CardValue } from "@/components/ui/card";
+import {
+  ExpenseAmountCard,
+  ExpenseSummaryProvider,
+  ExpenseTitle,
+} from "@/components/expenses/expense-summary";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
-import { isForeignCurrency } from "@/lib/expenses/receipt-parse";
+import { expenseOriginalAmount, needsAmountCheck } from "@/lib/expenses/currency";
 import { getExpenseRebill, listOrderOptions } from "@/lib/profitability/queries";
 import { getPaymentSourceSuggestion } from "@/lib/expenses/payment-source-queries";
 import { paymentSourceSummary } from "@/lib/expenses/payment-source";
@@ -70,9 +74,7 @@ export default async function ExpenseDetailPage({
   );
   const canLinkBank =
     canWrite && settlements.length === 0 && isExpenseLinkable(detail.expense);
-  const foreignCurrency = isForeignCurrency(detail.expense.detectedCurrency)
-    ? detail.expense.detectedCurrency!.toUpperCase()
-    : null;
+  const originalAmount = expenseOriginalAmount(detail.expense);
 
   const listHref = expenseListReturnHref((await cookies()).get(EXPENSE_LIST_COOKIE)?.value);
 
@@ -127,11 +129,11 @@ export default async function ExpenseDetailPage({
         </div>
       ) : null}
 
-      {foreignCurrency && detail.expense.status === "pending" ? (
+      {originalAmount && detail.expense.status === "pending" ? (
         <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
-          Foreign currency detected on the receipt ({foreignCurrency}). Amounts in
-          this app are recorded in GBP — confirm the sterling amount before
-          approving. If the receipt is actually in sterling, set the currency to GBP.
+          {needsAmountCheck(detail.expense)
+            ? `The receipt is in ${originalAmount.currency}, and this expense was saved with one amount for both the receipt and GBP. Check both amounts before approving. If the receipt is actually in sterling, set the currency to GBP.`
+            : `The receipt is in ${originalAmount.currency}. The GBP amount is converted at the Bank of England rate; change it to what your bank charged if you know it. If the receipt is actually in sterling, set the currency to GBP.`}
         </div>
       ) : null}
 
@@ -190,50 +192,51 @@ export default async function ExpenseDetailPage({
         </div>
       )}
 
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-semibold">
-            {detail.expense.description}
-          </h1>
-          <p className="mt-1 text-muted">
-            {expenseStatusLabel(detail.expense.status as ExpenseStatus)}
-            {detail.expense.spentAt ? ` · ${detail.expense.spentAt}` : null}
-            {detail.paidBy ? ` · Paid by ${detail.paidBy.name || detail.paidBy.email}` : null}
-          </p>
+      <ExpenseSummaryProvider
+        initialDescription={detail.expense.description}
+        initialPence={detail.expense.amountPence}
+        initialOriginal={originalAmount}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <ExpenseTitle fallback={detail.expense.description} />
+            <p className="mt-1 text-muted">
+              {expenseStatusLabel(detail.expense.status as ExpenseStatus)}
+              {detail.expense.spentAt ? ` · ${detail.expense.spentAt}` : null}
+              {detail.paidBy ? ` · Paid by ${detail.paidBy.name || detail.paidBy.email}` : null}
+            </p>
+          </div>
+          <ExpenseAmountCard />
         </div>
-        <Card className="min-w-[140px]">
-          <CardTitle>Amount</CardTitle>
-          <CardValue>{detail.expense.amountFormatted}</CardValue>
-        </Card>
-      </div>
 
-      <div className="mt-8 grid gap-10 lg:grid-cols-2">
-        <ExpenseForm
-          listHref={listHref}
-          // Remount when the status changes (e.g. a pending email expense is
-          // approved, or the sender answers how they paid) so the form's status
-          // state re-derives from the saved row.
-          key={`${detail.expense.id}:${detail.expense.status}:${paymentSource?.suggestedStatus ?? ""}`}
-          mode="edit"
-          expense={detail.expense}
-          founders={founders}
-          clients={clients}
-          orders={orders}
-          rebilledOn={rebill}
-          linkedToBank={settlements.length > 0}
-          receiptCount={detail.receipts.length}
-          suggestedApproveStatus={paymentSource?.suggestedStatus ?? null}
-          canWrite={canWrite}
-          defaultMileageRatePence={settings.defaultMileageRatePence}
-          vatRegistered={settings.vatRegistered}
-          defaultVatRate={settings.vatRegistered ? settings.defaultVatRate : 0}
-        />
-        <ReceiptPanel
-          expenseId={detail.expense.id}
-          receipts={detail.receipts}
-          canWrite={canWrite}
-        />
-      </div>
+        <div className="mt-8 grid gap-10 lg:grid-cols-2">
+          <ExpenseForm
+            listHref={listHref}
+            // Remount when the status changes (e.g. a pending email expense is
+            // approved, or the sender answers how they paid) so the form's status
+            // state re-derives from the saved row.
+            key={`${detail.expense.id}:${detail.expense.status}:${paymentSource?.suggestedStatus ?? ""}`}
+            mode="edit"
+            expense={detail.expense}
+            founders={founders}
+            clients={clients}
+            orders={orders}
+            rebilledOn={rebill}
+            linkedToBank={settlements.length > 0}
+            receiptCount={detail.receipts.length}
+            suggestedApproveStatus={paymentSource?.suggestedStatus ?? null}
+            canWrite={canWrite}
+            defaultMileageRatePence={settings.defaultMileageRatePence}
+            vatRegistered={settings.vatRegistered}
+            defaultVatRate={settings.vatRegistered ? settings.defaultVatRate : 0}
+          />
+          <ReceiptPanel
+            expenseId={detail.expense.id}
+            receipts={detail.receipts}
+            canWrite={canWrite}
+          />
+        </div>
+      </ExpenseSummaryProvider>
     </div>
   );
 }

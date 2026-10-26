@@ -4,6 +4,13 @@ import { getDb } from "@/db";
 import { expenseReceipts, expenses } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
 import { refreshExpenseBankSuggestion } from "@/lib/bank/expense-match";
+import { sterlingFromForeign } from "@/lib/expenses/convert";
+import {
+  isAllowedExpenseCurrency,
+  needsAmountCheck,
+  UNSUPPORTED_CURRENCY_ERROR,
+} from "@/lib/expenses/currency";
+import { FORM_FIELD_ERROR_SUMMARY } from "@/lib/validation/field-errors";
 import { safeFilename } from "@/lib/files";
 import { parseReceiptFileAsync } from "@/lib/expenses/receipt-file";
 import { normalizeExpensePaymentFields } from "@/lib/expenses/schema";
@@ -31,13 +38,14 @@ export type ApproveExpenseInput = {
     description: string;
     category: string | null;
     spentAt: string | null;
+    /** Sterling; 0 for a foreign expense means convert originalAmountMinor. */
     amountPence: number;
+    foreignCurrency: string | null;
+    originalAmountMinor: number | null;
     vatRate: number;
     billable: boolean;
     clientId: string | null;
     orderId: string | null;
-    /** Null marks the receipt as sterling; omitted = keep the detected currency. */
-    detectedCurrency?: null;
   };
 };
 
@@ -58,7 +66,41 @@ export async function approvePendingExpense(
     return { ok: false, error: "Only pending expenses can be approved" };
   }
 
-  const amountPence = input.fields?.amountPence ?? existing.amountPence;
+  if (
+    input.fields?.foreignCurrency &&
+    !isAllowedExpenseCurrency(input.fields.foreignCurrency, existing.detectedCurrency)
+  ) {
+    return {
+      ok: false,
+      error: FORM_FIELD_ERROR_SUMMARY,
+      fieldErrors: { currency: UNSUPPORTED_CURRENCY_ERROR },
+    };
+  }
+  // Approving as stored (the mobile app) can't confirm an ambiguous amount.
+  if (!input.fields && needsAmountCheck(existing)) {
+    return {
+      ok: false,
+      error:
+        "Check the receipt amount and the GBP amount on the web before approving this expense",
+    };
+  }
+
+  const foreignCurrency = input.fields
+    ? input.fields.foreignCurrency
+    : existing.detectedCurrency;
+  const originalAmountMinor = input.fields
+    ? input.fields.originalAmountMinor
+    : existing.originalAmountMinor;
+  const spentAt = input.fields ? input.fields.spentAt : existing.spentAt;
+  let amountPence = input.fields?.amountPence ?? existing.amountPence;
+  if (amountPence <= 0 && foreignCurrency && originalAmountMinor && originalAmountMinor > 0) {
+    amountPence =
+      (await sterlingFromForeign(foreignCurrency, originalAmountMinor, spentAt)) ?? 0;
+    if (amountPence <= 0) {
+      const message = `Couldn't get a ${foreignCurrency} exchange rate. Enter the amount in GBP.`;
+      return { ok: false, error: message, fieldErrors: { amountPounds: message } };
+    }
+  }
   if (amountPence <= 0) {
     return {
       ok: false,
@@ -88,7 +130,6 @@ export async function approvePendingExpense(
 
   const company = await getOrCreateCompanySettings(companyId);
   // Approving brings the expense into the books on its spend date.
-  const spentAt = input.fields ? input.fields.spentAt : existing.spentAt;
   const locked = periodLockError(company.booksLockedThrough, spentAt);
   if (locked) return { ok: false, error: locked };
   const vatRate = resolveLineVatRate(
@@ -110,7 +151,8 @@ export async function approvePendingExpense(
             orderId: input.fields.orderId,
             mileageMiles: null,
             mileageRatePence: null,
-            ...(input.fields.detectedCurrency === null ? { detectedCurrency: null } : {}),
+            detectedCurrency: input.fields.foreignCurrency,
+            originalAmountMinor: input.fields.originalAmountMinor,
           }
         : {}),
       amountPence,
