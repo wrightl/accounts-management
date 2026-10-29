@@ -116,13 +116,13 @@ describe("senderAuthenticated", () => {
 });
 
 describe("externalSenderOf", () => {
-  it("is null when the owner sent it and nothing says otherwise", () => {
-    expect(externalSenderOf("Lee <LEE@example.com>", "lee@example.com", null)).toBeNull();
-    expect(externalSenderOf("lee@example.com", "lee@example.com", true)).toBeNull();
+  it("is null only when the owner's address passes the checks", () => {
+    expect(externalSenderOf("Lee <LEE@example.com>", "lee@example.com", true)).toBeNull();
   });
 
-  it("flags anyone else, and the owner's address when it fails the checks", () => {
+  it("flags anyone else, and the owner's address when the checks fail or are missing", () => {
     expect(externalSenderOf("billing@shop.com", "lee@example.com", true)).toBe("billing@shop.com");
     expect(externalSenderOf("lee@example.com", "lee@example.com", false)).toBe("lee@example.com");
+    expect(externalSenderOf("lee@example.com", "lee@example.com", null)).toBe("lee@example.com");
   });
 });

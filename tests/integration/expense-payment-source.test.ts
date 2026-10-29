@@ -82,6 +82,9 @@ let companyId: string;
 let companySlug: string;
 let founderId: string;
 
+/** What the receiving server adds to genuine mail from the owner. */
+const AUTH_PASS = { "Authentication-Results": "mx.resend.com; dkim=pass; spf=pass; dmarc=pass" };
+
 const mailbox = () => `expenses+${companySlug}.founder@dotanddashconsulting.com`;
 
 beforeEach(async () => {
@@ -126,7 +129,7 @@ async function receive(
   envelope: { from?: string; to?: string; headers?: Record<string, string> } = {},
 ) {
   mockReceivingGet.mockResolvedValue({
-    data: { ...email, html: null, headers: envelope.headers ?? null },
+    data: { ...email, html: null, headers: envelope.headers ?? AUTH_PASS },
     error: null,
   });
   mockAttachmentsList.mockResolvedValue({
@@ -314,7 +317,12 @@ describe("payment source on emailed expenses", () => {
     await db.insert(companyMemberships).values({ userId: other.id, companyId, role: "user" });
 
     mockReceivingGet.mockResolvedValue({
-      data: { subject: `Re: ${subject}`, text: "#personal Total £5.00", html: null },
+      data: {
+        subject: `Re: ${subject}`,
+        text: "#personal Total £5.00",
+        html: null,
+        headers: AUTH_PASS,
+      },
       error: null,
     });
     mockAttachmentsList.mockResolvedValue({ data: { data: [] }, error: null });
@@ -374,6 +382,15 @@ describe("claims sent by someone other than the mailbox owner", () => {
     expect(expense.status).toBe("pending");
     expect(expense.submittedByUserId).toBe(founderId);
     expect(expense.externalSenderEmail).toBe("billing@shop.com");
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
+  it("flags mail from the owner's address with no authentication result", async () => {
+    const { result } = await receive("s3b", { subject: "Lunch", text: "Total £24.00" }, undefined, {
+      to: short,
+      headers: {},
+    });
+    expect((await expenseOf(result)).externalSenderEmail).toBe("founder@example.com");
     expect(mockSendEmail).not.toHaveBeenCalled();
   });
 

@@ -100,7 +100,7 @@ export default async function ExpenseDetailPage({
           {externalSender ? (
             <span className="mt-1 block font-medium">
               {externalSender === detail.submitter?.email.toLowerCase()
-                ? `It says it is from ${externalSender}, but the email failed the checks that prove who sent it. Check it is genuine before approving.`
+                ? `It says it is from ${externalSender}, but we couldn't confirm the email really came from them. Check it is genuine before approving.`
                 : `It was sent by ${externalSender}, not by them. Check it is genuine before approving.`}
             </span>
           ) : null}

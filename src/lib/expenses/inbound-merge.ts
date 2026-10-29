@@ -217,8 +217,9 @@ export function senderAuthenticated(
 
 /**
  * The sender to flag on an emailed claim, or null when it came from the
- * mailbox owner. Mail that says it is from the owner but fails the checks
- * is flagged too, since anyone can type any From address.
+ * mailbox owner. Anyone can type any From address, so the owner's address
+ * only counts when the checks positively pass: a failed or missing result
+ * (`authenticated` false or null) is flagged too.
  */
 export function externalSenderOf(
   fromEmail: string,
@@ -226,7 +227,7 @@ export function externalSenderOf(
   authenticated: boolean | null,
 ): string | null {
   const from = parseEmailAddressHeader(fromEmail);
-  if (from === ownerEmail.trim().toLowerCase() && authenticated !== false) return null;
+  if (from === ownerEmail.trim().toLowerCase() && authenticated === true) return null;
   return from;
 }
 
