@@ -198,8 +198,9 @@ the scheduled Action is the drain/retry when no new mail arrives.
 ### Preview domain
 
 `.github/workflows/preview-alias.yml` points a fixed custom domain at the latest
-successful preview deployment from any branch. Add the domain to the Vercel team
-(not assigned to production or a branch), then set GitHub secret `VERCEL_TOKEN`
+successful preview deployment from any branch. Add the domain to the Vercel
+project assigned to Preview with an unused branch name (e.g. `preview-domain`) so
+only the workflow moves it, then set GitHub secret `VERCEL_TOKEN`
 and repository variables `PREVIEW_DOMAIN` (hostname) and `VERCEL_SCOPE` (team
 slug). Add the hostname to Clerk's allowed origins if sign-in fails there.
 

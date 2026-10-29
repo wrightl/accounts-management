@@ -3,7 +3,8 @@ name: Preview alias
 # Vercel can only pin a custom domain to production or one Git branch. This
 # points PREVIEW_DOMAIN at the latest successful preview from any branch.
 # Requires secret VERCEL_TOKEN and variables PREVIEW_DOMAIN, VERCEL_SCOPE
-# (team slug). The domain must already be added to the Vercel team.
+# (team slug). Add the domain to the Vercel project first, assigned to
+# Preview with an unused branch name so only this workflow moves it.
 
 on:
     deployment_status:
