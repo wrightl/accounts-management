@@ -6,8 +6,10 @@ import { writeAudit } from "@/lib/audit";
 import { ensureLocalUser } from "@/lib/users";
 import {
   MENU_FEATURES,
+  featuresFromAnswers,
   featuresFromFormData,
   isMenuFeature,
+  menuAnswersFromFormData,
   type MenuFeature,
 } from "@/lib/menu/features";
 import {
@@ -29,7 +31,12 @@ async function menuContext() {
     return { ok: false as const, error: "Complete onboarding first." };
   }
   const localUserId = await ensureLocalUser(user);
-  return { ok: true as const, companyId: user.companyId, localUserId };
+  return {
+    ok: true as const,
+    companyId: user.companyId,
+    entityType: user.entityType,
+    localUserId,
+  };
 }
 
 async function saveFeatures(
@@ -55,6 +62,27 @@ export async function updateMenuFeatures(formData: FormData): Promise<ActionResu
   const ctx = await menuContext();
   if (!ctx.ok) return ctx;
   return saveFeatures(ctx, featuresFromFormData(formData), "user.menu.update");
+}
+
+/** Set the menu from the yes/no questions, for people who skipped onboarding. */
+export async function answerMenuQuestions(formData: FormData): Promise<ActionResult> {
+  const ctx = await menuContext();
+  if (!ctx.ok) return ctx;
+  return saveFeatures(
+    ctx,
+    featuresFromAnswers(menuAnswersFromFormData(formData), ctx.entityType),
+    "user.menu.answer",
+  );
+}
+
+/**
+ * Keep every page but record that this person has chosen, so the questions
+ * stop showing and menu suggestions can start.
+ */
+export async function skipMenuQuestions(): Promise<ActionResult> {
+  const ctx = await menuContext();
+  if (!ctx.ok) return ctx;
+  return saveFeatures(ctx, [...MENU_FEATURES], "user.menu.skip");
 }
 
 /** Add items to the menu (from search or a suggestion), keeping the rest. */
