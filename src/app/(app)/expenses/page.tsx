@@ -12,7 +12,12 @@ import {
   expenseStatusLabel,
   type ExpenseStatus,
 } from "@/lib/expenses/categories";
-import { expenseInboundAddress } from "@/lib/expenses/inbound-mailbox";
+import {
+  ensureInboundAlias,
+  expenseInboundAddress,
+  getInboundAlias,
+  inboundMailboxConfig,
+} from "@/lib/expenses/inbound-mailbox";
 import { buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
@@ -20,7 +25,7 @@ import { findLocalUser } from "@/lib/users";
 import { getCompany } from "@/lib/tenant";
 import { ExpenseImportButton } from "@/components/expenses/expense-import-panel";
 import { ExpenseLiveRefresh } from "@/components/expenses/expense-live-refresh";
-import { CopyButton } from "@/components/ui/copy-button";
+import { InboundAddress } from "@/components/expenses/inbound-address";
 import { sortHeaders } from "@/components/ui/sortable-th";
 import { EXPENSE_SORT } from "@/lib/expenses/list-sort";
 import {
@@ -77,10 +82,15 @@ export default async function ExpensesPage({
     rows.filter((r) => r.status === "pending").map((r) => r.id),
   );
 
-  const inboundAddress =
-    localUser &&
-    (localUser.role === "admin" || localUser.role === "user") &&
-    localUser.expenseInboundSlug
+  const isFounder = localUser?.role === "admin" || localUser?.role === "user";
+  // Members from before short addresses, if the backfill hasn't reached them yet.
+  const inboundAlias =
+    localUser && isFounder
+      ? ((await getInboundAlias(localUser.id, companyId)) ??
+        (await ensureInboundAlias(localUser.id, companyId)))
+      : null;
+  const legacyInboundAddress =
+    inboundAlias && localUser?.expenseInboundSlug
       ? expenseInboundAddress(company.slug, localUser.expenseInboundSlug)
       : null;
 
@@ -109,15 +119,12 @@ export default async function ExpensesPage({
         )}
       </div>
 
-      {inboundAddress ? (
-        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-wash/50 px-4 py-3 text-sm">
-          <span className="text-muted">
-            Email receipts to{" "}
-            <span className="font-medium text-foreground break-all">{inboundAddress}</span>
-            . Add #personal or #company to the subject to say how you paid.
-          </span>
-          <CopyButton value={inboundAddress} />
-        </div>
+      {inboundAlias ? (
+        <InboundAddress
+          alias={inboundAlias}
+          domain={inboundMailboxConfig().domain}
+          legacyAddress={legacyInboundAddress}
+        />
       ) : null}
 
       {reimbSummary.count > 0 && (
@@ -213,6 +220,11 @@ export default async function ExpensesPage({
                       <span className="ml-2 text-xs text-muted">
                         {e.billable ? "Rebill → " : "For "}
                         {e.clientName}
+                      </span>
+                    ) : null}
+                    {e.status === "pending" && e.externalSenderEmail ? (
+                      <span className="block text-xs text-amber-800 dark:text-amber-200">
+                        Sent by {e.externalSenderEmail}, check before approving
                       </span>
                     ) : null}
                   </TD>

@@ -11,12 +11,14 @@ import {
 import { writeAudit } from "@/lib/audit";
 import { safeFilename } from "@/lib/files";
 import {
-  matchesInboundMailboxPattern,
+  externalSenderOf,
+  inboundMailboxCandidates,
   parseEmailAddressHeader,
   parseEmailBodyText,
   parseInboundMailbox,
   pickReceiptAttachments,
   planInboundExpenses,
+  senderAuthenticated,
 } from "@/lib/expenses/inbound-merge";
 import {
   describeFetchError,
@@ -40,7 +42,6 @@ import {
 } from "@/lib/expenses/receipt-file";
 import {
   inboundMailboxConfig,
-  pickInboundToAddress,
   resolveInboundRecipient,
 } from "@/lib/expenses/inbound-mailbox";
 import { formatExpenseAmount, poundsToPence } from "@/lib/money";
@@ -160,12 +161,8 @@ export async function enqueueInboundEmailJob(
   payload: InboundEmailReceivedPayload,
 ): Promise<{ jobId: string | null; skipped: boolean }> {
   const config = inboundMailboxConfig();
-  if (!matchesInboundMailboxPattern(payload.to, config)) {
-    return { jobId: null, skipped: true };
-  }
-
-  const toEmail = pickInboundToAddress(payload.to, config);
-  if (!toEmail) {
+  const candidates = inboundMailboxCandidates(payload.to, config);
+  if (candidates.length === 0) {
     return { jobId: null, skipped: true };
   }
 
@@ -180,9 +177,15 @@ export async function enqueueInboundEmailJob(
   }
 
   const fromEmail = parseEmailAddressHeader(payload.from);
-  const recipient = await resolveInboundRecipient(toEmail, config);
+  // The first address that names a real mailbox wins; others may be CCs on our domain.
+  let recipient = null;
+  for (const address of candidates) {
+    recipient = await resolveInboundRecipient(address, config);
+    if (recipient) break;
+  }
 
   if (recipient) {
+    const toEmail = recipient.address;
     const [created] = await db
       .insert(inboundEmailJobs)
       .values({
@@ -197,11 +200,15 @@ export async function enqueueInboundEmailJob(
     return { jobId: created.id, skipped: false };
   }
 
-  // Pattern matched but company/user unknown → rejected job when company exists.
-  const parsed = parseInboundMailbox(toEmail, config);
+  // A legacy address whose company exists but user doesn't → rejected job, so
+  // the company sees it. An unknown short alias names no company, so it is skipped.
+  const parsed = candidates
+    .map((address) => parseInboundMailbox(address, config))
+    .find((p) => p !== null);
   if (!parsed) {
     return { jobId: null, skipped: true };
   }
+  const toEmail = parsed.address;
   const [company] = await db
     .select({ id: companies.id })
     .from(companies)
@@ -320,7 +327,8 @@ export async function processInboundEmailJob(
       })
       .where(eq(inboundEmailJobs.id, jobId));
 
-    if (!delivered.paymentStated) {
+    // Only ask the mailbox owner, and only about a claim they sent themselves.
+    if (!delivered.paymentStated && !delivered.externalSender) {
       try {
         await maybeAskHowPaid({ job, senderEmail: delivered.senderEmail, expenseIds });
       } catch (askErr) {
@@ -466,6 +474,8 @@ type DeliveredClaim = {
   /** The sender said how they paid, so there is no need to ask. */
   paymentStated: boolean;
   senderEmail: string;
+  /** Someone other than the mailbox owner sent it; see expenses.externalSenderEmail. */
+  externalSender: boolean;
 };
 
 type DeliveredAnswer = {
@@ -543,6 +553,12 @@ async function deliverInboundEmail(
     );
   }
 
+  const externalSenderEmail = externalSenderOf(
+    job.fromEmail,
+    sender.email,
+    senderAuthenticated(email.headers),
+  );
+
   const companyId = job.companyId;
   const ocr = await getReceiptOcrSettings();
   const providerRaw = ocr.provider ?? "local";
@@ -570,7 +586,8 @@ async function deliverInboundEmail(
 
   const candidates = pickReceiptAttachments(attachmentList?.data ?? []);
 
-  const questionRef = parsePaymentQuestionRef(subject);
+  // Only the mailbox owner can answer our question; anyone else's reply is a claim to check.
+  const questionRef = externalSenderEmail ? null : parsePaymentQuestionRef(subject);
   if (questionRef && candidates.length === 0) {
     const answered = await findQuestionedJob({
       companyId,
@@ -740,6 +757,7 @@ async function deliverInboundEmail(
           statedPaymentSource: statedPaymentSource ?? null,
           statedPaymentSourceVia: statedPaymentSource ? "email" : null,
           receiptCardLast4: merged.cardLast4 ?? null,
+          externalSenderEmail,
         });
 
         const receipt = receipts[i];
@@ -803,6 +821,7 @@ async function deliverInboundEmail(
     unscanned,
     paymentStated: Boolean(statedPaymentSource),
     senderEmail: sender.email,
+    externalSender: externalSenderEmail !== null,
   };
 }
 

@@ -8,6 +8,7 @@ import {
   parseReceiptMerchant,
 } from "@/lib/expenses/receipt-parse";
 import { parseCardLast4 } from "@/lib/expenses/payment-source";
+import { INBOUND_ALIAS_MAX, isValidInboundAlias } from "@/lib/expenses/inbound-alias";
 
 const CONFIDENCE_RANK: Record<ReceiptExtraction["confidence"], number> = {
   high: 3,
@@ -79,6 +80,41 @@ export function tokenizedInboundSlug(seed: string): string {
   return `${readable || "user"}-${inboundSlugToken()}`;
 }
 
+/** Trim to the alias length budget without leaving a trailing separator. */
+function fitAlias(value: string, room = INBOUND_ALIAS_MAX): string {
+  return value.slice(0, room).replace(/[.-]+$/, "");
+}
+
+/**
+ * Short addresses to offer a new member, best first: `lee`, `lee.wright`,
+ * `lee-acme`, `lee-acme-2`, … The caller takes the first one that is free.
+ */
+export function defaultInboundAliasCandidates(
+  name: string | null | undefined,
+  email: string,
+  companySlug: string,
+  numbered = 8,
+): string[] {
+  const seed = name?.trim() ? name : (email.split("@")[0] ?? "");
+  const parts = slugifyInbound(seed, "").split("-").filter(Boolean);
+  const first = parts[0] ?? "member";
+  const last = parts.length > 1 ? parts[parts.length - 1] : null;
+  const withCompany = fitAlias(`${first}-${companySlug}`);
+
+  const out: string[] = [];
+  const add = (alias: string) => {
+    if (isValidInboundAlias(alias) && !out.includes(alias)) out.push(alias);
+  };
+  add(fitAlias(first));
+  if (last) add(fitAlias(`${first}.${last}`));
+  add(withCompany);
+  for (let n = 2; n < numbered + 2; n++) {
+    const suffix = `-${n}`;
+    add(`${fitAlias(withCompany, INBOUND_ALIAS_MAX - suffix.length)}${suffix}`);
+  }
+  return out;
+}
+
 /**
  * Parse `{prefix}+{companySlug}.{userSlug}@{domain}` from a To header.
  * Returns null when the address is not an inbound expense mailbox.
@@ -112,21 +148,86 @@ export function parseInboundMailbox(
   return { companySlug, userSlug, address };
 }
 
-/** Whether any recipient matches the configured plus-address pattern. */
+/**
+ * Parse a short `{alias}@{domain}` address from a To header. Returns null for
+ * other domains, legacy plus-addresses, and local parts that can't be aliases.
+ */
+export function parseInboundAlias(
+  toHeader: string,
+  config: InboundMailboxConfig,
+): { alias: string; address: string } | null {
+  const address = parseEmailAddressHeader(toHeader);
+  const at = address.lastIndexOf("@");
+  if (at <= 0) return null;
+  if (address.slice(at + 1) !== config.domain.toLowerCase()) return null;
+  const alias = address.slice(0, at);
+  return isValidInboundAlias(alias) ? { alias, address } : null;
+}
+
+/** Recipients that look like an inbound expense mailbox, short or legacy, in order. */
+export function inboundMailboxCandidates(
+  recipients: string[],
+  config: InboundMailboxConfig,
+): string[] {
+  const out: string[] = [];
+  for (const recipient of recipients) {
+    const parsed =
+      parseInboundAlias(recipient, config) ?? parseInboundMailbox(recipient, config);
+    if (parsed && !out.includes(parsed.address)) out.push(parsed.address);
+  }
+  return out;
+}
+
+/** Whether any recipient looks like an inbound expense mailbox, short or legacy. */
 export function matchesInboundMailboxPattern(
   recipients: string[],
   config: InboundMailboxConfig,
 ): boolean {
-  return recipients.some((r) => parseInboundMailbox(r, config) !== null);
+  return inboundMailboxCandidates(recipients, config).length > 0;
 }
 
-/** Build the display address for a company/user pair. */
+/** Build the legacy display address for a company/user pair. */
 export function formatExpenseInboundAddress(
   companySlug: string,
   userSlug: string,
   config: InboundMailboxConfig,
 ): string {
   return `${config.prefix}+${companySlug}.${userSlug}@${config.domain}`;
+}
+
+/**
+ * What the receiving server's Authentication-Results say about the From address:
+ * true when DMARC passed (or, with no DMARC verdict, DKIM or SPF did), false when
+ * they failed, null when there is no such header to go on.
+ */
+export function senderAuthenticated(
+  headers: Record<string, string> | null | undefined,
+): boolean | null {
+  if (!headers) return null;
+  const results = Object.entries(headers)
+    .filter(([key]) => key.toLowerCase() === "authentication-results")
+    .map(([, value]) => value)
+    .join(";")
+    .toLowerCase();
+  if (!results) return null;
+  const dmarc = results.match(/\bdmarc=([a-z]+)/);
+  if (dmarc) return dmarc[1] === "pass";
+  return /\b(dkim|spf)=pass\b/.test(results);
+}
+
+/**
+ * The sender to flag on an emailed claim, or null when it came from the
+ * mailbox owner. Mail that says it is from the owner but fails the checks
+ * is flagged too, since anyone can type any From address.
+ */
+export function externalSenderOf(
+  fromEmail: string,
+  ownerEmail: string,
+  authenticated: boolean | null,
+): string | null {
+  const from = parseEmailAddressHeader(fromEmail);
+  if (from === ownerEmail.trim().toLowerCase() && authenticated !== false) return null;
+  return from;
 }
 
 /** Merge OCR/body extractions — higher confidence wins per field. */

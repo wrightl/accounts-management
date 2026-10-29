@@ -3,6 +3,7 @@ import { and, count, eq, inArray, ne, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { bankAccounts, bankSpendingCategories, bankTransactions } from "@/db/schema";
 import { isKnownBankCategory } from "@/lib/bank/categories";
+import { isUniqueViolation } from "@/lib/db-errors";
 
 const MAX_CATEGORY_LENGTH = 120;
 
@@ -227,18 +228,4 @@ export async function renameBankSpendingCategory(
     return { ok: false, error: `A category called "${normalized}" already exists` };
   }
   return { ok: true, name: normalized };
-}
-
-function isUniqueViolation(err: unknown): boolean {
-  const code =
-    typeof err === "object" && err !== null
-      ? String(
-          (err as { code?: string }).code ??
-            (err as { cause?: { code?: string } }).cause?.code ??
-            "",
-        )
-      : "";
-  if (code === "23505") return true;
-  const message = err instanceof Error ? err.message : String(err);
-  return /duplicate key|unique constraint/i.test(message);
 }

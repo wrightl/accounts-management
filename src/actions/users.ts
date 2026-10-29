@@ -21,10 +21,6 @@ import {
 } from "@/lib/users";
 import { isPlatformAdminEmail } from "@/lib/bootstrap";
 import {
-  uniquifyUserInboundSlug,
-  userInboundSlugSeed,
-} from "@/lib/expenses/inbound-mailbox";
-import {
   clerkErrorMessage,
   sendClerkInvitation,
 } from "@/lib/clerk-invite";
@@ -203,16 +199,9 @@ export async function inviteUser(formData: FormData): Promise<ActionResult> {
 
       const db = getDb();
       let userId: string;
-      const shouldHaveInbound = role === "admin" || role === "user";
 
       if (existing) {
         // First membership for a pending invite (or re-invite before sign-in).
-        const inboundSlug = shouldHaveInbound
-          ? await uniquifyUserInboundSlug(
-              userInboundSlugSeed(name, email),
-              existing.id,
-            )
-          : null;
         await db
           .update(users)
           .set({
@@ -220,19 +209,11 @@ export async function inviteUser(formData: FormData): Promise<ActionResult> {
             role,
             companyId,
             invitedByUserId: localUserId,
-            ...(inboundSlug && !existing.expenseInboundSlug
-              ? { expenseInboundSlug: inboundSlug }
-              : {}),
           })
           .where(eq(users.id, existing.id));
         await upsertMembership(existing.id, companyId, role);
         userId = existing.id;
       } else {
-        const inboundSlug = shouldHaveInbound
-          ? await uniquifyUserInboundSlug(
-              userInboundSlugSeed(name, email),
-            )
-          : null;
         const [created] = await db
           .insert(users)
           .values({
@@ -241,7 +222,6 @@ export async function inviteUser(formData: FormData): Promise<ActionResult> {
             role,
             clerkUserId: null,
             companyId,
-            expenseInboundSlug: inboundSlug,
             invitedByUserId: localUserId,
           })
           .returning({ id: users.id });
@@ -378,22 +358,12 @@ export async function updateUser(userId: string, formData: FormData): Promise<Ac
         name: string | null;
         email: string;
         role?: TenantRole;
-        expenseInboundSlug?: string;
       } = {
         name,
         email,
       };
       if (target.companyId === companyId) {
         userPatch.role = role;
-      }
-      if (
-        (role === "admin" || role === "user") &&
-        !target.expenseInboundSlug
-      ) {
-        userPatch.expenseInboundSlug = await uniquifyUserInboundSlug(
-          userInboundSlugSeed(name, email),
-          parsed.data.userId,
-        );
       }
 
       await db
