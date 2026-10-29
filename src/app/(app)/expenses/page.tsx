@@ -13,7 +13,6 @@ import {
   type ExpenseStatus,
 } from "@/lib/expenses/categories";
 import {
-  ensureInboundAlias,
   expenseInboundAddress,
   getInboundAlias,
   inboundMailboxConfig,
@@ -83,12 +82,9 @@ export default async function ExpensesPage({
   );
 
   const isFounder = localUser?.role === "admin" || localUser?.role === "user";
-  // Members from before short addresses, if the backfill hasn't reached them yet.
+  // Given out when someone becomes a founder, and backfilled for earlier founders.
   const inboundAlias =
-    localUser && isFounder
-      ? ((await getInboundAlias(localUser.id, companyId)) ??
-        (await ensureInboundAlias(localUser.id, companyId)))
-      : null;
+    localUser && isFounder ? await getInboundAlias(localUser.id, companyId) : null;
   const legacyInboundAddress =
     inboundAlias && localUser?.expenseInboundSlug
       ? expenseInboundAddress(company.slug, localUser.expenseInboundSlug)

@@ -195,39 +195,44 @@ export function formatExpenseInboundAddress(
   return `${config.prefix}+${companySlug}.${userSlug}@${config.domain}`;
 }
 
+/** One check's verdict, as Resend's receiving server computed it. */
+export type InboundAuthResult = "pass" | "fail" | "gray" | "processing_failed" | "unknown";
+
 /**
- * What the receiving server's Authentication-Results say about the From address:
- * true when DMARC passed (or, with no DMARC verdict, DKIM or SPF did), false when
- * they failed, null when there is no such header to go on.
+ * The `authentication` field on a received email (Retrieve Received Email API).
+ * Resend computes it on arrival, so unlike headers the sender can't forge it.
+ * Null for mail received before Resend added the field.
  */
-export function senderAuthenticated(
-  headers: Record<string, string> | null | undefined,
-): boolean | null {
-  if (!headers) return null;
-  const results = Object.entries(headers)
-    .filter(([key]) => key.toLowerCase() === "authentication-results")
-    .map(([, value]) => value)
-    .join(";")
-    .toLowerCase();
-  if (!results) return null;
-  const dmarc = results.match(/\bdmarc=([a-z]+)/);
-  if (dmarc) return dmarc[1] === "pass";
-  return /\b(dkim|spf)=pass\b/.test(results);
+export type InboundAuthentication = {
+  spf?: InboundAuthResult | null;
+  dkim?: InboundAuthResult | null;
+  dmarc?: InboundAuthResult | null;
+} | null;
+
+/**
+ * Whether the receiving server vouches for the From domain: DMARC passed, or
+ * DKIM passed for a domain with no DMARC policy. DKIM "pass" means the signing
+ * domain matches From ("gray" covers a mismatch). SPF alone doesn't count: it
+ * checks the envelope sender, which needn't match From.
+ */
+export function senderAuthenticated(authentication: InboundAuthentication | undefined): boolean {
+  if (!authentication) return false;
+  if (authentication.dmarc === "pass") return true;
+  return authentication.dmarc === "gray" && authentication.dkim === "pass";
 }
 
 /**
  * The sender to flag on an emailed claim, or null when it came from the
  * mailbox owner. Anyone can type any From address, so the owner's address
- * only counts when the checks positively pass: a failed or missing result
- * (`authenticated` false or null) is flagged too.
+ * only counts when {@link senderAuthenticated} vouches for it.
  */
 export function externalSenderOf(
   fromEmail: string,
   ownerEmail: string,
-  authenticated: boolean | null,
+  authenticated: boolean,
 ): string | null {
   const from = parseEmailAddressHeader(fromEmail);
-  if (from === ownerEmail.trim().toLowerCase() && authenticated === true) return null;
+  if (from === ownerEmail.trim().toLowerCase() && authenticated) return null;
   return from;
 }
 

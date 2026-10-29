@@ -95,23 +95,20 @@ describe("parseInboundAlias / inboundMailboxCandidates", () => {
 });
 
 describe("senderAuthenticated", () => {
-  it("is null without an Authentication-Results header", () => {
-    expect(senderAuthenticated(null)).toBeNull();
-    expect(senderAuthenticated({ subject: "x" })).toBeNull();
+  it("is false without Resend's authentication result", () => {
+    expect(senderAuthenticated(null)).toBe(false);
+    expect(senderAuthenticated(undefined)).toBe(false);
   });
 
-  it("follows DMARC when present", () => {
-    expect(
-      senderAuthenticated({ "Authentication-Results": "mx; spf=pass; dkim=pass; dmarc=fail" }),
-    ).toBe(false);
-    expect(senderAuthenticated({ "authentication-results": "mx; spf=fail; dmarc=pass" })).toBe(true);
+  it("trusts DMARC, or aligned DKIM when the domain has no DMARC policy", () => {
+    expect(senderAuthenticated({ spf: "fail", dkim: "fail", dmarc: "pass" })).toBe(true);
+    expect(senderAuthenticated({ spf: "pass", dkim: "pass", dmarc: "gray" })).toBe(true);
   });
 
-  it("falls back to DKIM or SPF without a DMARC verdict", () => {
-    expect(senderAuthenticated({ "authentication-results": "mx; dkim=pass" })).toBe(true);
-    expect(senderAuthenticated({ "authentication-results": "mx; dkim=fail; spf=softfail" })).toBe(
-      false,
-    );
+  it("doesn't trust a DMARC failure, unaligned DKIM, or SPF alone", () => {
+    expect(senderAuthenticated({ spf: "pass", dkim: "pass", dmarc: "fail" })).toBe(false);
+    expect(senderAuthenticated({ spf: "pass", dkim: "gray", dmarc: "gray" })).toBe(false);
+    expect(senderAuthenticated({ spf: "pass", dkim: "unknown", dmarc: "unknown" })).toBe(false);
   });
 });
 
@@ -120,9 +117,8 @@ describe("externalSenderOf", () => {
     expect(externalSenderOf("Lee <LEE@example.com>", "lee@example.com", true)).toBeNull();
   });
 
-  it("flags anyone else, and the owner's address when the checks fail or are missing", () => {
+  it("flags anyone else, and the owner's address when the checks don't pass", () => {
     expect(externalSenderOf("billing@shop.com", "lee@example.com", true)).toBe("billing@shop.com");
     expect(externalSenderOf("lee@example.com", "lee@example.com", false)).toBe("lee@example.com");
-    expect(externalSenderOf("lee@example.com", "lee@example.com", null)).toBe("lee@example.com");
   });
 });

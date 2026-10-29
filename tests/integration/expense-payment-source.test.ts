@@ -82,8 +82,8 @@ let companyId: string;
 let companySlug: string;
 let founderId: string;
 
-/** What the receiving server adds to genuine mail from the owner. */
-const AUTH_PASS = { "Authentication-Results": "mx.resend.com; dkim=pass; spf=pass; dmarc=pass" };
+/** What Resend's receiving server reports for genuine mail from the owner. */
+const AUTH_PASS = { spf: "pass", dkim: "pass", dmarc: "pass" };
 
 const mailbox = () => `expenses+${companySlug}.founder@dotanddashconsulting.com`;
 
@@ -126,10 +126,18 @@ async function receive(
   emailId: string,
   email: { subject: string; text: string },
   receipt?: { description: string; amountPounds: string; cardLast4?: string },
-  envelope: { from?: string; to?: string; headers?: Record<string, string> } = {},
+  envelope: {
+    from?: string;
+    to?: string;
+    authentication?: Record<string, string> | null;
+  } = {},
 ) {
   mockReceivingGet.mockResolvedValue({
-    data: { ...email, html: null, headers: envelope.headers ?? AUTH_PASS },
+    data: {
+      ...email,
+      html: null,
+      authentication: envelope.authentication === undefined ? AUTH_PASS : envelope.authentication,
+    },
     error: null,
   });
   mockAttachmentsList.mockResolvedValue({
@@ -321,7 +329,7 @@ describe("payment source on emailed expenses", () => {
         subject: `Re: ${subject}`,
         text: "#personal Total £5.00",
         html: null,
-        headers: AUTH_PASS,
+        authentication: AUTH_PASS,
       },
       error: null,
     });
@@ -360,7 +368,6 @@ describe("claims sent by someone other than the mailbox owner", () => {
   it("routes a short address and doesn't flag the owner's own claim", async () => {
     const { result } = await receive("s1", { subject: "Lunch", text: "Total £24.00" }, undefined, {
       to: short,
-      headers: { "Authentication-Results": "mx.resend.com; dkim=pass; dmarc=pass" },
     });
     expect(result.ok).toBe(true);
     const expense = await expenseOf(result);
@@ -388,7 +395,7 @@ describe("claims sent by someone other than the mailbox owner", () => {
   it("flags mail from the owner's address with no authentication result", async () => {
     const { result } = await receive("s3b", { subject: "Lunch", text: "Total £24.00" }, undefined, {
       to: short,
-      headers: {},
+      authentication: null,
     });
     expect((await expenseOf(result)).externalSenderEmail).toBe("founder@example.com");
     expect(mockSendEmail).not.toHaveBeenCalled();
@@ -397,7 +404,7 @@ describe("claims sent by someone other than the mailbox owner", () => {
   it("flags mail that claims to be from the owner but fails DMARC", async () => {
     const { result } = await receive("s3", { subject: "Lunch", text: "Total £24.00" }, undefined, {
       to: short,
-      headers: { "Authentication-Results": "mx.resend.com; spf=fail; dmarc=fail" },
+      authentication: { spf: "fail", dkim: "pass", dmarc: "fail" },
     });
     expect((await expenseOf(result)).externalSenderEmail).toBe("founder@example.com");
     expect(mockSendEmail).not.toHaveBeenCalled();

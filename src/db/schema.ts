@@ -293,6 +293,19 @@ export const companyMemberships = pgTable(
   ],
 );
 
+/**
+ * Inbound aliases someone renamed away from. Nobody else can claim one for a
+ * cool-down, so mail still sent to it is never delivered to another person or
+ * company. The membership that released it may take it back.
+ */
+export const releasedInboundAliases = pgTable("released_inbound_aliases", {
+  alias: text("alias").primaryKey(),
+  membershipId: uuid("membership_id").references(() => companyMemberships.id, {
+    onDelete: "set null",
+  }),
+  releasedAt: timestamp("released_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const clients = pgTable(
   "clients",
   {
@@ -1577,6 +1590,7 @@ export const schema = {
   companies,
   companySettings,
   companyMemberships,
+  releasedInboundAliases,
   clients,
   invoices,
   invoiceLineItems,

@@ -19,6 +19,7 @@ import {
   pickReceiptAttachments,
   planInboundExpenses,
   senderAuthenticated,
+  type InboundAuthentication,
 } from "@/lib/expenses/inbound-merge";
 import {
   describeFetchError,
@@ -556,7 +557,8 @@ async function deliverInboundEmail(
   const externalSenderEmail = externalSenderOf(
     job.fromEmail,
     sender.email,
-    senderAuthenticated(email.headers),
+    // Not in the SDK's types yet; see InboundAuthentication.
+    senderAuthenticated((email as { authentication?: InboundAuthentication }).authentication),
   );
 
   const companyId = job.companyId;

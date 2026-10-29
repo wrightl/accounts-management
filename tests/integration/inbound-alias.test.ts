@@ -2,10 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
-import { companyMemberships, users } from "@/db/schema";
+import { companyMemberships, releasedInboundAliases, users } from "@/db/schema";
 import {
   ensureInboundAlias,
   getInboundAlias,
+  RELEASED_ALIAS_COOLDOWN_DAYS,
   resolveInboundRecipient,
   setInboundAlias,
 } from "@/lib/expenses/inbound-mailbox";
@@ -102,9 +103,57 @@ describe("short inbound addresses", () => {
     expect(await resolveInboundRecipient(at("lee"))).toBeNull();
     expect((await resolveInboundRecipient(at("lee.wright")))?.userId).toBe(lee);
 
-    // The old one is free for anyone.
+    // Nobody else can take the old one during the cool-down, from any company.
+    expect(await setInboundAlias(sam, otherId, "lee")).toEqual({
+      ok: false,
+      error: "That address is taken. Pick another.",
+    });
+    expect(await resolveInboundRecipient(at("lee"))).toBeNull();
+  });
+
+  it("lets the old owner take an address back during the cool-down", async () => {
+    const lee = await addUser("lee@example.com", "Lee");
+    await upsertMembership(lee, acmeId, "user");
+    expect((await setInboundAlias(lee, acmeId, "lee.new")).ok).toBe(true);
+    expect(await setInboundAlias(lee, acmeId, "lee")).toEqual({
+      ok: true,
+      alias: "lee",
+      previous: "lee.new",
+    });
+    expect((await resolveInboundRecipient(at("lee")))?.userId).toBe(lee);
+  });
+
+  it("frees an address for others once the cool-down ends", async () => {
+    const lee = await addUser("lee@example.com", "Lee");
+    const sam = await addUser("sam@example.com", "Sam");
+    await upsertMembership(lee, acmeId, "user");
+    await upsertMembership(sam, otherId, "user");
+    expect((await setInboundAlias(lee, acmeId, "lee.new")).ok).toBe(true);
+
+    const longAgo = new Date(Date.now() - (RELEASED_ALIAS_COOLDOWN_DAYS + 1) * 86_400_000);
+    await db
+      .update(releasedInboundAliases)
+      .set({ releasedAt: longAgo })
+      .where(eq(releasedInboundAliases.alias, "lee"));
     expect((await setInboundAlias(sam, otherId, "lee")).ok).toBe(true);
     expect((await resolveInboundRecipient(at("lee")))?.userId).toBe(sam);
+  });
+
+  it("doesn't give a cooling-down address to a new founder", async () => {
+    const lee = await addUser("lee@example.com", "Lee");
+    await upsertMembership(lee, acmeId, "user");
+    expect((await setInboundAlias(lee, acmeId, "lee.new")).ok).toBe(true);
+
+    const otherLee = await addUser("lee@other.com", "Lee");
+    await upsertMembership(otherLee, otherId, "user");
+    expect(await getInboundAlias(otherLee, otherId)).toBe("lee-other");
+  });
+
+  it("only lets founders set an address", async () => {
+    const acct = await addUser("acct@example.com", "Ann");
+    await upsertMembership(acct, acmeId, "accountant");
+    expect((await setInboundAlias(acct, acmeId, "ann.books")).ok).toBe(false);
+    expect(await resolveInboundRecipient(at("ann.books"))).toBeNull();
   });
 
   it("enforces uniqueness in the database too", async () => {

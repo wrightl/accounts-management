@@ -1,7 +1,7 @@
 import "server-only";
-import { and, eq, isNotNull, isNull, ne } from "drizzle-orm";
+import { and, eq, gt, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { companies, companyMemberships, users } from "@/db/schema";
+import { companies, companyMemberships, releasedInboundAliases, users } from "@/db/schema";
 import { serverEnv } from "@/env";
 import { isUniqueViolation } from "@/lib/db-errors";
 import { inboundAliasError, normalizeInboundAlias } from "@/lib/expenses/inbound-alias";
@@ -165,7 +165,8 @@ export async function ensureInboundAlias(
     candidates.push(`${seed.slice(0, 20)}-${inboundSlugToken().slice(0, 6)}`);
   }
 
-  for (const alias of candidates) {
+  const coolingDown = await coolingDownAliases(candidates);
+  for (const alias of candidates.filter((c) => !coolingDown.has(c))) {
     try {
       const [set] = await db
         .update(companyMemberships)
@@ -192,6 +193,28 @@ export async function ensureInboundAlias(
   throw new Error("Could not allocate a unique inbound address");
 }
 
+/** How long a renamed-away alias stays out of reach of everyone else. */
+export const RELEASED_ALIAS_COOLDOWN_DAYS = 90;
+
+function cooldownCutoff(): Date {
+  return new Date(Date.now() - RELEASED_ALIAS_COOLDOWN_DAYS * 24 * 60 * 60 * 1000);
+}
+
+/** Of `aliases`, those released recently enough that only their old owner may take them. */
+async function coolingDownAliases(aliases: string[]): Promise<Set<string>> {
+  if (aliases.length === 0) return new Set();
+  const rows = await getDb()
+    .select({ alias: releasedInboundAliases.alias })
+    .from(releasedInboundAliases)
+    .where(
+      and(
+        inArray(releasedInboundAliases.alias, aliases),
+        gt(releasedInboundAliases.releasedAt, cooldownCutoff()),
+      ),
+    );
+  return new Set(rows.map((r) => r.alias));
+}
+
 const ALIAS_TAKEN = "That address is taken. Pick another.";
 
 export type SetInboundAliasResult =
@@ -199,8 +222,10 @@ export type SetInboundAliasResult =
   | { ok: false; error: string };
 
 /**
- * Rename a membership's short address. The old one stops working at once and
- * anyone may claim it. Uniqueness is enforced by the database index.
+ * Rename a founder's short address. The old one stops working at once, and for
+ * {@link RELEASED_ALIAS_COOLDOWN_DAYS} days only they can take it back, so mail
+ * still sent to it never reaches anyone else. Uniqueness among live aliases is
+ * enforced by the database index.
  */
 export async function setInboundAlias(
   userId: string,
@@ -211,34 +236,70 @@ export async function setInboundAlias(
   const invalid = inboundAliasError(alias);
   if (invalid) return { ok: false, error: invalid };
 
-  const db = getDb();
-  const [current] = await db
-    .select({ id: companyMemberships.id, alias: companyMemberships.inboundAlias })
-    .from(companyMemberships)
-    .where(
-      and(eq(companyMemberships.userId, userId), eq(companyMemberships.companyId, companyId)),
-    )
-    .limit(1);
-  if (!current) return { ok: false, error: "You are not a member of this company." };
-  if (current.alias === alias) return { ok: true, alias, previous: current.alias };
-
-  const [taken] = await db
-    .select({ id: companyMemberships.id })
-    .from(companyMemberships)
-    .where(
-      and(eq(companyMemberships.inboundAlias, alias), ne(companyMemberships.id, current.id)),
-    )
-    .limit(1);
-  if (taken) return { ok: false, error: ALIAS_TAKEN };
-
   try {
-    await db
-      .update(companyMemberships)
-      .set({ inboundAlias: alias })
-      .where(eq(companyMemberships.id, current.id));
+    return await getDb().transaction(async (tx) => {
+      // One rename at a time, so an alias can't be freed between the checks and the claim.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext('inbound_alias'))`);
+
+      const [current] = await tx
+        .select({
+          id: companyMemberships.id,
+          alias: companyMemberships.inboundAlias,
+          role: companyMemberships.role,
+        })
+        .from(companyMemberships)
+        .where(
+          and(
+            eq(companyMemberships.userId, userId),
+            eq(companyMemberships.companyId, companyId),
+          ),
+        )
+        .limit(1);
+      if (!current) return { ok: false, error: "You are not a member of this company." };
+      if (current.role !== "admin" && current.role !== "user") {
+        return { ok: false, error: "Only founders have an address for emailing receipts." };
+      }
+      if (current.alias === alias) return { ok: true, alias, previous: current.alias };
+
+      const [taken] = await tx
+        .select({ id: companyMemberships.id })
+        .from(companyMemberships)
+        .where(eq(companyMemberships.inboundAlias, alias))
+        .limit(1);
+      const [released] = await tx
+        .select({ alias: releasedInboundAliases.alias })
+        .from(releasedInboundAliases)
+        .where(
+          and(
+            eq(releasedInboundAliases.alias, alias),
+            gt(releasedInboundAliases.releasedAt, cooldownCutoff()),
+            or(
+              isNull(releasedInboundAliases.membershipId),
+              ne(releasedInboundAliases.membershipId, current.id),
+            ),
+          ),
+        )
+        .limit(1);
+      if (taken || released) return { ok: false, error: ALIAS_TAKEN };
+
+      await tx
+        .update(companyMemberships)
+        .set({ inboundAlias: alias })
+        .where(eq(companyMemberships.id, current.id));
+      await tx.delete(releasedInboundAliases).where(eq(releasedInboundAliases.alias, alias));
+      if (current.alias) {
+        await tx
+          .insert(releasedInboundAliases)
+          .values({ alias: current.alias, membershipId: current.id, releasedAt: new Date() })
+          .onConflictDoUpdate({
+            target: releasedInboundAliases.alias,
+            set: { membershipId: current.id, releasedAt: new Date() },
+          });
+      }
+      return { ok: true, alias, previous: current.alias };
+    });
   } catch (err) {
     if (isUniqueViolation(err)) return { ok: false, error: ALIAS_TAKEN };
     throw err;
   }
-  return { ok: true, alias, previous: current.alias };
 }

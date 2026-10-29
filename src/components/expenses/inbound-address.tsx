@@ -97,7 +97,7 @@ export function InboundAddress({
         <FieldError id="inbound-alias-error">{error}</FieldError>
         <p id="inbound-alias-help" className="mt-1 text-muted">
           Letters and numbers, with dots or hyphens between them. {address} stops working
-          as soon as you save, and someone else could take it.
+          as soon as you save. For 90 days only you can switch back to it.
         </p>
       </form>
     );
