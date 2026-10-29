@@ -126,6 +126,7 @@ function releasingClient(client: PGlite, release: () => void): PGlite {
  */
 export async function createTestDb({ fresh = false }: { fresh?: boolean } = {}) {
   if (fresh || cached?.inUse) {
+    // Not shared: the test's own `client.close()` really closes it.
     const client = await restoreSnapshot();
     return { db: drizzle({ client, schema }), client };
   }

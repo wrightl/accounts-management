@@ -21,7 +21,7 @@ import {
 } from "@/actions/menu";
 import { getMenuState, setMenuFeatures } from "@/lib/menu/queries";
 import { getMenuSuggestions } from "@/lib/menu/suggestions";
-import { MENU_FEATURES } from "@/lib/menu/features";
+import { LTD_ONLY_FEATURES, MENU_FEATURES } from "@/lib/menu/features";
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({
@@ -160,6 +160,24 @@ describe("menu questions", () => {
   it("keeps every page when skipped, but records a choice", async () => {
     expect(await skipMenuQuestions()).toMatchObject({ ok: true });
     expect((await getMenuState(userId, companyId)).enabled).toEqual([...MENU_FEATURES]);
+  });
+
+  it("never stores limited-company pages for a sole trader, from any action", async () => {
+    await db.update(companies).set({ entityType: "sole_trader" });
+    await skipMenuQuestions();
+    const skipped = (await getMenuState(userId, companyId)).enabled ?? [];
+    expect(skipped).toContain("quotes");
+    for (const ltdOnly of LTD_ONLY_FEATURES) expect(skipped).not.toContain(ltdOnly);
+
+    await updateMenuFeatures(form(["quotes", "dividends"]));
+    expect((await getMenuState(userId, companyId)).enabled).toEqual(["quotes"]);
+  });
+
+  it("does not overwrite a menu chosen since the card was shown", async () => {
+    await setMenuFeatures(userId, companyId, ["forecast"]);
+    expect(await answerMenuQuestions(answers({ quotes: "yes" }))).toMatchObject({ ok: true });
+    expect(await skipMenuQuestions()).toMatchObject({ ok: true });
+    expect((await getMenuState(userId, companyId)).enabled).toEqual(["forecast"]);
   });
 
   it("lets a read-only accountant answer", async () => {

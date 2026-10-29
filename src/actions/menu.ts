@@ -6,6 +6,7 @@ import { writeAudit } from "@/lib/audit";
 import { ensureLocalUser } from "@/lib/users";
 import {
   MENU_FEATURES,
+  featureAppliesTo,
   featuresFromAnswers,
   featuresFromFormData,
   isMenuFeature,
@@ -39,11 +40,13 @@ async function menuContext() {
   };
 }
 
+/** Every write goes through here, so sole traders never store limited-company pages. */
 async function saveFeatures(
-  ctx: { companyId: string; localUserId: string },
-  features: MenuFeature[],
+  ctx: { companyId: string; entityType: string | null; localUserId: string },
+  requested: MenuFeature[],
   action: string,
 ): Promise<ActionResult> {
+  const features = requested.filter((f) => featureAppliesTo(f, ctx.entityType));
   await setMenuFeatures(ctx.localUserId, ctx.companyId, features);
   await writeAudit({
     companyId: ctx.companyId,
@@ -64,10 +67,19 @@ export async function updateMenuFeatures(formData: FormData): Promise<ActionResu
   return saveFeatures(ctx, featuresFromFormData(formData), "user.menu.update");
 }
 
+/**
+ * The dashboard card only asks people who never chose. A stale card (another
+ * tab, a double submit) must not overwrite a menu chosen since.
+ */
+async function hasChosenMenu(ctx: { companyId: string; localUserId: string }) {
+  return (await getMenuState(ctx.localUserId, ctx.companyId)).enabled !== null;
+}
+
 /** Set the menu from the yes/no questions, for people who skipped onboarding. */
 export async function answerMenuQuestions(formData: FormData): Promise<ActionResult> {
   const ctx = await menuContext();
   if (!ctx.ok) return ctx;
+  if (await hasChosenMenu(ctx)) return { ok: true, id: ctx.localUserId };
   return saveFeatures(
     ctx,
     featuresFromAnswers(menuAnswersFromFormData(formData), ctx.entityType),
@@ -82,6 +94,7 @@ export async function answerMenuQuestions(formData: FormData): Promise<ActionRes
 export async function skipMenuQuestions(): Promise<ActionResult> {
   const ctx = await menuContext();
   if (!ctx.ok) return ctx;
+  if (await hasChosenMenu(ctx)) return { ok: true, id: ctx.localUserId };
   return saveFeatures(ctx, [...MENU_FEATURES], "user.menu.skip");
 }
 
