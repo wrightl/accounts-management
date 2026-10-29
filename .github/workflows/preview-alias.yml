@@ -1,0 +1,42 @@
+name: Preview alias
+
+# Vercel can only pin a custom domain to production or one Git branch. This
+# points PREVIEW_DOMAIN at the latest successful preview from any branch.
+# Requires secret VERCEL_TOKEN and variables PREVIEW_DOMAIN, VERCEL_SCOPE
+# (team slug). The domain must already be added to the Vercel team.
+
+on:
+    deployment_status:
+
+permissions: {}
+
+concurrency:
+    group: preview-alias
+    cancel-in-progress: true
+
+jobs:
+    alias:
+        if: >-
+            github.event.deployment_status.state == 'success' &&
+            startsWith(github.event.deployment.environment, 'Preview')
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+
+            # No checkout: PR code never runs in a job that holds the token.
+            - name: Alias latest preview
+              env:
+                  VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+                  VERCEL_SCOPE: ${{ vars.VERCEL_SCOPE }}
+                  PREVIEW_DOMAIN: ${{ vars.PREVIEW_DOMAIN }}
+                  DEPLOY_URL: ${{ github.event.deployment_status.environment_url || github.event.deployment_status.target_url }}
+              run: |
+                  set -euo pipefail
+                  if [ -z "${VERCEL_TOKEN:-}" ] || [ -z "${PREVIEW_DOMAIN:-}" ] || [ -z "${VERCEL_SCOPE:-}" ]; then
+                    echo "Missing VERCEL_TOKEN, PREVIEW_DOMAIN or VERCEL_SCOPE" >&2
+                    exit 1
+                  fi
+                  npx --yes vercel@39.1.0 alias set "${DEPLOY_URL#https://}" "$PREVIEW_DOMAIN" \
+                    --token "$VERCEL_TOKEN" --scope "$VERCEL_SCOPE"

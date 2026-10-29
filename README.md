@@ -195,6 +195,14 @@ Inbound receipt email is primarily handled by the Resend webhook
 (`/api/webhooks/resend`), which also opportunistically drains a few pending jobs;
 the scheduled Action is the drain/retry when no new mail arrives.
 
+### Preview domain
+
+`.github/workflows/preview-alias.yml` points a fixed custom domain at the latest
+successful preview deployment from any branch. Add the domain to the Vercel team
+(not assigned to production or a branch), then set GitHub secret `VERCEL_TOKEN`
+and repository variables `PREVIEW_DOMAIN` (hostname) and `VERCEL_SCOPE` (team
+slug). Add the hostname to Clerk's allowed origins if sign-in fails there.
+
 ## Conventions
 
 - **Money** is integer pence (`src/lib/money.ts`). Books are **GBP**.
