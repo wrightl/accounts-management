@@ -5,6 +5,7 @@ import {
   bankAccounts,
   bankTransactions,
   clients,
+  companies,
   companyMemberships,
   expenses,
   invoices,
@@ -13,12 +14,14 @@ import {
 import { seedCompany } from "@/lib/test/seed-company";
 import {
   addMenuFeatures,
+  answerMenuQuestions,
   dismissMenuSuggestion,
+  skipMenuQuestions,
   updateMenuFeatures,
 } from "@/actions/menu";
 import { getMenuState, setMenuFeatures } from "@/lib/menu/queries";
 import { getMenuSuggestions } from "@/lib/menu/suggestions";
-import { MENU_FEATURES } from "@/lib/menu/features";
+import { LTD_ONLY_FEATURES, MENU_FEATURES } from "@/lib/menu/features";
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({
@@ -125,6 +128,64 @@ describe("menu actions", () => {
     const accountantId = await seedUser("accountant");
     expect(await updateMenuFeatures(form(["forecast"]))).toMatchObject({ ok: true });
     expect((await getMenuState(accountantId, companyId)).enabled).toEqual(["forecast"]);
+  });
+});
+
+function answers(values: Record<string, "yes" | "no">) {
+  const fd = new FormData();
+  for (const [id, value] of Object.entries(values)) fd.append(`menu_${id}`, value);
+  return fd;
+}
+
+describe("menu questions", () => {
+  it("sets the menu from the answers, in menu order, using defaults for the rest", async () => {
+    expect(await answerMenuQuestions(answers({ quotes: "yes", planning: "no" }))).toMatchObject({ ok: true });
+    expect((await getMenuState(userId, companyId)).enabled).toEqual([
+      "quotes",
+      "orders",
+      "dividends",
+      "shareholders",
+      "directorsLoans",
+      "safeToPay",
+      "reserves",
+    ]);
+  });
+
+  it("leaves out limited-company pages for a sole trader", async () => {
+    await db.update(companies).set({ entityType: "sole_trader" });
+    await answerMenuQuestions(answers({ payingYourself: "yes", recurring: "yes" }));
+    expect((await getMenuState(userId, companyId)).enabled).toEqual(["recurring"]);
+  });
+
+  it("keeps every page when skipped, but records a choice", async () => {
+    expect(await skipMenuQuestions()).toMatchObject({ ok: true });
+    expect((await getMenuState(userId, companyId)).enabled).toEqual([...MENU_FEATURES]);
+  });
+
+  it("never stores limited-company pages for a sole trader, from any action", async () => {
+    await db.update(companies).set({ entityType: "sole_trader" });
+    await skipMenuQuestions();
+    const skipped = (await getMenuState(userId, companyId)).enabled ?? [];
+    expect(skipped).toContain("quotes");
+    for (const ltdOnly of LTD_ONLY_FEATURES) expect(skipped).not.toContain(ltdOnly);
+
+    await updateMenuFeatures(form(["quotes", "dividends"]));
+    expect((await getMenuState(userId, companyId)).enabled).toEqual(["quotes"]);
+  });
+
+  it("does not overwrite a menu chosen since the card was shown", async () => {
+    await setMenuFeatures(userId, companyId, ["forecast"]);
+    expect(await answerMenuQuestions(answers({ quotes: "yes" }))).toMatchObject({ ok: true });
+    expect(await skipMenuQuestions()).toMatchObject({ ok: true });
+    expect((await getMenuState(userId, companyId)).enabled).toEqual(["forecast"]);
+  });
+
+  it("lets a read-only accountant answer", async () => {
+    await db.delete(companyMemberships);
+    await db.delete(users);
+    const accountantId = await seedUser("accountant");
+    expect(await answerMenuQuestions(answers({ routine: "yes", payingYourself: "no" }))).toMatchObject({ ok: true });
+    expect((await getMenuState(accountantId, companyId)).enabled).toEqual(["close", "bookkeeper"]);
   });
 });
 

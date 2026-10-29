@@ -8,6 +8,7 @@ export default defineConfig({
     include: ["tests/unit/**/*.test.{ts,tsx}", "tests/integration/**/*.test.ts"],
     globals: true,
     globalSetup: ["tests/global-setup.ts"],
+    setupFiles: ["tests/setup.ts"],
   },
   resolve: {
     alias: {

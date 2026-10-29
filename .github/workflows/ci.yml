@@ -10,13 +10,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
+  # The checks below run in parallel; `verify` is the single required check.
+  lint-typecheck:
     runs-on: ubuntu-latest
-    # Clerk development-instance keys. The publishable key is inlined at build
-    # time, and `next start` can't serve any page without both.
-    env:
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
-      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -34,8 +30,50 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Unit & integration tests
-        run: npm test
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit & integration tests (shard ${{ matrix.shard }}/3)
+        run: npx vitest run --shard=${{ matrix.shard }}/3
+
+  build-e2e:
+    runs-on: ubuntu-latest
+    # Clerk development-instance keys. The publishable key is inlined at build
+    # time, and `next start` can't serve any page without both.
+    env:
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Next.js build cache
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: nextjs-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**', 'public/**', 'next.config.*') }}
+          restore-keys: |
+            nextjs-${{ hashFiles('package-lock.json') }}-
 
       - name: Build
         run: npm run build
@@ -55,6 +93,22 @@ jobs:
           path: test-results/
           if-no-files-found: ignore
           retention-days: 14
+
+  # Required check. Runs even when a job above fails, because GitHub treats a
+  # skipped required check as passing.
+  verify:
+    needs: [lint-typecheck, test, build-e2e]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: All checks passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Results: $RESULTS"
+          for result in $RESULTS; do
+            [ "$result" = "success" ] || exit 1
+          done
 
   security:
     runs-on: ubuntu-latest
