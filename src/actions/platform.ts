@@ -31,10 +31,6 @@ import {
   revokeCompanyInvite,
 } from "@/lib/users/manage";
 import {
-  uniquifyUserInboundSlug,
-  userInboundSlugSeed,
-} from "@/lib/expenses/inbound-mailbox";
-import {
   adminDismissInboundEmailJob,
   adminRetryInboundEmailJob,
   drainInboundEmailJobs,
@@ -300,25 +296,17 @@ export async function platformInviteCompanyAdmin(
       let userId: string;
 
       if (existing) {
-        const inboundSlug = await uniquifyUserInboundSlug(
-          userInboundSlugSeed(name, email),
-          existing.id,
-        );
         await db
           .update(users)
           .set({
             name: name ?? existing.name,
             role,
             companyId,
-            expenseInboundSlug: inboundSlug,
           })
           .where(eq(users.id, existing.id));
         await upsertMembership(existing.id, companyId, role);
         userId = existing.id;
       } else {
-        const inboundSlug = await uniquifyUserInboundSlug(
-          userInboundSlugSeed(name, email),
-        );
         const [created] = await db
           .insert(users)
           .values({
@@ -326,7 +314,6 @@ export async function platformInviteCompanyAdmin(
             name,
             role,
             companyId,
-            expenseInboundSlug: inboundSlug,
           })
           .returning({ id: users.id });
         await upsertMembership(created.id, companyId, role);
@@ -344,7 +331,6 @@ export async function platformInviteCompanyAdmin(
               name: existing.name,
               role: existing.role,
               companyId: existing.companyId,
-              expenseInboundSlug: existing.expenseInboundSlug,
             })
             .where(eq(users.id, existing.id));
         } else {

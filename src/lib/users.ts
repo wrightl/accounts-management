@@ -193,6 +193,12 @@ export async function upsertMembership(
     await db.insert(companyMemberships).values({ userId, companyId, role });
   }
 
+  // Founders get a short address for emailing in receipts.
+  if (role === "admin" || role === "user") {
+    const { ensureInboundAlias } = await import("@/lib/expenses/inbound-mailbox");
+    await ensureInboundAlias(userId, companyId);
+  }
+
   const [user] = await db
     .select({ companyId: users.companyId })
     .from(users)
@@ -434,21 +440,9 @@ export async function assignUserCompany(
     companyId: string;
     role?: TenantRole;
     name?: string | null;
-    expenseInboundSlug?: string;
   } = { companyId, role };
   if (options?.name !== undefined) {
     patch.name = name;
-  }
-
-  const shouldHaveInbound = role === "admin" || role === "user";
-  if (shouldHaveInbound && !current.expenseInboundSlug) {
-    const { uniquifyUserInboundSlug, userInboundSlugSeed } = await import(
-      "@/lib/expenses/inbound-mailbox"
-    );
-    patch.expenseInboundSlug = await uniquifyUserInboundSlug(
-      userInboundSlugSeed(name, current.email),
-      localUserId,
-    );
   }
 
   await db.update(users).set(patch).where(eq(users.id, localUserId));

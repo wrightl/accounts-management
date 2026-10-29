@@ -220,6 +220,7 @@ export const users = pgTable(
     /**
      * Per-user inbound expense local-part tag
      * (`alfa.expenses+{companySlug}.{expenseInboundSlug}@inbound.dotanddashconsulting.com`). Stable once set.
+     * Legacy: still routes, but new addresses use `company_memberships.inbound_alias`.
      */
     expenseInboundSlug: text("expense_inbound_slug"),
     /**
@@ -273,10 +274,16 @@ export const companyMemberships = pgTable(
       .array()
       .notNull()
       .default([]),
+    /**
+     * Short inbound expense mailbox (`{inboundAlias}@inbound.dotanddashconsulting.com`)
+     * for this person in this company. Unique across all companies; the person can rename it.
+     */
+    inboundAlias: text("inbound_alias"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
     uniqueIndex("uniq_company_memberships_user_company").on(t.userId, t.companyId),
+    uniqueIndex("uniq_company_memberships_inbound_alias").on(t.inboundAlias),
     index("idx_company_memberships_company").on(t.companyId),
     index("idx_company_memberships_user").on(t.userId),
     check(
@@ -285,6 +292,19 @@ export const companyMemberships = pgTable(
     ),
   ],
 );
+
+/**
+ * Inbound aliases someone renamed away from. Nobody else can claim one for a
+ * cool-down, so mail still sent to it is never delivered to another person or
+ * company. The membership that released it may take it back.
+ */
+export const releasedInboundAliases = pgTable("released_inbound_aliases", {
+  alias: text("alias").primaryKey(),
+  membershipId: uuid("membership_id").references(() => companyMemberships.id, {
+    onDelete: "set null",
+  }),
+  releasedAt: timestamp("released_at", { withTimezone: true }).defaultNow().notNull(),
+});
 
 export const clients = pgTable(
   "clients",
@@ -536,6 +556,11 @@ export const expenses = pgTable(
     statedPaymentSourceVia: text("stated_payment_source_via"),
     /** Last four digits of the card shown on the receipt, when it shows one. */
     receiptCardLast4: text("receipt_card_last4"),
+    /**
+     * Who emailed this claim, when it wasn't the submitter themselves (a supplier,
+     * or anyone who knows the address). The reviewer should check it first.
+     */
+    externalSenderEmail: text("external_sender_email"),
     /** The inbound email this expense came from; one email can create several. */
     inboundEmailJobId: uuid("inbound_email_job_id").references(
       (): AnyPgColumn => inboundEmailJobs.id,
@@ -1565,6 +1590,7 @@ export const schema = {
   companies,
   companySettings,
   companyMemberships,
+  releasedInboundAliases,
   clients,
   invoices,
   invoiceLineItems,

@@ -6,10 +6,6 @@ import { reimbursements, users } from "@/db/schema";
 import { cancelPendingReimbursementRunsForPayee } from "@/lib/reimbursements/cancel";
 import { clerkErrorMessage, sendClerkInvitation } from "@/lib/clerk-invite";
 import type { InviteContext } from "@/lib/invite-email";
-import {
-  uniquifyUserInboundSlug,
-  userInboundSlugSeed,
-} from "@/lib/expenses/inbound-mailbox";
 import type { TenantRole } from "@/lib/roles";
 import {
   countAdminUsers,
@@ -98,18 +94,8 @@ export async function changeCompanyMemberRole(params: {
     };
   }
 
-  const patch: { role?: TenantRole; expenseInboundSlug?: string } = {};
   if (target.companyId === companyId) {
-    patch.role = nextRole;
-  }
-  if ((nextRole === "admin" || nextRole === "user") && !target.expenseInboundSlug) {
-    patch.expenseInboundSlug = await uniquifyUserInboundSlug(
-      userInboundSlugSeed(target.name, target.email),
-      userId,
-    );
-  }
-  if (Object.keys(patch).length > 0) {
-    await db.update(users).set(patch).where(eq(users.id, userId));
+    await db.update(users).set({ role: nextRole }).where(eq(users.id, userId));
   }
   await upsertMembership(userId, companyId, nextRole);
   return { ok: true, id: userId };

@@ -68,6 +68,7 @@ export default async function ExpenseDetailPage({
   const askedHowPaid =
     Boolean(inboundJob?.paymentQuestionSentAt) && !detail.expense.statedPaymentSource;
 
+  const externalSender = detail.expense.externalSenderEmail;
   const payeeId = detail.expense.paidByUserId;
   const booksLocked = settlements.some((s) =>
     Boolean(periodLockError(settings.booksLockedThrough, s.bookedAt)),
@@ -91,7 +92,16 @@ export default async function ExpenseDetailPage({
           Submitted by email — review the details and attachments, then approve or reject.
           {detail.submitter ? (
             <span className="mt-1 block">
-              From {detail.submitter.name || detail.submitter.email}
+              {externalSender
+                ? `Sent to ${detail.submitter.name || detail.submitter.email}'s address`
+                : `From ${detail.submitter.name || detail.submitter.email}`}
+            </span>
+          ) : null}
+          {externalSender ? (
+            <span className="mt-1 block font-medium">
+              {externalSender === detail.submitter?.email.toLowerCase()
+                ? `It says it is from ${externalSender}, but we couldn't confirm the email really came from them. Check it is genuine before approving.`
+                : `It was sent by ${externalSender}, not by them. Check it is genuine before approving.`}
             </span>
           ) : null}
         </div>

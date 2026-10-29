@@ -15,6 +15,7 @@ import { enqueueInboundEmailJob, processInboundEmailJob } from "@/lib/expenses/i
 import { getPaymentSourceSuggestion } from "@/lib/expenses/payment-source-queries";
 import { setBankAccountCards } from "@/lib/bank/company-cards";
 import { paymentQuestionRef } from "@/lib/expenses/payment-source";
+import { setInboundAlias } from "@/lib/expenses/inbound-mailbox";
 import { seedCompany } from "@/lib/test/seed-company";
 
 vi.mock("server-only", () => ({}));
@@ -79,6 +80,10 @@ let ctx: Awaited<ReturnType<typeof createTestDb>>;
 let db: TestDatabase;
 let companyId: string;
 let companySlug: string;
+let founderId: string;
+
+/** What Resend's receiving server reports for genuine mail from the owner. */
+const AUTH_PASS = { spf: "pass", dkim: "pass", dmarc: "pass" };
 
 const mailbox = () => `expenses+${companySlug}.founder@dotanddashconsulting.com`;
 
@@ -106,6 +111,7 @@ beforeEach(async () => {
     })
     .returning();
   await db.insert(companyMemberships).values({ userId: founder.id, companyId, role: "user" });
+  founderId = founder.id;
 });
 
 afterEach(async () => {
@@ -120,8 +126,20 @@ async function receive(
   emailId: string,
   email: { subject: string; text: string },
   receipt?: { description: string; amountPounds: string; cardLast4?: string },
+  envelope: {
+    from?: string;
+    to?: string;
+    authentication?: Record<string, string> | null;
+  } = {},
 ) {
-  mockReceivingGet.mockResolvedValue({ data: { ...email, html: null }, error: null });
+  mockReceivingGet.mockResolvedValue({
+    data: {
+      ...email,
+      html: null,
+      authentication: envelope.authentication === undefined ? AUTH_PASS : envelope.authentication,
+    },
+    error: null,
+  });
   mockAttachmentsList.mockResolvedValue({
     data: {
       data: receipt
@@ -144,8 +162,8 @@ async function receive(
   }
   const { jobId } = await enqueueInboundEmailJob({
     email_id: emailId,
-    from: "founder@example.com",
-    to: [mailbox()],
+    from: envelope.from ?? "founder@example.com",
+    to: [envelope.to ?? mailbox()],
     subject: email.subject,
   });
   if (!jobId) throw new Error("expected job");
@@ -307,7 +325,12 @@ describe("payment source on emailed expenses", () => {
     await db.insert(companyMemberships).values({ userId: other.id, companyId, role: "user" });
 
     mockReceivingGet.mockResolvedValue({
-      data: { subject: `Re: ${subject}`, text: "#personal Total £5.00", html: null },
+      data: {
+        subject: `Re: ${subject}`,
+        text: "#personal Total £5.00",
+        html: null,
+        authentication: AUTH_PASS,
+      },
       error: null,
     });
     mockAttachmentsList.mockResolvedValue({ data: { data: [] }, error: null });
@@ -327,5 +350,92 @@ describe("payment source on emailed expenses", () => {
     // Treated as a new claim from the other person instead.
     const theirs = await db.select().from(expenses).where(eq(expenses.submittedByUserId, other.id));
     expect(theirs).toHaveLength(1);
+  });
+});
+
+describe("claims sent by someone other than the mailbox owner", () => {
+  const short = "founder@dotanddashconsulting.com";
+
+  beforeEach(async () => {
+    expect((await setInboundAlias(founderId, companyId, "founder")).ok).toBe(true);
+  });
+
+  async function expenseOf(result: { expenseId?: string }) {
+    const [expense] = await db.select().from(expenses).where(eq(expenses.id, result.expenseId!));
+    return expense;
+  }
+
+  it("routes a short address and doesn't flag the owner's own claim", async () => {
+    const { result } = await receive("s1", { subject: "Lunch", text: "Total £24.00" }, undefined, {
+      to: short,
+    });
+    expect(result.ok).toBe(true);
+    const expense = await expenseOf(result);
+    expect(expense.submittedByUserId).toBe(founderId);
+    expect(expense.externalSenderEmail).toBeNull();
+    expect(mockSendEmail).toHaveBeenCalledTimes(1);
+    expect((mockSendEmail.mock.calls[0][0] as { replyTo: string }).replyTo).toBe(short);
+  });
+
+  it("flags a supplier's claim and doesn't ask the supplier how it was paid", async () => {
+    const { result } = await receive(
+      "s2",
+      { subject: "Your invoice", text: "Total £80.00" },
+      undefined,
+      { to: short, from: "Shop Billing <billing@shop.com>" },
+    );
+    expect(result.ok).toBe(true);
+    const expense = await expenseOf(result);
+    expect(expense.status).toBe("pending");
+    expect(expense.submittedByUserId).toBe(founderId);
+    expect(expense.externalSenderEmail).toBe("billing@shop.com");
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
+  it("flags mail from the owner's address with no authentication result", async () => {
+    const { result } = await receive("s3b", { subject: "Lunch", text: "Total £24.00" }, undefined, {
+      to: short,
+      authentication: null,
+    });
+    expect((await expenseOf(result)).externalSenderEmail).toBe("founder@example.com");
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
+  it("flags mail that claims to be from the owner but fails DMARC", async () => {
+    const { result } = await receive("s3", { subject: "Lunch", text: "Total £24.00" }, undefined, {
+      to: short,
+      authentication: { spf: "fail", dkim: "pass", dmarc: "fail" },
+    });
+    expect((await expenseOf(result)).externalSenderEmail).toBe("founder@example.com");
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
+  it("flags the legacy address the same way", async () => {
+    const { result } = await receive(
+      "s4",
+      { subject: "Your invoice", text: "Total £80.00" },
+      undefined,
+      { from: "billing@shop.com" },
+    );
+    expect((await expenseOf(result)).externalSenderEmail).toBe("billing@shop.com");
+  });
+
+  it("doesn't let anyone else answer the owner's payment question", async () => {
+    const claim = await receive("s5", { subject: "Lunch", text: "Total £24.00" }, undefined, {
+      to: short,
+    });
+    const subject = (mockSendEmail.mock.calls[0][0] as { subject: string }).subject;
+
+    const reply = await receive(
+      "s6",
+      { subject: `Re: ${subject}`, text: "#personal Total £5.00" },
+      undefined,
+      { to: short, from: "stranger@example.net" },
+    );
+    expect(reply.result.ok).toBe(true);
+    expect((await expenseOf(claim.result)).statedPaymentSource).toBeNull();
+    expect((await jobRow(reply.jobId)).answersJobId).toBeNull();
+    // Kept as a claim of its own, flagged for checking.
+    expect((await expenseOf(reply.result)).externalSenderEmail).toBe("stranger@example.net");
   });
 });
