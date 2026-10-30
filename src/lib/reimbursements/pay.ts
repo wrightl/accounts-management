@@ -1,6 +1,7 @@
 import { eq, inArray, sql, and } from "drizzle-orm";
 import { expenses, reimbursementItems, reimbursements } from "@/db/schema";
 import type { getDb } from "@/db";
+import { todayIsoDate } from "@/lib/dates";
 
 type DbTx = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
 
@@ -42,7 +43,7 @@ export async function payReimbursementRun(
 
   await tx
     .update(reimbursements)
-    .set({ status: "paid", paidAt })
+    .set({ status: "paid", paidAt, reimbursementDate: todayIsoDate(paidAt) })
     .where(
       and(
         eq(reimbursements.id, reimbursementId),

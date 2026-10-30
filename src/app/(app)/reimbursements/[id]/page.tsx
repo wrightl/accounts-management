@@ -54,7 +54,9 @@ export default async function ReimbursementDetailPage({
             {detail.reimbursement.status}
             {detail.reimbursement.paidAt
               ? ` · Paid ${detail.reimbursement.paidAt.toISOString().slice(0, 10)}`
-              : null}
+              : detail.reimbursement.reimbursementDate
+                ? ` · Reimbursement date ${detail.reimbursement.reimbursementDate}`
+                : null}
           </p>
           {detail.reimbursement.reference ? (
             <p className="mt-2 text-sm">
@@ -81,6 +83,7 @@ export default async function ReimbursementDetailPage({
         <ReimbursementActions
           id={detail.reimbursement.id}
           status={detail.reimbursement.status}
+          reimbursementDate={detail.reimbursement.reimbursementDate}
           canWrite={canWrite}
         />
       </div>

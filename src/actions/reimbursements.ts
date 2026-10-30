@@ -26,6 +26,7 @@ import {
 } from "@/lib/reimbursements/schema";
 import type { ActionResult } from "@/actions/result";
 import { checkPeriodOpen } from "@/lib/period-lock-queries";
+import { todayIsoDate } from "@/lib/dates";
 
 class ReimburseError extends Error {
   constructor(message: string) {
@@ -103,6 +104,7 @@ export async function createReimbursementRun(
               status: "pending",
               totalPence,
               reference: parsed.data.reference,
+              reimbursementDate: parsed.data.reimbursementDate,
             })
             .returning({ id: reimbursements.id });
 
@@ -227,6 +229,7 @@ export async function updateReimbursementRun(
             .update(reimbursements)
             .set({
               reference: parsed.data.reference,
+              reimbursementDate: parsed.data.reimbursementDate,
               totalPence,
             })
             .where(and(eq(reimbursements.id, id), eq(reimbursements.companyId, companyId)));
@@ -242,7 +245,11 @@ export async function updateReimbursementRun(
         action: "reimbursement.update",
         entityType: "reimbursement",
         entityId: id,
-        meta: { totalPence, count: parsed.data.expenseIds.length },
+        meta: {
+          totalPence,
+          count: parsed.data.expenseIds.length,
+          reimbursementDate: parsed.data.reimbursementDate,
+        },
       });
 
       return { ok: true, id };
@@ -295,11 +302,25 @@ export async function markReimbursementPaid(
         }
       }
 
+      if (
+        !bankTransactionId &&
+        run.reimbursementDate &&
+        run.reimbursementDate > todayIsoDate()
+      ) {
+        return {
+          ok: false,
+          error: "The reimbursement date is in the future. Edit the run to change it.",
+        };
+      }
+
+      // A linked bank transaction's date wins: that's when the money actually left.
       const paidAt = bankTransactionId
         ? new Date(
             `${(await getBankTransactionById(companyId, bankTransactionId))!.bookedAt}T12:00:00Z`,
           )
-        : new Date();
+        : run.reimbursementDate
+          ? new Date(`${run.reimbursementDate}T12:00:00Z`)
+          : new Date();
       const locked = await checkPeriodOpen(companyId, paidAt);
       if (locked) return { ok: false, error: locked };
 

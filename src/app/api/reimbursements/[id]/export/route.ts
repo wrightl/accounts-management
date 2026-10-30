@@ -29,13 +29,14 @@ export async function GET(
   }
 
   const lines = [
-    ["reimbursement_id", "payee", "status", "reference", "total_gbp"].join(","),
+    ["reimbursement_id", "payee", "status", "reference", "total_gbp", "reimbursement_date"].join(","),
     [
       detail.reimbursement.id,
       csv(detail.payee.name || detail.payee.email),
       detail.reimbursement.status,
       csv(detail.reimbursement.reference ?? ""),
       (detail.reimbursement.totalPence / 100).toFixed(2),
+      detail.reimbursement.reimbursementDate ?? "",
     ].join(","),
     "",
     ["expense_id", "date", "description", "category", "amount_gbp"].join(","),

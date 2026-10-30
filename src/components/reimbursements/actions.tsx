@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonClasses } from "@/components/ui/button";
 import { useAlert } from "@/components/ui/alert-dialog";
 import { FieldError, Label, Select } from "@/components/ui/form";
 import { useFieldErrors } from "@/components/ui/use-field-errors";
@@ -13,13 +14,15 @@ import type { ReimbursementBankMatch } from "@/lib/bank/queries";
 export function ReimbursementActions({
   id,
   status,
+  reimbursementDate = null,
   canWrite,
   compact = false,
 }: {
   id: string;
   status: string;
+  reimbursementDate?: string | null;
   canWrite: boolean;
-  /** List-row control: mark paid without export or bank matching. */
+  /** List-row control: edit and mark paid, without export or bank matching. */
   compact?: boolean;
 }) {
   const router = useRouter();
@@ -65,8 +68,10 @@ export function ReimbursementActions({
     const ok = await confirm({
       title: "Mark as paid",
       message: selectedMatchId
-        ? "Mark this reimbursement as paid and link the bank transaction?"
-        : "Mark this reimbursement as paid?",
+        ? "Mark this reimbursement as paid and link the bank transaction? It will be dated from the bank transaction."
+        : reimbursementDate
+          ? `Mark this reimbursement as paid on ${reimbursementDate}?`
+          : "Mark this reimbursement as paid today?",
       confirmLabel: "Mark as paid",
     });
     if (!ok) return;
@@ -91,7 +96,15 @@ export function ReimbursementActions({
     if (!markPaidButton) return null;
     return (
       <div className="flex flex-col items-end">
-        {markPaidButton}
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/reimbursements/${id}/edit`}
+            className={buttonClasses("ghost", "text-sm")}
+          >
+            Edit
+          </Link>
+          {markPaidButton}
+        </div>
         <FieldError>{error}</FieldError>
       </div>
     );

@@ -975,6 +975,7 @@ export async function suggestMatches(
                     id: reimbursements.id,
                     totalPence: reimbursements.totalPence,
                     createdAt: reimbursements.createdAt,
+                    reimbursementDate: reimbursements.reimbursementDate,
                     reference: reimbursements.reference,
                     payeeName: users.name,
                     payeeEmail: users.email,
@@ -995,9 +996,11 @@ export async function suggestMatches(
                           candidate: {
                               id: reimbCandidates[0].id,
                               amountPence: reimbCandidates[0].totalPence,
-                              date: reimbCandidates[0].createdAt
-                                  .toISOString()
-                                  .slice(0, 10),
+                              date:
+                                  reimbCandidates[0].reimbursementDate ??
+                                  reimbCandidates[0].createdAt
+                                      .toISOString()
+                                      .slice(0, 10),
                               reference: [
                                   reimbCandidates[0].reference,
                                   reimbCandidates[0].payeeName,
@@ -1019,7 +1022,9 @@ export async function suggestMatches(
                           reimbCandidates.map((r) => ({
                               id: r.id,
                               amountPence: r.totalPence,
-                              date: r.createdAt.toISOString().slice(0, 10),
+                              date:
+                                  r.reimbursementDate ??
+                                  r.createdAt.toISOString().slice(0, 10),
                               reference: [
                                   r.reference,
                                   r.payeeName,
@@ -1611,7 +1616,8 @@ export async function findReimbursementBankMatches(
         .limit(1);
     if (!run || run.run.status !== 'pending') return [];
 
-    const referenceDate = run.run.createdAt.toISOString().slice(0, 10);
+    const referenceDate =
+        run.run.reimbursementDate ?? run.run.createdAt.toISOString().slice(0, 10);
     const payeeLabel = run.payeeName || run.payeeEmail;
     const unmatched = await listUnmatchedOutgoingTransactions(companyId);
     const scored: ReimbursementBankMatch[] = [];

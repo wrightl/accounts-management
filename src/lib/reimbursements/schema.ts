@@ -6,6 +6,18 @@ import {
   type ParseOk,
 } from "@/lib/validation/field-errors";
 
+function isCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+const reimbursementDateField = z
+  .string()
+  .trim()
+  .refine((v) => v === "" || isCalendarDate(v), "Enter a valid date")
+  .transform((v) => v || null);
+
 export const createReimbursementSchema = z.object({
   payeeUserId: z.string().uuid("Select a payee"),
   expenseIds: z
@@ -15,6 +27,7 @@ export const createReimbursementSchema = z.object({
     .string()
     .trim()
     .min(1, "Enter a bank payment reference"),
+  reimbursementDate: reimbursementDateField,
 });
 
 export const updateReimbursementSchema = z.object({
@@ -25,6 +38,7 @@ export const updateReimbursementSchema = z.object({
     .string()
     .trim()
     .min(1, "Enter a bank payment reference"),
+  reimbursementDate: reimbursementDateField,
 });
 
 export type CreateReimbursementParsed = z.infer<typeof createReimbursementSchema>;
@@ -63,6 +77,7 @@ export function reimbursementCreateRawFromFormData(
       payeeUserId: formData.get("payeeUserId"),
       expenseIds: ids.expenseIds,
       reference: formData.get("reference") ?? "",
+      reimbursementDate: formData.get("reimbursementDate") ?? "",
     },
   };
 }
@@ -77,6 +92,7 @@ export function reimbursementUpdateRawFromFormData(
     data: {
       expenseIds: ids.expenseIds,
       reference: formData.get("reference") ?? "",
+      reimbursementDate: formData.get("reimbursementDate") ?? "",
     },
   };
 }

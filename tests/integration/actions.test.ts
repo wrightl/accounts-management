@@ -14,6 +14,7 @@ import {
   users,
 } from "@/db/schema";
 import { seedCompany } from "@/lib/test/seed-company";
+import { todayIsoDate } from "@/lib/dates";
 import { recordPayment } from "@/actions/payments";
 import { createQuote } from "@/actions/quotes";
 import { createReimbursementRun, markReimbursementPaid, updateReimbursementRun } from "@/actions/reimbursements";
@@ -251,6 +252,97 @@ describe("action-layer PGlite", () => {
     expect(blocked.ok).toBe(false);
     if (blocked.ok) throw new Error("expected failure");
     expect(blocked.error).toMatch(/pending/i);
+  });
+
+  describe("reimbursement date", () => {
+    async function seedRun(reimbursementDate: string) {
+      const [actor] = await db
+        .insert(users)
+        .values({
+          companyId,
+          clerkUserId: "user_clerk_1",
+          email: "lee@dotanddashconsulting.com",
+          name: "Lee",
+          role: "admin",
+        })
+        .returning();
+      const [exp] = await db
+        .insert(expenses)
+        .values({
+          companyId,
+          description: "Train",
+          category: "Travel",
+          spentAt: "2026-04-01",
+          amountPence: 4500,
+          status: "reimbursable",
+          paidByUserId: actor.id,
+          createdByUserId: actor.id,
+        })
+        .returning();
+      const form = new FormData();
+      form.set("payeeUserId", actor.id);
+      form.set("expenseIdsJson", JSON.stringify([exp.id]));
+      form.set("reference", "Reimb Lee Apr");
+      form.set("reimbursementDate", reimbursementDate);
+      const created = await createReimbursementRun(form);
+      if (!created.ok || !created.id) throw new Error("expected run id");
+      return { id: created.id, expenseId: exp.id };
+    }
+
+    async function loadRun(id: string) {
+      const [run] = await db.select().from(reimbursements).where(eq(reimbursements.id, id));
+      return run;
+    }
+
+    function updateForm(expenseId: string, reimbursementDate: string) {
+      const form = new FormData();
+      form.set("expenseIdsJson", JSON.stringify([expenseId]));
+      form.set("reference", "Reimb Lee Apr");
+      form.set("reimbursementDate", reimbursementDate);
+      return form;
+    }
+
+    it("is saved on create, changed and cleared on edit", async () => {
+      const { id, expenseId } = await seedRun("2026-04-10");
+      expect((await loadRun(id)).reimbursementDate).toBe("2026-04-10");
+
+      expect((await updateReimbursementRun(id, updateForm(expenseId, "2026-04-12"))).ok).toBe(true);
+      expect((await loadRun(id)).reimbursementDate).toBe("2026-04-12");
+
+      expect((await updateReimbursementRun(id, updateForm(expenseId, ""))).ok).toBe(true);
+      expect((await loadRun(id)).reimbursementDate).toBeNull();
+    });
+
+    it("rejects a date that doesn't exist", async () => {
+      const { id, expenseId } = await seedRun("2026-04-10");
+      const result = await updateReimbursementRun(id, updateForm(expenseId, "2026-02-31"));
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error("expected failure");
+      expect(result.fieldErrors?.reimbursementDate).toMatch(/valid date/i);
+    });
+
+    it("dates the payment when the run is marked paid", async () => {
+      const { id } = await seedRun("2026-04-10");
+      expect((await markReimbursementPaid(id)).ok).toBe(true);
+      const run = await loadRun(id);
+      expect(run.paidAt?.toISOString()).toBe("2026-04-10T12:00:00.000Z");
+      expect(run.reimbursementDate).toBe("2026-04-10");
+    });
+
+    it("falls back to today when no date was set", async () => {
+      const { id } = await seedRun("");
+      expect((await markReimbursementPaid(id)).ok).toBe(true);
+      expect((await loadRun(id)).reimbursementDate).toBe(todayIsoDate());
+    });
+
+    it("won't mark a run paid on a future date", async () => {
+      const { id } = await seedRun("2999-01-01");
+      const result = await markReimbursementPaid(id);
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error("expected failure");
+      expect(result.error).toMatch(/future/i);
+      expect((await loadRun(id)).status).toBe("pending");
+    });
   });
 
   it("createQuote ignores trailing blank lines", async () => {

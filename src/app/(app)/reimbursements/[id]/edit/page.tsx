@@ -34,6 +34,7 @@ export default async function EditReimbursementPage({
         expenses={data.expenses}
         initialExpenseIds={data.initialExpenseIds}
         initialReference={data.initialReference}
+        initialReimbursementDate={data.initialReimbursementDate}
       />
     </div>
   );

@@ -21,6 +21,7 @@ export function EditReimbursementForm({
   expenses,
   initialExpenseIds,
   initialReference,
+  initialReimbursementDate,
 }: {
   id: string;
   payeeLabel: string;
@@ -32,10 +33,12 @@ export function EditReimbursementForm({
   }[];
   initialExpenseIds: string[];
   initialReference: string;
+  initialReimbursementDate: string;
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set(initialExpenseIds));
   const [reference, setReference] = useState(initialReference);
+  const [reimbursementDate, setReimbursementDate] = useState(initialReimbursementDate);
   const {
     fieldErrors,
     error,
@@ -62,6 +65,7 @@ export function EditReimbursementForm({
       onSubmit={preventResetSubmit((formData) => {
         formData.set("expenseIdsJson", JSON.stringify([...selected]));
         formData.set("reference", reference);
+        formData.set("reimbursementDate", reimbursementDate);
         clearAll();
         const raw = reimbursementUpdateRawFromFormData(formData);
         if (!raw.ok) {
@@ -152,6 +156,34 @@ export function EditReimbursementForm({
           }
         />
         <FieldError id="reference-error">{fieldErrors.reference}</FieldError>
+      </div>
+
+      <div>
+        <Label htmlFor="reimbursementDate">Reimbursement date</Label>
+        <Input
+          id="reimbursementDate"
+          name="reimbursementDate"
+          type="date"
+          value={reimbursementDate}
+          onChange={(e) => {
+            setReimbursementDate(e.target.value);
+            clearField("reimbursementDate");
+          }}
+          disabled={pending}
+          aria-invalid={Boolean(fieldErrors.reimbursementDate)}
+          aria-describedby={
+            fieldErrors.reimbursementDate
+              ? "reimbursementDate-error"
+              : "reimbursementDate-hint"
+          }
+        />
+        <p id="reimbursementDate-hint" className="mt-1 text-xs text-muted">
+          Leave blank to use the day you mark it paid. A linked bank transaction&apos;s
+          date takes priority.
+        </p>
+        <FieldError id="reimbursementDate-error">
+          {fieldErrors.reimbursementDate}
+        </FieldError>
       </div>
 
       <p className="text-sm text-muted">Total: {formatGBP(total)}</p>

@@ -41,6 +41,7 @@ export async function listReimbursements(companyId: string) {
       status: reimbursements.status,
       totalPence: reimbursements.totalPence,
       reference: reimbursements.reference,
+      reimbursementDate: reimbursements.reimbursementDate,
       createdAt: reimbursements.createdAt,
       paidAt: reimbursements.paidAt,
       payeeName: users.name,
@@ -222,5 +223,6 @@ export async function getReimbursementEditData(companyId: string, id: string) {
     expenses: reimbursable.filter((expense) => !blocked.has(expense.id)),
     initialExpenseIds: detail.items.map((item) => item.expense.id),
     initialReference: detail.reimbursement.reference ?? "",
+    initialReimbursementDate: detail.reimbursement.reimbursementDate ?? "",
   };
 }

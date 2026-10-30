@@ -484,7 +484,9 @@ export function HelpGuide({
                 transfer from the business account).
               </>,
               <>
-                Transfer the total, then <strong>Mark as paid</strong>.
+                Transfer the total, then <strong>Mark as paid</strong>. Until
+                then you can edit the run, including its reimbursement date. Left
+                blank, the date is the day you mark it paid.
               </>,
               <>Export a CSV if you want a paper trail.</>,
             ]}
