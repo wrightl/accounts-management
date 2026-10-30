@@ -10,6 +10,7 @@ export function CreateReimbursementButton({
   founders,
   expenses,
   initialPayeeUserId,
+  initialExpenseId,
   defaultOpen = false,
 }: {
   canWrite: boolean;
@@ -22,6 +23,7 @@ export function CreateReimbursementButton({
     paidByUserId: string | null;
   }[];
   initialPayeeUserId?: string;
+  initialExpenseId?: string;
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -44,6 +46,7 @@ export function CreateReimbursementButton({
           founders={founders}
           expenses={expenses}
           initialPayeeUserId={initialPayeeUserId}
+          initialExpenseId={initialExpenseId}
         />
       </Dialog>
     </>

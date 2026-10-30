@@ -19,6 +19,7 @@ export function CreateReimbursementForm({
   founders,
   expenses,
   initialPayeeUserId,
+  initialExpenseId,
 }: {
   founders: { id: string; name: string | null; email: string }[];
   expenses: {
@@ -29,6 +30,7 @@ export function CreateReimbursementForm({
     paidByUserId: string | null;
   }[];
   initialPayeeUserId?: string;
+  initialExpenseId?: string;
 }) {
   const router = useRouter();
   const defaultPayee =
@@ -36,7 +38,9 @@ export function CreateReimbursementForm({
       ? initialPayeeUserId
       : (founders[0]?.id ?? "");
   const [payeeUserId, setPayeeUserId] = useState(defaultPayee);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(
+    new Set(initialExpenseId ? [initialExpenseId] : []),
+  );
   const [reference, setReference] = useState("");
   const {
     fieldErrors,

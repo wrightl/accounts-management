@@ -72,6 +72,9 @@ export default async function ReimbursementsPage({
 
   const initialPayee =
     sp.payee && founders.some((f) => f.id === sp.payee) ? sp.payee : undefined;
+  const initialExpense = initialPayee
+    ? reimbursable.find((e) => e.id === sp.expense && e.paidByUserId === initialPayee)
+    : undefined;
 
   return (
     <div>
@@ -87,6 +90,7 @@ export default async function ReimbursementsPage({
           founders={founders}
           expenses={reimbursable}
           initialPayeeUserId={initialPayee}
+          initialExpenseId={initialExpense?.id}
           defaultOpen={Boolean(initialPayee)}
         />
       </div>
