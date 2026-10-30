@@ -177,6 +177,116 @@ in the Secrets panel:
 Use **test/development** credentials here where possible; production values live
 in Vercel.
 
+## 8. Preview environment (`preview` branch) **(you)**
+
+A long-lived staging copy at `https://alfa.preview.dotanddashconsulting.com`,
+deployed from the `preview` branch. It is Vercel's built-in **Preview**
+environment with **branch-scoped** env vars (Git branch = `preview`), which
+override the general Preview values for that branch only. PR previews keep the
+general Preview values. It never shares users, data, email or payments with
+production.
+
+### 8.1 Branch and domain
+
+1. Create the branch: `git switch -c preview origin/main && git push -u origin preview`.
+2. Vercel → Project → **Settings → Domains** → add
+   `alfa.preview.dotanddashconsulting.com` → connect to **Preview**, Git branch
+   `preview`.
+3. Squarespace DNS: `CNAME` host `alfa.preview` → the target Vercel shows
+   (usually `cname.vercel-dns.com`).
+
+### 8.2 Deployment protection
+
+Standard Protection puts Vercel login in front of every domain except
+production's. That blocks Resend and Stripe webhooks and the cron call.
+
+1. Settings → **Deployment Protection** → **Protection Bypass for
+   Automation** → create a secret.
+2. Append `?x-vercel-protection-bypass=<secret>` to every webhook URL below.
+   The cron call sends it as the `x-vercel-protection-bypass` header.
+3. Testers need a Vercel account on the team. If they don't have one, turn
+   protection off instead (on Hobby that unprotects all PR previews too).
+
+### 8.3 Neon database
+
+1. With branch-per-preview on, the `preview` git branch gets its own Neon
+   branch, which is reused on every deploy. Migrations and data migrations run on
+   build, and `0001_platform_admin` invites the operator through the **dev**
+   Clerk instance.
+2. **A Neon branch is a copy of its parent's data.** Created from production,
+   it holds real customer data. Before the first deploy, create the
+   `preview` Neon branch **schema-only**, or from an empty parent. Then point the
+   branch-scoped `DATABASE_URL` / `DATABASE_URL_UNPOOLED` at it.
+
+### 8.4 Clerk: Development instance
+
+1. Clerk dashboard → this app → **Development** instance → API keys.
+2. Configure it like production (§3): Google social connection (dev instance
+   uses Clerk's shared OAuth credentials), sign-up restricted, same paths.
+   `*.clerk.accounts.dev` is already allowed in the CSP (`next.config.ts`).
+
+### 8.5 Resend
+
+1. **Outbound**: reuse the verified sending domain. You can use a separate
+   API key so it can be revoked on its own.
+2. **Inbound**: add `inbound-preview.dotanddashconsulting.com` as a receiving
+   domain and add its `MX` record (host `inbound-preview`) in Squarespace.
+   Preview must **not** share `inbound.…`: short aliases (`lee@…`) exist in
+   both databases, so both environments would claim the same email. Each
+   environment ignores mail for the other's domain.
+3. Webhook → `https://alfa.preview.dotanddashconsulting.com/api/webhooks/resend?x-vercel-protection-bypass=<secret>`,
+   event `email.received` → signing secret → `RESEND_WEBHOOK_SECRET`.
+
+### 8.6 Stripe: test mode
+
+1. In **test mode**, create the four Products/Prices (§5b), the restricted key
+   and Connect.
+2. Two test-mode webhooks with the same events as production:
+   `…/api/webhooks/stripe?x-vercel-protection-bypass=<secret>` and
+   `…/api/webhooks/stripe-connect?x-vercel-protection-bypass=<secret>`
+   (connected accounts).
+3. After the first deploy, paste the test `price_…` IDs into the preview app's
+   **Platform → Settings → Stripe plans**.
+
+### 8.7 Env vars: Preview, Git branch `preview`
+
+| Variable | Value |
+| --- | --- |
+| `NEXT_PUBLIC_APP_URL` | `https://alfa.preview.dotanddashconsulting.com` |
+| `DATABASE_URL`, `DATABASE_URL_UNPOOLED` | the schema-only `preview` Neon branch (§8.3) |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` | dev instance `pk_test_…` / `sk_test_…` |
+| `NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL`, `NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL` | same paths as production |
+| `EMAIL_PROVIDER` | `resend` |
+| `RESEND_API_KEY` | preview key (or production's) |
+| `RESEND_WEBHOOK_SECRET` | from the preview webhook (§8.5) |
+| `EMAIL_FROM` | e.g. `Alfa (Preview) <accounts@dotanddashconsulting.com>` |
+| `EXPENSE_INBOUND_DOMAIN` | `inbound-preview.dotanddashconsulting.com` |
+| `EXPENSE_INBOUND_PREFIX` | `alfa.expenses` |
+| `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | test mode `sk_test_…` / `pk_test_…` |
+| `STRIPE_WEBHOOK_SECRET`, `STRIPE_CONNECT_WEBHOOK_SECRET` | from the test webhooks (§8.6) |
+| `CRON_SECRET` | new random value, not production's |
+| `BLOB_READ_WRITE_TOKEN` | token for a separate preview Blob store |
+| `PLATFORM_ADMIN_EMAILS` | optional break-glass list |
+
+`AI_GATEWAY_API_KEY`, `COMPANIES_HOUSE_API_KEY` and the VAPID keys can be shared
+with production. Leave `FCM_*` unset unless you test mobile push.
+
+### 8.8 Cron
+
+Vercel Cron only fires on production. To drain inbound email on preview, call
+`https://alfa.preview.dotanddashconsulting.com/api/cron/inbound-email` with
+`Authorization: Bearer <preview CRON_SECRET>` and the bypass header, either by
+hand or from a GitHub Actions `preview` environment.
+
+### 8.9 Verify
+
+- [ ] Push to `preview` → deployment is assigned `alfa.preview.dotanddashconsulting.com`
+- [ ] `/robots.txt` disallows everything (non-production `VERCEL_ENV`)
+- [ ] Sign in works via the Clerk dev instance (dev-mode badge visible)
+- [ ] `/platform/health` all green
+- [ ] Email to an alias `@inbound-preview…` shows up as a pending expense on preview only
+- [ ] Stripe test checkout updates the subscription (webhook delivered, 2xx)
+
 ## Go-live checklist
 
 - [ ] Neon **"branch per preview"** enabled (Preview must not share Production `DATABASE_URL`)
