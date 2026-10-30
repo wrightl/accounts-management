@@ -1,475 +1,482 @@
 {
-  "version": "7",
-  "dialect": "postgresql",
-  "entries": [
-    {
-      "idx": 0,
-      "version": "7",
-      "when": 1787141373341,
-      "tag": "0000_init",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1787349524961,
-      "tag": "0001_invoicing",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1787350724234,
-      "tag": "0002_phases_4_to_6",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1787352801393,
-      "tag": "0003_go_live_hardening",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1787354010418,
-      "tag": "0004_glorious_roland_deschain",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1787477684255,
-      "tag": "0005_military_bullseye",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1787481061566,
-      "tag": "0006_goofy_groot",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "7",
-      "when": 1787483178611,
-      "tag": "0007_certain_thunderball",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "7",
-      "when": 1787483616033,
-      "tag": "0008_black_patriot",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "7",
-      "when": 1787483931444,
-      "tag": "0009_sour_marvel_boy",
-      "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "7",
-      "when": 1787484614034,
-      "tag": "0010_friendly_santa_claus",
-      "breakpoints": true
-    },
-    {
-      "idx": 11,
-      "version": "7",
-      "when": 1787485000000,
-      "tag": "0011_quote_orders",
-      "breakpoints": true
-    },
-    {
-      "idx": 12,
-      "version": "7",
-      "when": 1787485500000,
-      "tag": "0012_order_invoicing",
-      "breakpoints": true
-    },
-    {
-      "idx": 13,
-      "version": "7",
-      "when": 1787486000000,
-      "tag": "0013_client_company_name",
-      "breakpoints": true
-    },
-    {
-      "idx": 14,
-      "version": "7",
-      "when": 1787486500000,
-      "tag": "0014_reconciliation_invoice_id",
-      "breakpoints": true
-    },
-    {
-      "idx": 15,
-      "version": "7",
-      "when": 1787487000000,
-      "tag": "0015_expense_mileage_reimbursement_recon",
-      "breakpoints": true
-    },
-    {
-      "idx": 16,
-      "version": "7",
-      "when": 1787487500000,
-      "tag": "0016_receipt_ocr_provider",
-      "breakpoints": true
-    },
-    {
-      "idx": 17,
-      "version": "7",
-      "when": 1787488000000,
-      "tag": "0017_receipt_ocr_model",
-      "breakpoints": true
-    },
-    {
-      "idx": 18,
-      "version": "7",
-      "when": 1787488500000,
-      "tag": "0018_expense_inbound_email",
-      "breakpoints": true
-    },
-    {
-      "idx": 19,
-      "version": "7",
-      "when": 1787489000000,
-      "tag": "0019_shareholders_dividends",
-      "breakpoints": true
-    },
-    {
-      "idx": 20,
-      "version": "7",
-      "when": 1787490000000,
-      "tag": "0020_multi_tenancy",
-      "breakpoints": true
-    },
-    {
-      "idx": 21,
-      "version": "7",
-      "when": 1787491000000,
-      "tag": "0021_expense_inbound_slugs",
-      "breakpoints": true
-    },
-    {
-      "idx": 22,
-      "version": "7",
-      "when": 1787492000000,
-      "tag": "0022_expense_detected_currency",
-      "breakpoints": true
-    },
-    {
-      "idx": 23,
-      "version": "7",
-      "when": 1787493000000,
-      "tag": "0023_company_memberships",
-      "breakpoints": true
-    },
-    {
-      "idx": 24,
-      "version": "7",
-      "when": 1787494000000,
-      "tag": "0024_remove_placeholder_company",
-      "breakpoints": true
-    },
-    {
-      "idx": 25,
-      "version": "7",
-      "when": 1787495000000,
-      "tag": "0025_drop_company_bank_name_default",
-      "breakpoints": true
-    },
-    {
-      "idx": 26,
-      "version": "7",
-      "when": 1787496000000,
-      "tag": "0026_drop_company_name_defaults",
-      "breakpoints": true
-    },
-    {
-      "idx": 27,
-      "version": "7",
-      "when": 1787497000000,
-      "tag": "0027_drop_bank_account_defaults",
-      "breakpoints": true
-    },
-    {
-      "idx": 28,
-      "version": "7",
-      "when": 1787498000000,
-      "tag": "0028_multi_bank_csv_import",
-      "breakpoints": true
-    },
-    {
-      "idx": 29,
-      "version": "7",
-      "when": 1787499000000,
-      "tag": "0029_platform_admin",
-      "breakpoints": true
-    },
-    {
-      "idx": 30,
-      "version": "7",
-      "when": 1787500000000,
-      "tag": "0030_drop_company_receipt_ocr",
-      "breakpoints": true
-    },
-    {
-      "idx": 31,
-      "version": "7",
-      "when": 1787501000000,
-      "tag": "0031_platform_admin_role",
-      "breakpoints": true
-    },
-    {
-      "idx": 32,
-      "version": "7",
-      "when": 1787502000000,
-      "tag": "0032_platform_admin_detach_company",
-      "breakpoints": true
-    },
-    {
-      "idx": 33,
-      "version": "7",
-      "when": 1787503000000,
-      "tag": "0033_platform_admin_invariants",
-      "breakpoints": true
-    },
-    {
-      "idx": 34,
-      "version": "7",
-      "when": 1787504000000,
-      "tag": "0034_recurring_invoices_parity",
-      "breakpoints": true
-    },
-    {
-      "idx": 35,
-      "version": "7",
-      "when": 1787505000000,
-      "tag": "0035_drop_recurring_invoices_enabled",
-      "breakpoints": true
-    },
-    {
-      "idx": 36,
-      "version": "7",
-      "when": 1787600000000,
-      "tag": "0036_vat_readiness",
-      "breakpoints": true
-    },
-    {
-      "idx": 37,
-      "version": "7",
-      "when": 1787601000000,
-      "tag": "0037_quote_public_accept",
-      "breakpoints": true
-    },
-    {
-      "idx": 38,
-      "version": "7",
-      "when": 1787602000000,
-      "tag": "0038_data_migrations",
-      "breakpoints": true
-    },
-    {
-      "idx": 39,
-      "version": "7",
-      "when": 1787700000000,
-      "tag": "0039_subscriptions_billing",
-      "breakpoints": true
-    },
-    {
-      "idx": 40,
-      "version": "7",
-      "when": 1787800000000,
-      "tag": "0040_users_ui_prefs",
-      "breakpoints": true
-    },
-    {
-      "idx": 41,
-      "version": "7",
-      "when": 1787900000000,
-      "tag": "0041_stripe_price_ids",
-      "breakpoints": true
-    },
-    {
-      "idx": 42,
-      "version": "7",
-      "when": 1788000000000,
-      "tag": "0042_send_jobs_actor_user",
-      "breakpoints": true
-    },
-    {
-      "idx": 43,
-      "version": "7",
-      "when": 1788100000000,
-      "tag": "0043_notifications",
-      "breakpoints": true
-    },
-    {
-      "idx": 44,
-      "version": "7",
-      "when": 1788200000000,
-      "tag": "0044_bank_credit_explanations",
-      "breakpoints": true
-    },
-    {
-      "idx": 45,
-      "version": "7",
-      "when": 1788300000000,
-      "tag": "0045_migration_cutover",
-      "breakpoints": true
-    },
-    {
-      "idx": 46,
-      "version": "7",
-      "when": 1788400000000,
-      "tag": "0046_dividend_payout_share_count",
-      "breakpoints": true
-    },
-    {
-      "idx": 47,
-      "version": "7",
-      "when": 1788500000000,
-      "tag": "0047_fx_rates",
-      "breakpoints": true
-    },
-    {
-      "idx": 48,
-      "version": "7",
-      "when": 1788600000000,
-      "tag": "0048_job_leases",
-      "breakpoints": true
-    },
-    {
-      "idx": 49,
-      "version": "7",
-      "when": 1788700000000,
-      "tag": "0049_fractional_quantity_line_discount",
-      "breakpoints": true
-    },
-    {
-      "idx": 50,
-      "version": "7",
-      "when": 1788800000000,
-      "tag": "0050_credit_notes",
-      "breakpoints": true
-    },
-    {
-      "idx": 51,
-      "version": "7",
-      "when": 1788900000000,
-      "tag": "0051_online_invoice_payments",
-      "breakpoints": true
-    },
-    {
-      "idx": 52,
-      "version": "7",
-      "when": 1789000000000,
-      "tag": "0052_books_lock",
-      "breakpoints": true
-    },
-    {
-      "idx": 53,
-      "version": "7",
-      "when": 1789100000000,
-      "tag": "0053_quote_deposit_on_accept",
-      "breakpoints": true
-    },
-    {
-      "idx": 54,
-      "version": "7",
-      "when": 1789200000000,
-      "tag": "0054_light_ledger",
-      "breakpoints": true
-    },
-    {
-      "idx": 55,
-      "version": "7",
-      "when": 1789300000000,
-      "tag": "0055_weekly_close_and_chasing",
-      "breakpoints": true
-    },
-    {
-      "idx": 56,
-      "version": "7",
-      "when": 1789400000000,
-      "tag": "0056_safe_to_pay",
-      "breakpoints": true
-    },
-    {
-      "idx": 57,
-      "version": "7",
-      "when": 1789500000000,
-      "tag": "0057_ai_bookkeeper",
-      "breakpoints": true
-    },
-    {
-      "idx": 58,
-      "version": "7",
-      "when": 1789600000000,
-      "tag": "0058_project_profitability",
-      "breakpoints": true
-    },
-    {
-      "idx": 59,
-      "version": "7",
-      "when": 1789700000000,
-      "tag": "0059_ltd_paperwork",
-      "breakpoints": true
-    },
-    {
-      "idx": 60,
-      "version": "7",
-      "when": 1789800000000,
-      "tag": "0060_menu_features",
-      "breakpoints": true
-    },
-    {
-      "idx": 61,
-      "version": "7",
-      "when": 1789900000000,
-      "tag": "0061_expense_inbound_email_job",
-      "breakpoints": true
-    },
-    {
-      "idx": 62,
-      "version": "7",
-      "when": 1790000000000,
-      "tag": "0062_expense_payment_source",
-      "breakpoints": true
-    },
-    {
-      "idx": 63,
-      "version": "7",
-      "when": 1790100000000,
-      "tag": "0063_expense_original_amount",
-      "breakpoints": true
-    },
-    {
-      "idx": 64,
-      "version": "7",
-      "when": 1790200000000,
-      "tag": "0064_inbound_email_body",
-      "breakpoints": true
-    },
-    {
-      "idx": 65,
-      "version": "7",
-      "when": 1790300000000,
-      "tag": "0065_membership_inbound_alias",
-      "breakpoints": true
-    },
-    {
-      "idx": 66,
-      "version": "7",
-      "when": 1790400000000,
-      "tag": "0066_released_inbound_aliases",
-      "breakpoints": true
-    }
-  ]
+    "version": "7",
+    "dialect": "postgresql",
+    "entries": [
+        {
+            "idx": 0,
+            "version": "7",
+            "when": 1787141373341,
+            "tag": "0000_init",
+            "breakpoints": true
+        },
+        {
+            "idx": 1,
+            "version": "7",
+            "when": 1787349524961,
+            "tag": "0001_invoicing",
+            "breakpoints": true
+        },
+        {
+            "idx": 2,
+            "version": "7",
+            "when": 1787350724234,
+            "tag": "0002_phases_4_to_6",
+            "breakpoints": true
+        },
+        {
+            "idx": 3,
+            "version": "7",
+            "when": 1787352801393,
+            "tag": "0003_go_live_hardening",
+            "breakpoints": true
+        },
+        {
+            "idx": 4,
+            "version": "7",
+            "when": 1787354010418,
+            "tag": "0004_glorious_roland_deschain",
+            "breakpoints": true
+        },
+        {
+            "idx": 5,
+            "version": "7",
+            "when": 1787477684255,
+            "tag": "0005_military_bullseye",
+            "breakpoints": true
+        },
+        {
+            "idx": 6,
+            "version": "7",
+            "when": 1787481061566,
+            "tag": "0006_goofy_groot",
+            "breakpoints": true
+        },
+        {
+            "idx": 7,
+            "version": "7",
+            "when": 1787483178611,
+            "tag": "0007_certain_thunderball",
+            "breakpoints": true
+        },
+        {
+            "idx": 8,
+            "version": "7",
+            "when": 1787483616033,
+            "tag": "0008_black_patriot",
+            "breakpoints": true
+        },
+        {
+            "idx": 9,
+            "version": "7",
+            "when": 1787483931444,
+            "tag": "0009_sour_marvel_boy",
+            "breakpoints": true
+        },
+        {
+            "idx": 10,
+            "version": "7",
+            "when": 1787484614034,
+            "tag": "0010_friendly_santa_claus",
+            "breakpoints": true
+        },
+        {
+            "idx": 11,
+            "version": "7",
+            "when": 1787485000000,
+            "tag": "0011_quote_orders",
+            "breakpoints": true
+        },
+        {
+            "idx": 12,
+            "version": "7",
+            "when": 1787485500000,
+            "tag": "0012_order_invoicing",
+            "breakpoints": true
+        },
+        {
+            "idx": 13,
+            "version": "7",
+            "when": 1787486000000,
+            "tag": "0013_client_company_name",
+            "breakpoints": true
+        },
+        {
+            "idx": 14,
+            "version": "7",
+            "when": 1787486500000,
+            "tag": "0014_reconciliation_invoice_id",
+            "breakpoints": true
+        },
+        {
+            "idx": 15,
+            "version": "7",
+            "when": 1787487000000,
+            "tag": "0015_expense_mileage_reimbursement_recon",
+            "breakpoints": true
+        },
+        {
+            "idx": 16,
+            "version": "7",
+            "when": 1787487500000,
+            "tag": "0016_receipt_ocr_provider",
+            "breakpoints": true
+        },
+        {
+            "idx": 17,
+            "version": "7",
+            "when": 1787488000000,
+            "tag": "0017_receipt_ocr_model",
+            "breakpoints": true
+        },
+        {
+            "idx": 18,
+            "version": "7",
+            "when": 1787488500000,
+            "tag": "0018_expense_inbound_email",
+            "breakpoints": true
+        },
+        {
+            "idx": 19,
+            "version": "7",
+            "when": 1787489000000,
+            "tag": "0019_shareholders_dividends",
+            "breakpoints": true
+        },
+        {
+            "idx": 20,
+            "version": "7",
+            "when": 1787490000000,
+            "tag": "0020_multi_tenancy",
+            "breakpoints": true
+        },
+        {
+            "idx": 21,
+            "version": "7",
+            "when": 1787491000000,
+            "tag": "0021_expense_inbound_slugs",
+            "breakpoints": true
+        },
+        {
+            "idx": 22,
+            "version": "7",
+            "when": 1787492000000,
+            "tag": "0022_expense_detected_currency",
+            "breakpoints": true
+        },
+        {
+            "idx": 23,
+            "version": "7",
+            "when": 1787493000000,
+            "tag": "0023_company_memberships",
+            "breakpoints": true
+        },
+        {
+            "idx": 24,
+            "version": "7",
+            "when": 1787494000000,
+            "tag": "0024_remove_placeholder_company",
+            "breakpoints": true
+        },
+        {
+            "idx": 25,
+            "version": "7",
+            "when": 1787495000000,
+            "tag": "0025_drop_company_bank_name_default",
+            "breakpoints": true
+        },
+        {
+            "idx": 26,
+            "version": "7",
+            "when": 1787496000000,
+            "tag": "0026_drop_company_name_defaults",
+            "breakpoints": true
+        },
+        {
+            "idx": 27,
+            "version": "7",
+            "when": 1787497000000,
+            "tag": "0027_drop_bank_account_defaults",
+            "breakpoints": true
+        },
+        {
+            "idx": 28,
+            "version": "7",
+            "when": 1787498000000,
+            "tag": "0028_multi_bank_csv_import",
+            "breakpoints": true
+        },
+        {
+            "idx": 29,
+            "version": "7",
+            "when": 1787499000000,
+            "tag": "0029_platform_admin",
+            "breakpoints": true
+        },
+        {
+            "idx": 30,
+            "version": "7",
+            "when": 1787500000000,
+            "tag": "0030_drop_company_receipt_ocr",
+            "breakpoints": true
+        },
+        {
+            "idx": 31,
+            "version": "7",
+            "when": 1787501000000,
+            "tag": "0031_platform_admin_role",
+            "breakpoints": true
+        },
+        {
+            "idx": 32,
+            "version": "7",
+            "when": 1787502000000,
+            "tag": "0032_platform_admin_detach_company",
+            "breakpoints": true
+        },
+        {
+            "idx": 33,
+            "version": "7",
+            "when": 1787503000000,
+            "tag": "0033_platform_admin_invariants",
+            "breakpoints": true
+        },
+        {
+            "idx": 34,
+            "version": "7",
+            "when": 1787504000000,
+            "tag": "0034_recurring_invoices_parity",
+            "breakpoints": true
+        },
+        {
+            "idx": 35,
+            "version": "7",
+            "when": 1787505000000,
+            "tag": "0035_drop_recurring_invoices_enabled",
+            "breakpoints": true
+        },
+        {
+            "idx": 36,
+            "version": "7",
+            "when": 1787600000000,
+            "tag": "0036_vat_readiness",
+            "breakpoints": true
+        },
+        {
+            "idx": 37,
+            "version": "7",
+            "when": 1787601000000,
+            "tag": "0037_quote_public_accept",
+            "breakpoints": true
+        },
+        {
+            "idx": 38,
+            "version": "7",
+            "when": 1787602000000,
+            "tag": "0038_data_migrations",
+            "breakpoints": true
+        },
+        {
+            "idx": 39,
+            "version": "7",
+            "when": 1787700000000,
+            "tag": "0039_subscriptions_billing",
+            "breakpoints": true
+        },
+        {
+            "idx": 40,
+            "version": "7",
+            "when": 1787800000000,
+            "tag": "0040_users_ui_prefs",
+            "breakpoints": true
+        },
+        {
+            "idx": 41,
+            "version": "7",
+            "when": 1787900000000,
+            "tag": "0041_stripe_price_ids",
+            "breakpoints": true
+        },
+        {
+            "idx": 42,
+            "version": "7",
+            "when": 1788000000000,
+            "tag": "0042_send_jobs_actor_user",
+            "breakpoints": true
+        },
+        {
+            "idx": 43,
+            "version": "7",
+            "when": 1788100000000,
+            "tag": "0043_notifications",
+            "breakpoints": true
+        },
+        {
+            "idx": 44,
+            "version": "7",
+            "when": 1788200000000,
+            "tag": "0044_bank_credit_explanations",
+            "breakpoints": true
+        },
+        {
+            "idx": 45,
+            "version": "7",
+            "when": 1788300000000,
+            "tag": "0045_migration_cutover",
+            "breakpoints": true
+        },
+        {
+            "idx": 46,
+            "version": "7",
+            "when": 1788400000000,
+            "tag": "0046_dividend_payout_share_count",
+            "breakpoints": true
+        },
+        {
+            "idx": 47,
+            "version": "7",
+            "when": 1788500000000,
+            "tag": "0047_fx_rates",
+            "breakpoints": true
+        },
+        {
+            "idx": 48,
+            "version": "7",
+            "when": 1788600000000,
+            "tag": "0048_job_leases",
+            "breakpoints": true
+        },
+        {
+            "idx": 49,
+            "version": "7",
+            "when": 1788700000000,
+            "tag": "0049_fractional_quantity_line_discount",
+            "breakpoints": true
+        },
+        {
+            "idx": 50,
+            "version": "7",
+            "when": 1788800000000,
+            "tag": "0050_credit_notes",
+            "breakpoints": true
+        },
+        {
+            "idx": 51,
+            "version": "7",
+            "when": 1788900000000,
+            "tag": "0051_online_invoice_payments",
+            "breakpoints": true
+        },
+        {
+            "idx": 52,
+            "version": "7",
+            "when": 1789000000000,
+            "tag": "0052_books_lock",
+            "breakpoints": true
+        },
+        {
+            "idx": 53,
+            "version": "7",
+            "when": 1789100000000,
+            "tag": "0053_quote_deposit_on_accept",
+            "breakpoints": true
+        },
+        {
+            "idx": 54,
+            "version": "7",
+            "when": 1789200000000,
+            "tag": "0054_light_ledger",
+            "breakpoints": true
+        },
+        {
+            "idx": 55,
+            "version": "7",
+            "when": 1789300000000,
+            "tag": "0055_weekly_close_and_chasing",
+            "breakpoints": true
+        },
+        {
+            "idx": 56,
+            "version": "7",
+            "when": 1789400000000,
+            "tag": "0056_safe_to_pay",
+            "breakpoints": true
+        },
+        {
+            "idx": 57,
+            "version": "7",
+            "when": 1789500000000,
+            "tag": "0057_ai_bookkeeper",
+            "breakpoints": true
+        },
+        {
+            "idx": 58,
+            "version": "7",
+            "when": 1789600000000,
+            "tag": "0058_project_profitability",
+            "breakpoints": true
+        },
+        {
+            "idx": 59,
+            "version": "7",
+            "when": 1789700000000,
+            "tag": "0059_ltd_paperwork",
+            "breakpoints": true
+        },
+        {
+            "idx": 60,
+            "version": "7",
+            "when": 1789800000000,
+            "tag": "0060_menu_features",
+            "breakpoints": true
+        },
+        {
+            "idx": 61,
+            "version": "7",
+            "when": 1789900000000,
+            "tag": "0061_expense_inbound_email_job",
+            "breakpoints": true
+        },
+        {
+            "idx": 62,
+            "version": "7",
+            "when": 1790000000000,
+            "tag": "0062_expense_payment_source",
+            "breakpoints": true
+        },
+        {
+            "idx": 63,
+            "version": "7",
+            "when": 1790100000000,
+            "tag": "0063_expense_original_amount",
+            "breakpoints": true
+        },
+        {
+            "idx": 64,
+            "version": "7",
+            "when": 1790200000000,
+            "tag": "0064_inbound_email_body",
+            "breakpoints": true
+        },
+        {
+            "idx": 65,
+            "version": "7",
+            "when": 1790300000000,
+            "tag": "0065_membership_inbound_alias",
+            "breakpoints": true
+        },
+        {
+            "idx": 66,
+            "version": "7",
+            "when": 1790400000000,
+            "tag": "0066_released_inbound_aliases",
+            "breakpoints": true
+        },
+        {
+            "idx": 67,
+            "version": "7",
+            "when": 1790500000000,
+            "tag": "0067_clear_fx_rates",
+            "breakpoints": true
+        }
+    ]
 }

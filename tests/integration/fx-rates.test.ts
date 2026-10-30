@@ -29,7 +29,7 @@ function boeFetch(csv: string) {
 describe("resolveFxRate", () => {
   it("tolerates concurrent fetches of the same observations", async () => {
     const fetchImpl = boeFetch(
-      ["DATE,XUDLUSD", "01 Apr 2026,1.2700", "02 Apr 2026,1.2750"].join("\n"),
+      ["DATE,XUDLUSS", "01 Apr 2026,1.2700", "02 Apr 2026,1.2750"].join("\n"),
     );
 
     const [a, b] = await Promise.all([

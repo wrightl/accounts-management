@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  BOE_SERIES_BY_CURRENCY,
   bankAmountWithinFxBand,
   buildFxMatchNote,
   expectedGbpPenceFromForeign,
@@ -12,6 +13,22 @@ describe("FX amount helpers", () => {
   it("converts foreign amount using foreign-per-GBP quote", () => {
     // $100 at 1.27 USD/GBP → ~£78.74
     expect(expectedGbpPenceFromForeign(10000, 1.27)).toBe(7874);
+    // €2,997 at the BoE's 1.1668 EUR/GBP on 24 Aug 2023 → £2,568.56
+    expect(expectedGbpPenceFromForeign(299700, 1.1668)).toBe(256856);
+  });
+
+  it("uses the BoE series quoted against sterling, not the US dollar", () => {
+    expect(BOE_SERIES_BY_CURRENCY).toEqual({
+      USD: "XUDLUSS",
+      EUR: "XUDLERS",
+      JPY: "XUDLJYS",
+      CHF: "XUDLSFS",
+      AUD: "XUDLADS",
+      CAD: "XUDLCDS",
+      SEK: "XUDLSKS",
+      NOK: "XUDLNKS",
+      DKK: "XUDLDKS",
+    });
   });
 
   it("builds an inclusive ±10% band", () => {
@@ -52,7 +69,7 @@ describe("FX amount helpers", () => {
   it("returns empty observations when BoE fetch fails", async () => {
     const fetchImpl = vi.fn().mockRejectedValue(new Error("network down"));
     const rows = await fetchBoeSeriesObservations(
-      "XUDLUSD",
+      "XUDLUSS",
       "2026-04-01",
       "2026-04-03",
       fetchImpl,
@@ -62,7 +79,7 @@ describe("FX amount helpers", () => {
 
   it("parses BoE CSV observations", async () => {
     const csv = [
-      "DATE,XUDLUSD",
+      "DATE,XUDLUSS",
       "01 Apr 2026,1.2700",
       "02 Apr 2026,1.2750",
     ].join("\n");
@@ -71,7 +88,7 @@ describe("FX amount helpers", () => {
       text: async () => csv,
     });
     const rows = await fetchBoeSeriesObservations(
-      "XUDLUSD",
+      "XUDLUSS",
       "2026-04-01",
       "2026-04-02",
       fetchImpl as unknown as typeof fetch,
