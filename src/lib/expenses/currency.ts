@@ -10,15 +10,15 @@ import { isForeignCurrency } from "@/lib/expenses/receipt-parse";
  * These are the currencies an expense can be entered in besides GBP.
  */
 export const BOE_SERIES_BY_CURRENCY: Record<string, string> = {
-  USD: "XUDLUSD",
-  EUR: "XUDLERD",
-  JPY: "XUDLJYD",
-  CHF: "XUDLSFD",
-  AUD: "XUDLADD",
-  CAD: "XUDLCDD",
-  SEK: "XUDLSKD",
-  NOK: "XUDLNKD",
-  DKK: "XUDLDKD",
+  USD: "XUDLUSS",
+  EUR: "XUDLERS",
+  JPY: "XUDLJYS",
+  CHF: "XUDLSFS",
+  AUD: "XUDLADS",
+  CAD: "XUDLCDS",
+  SEK: "XUDLSKS",
+  NOK: "XUDLNKS",
+  DKK: "XUDLDKS",
 };
 
 export const EXPENSE_CURRENCIES = ["GBP", ...Object.keys(BOE_SERIES_BY_CURRENCY)];
