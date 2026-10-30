@@ -42,6 +42,7 @@ export function CreateReimbursementForm({
     new Set(initialExpenseId ? [initialExpenseId] : []),
   );
   const [reference, setReference] = useState("");
+  const [reimbursementDate, setReimbursementDate] = useState("");
   const {
     fieldErrors,
     error,
@@ -74,6 +75,7 @@ export function CreateReimbursementForm({
         formData.set("expenseIdsJson", JSON.stringify([...selected]));
         formData.set("payeeUserId", payeeUserId);
         formData.set("reference", reference);
+        formData.set("reimbursementDate", reimbursementDate);
         clearAll();
         const raw = reimbursementCreateRawFromFormData(formData);
         if (!raw.ok) {
@@ -187,6 +189,34 @@ export function CreateReimbursementForm({
           }
         />
         <FieldError id="reference-error">{fieldErrors.reference}</FieldError>
+      </div>
+
+      <div>
+        <Label htmlFor="reimbursementDate">Reimbursement date</Label>
+        <Input
+          id="reimbursementDate"
+          name="reimbursementDate"
+          type="date"
+          value={reimbursementDate}
+          onChange={(e) => {
+            setReimbursementDate(e.target.value);
+            clearField("reimbursementDate");
+          }}
+          disabled={pending}
+          aria-invalid={Boolean(fieldErrors.reimbursementDate)}
+          aria-describedby={
+            fieldErrors.reimbursementDate
+              ? "reimbursementDate-error"
+              : "reimbursementDate-hint"
+          }
+        />
+        <p id="reimbursementDate-hint" className="mt-1 text-xs text-muted">
+          Leave blank to use the day you mark it paid. A linked bank transaction&apos;s
+          date takes priority.
+        </p>
+        <FieldError id="reimbursementDate-error">
+          {fieldErrors.reimbursementDate}
+        </FieldError>
       </div>
 
       <p className="text-sm text-muted">Total: {formatGBP(total)}</p>

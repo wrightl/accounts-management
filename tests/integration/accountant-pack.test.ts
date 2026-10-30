@@ -13,6 +13,8 @@ import {
   invoices,
   payments,
   reconciliationMatches,
+  reimbursementItems,
+  reimbursements,
   users,
 } from "@/db/schema";
 import { seedCompany } from "@/lib/test/seed-company";
@@ -310,6 +312,86 @@ describe("accountant pack integration", () => {
     const paymentLines = paymentsCsv.split("\n").slice(1).filter(Boolean);
     expect(paymentLines).toHaveLength(1);
     expect(paymentLines[0]).toContain("50.00");
+  });
+
+  it("selects reimbursements by the London date they were paid", async () => {
+    const [payee] = await db
+      .insert(users)
+      .values({
+        companyId,
+        clerkUserId: "user_reimb",
+        email: "lee@example.com",
+        name: "Lee",
+        role: "admin",
+      })
+      .returning();
+    const [run, ...others] = await db
+      .insert(reimbursements)
+      .values(
+        [
+          // Created before the period, paid in it.
+          { reference: "PAID-IN-APRIL", createdAt: "2026-03-20T12:00:00Z", paidAt: "2026-04-10T12:00:00Z" },
+          // First and last moments of April in London (BST).
+          { reference: "PAID-FIRST-MOMENT", createdAt: "2026-03-20T12:00:00Z", paidAt: "2026-03-31T23:30:00Z" },
+          { reference: "PAID-LAST-MOMENT", createdAt: "2026-04-10T12:00:00Z", paidAt: "2026-04-30T22:30:00Z" },
+          // Created in the period, paid after it: already 1 May in London.
+          { reference: "PAID-IN-MAY", createdAt: "2026-04-10T12:00:00Z", paidAt: "2026-04-30T23:30:00Z" },
+          { reference: "PAID-IN-MARCH", createdAt: "2026-03-01T12:00:00Z", paidAt: "2026-03-31T22:30:00Z" },
+        ].map((r) => ({
+          companyId,
+          payeeUserId: payee.id,
+          status: "paid" as const,
+          totalPence: 4500,
+          reference: r.reference,
+          createdAt: new Date(r.createdAt),
+          paidAt: new Date(r.paidAt),
+        })),
+      )
+      .returning();
+    const [pending] = await db
+      .insert(reimbursements)
+      .values({
+        companyId,
+        payeeUserId: payee.id,
+        status: "pending",
+        totalPence: 1200,
+        reference: "UNPAID",
+        createdAt: new Date("2026-04-10T12:00:00Z"),
+      })
+      .returning();
+    const [paidExpense, excludedExpense] = await db
+      .insert(expenses)
+      .values(
+        ["In-period run item", "Out-of-period run item"].map((description) => ({
+          companyId,
+          description,
+          spentAt: "2026-03-15",
+          amountPence: 4500,
+          status: "reimbursed" as const,
+          paidByUserId: payee.id,
+          createdByUserId: payee.id,
+        })),
+      )
+      .returning();
+    await db.insert(reimbursementItems).values([
+      { reimbursementId: run.id, expenseId: paidExpense.id },
+      { reimbursementId: others[2].id, expenseId: excludedExpense.id },
+    ]);
+    expect(pending.paidAt).toBeNull();
+
+    const { zip } = await buildAccountantPack({ companyId, ...PERIOD });
+
+    const csv = extractZipText(zip, "reimbursements.csv");
+    expect(csv).toContain("PAID-IN-APRIL");
+    expect(csv).toContain("PAID-FIRST-MOMENT");
+    expect(csv).toContain("PAID-LAST-MOMENT");
+    expect(csv).not.toContain("PAID-IN-MAY");
+    expect(csv).not.toContain("PAID-IN-MARCH");
+    expect(csv).not.toContain("UNPAID");
+
+    const itemsCsv = extractZipText(zip, "reimbursement-items.csv");
+    expect(itemsCsv).toContain("In-period run item");
+    expect(itemsCsv).not.toContain("Out-of-period run item");
   });
 
   it("leaves out the VAT summary when the plan has no VAT export", async () => {

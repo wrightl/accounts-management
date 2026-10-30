@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, gte, inArray, lte, ne } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, ne, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { mapWithConcurrency } from "@/lib/concurrency";
 import {
@@ -170,6 +170,7 @@ export async function buildAccountantPack({
       ),
     );
 
+  const reimbPaidOn = sql`(${reimbursements.paidAt} at time zone 'Europe/London')::date`;
   const reimbRows = await db
     .select({
       id: reimbursements.id,
@@ -186,8 +187,8 @@ export async function buildAccountantPack({
     .where(
       and(
         eq(reimbursements.companyId, companyId),
-        gte(reimbursements.createdAt, new Date(`${from}T00:00:00Z`)),
-        lte(reimbursements.createdAt, new Date(`${to}T23:59:59.999Z`)),
+        gte(reimbPaidOn, from),
+        lte(reimbPaidOn, to),
       ),
     );
 
@@ -863,7 +864,7 @@ function buildReadme({
     "  payments.csv      — cash received (by received_at in period)",
     "  expenses.csv      — spend (excl. pending, by spent_at)",
     "  receipts-index.csv + receipts/ — expense attachments",
-    "  reimbursements.csv + reimbursement-items.csv",
+    "  reimbursements.csv + reimbursement-items.csv — runs paid in period (by paid_at, excl. unpaid)",
     "  dividends.csv     — dividend declarations in period",
     "  shareholders.csv  — share register at export time (not period-filtered)",
     "  recurring-invoices.csv — current schedules (not period-filtered)",

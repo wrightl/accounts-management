@@ -477,6 +477,13 @@
             "when": 1790500000000,
             "tag": "0067_clear_fx_rates",
             "breakpoints": true
+        },
+        {
+            "idx": 68,
+            "version": "7",
+            "when": 1790600000000,
+            "tag": "0068_reimbursement_date",
+            "breakpoints": true
         }
     ]
 }

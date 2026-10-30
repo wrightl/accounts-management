@@ -150,6 +150,7 @@ export async function loadBooksPage(
               Reference: row.reference || "—",
               Status: row.status,
               Total: row.totalFormatted,
+              "Reimbursement date": row.reimbursementDate || "—",
               Paid: asDate(row.paidAt) || "—",
             },
           }),

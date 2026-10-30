@@ -622,6 +622,8 @@ export const reimbursements = pgTable(
     status: reimbursementStatusEnum("status").notNull().default("pending"),
     totalPence: integer("total_pence").notNull().default(0),
     reference: text("reference"),
+    /** Date the run is paid on. Optional while pending; set from paidAt once paid. */
+    reimbursementDate: date("reimbursement_date"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     paidAt: timestamp("paid_at", { withTimezone: true }),
   },

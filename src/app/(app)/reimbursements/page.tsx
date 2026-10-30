@@ -20,9 +20,9 @@ import {
 } from "@/lib/table-sort";
 
 const SORT = defineTableSort({
-  columns: ["payee", "status", "reference", "created", "total"],
+  columns: ["payee", "status", "reference", "date", "created", "total"],
   fallback: { sort: "created", dir: "desc" },
-  descFirst: ["created", "total"],
+  descFirst: ["date", "created", "total"],
 });
 
 const WORKFLOW_STEPS = [
@@ -65,6 +65,7 @@ export default async function ReimbursementsPage({
       payee: (r) => r.payeeName || r.payeeEmail,
       status: (r) => rankIn(["pending", "paid"], r.status),
       reference: (r) => r.reference,
+      date: (r) => r.reimbursementDate,
       created: (r) => r.createdAt.getTime(),
       total: (r) => r.totalPence,
     },
@@ -145,6 +146,7 @@ export default async function ReimbursementsPage({
                 {th("Payee", "payee")}
                 {th("Status", "status")}
                 {th("Reference", "reference")}
+                {th("Reimbursement date", "date")}
                 {th("Created", "created")}
                 {th("Total", "total", "end")}
                 {canWrite ? <TH className="text-right">Actions</TH> : null}
@@ -163,6 +165,7 @@ export default async function ReimbursementsPage({
                   </TD>
                   <TD className="capitalize">{r.status}</TD>
                   <TD className="text-muted">{r.reference ?? "—"}</TD>
+                  <TD className="text-muted">{r.reimbursementDate ?? "—"}</TD>
                   <TD className="text-muted">
                     {r.createdAt.toISOString().slice(0, 10)}
                   </TD>
@@ -172,6 +175,7 @@ export default async function ReimbursementsPage({
                       <ReimbursementActions
                         id={r.id}
                         status={r.status}
+                        reimbursementDate={r.reimbursementDate}
                         canWrite={canWrite}
                         compact
                       />
