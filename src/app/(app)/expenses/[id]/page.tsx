@@ -158,7 +158,7 @@ export default async function ExpenseDetailPage({
         <div className="mb-6 rounded-lg border border-border bg-wash/50 px-4 py-3 text-sm">
           This expense is owed back to the founder.{" "}
           <Link
-            href={`/reimbursements?payee=${payeeId}`}
+            href={`/reimbursements?payee=${payeeId}&expense=${detail.expense.id}`}
             className="font-medium text-foreground underline-offset-2 hover:underline"
           >
             Add to a reimbursement run →
