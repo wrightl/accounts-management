@@ -198,7 +198,7 @@ export default async function OrderDetailPage({
                         : "—"}
                   </TD>
                   <TD className="text-right text-muted">
-                    {m.dueDate ?? (m.dueInDays != null ? `${m.dueInDays} days` : "—")}
+                    {m.dueDate ? <DisplayDate value={m.dueDate} /> : m.dueInDays != null ? `${m.dueInDays} days` : "—"}
                   </TD>
                 </TR>
               ))}
@@ -236,7 +236,7 @@ export default async function OrderDetailPage({
                   <TD>
                     <StatusBadge status={inv.status as InvoiceStatus} />
                   </TD>
-                  <TD className="text-muted">{inv.issueDate ?? "—"}</TD>
+                  <TD className="text-muted"><DisplayDate value={inv.issueDate} /></TD>
                   <TD>
                     <InvoiceDueDate
                       dueDate={inv.dueDate}

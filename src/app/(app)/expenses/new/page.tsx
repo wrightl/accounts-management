@@ -11,6 +11,7 @@ import { getReceiptOcrSettings } from "@/lib/platform-settings";
 import { listOrderOptions } from "@/lib/profitability/queries";
 import { getBankTransactionById } from "@/lib/bank/queries";
 import { bankDebitLinkError } from "@/lib/bank/expense-link";
+import { bankReturnHref } from "@/lib/bank/list-position";
 import { formatGBP } from "@/lib/money";
 
 export default async function NewExpensePage({
@@ -18,7 +19,7 @@ export default async function NewExpensePage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const { status, clientId, orderId, bankTransactionId } = await searchParams;
+  const { status, clientId, orderId, bankTransactionId, returnTo } = await searchParams;
   const { companyId } = await guardTenantPage("accounts:write");
   const canWrite = await hasPermission("accounts:write");
 
@@ -51,12 +52,13 @@ export default async function NewExpensePage({
       : null;
 
   const listHref = expenseListReturnHref((await cookies()).get(EXPENSE_LIST_COOKIE)?.value);
+  const returnHref = bankReturnHref(returnTo);
 
   return (
     <div>
       <div className="mb-6">
-        <Link href={listHref} className={buttonClasses("ghost")}>
-          ← Expenses
+        <Link href={returnHref ?? listHref} scroll={!returnHref} className={buttonClasses("ghost")}>
+          {returnHref ? "← Transactions" : "← Expenses"}
         </Link>
       </div>
       <h1 className="mb-6 font-display text-2xl font-semibold">New expense</h1>
@@ -67,6 +69,7 @@ export default async function NewExpensePage({
       ) : null}
       <ExpenseForm
         listHref={listHref}
+        returnHref={returnHref}
         mode="create"
         founders={founders}
         clients={clients}

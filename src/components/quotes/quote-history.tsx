@@ -8,6 +8,7 @@ import { Button, buttonClasses } from "@/components/ui/button";
 import { useAlert } from "@/components/ui/alert-dialog";
 import { FieldError } from "@/components/ui/form";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
+import { DisplayDate } from "@/components/date-format-provider";
 
 type HistoryRow = {
   version: number;
@@ -69,7 +70,7 @@ export function QuoteHistory({
                   : null}
               </TD>
               <TD className="text-muted">
-                {row.createdAt.toISOString().slice(0, 16).replace("T", " ")}
+                <DisplayDate value={row.createdAt} withTime />
               </TD>
               <TD className="text-muted">{row.actorName ?? "—"}</TD>
               <TD className="text-right">

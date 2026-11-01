@@ -38,6 +38,7 @@ import { ExpenseFilters } from "@/components/expenses/expense-filters";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { getPaymentSourceSuggestions } from "@/lib/expenses/payment-source-queries";
 import { paymentSourceListLabel } from "@/lib/expenses/payment-source";
+import { DisplayDate } from "@/components/date-format-provider";
 
 export default async function ExpensesPage({
   searchParams,
@@ -204,7 +205,7 @@ export default async function ExpensesPage({
             <TBody>
               {rows.map((e) => (
                 <TR key={e.id} className={e.status === "pending" ? "bg-amber-50/50 dark:bg-amber-950/20" : undefined}>
-                  <TD className="text-muted">{e.spentAt ?? "—"}</TD>
+                  <TD className="text-muted"><DisplayDate value={e.spentAt} /></TD>
                   <TD>
                     <Link
                       href={`/expenses/${e.id}`}

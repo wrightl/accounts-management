@@ -14,6 +14,7 @@ import {
   parseCreateReimbursementInput,
   reimbursementCreateRawFromFormData,
 } from "@/lib/reimbursements/schema";
+import { DisplayDate } from "@/components/date-format-provider";
 
 export function CreateReimbursementForm({
   founders,
@@ -158,7 +159,7 @@ export function CreateReimbursementForm({
                   disabled={pending}
                 />
                 <span className="flex-1">
-                  {e.spentAt ?? "—"} · {e.description}
+                  <DisplayDate value={e.spentAt} /> · {e.description}
                 </span>
                 <span className="font-medium">{formatGBP(e.amountPence)}</span>
               </li>

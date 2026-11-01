@@ -1,9 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { loadBankTransactionsPage } from "@/actions/bank";
 import { Button } from "@/components/ui/button";
 import { BankTransactionCardList } from "@/components/bank/bank-list";
+import {
+  BankFeedDepthContext,
+  scrollBankListTo,
+  useBankListUrl,
+} from "@/components/bank/bank-list-position";
+import { takeBankListPosition } from "@/lib/bank/list-position";
 import { BANK_PAGE_SIZE } from "@/lib/bank/list-params";
 import type { BankListParams } from "@/lib/bank/list-params";
 import type { BankTransactionListItem } from "@/lib/bank/queries";
@@ -35,6 +49,13 @@ export function BankCardsFeed({
   const [error, setError] = useState<string | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const loadingRef = useRef(false);
+  const listUrl = useBankListUrl();
+  /** Returning from a new expense: the depth to load back to and the scroll to apply. */
+  const restoreRef = useRef<{ page: number; scrollTop: number } | null>(null);
+  const scrollAfterReloadRef = useRef<number | null>(null);
+  const reloadIdRef = useRef(0);
+  /** A refresh only returns the first page, so deeper pages are fetched again. */
+  const [refreshThrough, setRefreshThrough] = useState<number | null>(null);
 
   const [prevInitialRows, setPrevInitialRows] = useState(initialRows);
   const [prevInitialPage, setPrevInitialPage] = useState(initialPage);
@@ -52,9 +73,22 @@ export function BankCardsFeed({
     setPrevInitialRows(initialRows);
     setPrevInitialPage(initialPage);
     setPrevFilters(filters);
-    setRows(initialRows);
-    setPage(initialPage);
     setError(null);
+    const sameList =
+      initialPage === prevInitialPage &&
+      filters.q === prevFilters.q &&
+      filters.type === prevFilters.type &&
+      filters.category === prevFilters.category &&
+      filters.reconciliation === prevFilters.reconciliation &&
+      filters.from === prevFilters.from &&
+      filters.to === prevFilters.to;
+    if (sameList && page > initialPage) {
+      setRefreshThrough(page);
+    } else {
+      setRefreshThrough(null);
+      setRows(initialRows);
+      setPage(initialPage);
+    }
   }
 
   const hasMore = page < pageCount;
@@ -88,6 +122,66 @@ export function BankCardsFeed({
     });
   }, [filters, hasMore, page, pending]);
 
+  const reloadThrough = useEffectEvent((target: number) => {
+    const reloadId = ++reloadIdRef.current;
+    loadingRef.current = true;
+    startTransition(async () => {
+      const next = [...initialRows];
+      const seen = new Set(next.map((r) => r.id));
+      let reached = initialPage;
+      for (let p = initialPage + 1; p <= Math.min(target, pageCount); p++) {
+        const result = await loadBankTransactionsPage({
+          ...filters,
+          page: p,
+          pageSize: BANK_PAGE_SIZE,
+        });
+        if (reloadId !== reloadIdRef.current) return;
+        if (!result.ok) {
+          setError(result.error);
+          break;
+        }
+        for (const row of result.result.rows) {
+          if (!seen.has(row.id)) {
+            seen.add(row.id);
+            next.push(row);
+          }
+        }
+        reached = result.result.page;
+      }
+      loadingRef.current = false;
+      scrollAfterReloadRef.current = restoreRef.current?.scrollTop ?? null;
+      restoreRef.current = null;
+      setRows(next);
+      setPage(reached);
+      setRefreshThrough(null);
+    });
+  });
+
+  // Runs before the page's restorer, so the scroll waits for the rows it needs.
+  useLayoutEffect(() => {
+    const position = takeBankListPosition(listUrl);
+    if (!position) return;
+    if (position.cardsPage > 1) {
+      restoreRef.current = { page: position.cardsPage, scrollTop: position.scrollTop };
+      loadingRef.current = true;
+    } else {
+      scrollBankListTo(position.scrollTop);
+    }
+  }, [listUrl]);
+
+  useEffect(() => {
+    reloadIdRef.current++;
+    loadingRef.current = false;
+    const target = restoreRef.current?.page ?? refreshThrough;
+    if (target != null) reloadThrough(target);
+  }, [initialRows, refreshThrough]);
+
+  useLayoutEffect(() => {
+    if (scrollAfterReloadRef.current == null) return;
+    scrollBankListTo(scrollAfterReloadRef.current);
+    scrollAfterReloadRef.current = null;
+  }, [rows]);
+
   useEffect(() => {
     const el = sentinelRef.current;
     if (!el || !hasMore) return;
@@ -105,13 +199,15 @@ export function BankCardsFeed({
 
   return (
     <div>
-      <BankTransactionCardList
-        rows={rows}
-        customCategories={customCategories}
-        incomeCategories={incomeCategories}
-        canWrite={canWrite}
-        showAccount={showAccount}
-      />
+      <BankFeedDepthContext.Provider value={page}>
+        <BankTransactionCardList
+          rows={rows}
+          customCategories={customCategories}
+          incomeCategories={incomeCategories}
+          canWrite={canWrite}
+          showAccount={showAccount}
+        />
+      </BankFeedDepthContext.Provider>
 
       {hasMore ? (
         <div ref={sentinelRef} className="mt-6 flex flex-col items-center gap-2">

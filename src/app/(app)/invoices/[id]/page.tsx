@@ -153,7 +153,7 @@ export default async function InvoiceDetailPage({
               <CopyButton value={clientLink} />
               <span className="text-muted">
                 {invoice.viewedAt
-                  ? `Viewed ${invoice.viewedAt.toISOString().slice(0, 10)}`
+                  ? <>Viewed <DisplayDate value={invoice.viewedAt} /></>
                   : "Not viewed yet"}
               </span>
               {canManageSettings && !takesCardPayments && stored === "sent" ? (
@@ -351,7 +351,7 @@ export default async function InvoiceDetailPage({
               <TBody>
                 {payments.map((p) => (
                   <TR key={p.id}>
-                    <TD>{p.receivedAt.toISOString().slice(0, 10)}</TD>
+                    <TD><DisplayDate value={p.receivedAt} /></TD>
                     <TD>{p.method ?? "—"}</TD>
                     <TD className="text-muted">{p.reference ?? "—"}</TD>
                     <TD className="text-right">{p.amountFormatted}</TD>

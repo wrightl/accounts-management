@@ -27,6 +27,7 @@ import {
 } from "@/actions/bank";
 import { BankImportForm } from "@/components/bank/bank-import-form";
 import { AttachExpenseDialog } from "@/components/bank/expense-link-dialog";
+import { useNewExpenseFromBankList } from "@/components/bank/bank-list-position";
 import { CompanyCardsDialog } from "@/components/bank/company-cards-dialog";
 import type { BankAccountCards } from "@/lib/bank/company-cards";
 import {
@@ -40,6 +41,7 @@ import { explainMatch } from "@/lib/bookkeeper/explain";
 import { cn } from "@/lib/utils";
 import type { ActionResult } from "@/actions/result";
 import type { BankSpendingCategoryRow } from "@/lib/bank/spending-categories";
+import { DisplayDate } from "@/components/date-format-provider";
 
 function isCreditExplainMatchType(value: string | null): boolean {
   return (
@@ -171,7 +173,7 @@ export function SuggestMatchesDialog({
                       {item.tx.counterparty ?? "Unknown"} · {item.tx.amountFormatted}
                     </p>
                     <p className="text-sm text-muted">
-                      {item.tx.bookedAt}
+                      <DisplayDate value={item.tx.bookedAt} />
                       {item.tx.reference ? ` · ${item.tx.reference}` : ""}
                     </p>
                     <p className="mt-2 text-sm">
@@ -955,6 +957,7 @@ export function ReconciliationCell({
   const [explainOpen, setExplainOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { newExpenseHref, rememberPosition } = useNewExpenseFromBankList();
   const state = reconciliationState(row);
   const badge = RECONCILIATION_BADGE[state];
   const detail = reconciliationDetail(row);
@@ -976,8 +979,10 @@ export function ReconciliationCell({
   const createExpenseItem: RowMenuItem = {
     key: "create-expense",
     label: "Create expense…",
-    onSelect: () =>
-      router.push(`/expenses/new?bankTransactionId=${encodeURIComponent(row.id)}`),
+    onSelect: () => {
+      rememberPosition();
+      router.push(newExpenseHref({ bankTransactionId: row.id }));
+    },
   };
 
   let actions: ReactNode = null;

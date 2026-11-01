@@ -54,7 +54,7 @@ export default async function ReimbursementDetailPage({
           <p className="mt-1 capitalize text-muted">
             {detail.reimbursement.status}
             {detail.reimbursement.paidAt
-              ? ` · Paid ${detail.reimbursement.paidAt.toISOString().slice(0, 10)}`
+              ? <> · Paid <DisplayDate value={detail.reimbursement.paidAt} /></>
               : detail.reimbursement.reimbursementDate
                 ? <> · Reimbursement date <DisplayDate value={detail.reimbursement.reimbursementDate} /></>
                 : null}
@@ -103,7 +103,7 @@ export default async function ReimbursementDetailPage({
           <TBody>
             {detail.items.map((i) => (
               <TR key={i.itemId}>
-                <TD className="text-muted">{i.expense.spentAt ?? "—"}</TD>
+                <TD className="text-muted"><DisplayDate value={i.expense.spentAt} /></TD>
                 <TD>
                   <Link
                     href={`/expenses/${i.expense.id}`}

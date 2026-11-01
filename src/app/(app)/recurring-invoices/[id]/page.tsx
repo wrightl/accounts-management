@@ -78,7 +78,7 @@ export default async function RecurringInvoiceDetailPage({
                         On generate: {template.onGenerate}
                     </p>
                     <p className="mt-1 text-sm text-muted">
-                        Next run: {template.nextRunOn ?? '—'}
+                        Next run: <DisplayDate value={template.nextRunOn} />
                         {template.endsOn ? <> · Ends <DisplayDate value={template.endsOn} /></> : ''}
                         {template.maxOccurrences != null
                             ? ` · ${template.occurrenceCount}/${template.maxOccurrences} invoices`
@@ -175,7 +175,7 @@ export default async function RecurringInvoiceDetailPage({
                                         />
                                     </TD>
                                     <TD className="text-muted">
-                                        {inv.issueDate ?? '—'}
+                                        <DisplayDate value={inv.issueDate} />
                                     </TD>
                                     <TD className="text-right font-medium">
                                         {inv.grossFormatted}

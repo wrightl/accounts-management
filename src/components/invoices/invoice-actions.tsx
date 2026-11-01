@@ -16,6 +16,8 @@ import {
 } from "@/lib/payments/schema";
 import type { MatchScoreBreakdown } from "@/lib/bank/match";
 import { penceToPounds } from "@/lib/money";
+import { DisplayDate, useDateFormat } from "@/components/date-format-provider";
+import { formatIsoDate } from "@/lib/dates";
 
 function MatchBreakdown({ breakdown }: { breakdown: MatchScoreBreakdown }) {
   const parts: string[] = [];
@@ -53,6 +55,7 @@ export function InvoiceActions({
     setError,
   } = useFieldErrors();
   const [pending, startTransition] = useTransition();
+  const dateFormat = useDateFormat();
   const [showPayment, setShowPayment] = useState(false);
   const [loadingMatches, setLoadingMatches] = useState(false);
   const [matches, setMatches] = useState<InvoiceBankMatch[]>([]);
@@ -188,7 +191,7 @@ export function InvoiceActions({
                 {selectedMatch.counterparty ?? "Unknown"} · {selectedMatch.amountFormatted}
               </p>
               <p className="text-sm text-muted">
-                {selectedMatch.bookedAt}
+                <DisplayDate value={selectedMatch.bookedAt} />
                 {selectedMatch.reference ? ` · ${selectedMatch.reference}` : ""}
               </p>
               <MatchBreakdown breakdown={selectedMatch.breakdown} />
@@ -208,7 +211,7 @@ export function InvoiceActions({
                   >
                     {matches.map((m) => (
                       <option key={m.bankTransactionId} value={m.bankTransactionId}>
-                        {m.bookedAt} · {m.counterparty ?? "Unknown"} · {m.amountFormatted}
+                        {formatIsoDate(m.bookedAt, dateFormat)} · {m.counterparty ?? "Unknown"} · {m.amountFormatted}
                       </option>
                     ))}
                   </select>
