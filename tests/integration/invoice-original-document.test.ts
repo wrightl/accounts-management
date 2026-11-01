@@ -1,14 +1,17 @@
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
-import { auditLog, clients, invoices, users } from "@/db/schema";
+import { auditLog, clients, invoiceLineItems, invoices, users } from "@/db/schema";
 import {
   attachInvoiceDocument,
   removeInvoiceDocument,
 } from "@/actions/invoice-documents";
 import { GET as authedPdf } from "@/app/api/invoices/[id]/pdf/route";
 import { GET as publicPdf } from "@/app/i/[token]/pdf/route";
+import PublicInvoicePage from "@/app/i/[token]/page";
+import { deleteCompanyById } from "@/lib/companies/delete";
 import { sendEmail } from "@/lib/email";
 import { enqueueSendJob, processSendJob } from "@/lib/outbox";
 import { streamAccountantPack, listStoreZipEntries } from "@/lib/reports/accountant-pack";
@@ -212,6 +215,33 @@ describe("serving the original", () => {
     expect(body.equals(ORIGINAL)).toBe(false);
   });
 
+  it("doesn't serve an unmarked cached PDF for an import", async () => {
+    const cached = await getStorage().put(
+      "invoices/stale.v2.pdf",
+      Buffer.from("%PDF-1.4 stale unmarked"),
+      "application/pdf",
+    );
+    const inv = await addInvoice({ pdfBlobPath: cached.path });
+    const res = await authedPdf(new Request("http://test/"), {
+      params: Promise.resolve({ id: inv.id }),
+    });
+    expect((await bodyOf(res)).toString("latin1")).not.toContain("stale unmarked");
+  });
+
+  it("warns in the accountant pack when a counted invoice's original has gone", async () => {
+    const inv = await addInvoice({ number: "GONE-1", issueDate: "2026-05-01" });
+    await attachInvoiceDocument(inv.id, pdfForm());
+    await getStorage().delete((await reload(inv.id)).originalDocumentPath!);
+
+    const { stream } = await streamAccountantPack({
+      companyId,
+      from: "2026-04-01",
+      to: "2026-06-30",
+    });
+    const zip = Buffer.from(await new Response(stream).arrayBuffer());
+    expect(zip.toString("latin1")).toContain("Original invoice missing, using a generated record: GONE-1");
+  });
+
   it("is in the accountant pack, for counted and brought-forward invoices", async () => {
     const counted = await addInvoice({ number: "NEW-1", issueDate: "2026-05-01" });
     await attachInvoiceDocument(counted.id, pdfForm());
@@ -232,5 +262,78 @@ describe("serving the original", () => {
     expect(entries).toContain("invoices/NEW-1.pdf");
     expect(entries).toContain("reference/brought-forward-documents/OLD-2.pdf");
     expect(entries).not.toContain("invoices/OLD-2.pdf");
+  });
+});
+
+describe("public page for an imported invoice", () => {
+  async function renderPage(publicToken: string) {
+    const page = await PublicInvoicePage({
+      params: Promise.resolve({ token: publicToken }),
+      searchParams: Promise.resolve({}),
+    });
+    return renderToStaticMarkup(page);
+  }
+
+  async function addLine(invoiceId: string, vatRate: number) {
+    await db.insert(invoiceLineItems).values({
+      invoiceId,
+      description: "Work",
+      quantity: 1,
+      unitPricePence: 1000,
+      vatRate,
+      position: 0,
+    });
+  }
+
+  it("says it's a record when there is no original", async () => {
+    const inv = await addInvoice();
+    expect(await renderPage(inv.publicToken)).toContain("issued elsewhere");
+  });
+
+  it("says the PDF is the original once attached", async () => {
+    const inv = await addInvoice();
+    await attachInvoiceDocument(inv.id, pdfForm());
+    const html = await renderPage(inv.publicToken);
+    expect(html).toContain("The PDF is the original");
+    expect(html).not.toContain("issued elsewhere");
+  });
+
+  it("shows no notice for an invoice created in Alfa", async () => {
+    const inv = await addInvoice({ source: "alfa" });
+    expect(await renderPage(inv.publicToken)).not.toContain("issued elsewhere");
+  });
+
+  it("hides line VAT rates only when they don't reproduce the stored VAT", async () => {
+    const matching = await addInvoice({ number: "VAT-OK", vatPence: 200, grossPence: 1200 });
+    await addLine(matching.id, 20);
+    expect(await renderPage(matching.publicToken)).toContain("20%");
+
+    const lump = await addInvoice({ number: "VAT-LUMP", vatPence: 175, grossPence: 1175 });
+    await addLine(lump.id, 18);
+    expect(await renderPage(lump.publicToken)).not.toContain("18%");
+  });
+});
+
+describe("deleting a company", () => {
+  it("removes attached originals", async () => {
+    const other = await seedCompany(db, { name: "Closing Co" });
+    const [theirClient] = await db
+      .insert(clients)
+      .values({ companyId: other.id, name: "Theirs" })
+      .returning();
+    const path = `invoice-originals/${other.id}/doc.pdf`;
+    await getStorage().put(path, ORIGINAL, "application/pdf");
+    await db.insert(invoices).values({
+      companyId: other.id,
+      clientId: theirClient.id,
+      number: "THEIRS",
+      source: "import",
+      originalDocumentPath: path,
+    });
+
+    const result = await deleteCompanyById(other.id, "Closing Co");
+
+    expect(result.ok).toBe(true);
+    await expect(getStorage().get(path)).rejects.toThrow();
   });
 });

@@ -65,7 +65,7 @@ export async function attachInvoiceDocument(
             originalDocumentSize: bytes.byteLength,
             originalDocumentSha256: sha256,
           })
-          .where(eq(invoices.id, id));
+          .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)));
         await tx.insert(auditLog).values({
           companyId,
           actorUserId: localUserId,
@@ -100,7 +100,7 @@ export async function removeInvoiceDocument(id: string): Promise<ActionResult> {
             originalDocumentSize: null,
             originalDocumentSha256: null,
           })
-          .where(eq(invoices.id, id));
+          .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)));
         await tx.insert(auditLog).values({
           companyId,
           actorUserId: localUserId,

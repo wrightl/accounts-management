@@ -101,6 +101,7 @@ export async function streamAccountantPack({
       paidAt: invoices.paidAt,
       pdfBlobPath: invoices.pdfBlobPath,
       originalDocumentPath: invoices.originalDocumentPath,
+      source: invoices.source,
       clientName: clientDisplayNameSql.as("client_name"),
       orderNumber: orders.number,
       recurringSchedule: recurringInvoices.name,
@@ -861,9 +862,18 @@ export async function streamAccountantPack({
       const pdfPath = `invoices/${safeFilename(`${inv.number}.pdf`)}`;
       try {
         const original = await loadOriginalInvoiceDocument(inv);
+        if (original) return [pdfPath, original];
+        if (inv.originalDocumentPath) {
+          warnings.push(`Original invoice missing, using a generated record: ${inv.number} (${inv.id})`);
+        }
         return [
           pdfPath,
-          original ?? (await resolveInvoicePdf(companyId, inv.id, inv.pdfBlobPath)),
+          // An import's cached PDF could predate the record marking.
+          await resolveInvoicePdf(
+            companyId,
+            inv.id,
+            inv.source === "import" ? null : inv.pdfBlobPath,
+          ),
         ];
       } catch (err) {
         warnings.push(

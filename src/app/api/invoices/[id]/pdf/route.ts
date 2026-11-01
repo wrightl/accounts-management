@@ -47,7 +47,10 @@ export async function GET(
   const original = await loadOriginalInvoiceDocument(detail.invoice);
   if (original) {
     bytes = original;
-  } else if (isV2PdfCache(detail.invoice.pdfBlobPath)) {
+  } else if (
+    detail.invoice.source !== "import" &&
+    isV2PdfCache(detail.invoice.pdfBlobPath)
+  ) {
     try {
       const storage = getStorage();
       const obj = await storage.get(detail.invoice.pdfBlobPath!);
