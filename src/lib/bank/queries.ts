@@ -66,7 +66,11 @@ import {
     type InvoiceStatus,
 } from '@/lib/invoices/status';
 import { clientDisplayName } from '@/lib/clients/display';
-import { creditAdjustmentForInvoice } from '@/lib/credit-notes/adjustments';
+import {
+    creditAdjustmentForInvoice,
+    creditAdjustmentsByInvoice,
+} from '@/lib/credit-notes/adjustments';
+import { paymentCountsInAccounts } from '@/lib/invoices/accounts-scope';
 import { periodLockError } from '@/lib/period-lock';
 import { getBooksLockedThrough } from '@/lib/period-lock-queries';
 import {
@@ -724,10 +728,61 @@ function toSuggestedTx(tx: typeof bankTransactions.$inferSelect) {
     };
 }
 
+/** Open invoices with their balances, loaded once per run however many there are. */
+async function loadOpenInvoiceBalances(
+    db: ReturnType<typeof getDb>,
+    companyId: string,
+) {
+    const rows = await db
+        .select({
+            id: invoices.id,
+            number: invoices.number,
+            grossPence: invoices.grossPence,
+            status: invoices.status,
+            dueDate: invoices.dueDate,
+            issueDate: invoices.issueDate,
+            source: invoices.source,
+            clientName: clients.name,
+            companyName: clients.companyName,
+        })
+        .from(invoices)
+        .innerJoin(clients, eq(invoices.clientId, clients.id))
+        .where(
+            and(
+                eq(invoices.companyId, companyId),
+                or(eq(invoices.status, 'sent'), eq(invoices.status, 'overdue')),
+            ),
+        );
+    if (rows.length === 0) return [];
+
+    const ids = rows.map((r) => r.id);
+    const [paidRows, credits] = await Promise.all([
+        db
+            .select({
+                invoiceId: payments.invoiceId,
+                total: sum(payments.amountPence).mapWith(Number),
+            })
+            .from(payments)
+            .where(inArray(payments.invoiceId, ids))
+            .groupBy(payments.invoiceId),
+        creditAdjustmentsByInvoice(db, ids),
+    ]);
+    const paid = new Map(paidRows.map((r) => [r.invoiceId, r.total ?? 0]));
+    return rows.map((inv) => ({
+        ...inv,
+        balancePence: invoiceAmountDuePence({
+            grossPence: inv.grossPence,
+            paidPence: paid.get(inv.id) ?? 0,
+            ...credits.get(inv.id),
+        }),
+    }));
+}
+
 async function findIncomingMatch(
     db: ReturnType<typeof getDb>,
     companyId: string,
     tx: typeof bankTransactions.$inferSelect,
+    openInvoices: Awaited<ReturnType<typeof loadOpenInvoiceBalances>>,
 ) {
     const txLike = txLikeFromRow(tx);
 
@@ -748,6 +803,8 @@ async function findIncomingMatch(
             and(
                 eq(invoices.companyId, companyId),
                 eq(payments.amountPence, tx.amountPence),
+                // Money received before cutover can't be what's in this statement.
+                paymentCountsInAccounts,
             ),
         );
 
@@ -764,33 +821,9 @@ async function findIncomingMatch(
         })),
     );
 
-    const invoiceRows = await db
-        .select({
-            id: invoices.id,
-            number: invoices.number,
-            grossPence: invoices.grossPence,
-            status: invoices.status,
-            dueDate: invoices.dueDate,
-            issueDate: invoices.issueDate,
-            clientName: clients.name,
-            companyName: clients.companyName,
-        })
-        .from(invoices)
-        .innerJoin(clients, eq(invoices.clientId, clients.id))
-        .where(
-            and(
-                eq(invoices.companyId, companyId),
-                or(eq(invoices.status, 'sent'), eq(invoices.status, 'overdue')),
-            ),
-        );
-
     const invoiceCandidates = [];
-    for (const inv of invoiceRows) {
-        const balance = invoiceAmountDuePence({
-            grossPence: inv.grossPence,
-            paidPence: await paidTotalForInvoice(db, inv.id),
-            ...(await creditAdjustmentForInvoice(db, inv.id)),
-        });
+    for (const inv of openInvoices) {
+        const balance = inv.balancePence;
         if (balance !== tx.amountPence) continue;
         const referenceDate = inv.dueDate ?? inv.issueDate ?? tx.bookedAt;
         invoiceCandidates.push({
@@ -800,6 +833,7 @@ async function findIncomingMatch(
             invoiceNumber: inv.number,
             clientName: inv.clientName,
             companyName: inv.companyName,
+            oldDebt: inv.source === 'import',
             invoiceId: inv.id,
             invoiceNumberDisplay: inv.number,
             clientDisplay: clientDisplayName({
@@ -818,6 +852,7 @@ async function findIncomingMatch(
             invoiceNumber: c.invoiceNumber,
             clientName: c.clientName,
             companyName: c.companyName,
+            oldDebt: c.oldDebt,
         })),
     );
 
@@ -914,10 +949,18 @@ export async function suggestMatches(
         );
 
     const created: SuggestedMatch[] = [];
+    const openInvoices = unmatched.some(({ tx }) => tx.amountPence > 0)
+        ? await loadOpenInvoiceBalances(db, companyId)
+        : [];
 
     for (const { tx } of unmatched) {
         if (tx.amountPence > 0) {
-            const incoming = await findIncomingMatch(db, companyId, tx);
+            const incoming = await findIncomingMatch(
+                db,
+                companyId,
+                tx,
+                openInvoices,
+            );
             if (!incoming) continue;
 
             if (incoming.kind === 'payment') {
@@ -1555,6 +1598,7 @@ export async function findBankTransactionsForInvoice(
         balancePence,
         dueDate: invoice.dueDate,
         issueDate: invoice.issueDate,
+        oldDebt: invoice.source === 'import',
     };
 
     const unmatched = await listUnmatchedIncomingTransactions(companyId);

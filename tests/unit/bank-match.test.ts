@@ -107,3 +107,46 @@ describe("scoreBankTxForInvoice", () => {
     expect(result?.tx.reference).toBe("DD-2026-0001 lunch");
   });
 });
+
+describe("old debts", () => {
+  const old = { id: "a", amountPence: 25000, date: "2024-01-01", oldDebt: true };
+  const tx = { amountPence: 25000, bookedAt: "2026-04-02" };
+
+  it("scores below the suggestion threshold on the amount alone", () => {
+    expect(scoreMatch(tx, old)).toBeLessThan(70);
+    expect(scoreMatch(tx, old)).toBeGreaterThan(0);
+  });
+
+  it("reaches the threshold with a matching invoice reference", () => {
+    expect(
+      scoreMatch(
+        { ...tx, reference: "INV-77" },
+        { ...old, invoiceNumber: "INV-77" },
+      ),
+    ).toBeGreaterThanOrEqual(70);
+  });
+
+  it("settles the oldest of two identical debts first", () => {
+    const candidate = (id: string, date: string) => ({
+      ...old,
+      id,
+      date,
+      clientName: "Acme",
+    });
+    const credit = { ...tx, counterparty: "Acme" };
+    const older = candidate("older", "2023-01-01");
+    const newer = candidate("newer", "2024-06-01");
+    expect(pickBestMatch(credit, [newer, older])?.candidate.id).toBe("older");
+    expect(pickBestMatch(credit, [older, newer])?.candidate.id).toBe("older");
+  });
+
+    it("still rejects a different amount", () => {
+    expect(scoreMatch({ ...tx, amountPence: 1 }, old)).toBe(0);
+  });
+
+  it("keeps a closer date's higher score", () => {
+    expect(
+      scoreMatch(tx, { ...old, date: "2026-04-02" }),
+    ).toBeGreaterThan(30);
+  });
+});

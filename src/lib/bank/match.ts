@@ -22,6 +22,8 @@ export interface MatchCandidate {
   reference?: string | null;
   clientName?: string | null;
   companyName?: string | null;
+  /** An open imported invoice, which can be paid long after its due date. */
+  oldDebt?: boolean;
 }
 
 export interface InvoiceMatchTarget extends ClientNameFields {
@@ -30,6 +32,8 @@ export interface InvoiceMatchTarget extends ClientNameFields {
   balancePence: number;
   dueDate?: string | null;
   issueDate?: string | null;
+  /** An open imported invoice, which can be paid long after its due date. */
+  oldDebt?: boolean;
 }
 
 export type MatchScoreBreakdown = {
@@ -51,10 +55,16 @@ export function dateDiffDays(a: string, b: string): number {
 /** Hard cutoff — beyond this, dateScore is zero and the match is rejected. */
 export const DATE_WINDOW_DAYS = 90;
 
+/**
+ * Date score for an old debt at any distance. Too low to reach MIN_SUGGEST_SCORE
+ * on the amount alone, so it also needs a matching reference or counterparty.
+ */
+export const OLD_DEBT_DATE_SCORE = 30;
+
 /** Decaying date component (0–100). Closer dates score higher. */
-function dateScoreForGap(days: number): number {
-  if (days > DATE_WINDOW_DAYS) return 0;
-  return Math.max(0, 100 - days * 2);
+function dateScoreForGap(days: number, oldDebt = false): number {
+  const score = days > DATE_WINDOW_DAYS ? 0 : Math.max(0, 100 - days * 2);
+  return oldDebt ? Math.max(score, OLD_DEBT_DATE_SCORE) : score;
 }
 
 function referenceHaystack(tx: BankTxLike): string {
@@ -90,7 +100,7 @@ export function scoreMatchWithBreakdown(
 
   if (Math.abs(tx.amountPence) !== candidate.amountPence) return empty;
   const days = Math.abs(dateDiffDays(candidate.date, tx.bookedAt));
-  const dateScore = dateScoreForGap(days);
+  const dateScore = dateScoreForGap(days, candidate.oldDebt);
   if (dateScore === 0) return empty;
   const hay = referenceHaystack(tx);
 
@@ -129,7 +139,13 @@ export function pickBestMatch<T extends MatchCandidate>(
   let bestBreakdown: MatchScoreBreakdown | null = null;
   for (const candidate of candidates) {
     const breakdown = scoreMatchWithBreakdown(tx, candidate);
-    if (breakdown.total > (bestBreakdown?.total ?? 0)) {
+    // Two identical old debts for a client score the same: settle the oldest first.
+    const beatsTie =
+      best != null &&
+      candidate.oldDebt &&
+      breakdown.total === bestBreakdown?.total &&
+      candidate.date < best.date;
+    if (breakdown.total > (bestBreakdown?.total ?? 0) || beatsTie) {
       best = candidate;
       bestBreakdown = breakdown;
     }
@@ -157,7 +173,7 @@ export function scoreBankTxForInvoice(
   }
 
   const days = Math.abs(dateDiffDays(referenceDate, tx.bookedAt));
-  const dateScore = dateScoreForGap(days);
+  const dateScore = dateScoreForGap(days, invoice.oldDebt);
   if (dateScore === 0) {
     return {
       dateScore: 0,
