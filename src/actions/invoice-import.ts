@@ -247,28 +247,39 @@ export async function setImportClientResolution(
   return mutate(
     "accounts:write",
     async ({ companyId }) => {
-      const db = getDb();
-      const batch = await loadBatch(companyId, batchId);
-      if (!batch || batch.status !== "draft") return { ok: false, error: "Import not found" };
-      if (!(key in batch.clientResolutions)) return { ok: false, error: "Client not found in this import" };
-      if (clientId) {
-        const [client] = await db
-          .select({ id: clients.id })
-          .from(clients)
-          .where(and(eq(clients.id, clientId), eq(clients.companyId, companyId)))
-          .limit(1);
-        if (!client) return { ok: false, error: "Client not found" };
-      }
-      await db
-        .update(invoiceImportBatches)
-        .set({ clientResolutions: { ...batch.clientResolutions, [key]: clientId } })
-        .where(
-          and(
-            eq(invoiceImportBatches.id, batchId),
-            eq(invoiceImportBatches.companyId, companyId),
-          ),
-        );
-      return { ok: true };
+      return getDb().transaction(async (tx): Promise<ActionResult> => {
+        // Read under a row lock, so two choices made together both survive.
+        const [batch] = await tx
+          .select()
+          .from(invoiceImportBatches)
+          .where(
+            and(
+              eq(invoiceImportBatches.id, batchId),
+              eq(invoiceImportBatches.companyId, companyId),
+            ),
+          )
+          .for("update");
+        if (!batch || batch.status !== "draft") return { ok: false, error: "Import not found" };
+        if (!(key in batch.clientResolutions)) return { ok: false, error: "Client not found in this import" };
+        if (clientId) {
+          const [client] = await tx
+            .select({ id: clients.id })
+            .from(clients)
+            .where(and(eq(clients.id, clientId), eq(clients.companyId, companyId)))
+            .limit(1);
+          if (!client) return { ok: false, error: "Client not found" };
+        }
+        await tx
+          .update(invoiceImportBatches)
+          .set({ clientResolutions: { ...batch.clientResolutions, [key]: clientId } })
+          .where(
+            and(
+              eq(invoiceImportBatches.id, batchId),
+              eq(invoiceImportBatches.companyId, companyId),
+            ),
+          );
+        return { ok: true };
+      });
     },
     { paths: [`/invoices/import/${batchId}`] },
   );
@@ -368,6 +379,7 @@ export async function commitInvoiceImportChunk(
           .where(
             and(
               eq(invoiceImportDrafts.batchId, batchId),
+              eq(invoiceImportDrafts.companyId, companyId),
               eq(invoiceImportDrafts.status, "needs_review"),
             ),
           )
@@ -382,6 +394,7 @@ export async function commitInvoiceImportChunk(
           .where(
             and(
               eq(invoiceImportDrafts.batchId, batchId),
+              eq(invoiceImportDrafts.companyId, companyId),
               eq(invoiceImportDrafts.status, "ready"),
             ),
           )
@@ -445,6 +458,13 @@ export async function commitInvoiceImportChunk(
               .where(and(eq(clients.companyId, companyId), inArray(clients.id, clientIds)))
           : [];
         const validIds = new Set(valid.map((c) => c.id));
+        // Before anything is written: returning from this transaction commits it.
+        for (const { parsed } of drafts) {
+          const chosen = resolutions[parsed.client.key];
+          if (chosen && !validIds.has(chosen)) {
+            return { ok: false, error: `A client chosen for ${parsed.number ?? "an invoice"} no longer exists` };
+          }
+        }
 
         await advanceInvoiceSequences(
           tx,
@@ -456,9 +476,6 @@ export async function commitInvoiceImportChunk(
         for (const draft of drafts) {
           const { parsed } = draft;
           let clientId = resolutions[parsed.client.key] ?? null;
-          if (clientId && !validIds.has(clientId)) {
-            return { ok: false, error: `A client chosen for ${parsed.number ?? "an invoice"} no longer exists` };
-          }
           if (!clientId) {
             const [created] = await tx
               .insert(clients)
@@ -539,6 +556,7 @@ export async function commitInvoiceImportChunk(
           .where(
             and(
               eq(invoiceImportDrafts.batchId, batchId),
+              eq(invoiceImportDrafts.companyId, companyId),
               eq(invoiceImportDrafts.status, "ready"),
             ),
           );
@@ -743,6 +761,7 @@ export async function discardInvoiceImport(batchId: string): Promise<ActionResul
         .where(
           and(
             eq(invoiceImportDrafts.batchId, batchId),
+            eq(invoiceImportDrafts.companyId, companyId),
             eq(invoiceImportDrafts.status, "committed"),
           ),
         )
