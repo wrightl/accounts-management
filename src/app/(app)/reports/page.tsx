@@ -1,5 +1,6 @@
 import { guardTenantPage, hasPermission } from '@/lib/auth';
 import { financialYearStartDate, monthName, todayIsoDate } from '@/lib/dates';
+import { InvoiceCutoverCard } from '@/components/reports/invoice-cutover-card';
 import { PeriodLockCard } from '@/components/reports/period-lock-card';
 import Link from 'next/link';
 import { getBankReconciledThrough, getLastWeeklyClose } from '@/lib/close/checklist';
@@ -192,6 +193,12 @@ export default async function ReportsPage({
                 suggestedDate={lastYearEnd}
                 maxDate={dayBefore(today)}
                 canLock={canLock}
+            />
+
+            <InvoiceCutoverCard
+                cutover={company.invoiceCutoverDate}
+                maxDate={today}
+                canEdit={canLock}
             />
 
             <section className="mt-10">

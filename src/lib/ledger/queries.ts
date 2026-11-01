@@ -1,4 +1,5 @@
 import "server-only";
+import { invoiceCountsInAccounts } from "@/lib/invoices/accounts-scope";
 import { and, asc, desc, eq, gt, gte, inArray, lte, ne, or, sql, sum } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
@@ -46,7 +47,13 @@ async function earliestRecordDate(companyId: string): Promise<string | null> {
   const [inv] = await db
     .select({ d: sql<string | null>`min(${invoices.issueDate})` })
     .from(invoices)
-    .where(and(eq(invoices.companyId, companyId), ne(invoices.status, "draft")));
+    .where(
+      and(
+        eq(invoices.companyId, companyId),
+        ne(invoices.status, "draft"),
+        invoiceCountsInAccounts,
+      ),
+    );
   const [exp] = await db
     .select({ d: sql<string | null>`min(${expenses.spentAt})` })
     .from(expenses)

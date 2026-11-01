@@ -1,4 +1,5 @@
 import "server-only";
+import { invoiceCountsInAccounts } from "@/lib/invoices/accounts-scope";
 import { and, desc, eq, gte, inArray, lte, ne, sql, sum } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
@@ -72,6 +73,7 @@ export async function getProfitAndLoss(
         eq(invoices.companyId, companyId),
         ne(invoices.status, "void"),
         ne(invoices.status, "draft"),
+        invoiceCountsInAccounts,
         gte(invoices.issueDate, from),
         lte(invoices.issueDate, to),
       ),
@@ -314,6 +316,7 @@ export async function getIncomeByMonth(
         eq(invoices.companyId, companyId),
         ne(invoices.status, "void"),
         ne(invoices.status, "draft"),
+        invoiceCountsInAccounts,
         gte(invoices.issueDate, from),
         lte(invoices.issueDate, to),
       ),
@@ -410,6 +413,7 @@ export async function getVatSummary(
         eq(invoices.companyId, companyId),
         ne(invoices.status, "void"),
         ne(invoices.status, "draft"),
+        invoiceCountsInAccounts,
         gte(invoices.issueDate, from),
         lte(invoices.issueDate, to),
       ),

@@ -1,4 +1,5 @@
 import "server-only";
+import { creditNoteCountsInAccounts } from "@/lib/invoices/accounts-scope";
 import { and, eq, gte, isNotNull, lte, sql, sum } from "drizzle-orm";
 import { getDb } from "@/db";
 import { creditNotes } from "@/db/schema";
@@ -24,6 +25,7 @@ export async function sumCreditNotesInPeriod(
       and(
         eq(creditNotes.companyId, companyId),
         eq(creditNotes.status, "issued"),
+        creditNoteCountsInAccounts(creditNotes.issueDate),
         gte(creditNotes.issueDate, from),
         lte(creditNotes.issueDate, to),
       ),
@@ -54,6 +56,7 @@ export async function creditNotesByMonth(
       and(
         eq(creditNotes.companyId, companyId),
         eq(creditNotes.status, "issued"),
+        creditNoteCountsInAccounts(creditNotes.issueDate),
         gte(creditNotes.issueDate, from),
         lte(creditNotes.issueDate, to),
       ),
@@ -78,6 +81,7 @@ export async function sumRefundsInPeriod(
       and(
         eq(creditNotes.companyId, companyId),
         eq(creditNotes.status, "issued"),
+        creditNoteCountsInAccounts(creditNotes.refundedAt),
         isNotNull(creditNotes.refundedAt),
         gte(creditNotes.refundedAt, from),
         lte(creditNotes.refundedAt, to),
@@ -101,6 +105,7 @@ export async function refundsByMonth(
       and(
         eq(creditNotes.companyId, companyId),
         eq(creditNotes.status, "issued"),
+        creditNoteCountsInAccounts(creditNotes.refundedAt),
         isNotNull(creditNotes.refundedAt),
         gte(creditNotes.refundedAt, from),
         lte(creditNotes.refundedAt, to),

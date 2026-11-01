@@ -1,4 +1,5 @@
 import "server-only";
+import { invoiceCountsInAccounts } from "@/lib/invoices/accounts-scope";
 import { and, desc, eq, gte, inArray, lte, ne, sum } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
@@ -211,6 +212,7 @@ export async function getDashboardKpis(companyId: string): Promise<DashboardKpis
         eq(invoices.companyId, companyId),
         ne(invoices.status, "void"),
         ne(invoices.status, "draft"),
+        invoiceCountsInAccounts,
         gte(invoices.issueDate, monthStart),
         lte(invoices.issueDate, today),
       ),

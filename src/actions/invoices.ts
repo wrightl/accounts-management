@@ -1,10 +1,11 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
 import {
   clients,
+  companies,
   invoiceLineItems,
   invoices,
   payments,
@@ -16,6 +17,7 @@ import {
   advanceInvoiceSequences,
   allocateInvoiceNumber,
 } from "@/lib/invoices/allocate";
+import { isBroughtForward } from "@/lib/invoices/cutover";
 import {
   invoiceImportHasErrors,
   parseInvoiceImportCsv,
@@ -514,6 +516,16 @@ export async function commitInvoiceImport(
         .filter((n): n is string => Boolean(n));
 
       await db.transaction(async (tx) => {
+        // Under the lock saveInvoiceCutover takes, so a cutover saved while this
+        // runs can't leave rows flagged against the old date.
+        await tx.execute(
+          sql`select id from companies where id = ${companyId} for update`,
+        );
+        const [{ cutover }] = await tx
+          .select({ cutover: companies.invoiceCutoverDate })
+          .from(companies)
+          .where(eq(companies.id, companyId));
+
         // Advance the series past historical numbers before allocating blanks
         await advanceInvoiceSequences(tx, companyId, historicalNumbers);
 
@@ -569,6 +581,8 @@ export async function commitInvoiceImport(
               sentAt,
               paidAt,
               createdByUserId: localUserId,
+              source: "import",
+              broughtForward: isBroughtForward(row.issueDate, cutover),
             })
             .returning({ id: invoices.id });
 

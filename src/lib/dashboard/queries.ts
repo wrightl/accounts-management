@@ -1,4 +1,9 @@
 import "server-only";
+import { 
+  creditNoteCountsInAccounts,
+  invoiceCountsInAccounts,
+  paymentCountsInAccounts,
+ } from "@/lib/invoices/accounts-scope";
 import { and, eq, gte, inArray, lte, ne, sql, sum } from "drizzle-orm";
 import type { SessionUser } from "@/lib/auth";
 import { getDb } from "@/db";
@@ -177,7 +182,7 @@ export type DashboardOverviewData = {
   };
 };
 
-async function getCollectedInPeriod(
+export async function getCollectedInPeriod(
   companyId: string,
   from: string,
   to: string,
@@ -192,6 +197,7 @@ async function getCollectedInPeriod(
     .where(
       and(
         eq(invoices.companyId, companyId),
+        paymentCountsInAccounts,
         gte(sql`(${payments.receivedAt} AT TIME ZONE 'Europe/London')::date`, from),
         lte(sql`(${payments.receivedAt} AT TIME ZONE 'Europe/London')::date`, to),
       ),
@@ -200,7 +206,7 @@ async function getCollectedInPeriod(
   return (row?.total ?? 0) - refunds;
 }
 
-async function getCollectedByMonth(
+export async function getCollectedByMonth(
   companyId: string,
   from: string,
   to: string,
@@ -216,6 +222,7 @@ async function getCollectedByMonth(
     .where(
       and(
         eq(invoices.companyId, companyId),
+        paymentCountsInAccounts,
         gte(sql`(${payments.receivedAt} AT TIME ZONE 'Europe/London')::date`, from),
         lte(sql`(${payments.receivedAt} AT TIME ZONE 'Europe/London')::date`, to),
       ),
@@ -233,7 +240,7 @@ async function getCollectedByMonth(
   );
 }
 
-async function getInvoicedGrossInPeriod(
+export async function getInvoicedGrossInPeriod(
   companyId: string,
   from: string,
   to: string,
@@ -247,6 +254,7 @@ async function getInvoicedGrossInPeriod(
         eq(invoices.companyId, companyId),
         ne(invoices.status, "void"),
         ne(invoices.status, "draft"),
+        invoiceCountsInAccounts,
         gte(invoices.issueDate, from),
         lte(invoices.issueDate, to),
       ),
@@ -255,7 +263,7 @@ async function getInvoicedGrossInPeriod(
   return (row?.total ?? 0) - credits.grossPence;
 }
 
-async function getInvoicedGrossByMonth(
+export async function getInvoicedGrossByMonth(
   companyId: string,
   from: string,
   to: string,
@@ -272,6 +280,7 @@ async function getInvoicedGrossByMonth(
         eq(invoices.companyId, companyId),
         ne(invoices.status, "void"),
         ne(invoices.status, "draft"),
+        invoiceCountsInAccounts,
         gte(invoices.issueDate, from),
         lte(invoices.issueDate, to),
       ),
@@ -310,6 +319,7 @@ export async function getTopClientsByRevenue(
         eq(invoices.companyId, companyId),
         ne(invoices.status, "void"),
         ne(invoices.status, "draft"),
+        invoiceCountsInAccounts,
         gte(invoices.issueDate, from),
         lte(invoices.issueDate, to),
       ),
@@ -327,6 +337,7 @@ export async function getTopClientsByRevenue(
       and(
         eq(creditNotes.companyId, companyId),
         eq(creditNotes.status, "issued"),
+        creditNoteCountsInAccounts(creditNotes.issueDate),
         gte(creditNotes.issueDate, from),
         lte(creditNotes.issueDate, to),
       ),
@@ -450,7 +461,7 @@ async function getRecurringUpcoming(companyId: string): Promise<number> {
   return total;
 }
 
-async function getDaysSalesOutstanding(companyId: string): Promise<number | null> {
+export async function getDaysSalesOutstanding(companyId: string): Promise<number | null> {
   const db = getDb();
   const paid = await db
     .select({
@@ -458,7 +469,15 @@ async function getDaysSalesOutstanding(companyId: string): Promise<number | null
       issueDate: invoices.issueDate,
     })
     .from(invoices)
-    .where(and(eq(invoices.companyId, companyId), eq(invoices.status, "paid")));
+    .where(
+      and(
+        eq(invoices.companyId, companyId),
+        eq(invoices.status, "paid"),
+        // Applies with or without a cutover: imported payment dates are often
+        // estimates, so they would skew the average.
+        eq(invoices.source, "alfa"),
+      ),
+    );
 
   if (paid.length === 0) return null;
 
