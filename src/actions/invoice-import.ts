@@ -617,7 +617,7 @@ export async function undoInvoiceImport(batchId: string): Promise<UndoResult> {
         const [paymentRows, creditRows, matchRows, jobRows, claimRows] = none
           ? [[], [], [], [], []]
           : await Promise.all([
-              tx.select({ id: payments.id, invoiceId: payments.invoiceId, method: payments.method }).from(payments).where(inArray(payments.invoiceId, ids)),
+              tx.select({ id: payments.id, invoiceId: payments.invoiceId, method: payments.method, receivedAt: payments.receivedAt }).from(payments).where(inArray(payments.invoiceId, ids)),
               tx.select({ invoiceId: creditNotes.invoiceId }).from(creditNotes).where(inArray(creditNotes.invoiceId, ids)),
               tx
                 .select({ invoiceId: reconciliationMatches.invoiceId, paymentInvoiceId: payments.invoiceId })
@@ -637,8 +637,16 @@ export async function undoInvoiceImport(batchId: string): Promise<UndoResult> {
         for (const m of matchRows) block(m.invoiceId ?? m.paymentInvoiceId, "Matched to a bank transaction");
         for (const j of jobRows) block(j.invoiceId, "Has been emailed to the client");
         for (const c of claimRows) block(c.invoiceId, "Has a late payment claim");
+        // The same dates saving checks: removing an invoice moves whatever saving it added.
+        const cutover = company.invoiceCutoverDate;
         for (const inv of rows) {
-          if (!inv.broughtForward && periodLockError(company.booksLockedThrough, inv.issueDate)) {
+          const paid = paymentRows
+            .filter((p) => p.invoiceId === inv.id)
+            .map((p) => todayIsoDate(p.receivedAt));
+          const dates = inv.broughtForward
+            ? paid.filter((d) => cutover && d >= cutover)
+            : [inv.issueDate, ...paid];
+          if (periodLockError(company.booksLockedThrough, ...dates)) {
             block(inv.id, "Falls in the locked period");
           }
         }
@@ -780,37 +788,49 @@ export async function setNextInvoiceSequence(next: number): Promise<ActionResult
   return mutate(
     "settings:manage",
     async ({ companyId, localUserId }) => {
-      const db = getDb();
       const year = Number(todayIsoDate().slice(0, 4));
-      const [company] = await db
-        .select({ prefix: companies.invoiceNumberPrefix })
-        .from(companies)
-        .where(eq(companies.id, companyId));
-      const prefix = company.prefix || "DD";
-      const numbers = await db
-        .select({ number: invoices.number })
-        .from(invoices)
-        .where(eq(invoices.companyId, companyId));
-      const highest =
-        highestSeqByYear(prefix, numbers.map((n) => n.number)).get(year) ?? 0;
-      if (next <= highest) {
-        return {
-          ok: false,
-          error: `${formatInvoiceNumber(prefix, year, highest)} has been used, so start from ${highest + 1} or higher`,
-        };
-      }
-      await db.transaction(async (tx) => {
+      const seriesKey = [
+        documentSequences.companyId,
+        documentSequences.kind,
+        documentSequences.year,
+      ];
+      return getDb().transaction(async (tx): Promise<ActionResult> => {
+        // Hold the series row, which allocation also takes, so no number can be
+        // issued between checking what's been used and saving the new value.
         await tx
           .insert(documentSequences)
-          .values({ companyId, kind: "invoice", year, nextSeq: next })
+          .values({ companyId, kind: "invoice", year, nextSeq: 1 })
           .onConflictDoUpdate({
-            target: [
-              documentSequences.companyId,
-              documentSequences.kind,
-              documentSequences.year,
-            ],
-            set: { nextSeq: next },
+            target: seriesKey,
+            set: { nextSeq: sql`${documentSequences.nextSeq}` },
           });
+        const [company] = await tx
+          .select({ prefix: companies.invoiceNumberPrefix })
+          .from(companies)
+          .where(eq(companies.id, companyId));
+        const prefix = company.prefix || "DD";
+        const numbers = await tx
+          .select({ number: invoices.number })
+          .from(invoices)
+          .where(eq(invoices.companyId, companyId));
+        const highest =
+          highestSeqByYear(prefix, numbers.map((n) => n.number)).get(year) ?? 0;
+        if (next <= highest) {
+          return {
+            ok: false,
+            error: `${formatInvoiceNumber(prefix, year, highest)} has been used, so start from ${highest + 1} or higher`,
+          };
+        }
+        await tx
+          .update(documentSequences)
+          .set({ nextSeq: next })
+          .where(
+            and(
+              eq(documentSequences.companyId, companyId),
+              eq(documentSequences.kind, "invoice"),
+              eq(documentSequences.year, year),
+            ),
+          );
         await tx.insert(auditLog).values({
           companyId,
           actorUserId: localUserId,
@@ -819,8 +839,8 @@ export async function setNextInvoiceSequence(next: number): Promise<ActionResult
           entityId: companyId,
           meta: { year, next },
         });
+        return { ok: true };
       });
-      return { ok: true };
     },
     { paths: ["/invoices"] },
   );
