@@ -1,7 +1,6 @@
 import "server-only";
 import { and, eq, gte, inArray, lte, ne, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { mapWithConcurrency } from "@/lib/concurrency";
 import {
   bankAccounts,
   bankTransactions,
@@ -47,11 +46,15 @@ const FETCH_CONCURRENCY = 5;
 
 export type AccountantPackResult = {
   filename: string;
-  zip: Uint8Array;
+  stream: ReadableStream<Uint8Array>;
 };
 
-/** Build a period accountant pack (CSVs, summary reports, invoice PDFs, receipt files). */
-export async function buildAccountantPack({
+/**
+ * Stream a period accountant pack (CSVs, summary reports, invoice PDFs, receipt
+ * files). Queries run before this resolves, so they can still fail the request;
+ * files are fetched as the stream is read.
+ */
+export async function streamAccountantPack({
   companyId,
   from,
   to,
@@ -65,7 +68,6 @@ export async function buildAccountantPack({
 }): Promise<AccountantPackResult> {
   const db = getDb();
   const warnings: string[] = [];
-  const binaryFiles: Record<string, Uint8Array> = {};
 
   const [pnl, vat, aged, otherIncomeRows, company, shareRegister, recurringRows] =
     await Promise.all([
@@ -311,73 +313,18 @@ export async function buildAccountantPack({
           .orderBy(creditNoteLineItems.position);
   const creditNoteNumberById = new Map(creditNoteRows.map((r) => [r.id, r.number]));
 
-  await mapWithConcurrency(
-    creditNoteRows.filter((r) => r.status === "issued"),
-    FETCH_CONCURRENCY,
-    async (note) => {
-      const pdfPath = `credit-notes/${safeFilename(`${note.number}.pdf`)}`;
-      try {
-        const detail = await getCreditNoteDetail(companyId, note.id);
-        if (!detail) throw new Error("not found");
-        binaryFiles[pdfPath] = await renderCreditNotePdf({
-          creditNote: detail.creditNote,
-          invoiceNumber: detail.invoice.number,
-          client: detail.client,
-          lines: detail.lines,
-          company,
-        });
-      } catch (err) {
-        warnings.push(
-          `Credit note PDF missing: ${note.number} (${note.id}) — ${formatError(err)}`,
-        );
-      }
-    },
-  );
-
-  await mapWithConcurrency(invRows, FETCH_CONCURRENCY, async (inv) => {
-    const pdfPath = `invoices/${safeFilename(`${inv.number}.pdf`)}`;
-    try {
-      const bytes = await resolveInvoicePdf(companyId, inv.id, inv.pdfBlobPath);
-      binaryFiles[pdfPath] = bytes;
-    } catch (err) {
-      warnings.push(
-        `Invoice PDF missing: ${inv.number} (${inv.id}) — ${formatError(err)}`,
-      );
-    }
-  });
-
   const receiptIndexRows: string[][] = [];
-  await mapWithConcurrency(receiptRows, FETCH_CONCURRENCY, async (receipt) => {
-    const zipPath = `receipts/${receipt.expenseId}/${safeFilename(receipt.filename)}`;
-    try {
-      const bytes = await loadReceiptBytes(receipt.blobPath);
-      binaryFiles[zipPath] = bytes;
-      receiptIndexRows.push([
-        receipt.id,
-        receipt.expenseId,
-        receipt.filename,
-        receipt.contentType ?? "",
-        String(receipt.sizeBytes ?? bytes.byteLength),
-        receipt.uploadedAt.toISOString(),
-        zipPath,
-      ]);
-    } catch (err) {
-      warnings.push(
-        `Receipt file missing: ${receipt.filename} (${receipt.id}) — ${formatError(err)}`,
-      );
-      receiptIndexRows.push([
-        receipt.id,
-        receipt.expenseId,
-        receipt.filename,
-        receipt.contentType ?? "",
-        String(receipt.sizeBytes ?? ""),
-        receipt.uploadedAt.toISOString(),
-        "MISSING",
-      ]);
-    }
-  });
+  const usedReceiptPaths = new Set<string>();
+  const receiptFiles = receiptRows.map((receipt) => ({
+    receipt,
+    zipPath: uniqueZipPath(
+      `receipts/${receipt.expenseId}/${safeFilename(receipt.filename)}`,
+      usedReceiptPaths,
+    ),
+  }));
 
-  const textFiles: Record<string, string> = {
+  // Built after the files are fetched: the receipt index depends on the results.
+  const buildTextFiles = (): Record<string, string> => ({
     "summary/pnl.csv": toCsv(
       ["metric", "value_gbp", "note"],
       [
@@ -777,37 +724,139 @@ export async function buildAccountantPack({
         m.createdAt.toISOString(),
       ]),
     ),
-    "README.txt": buildReadme({ from, to, warnings, includeVat }),
-  };
+  });
 
-  if (!includeVat) {
-    delete textFiles["summary/vat.csv"];
-  } else {
-    try {
-      binaryFiles["summary/vat.pdf"] = await renderVatSummaryPdf({
-        companyName: company.name,
-        vatNumber: vat.vatNumber,
-        from,
-        to,
-        vatOnSalesPence: vat.vatOnSalesPence,
-        vatOnPurchasesPence: vat.vatOnPurchasesPence,
-        netVatPence: vat.netVatPence,
-        note: vat.note,
-      });
-    } catch (e) {
-      warnings.push(
-        `VAT PDF skipped: ${e instanceof Error ? e.message : String(e)}`,
-      );
+  async function* packEntries(): AsyncGenerator<[string, ZipEntry]> {
+    yield* fetchInBatches(
+      creditNoteRows.filter((r) => r.status === "issued"),
+      async (note) => {
+        const pdfPath = `credit-notes/${safeFilename(`${note.number}.pdf`)}`;
+        try {
+          const detail = await getCreditNoteDetail(companyId, note.id);
+          if (!detail) throw new Error("not found");
+          const bytes = await renderCreditNotePdf({
+            creditNote: detail.creditNote,
+            invoiceNumber: detail.invoice.number,
+            client: detail.client,
+            lines: detail.lines,
+            company,
+          });
+          return [pdfPath, bytes];
+        } catch (err) {
+          warnings.push(
+            `Credit note PDF missing: ${note.number} (${note.id}) — ${formatError(err)}`,
+          );
+          return null;
+        }
+      },
+    );
+
+    yield* fetchInBatches(invRows, async (inv) => {
+      const pdfPath = `invoices/${safeFilename(`${inv.number}.pdf`)}`;
+      try {
+        return [pdfPath, await resolveInvoicePdf(companyId, inv.id, inv.pdfBlobPath)];
+      } catch (err) {
+        warnings.push(
+          `Invoice PDF missing: ${inv.number} (${inv.id}) — ${formatError(err)}`,
+        );
+        return null;
+      }
+    });
+
+    yield* fetchInBatches(receiptFiles, async ({ receipt, zipPath }) => {
+      try {
+        const bytes = await loadReceiptBytes(receipt.blobPath);
+        receiptIndexRows.push([
+          receipt.id,
+          receipt.expenseId,
+          receipt.filename,
+          receipt.contentType ?? "",
+          String(receipt.sizeBytes ?? bytes.byteLength),
+          receipt.uploadedAt.toISOString(),
+          zipPath,
+        ]);
+        return [zipPath, bytes];
+      } catch (err) {
+        warnings.push(
+          `Receipt file missing: ${receipt.filename} (${receipt.id}) — ${formatError(err)}`,
+        );
+        receiptIndexRows.push([
+          receipt.id,
+          receipt.expenseId,
+          receipt.filename,
+          receipt.contentType ?? "",
+          String(receipt.sizeBytes ?? ""),
+          receipt.uploadedAt.toISOString(),
+          "MISSING",
+        ]);
+        return null;
+      }
+    });
+
+    if (includeVat) {
+      let vatPdf: Uint8Array | null = null;
+      try {
+        vatPdf = await renderVatSummaryPdf({
+          companyName: company.name,
+          vatNumber: vat.vatNumber,
+          from,
+          to,
+          vatOnSalesPence: vat.vatOnSalesPence,
+          vatOnPurchasesPence: vat.vatOnPurchasesPence,
+          netVatPence: vat.netVatPence,
+          note: vat.note,
+        });
+      } catch (e) {
+        warnings.push(
+          `VAT PDF skipped: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+      if (vatPdf) yield ["summary/vat.pdf", vatPdf];
     }
-  }
 
-  const allFiles: Record<string, ZipEntry> = { ...textFiles, ...binaryFiles };
-  const zip = buildStoreZip(allFiles);
+    const textFiles = buildTextFiles();
+    if (!includeVat) {
+      delete textFiles["summary/vat.csv"];
+    }
+    yield* Object.entries(textFiles);
+
+    // Last, so it can list every warning from the files above.
+    yield ["README.txt", buildReadme({ from, to, warnings, includeVat })];
+  }
 
   return {
     filename: `accountant-pack-${from}_${to}.zip`,
-    zip,
+    stream: zipStoreStream(packEntries()),
   };
+}
+
+/** Fetch a batch at a time, so a large pack only holds one batch in memory. */
+async function* fetchInBatches<T>(
+  items: readonly T[],
+  fetchFile: (item: T) => Promise<[string, Uint8Array] | null>,
+): AsyncGenerator<[string, ZipEntry]> {
+  for (let i = 0; i < items.length; i += FETCH_CONCURRENCY) {
+    const files = await Promise.all(
+      items.slice(i, i + FETCH_CONCURRENCY).map(fetchFile),
+    );
+    for (const file of files) {
+      if (file) yield file;
+    }
+  }
+}
+
+/** Suffix a repeated path (`a.jpg`, `a-2.jpg`). Ignores case, as unzipping on macOS and Windows does. */
+function uniqueZipPath(path: string, used: Set<string>): string {
+  const dot = path.lastIndexOf(".");
+  const hasExtension = dot > path.lastIndexOf("/") + 1;
+  const stem = hasExtension ? path.slice(0, dot) : path;
+  const extension = hasExtension ? path.slice(dot) : "";
+  let candidate = path;
+  for (let n = 2; used.has(candidate.toLowerCase()); n++) {
+    candidate = `${stem}-${n}${extension}`;
+  }
+  used.add(candidate.toLowerCase());
+  return candidate;
 }
 
 function buildCompanyCsvRows(company: Awaited<ReturnType<typeof getOrCreateCompanySettings>>) {
@@ -928,19 +977,55 @@ export function toCsv(headers: string[], rows: string[][]) {
   return [headers.join(","), ...rows.map((r) => r.map(esc).join(","))].join("\n");
 }
 
-/** Minimal ZIP (store method, no compression). Supports text and binary entries. */
-export function buildStoreZip(files: Record<string, ZipEntry>): Uint8Array {
+/**
+ * Minimal streaming ZIP (store method, no compression). Supports text and binary
+ * entries. Each entry is read when the consumer is ready for more, and a failure
+ * errors the stream so the download fails rather than ending as a valid zip.
+ */
+export function zipStoreStream(
+  entries: AsyncIterable<[string, ZipEntry]>,
+): ReadableStream<Uint8Array> {
+  const iterator = entries[Symbol.asyncIterator]();
   const encoder = new TextEncoder();
-  const parts: Uint8Array[] = [];
   const central: Uint8Array[] = [];
+  let centralSize = 0;
   let offset = 0;
 
-  for (const [name, content] of Object.entries(files)) {
+  const writeNextEntry = async (
+    controller: ReadableStreamDefaultController<Uint8Array>,
+  ) => {
+    const next = await iterator.next();
+    if (next.done) {
+      const end = new Uint8Array(22);
+      const ev = new DataView(end.buffer);
+      ev.setUint32(0, 0x06054b50, true);
+      ev.setUint16(8, central.length, true);
+      ev.setUint16(10, central.length, true);
+      ev.setUint32(12, centralSize, true);
+      ev.setUint32(16, offset, true);
+      for (const c of central) controller.enqueue(c);
+      controller.enqueue(end);
+      controller.close();
+      return;
+    }
+
+    const [name, content] = next.value;
     const nameBytes = encoder.encode(name);
     const data =
       typeof content === "string" ? encoder.encode(content) : content;
     const crc = crc32(data);
     const local = new Uint8Array(30 + nameBytes.length);
+
+    // Past these, the format needs ZIP64 and the headers would wrap around.
+    const entrySize = local.length + data.length;
+    const cenSize = 46 + nameBytes.length;
+    if (
+      central.length >= 0xfffe ||
+      offset + entrySize + centralSize + cenSize >= 0xffffffff
+    ) {
+      throw new Error("Accountant pack is too large for a ZIP file");
+    }
+
     const view = new DataView(local.buffer);
     view.setUint32(0, 0x04034b50, true);
     view.setUint16(8, 0, true);
@@ -949,9 +1034,10 @@ export function buildStoreZip(files: Record<string, ZipEntry>): Uint8Array {
     view.setUint32(22, data.length, true);
     view.setUint16(26, nameBytes.length, true);
     local.set(nameBytes, 30);
-    parts.push(local, data);
+    controller.enqueue(local);
+    controller.enqueue(data);
 
-    const cen = new Uint8Array(46 + nameBytes.length);
+    const cen = new Uint8Array(cenSize);
     const cv = new DataView(cen.buffer);
     cv.setUint32(0, 0x02014b50, true);
     cv.setUint16(10, 0, true);
@@ -963,32 +1049,24 @@ export function buildStoreZip(files: Record<string, ZipEntry>): Uint8Array {
     cen.set(nameBytes, 46);
     central.push(cen);
 
-    offset += local.length + data.length;
-  }
+    centralSize += cenSize;
+    offset += entrySize;
+  };
 
-  const centralSize = central.reduce((a, c) => a + c.length, 0);
-  const end = new Uint8Array(22);
-  const ev = new DataView(end.buffer);
-  ev.setUint32(0, 0x06054b50, true);
-  ev.setUint16(8, central.length, true);
-  ev.setUint16(10, central.length, true);
-  ev.setUint32(12, centralSize, true);
-  ev.setUint32(16, offset, true);
-
-  const total =
-    parts.reduce((a, p) => a + p.length, 0) + centralSize + end.length;
-  const out = new Uint8Array(total);
-  let o = 0;
-  for (const p of parts) {
-    out.set(p, o);
-    o += p.length;
-  }
-  for (const c of central) {
-    out.set(c, o);
-    o += c.length;
-  }
-  out.set(end, o);
-  return out;
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        await writeNextEntry(controller);
+      } catch (err) {
+        // The 200 has already gone out, so nothing else will report this.
+        console.error("Accountant pack stream failed:", err);
+        throw err;
+      }
+    },
+    async cancel() {
+      await iterator.return?.();
+    },
+  });
 }
 
 /** List entry paths from a store-only ZIP (for tests). */
@@ -1009,13 +1087,18 @@ export function listStoreZipEntries(zip: Uint8Array): string[] {
   return names;
 }
 
+const CRC_TABLE = Uint32Array.from({ length: 256 }, (_, n) => {
+  let c = n;
+  for (let k = 0; k < 8; k++) {
+    c = c & 1 ? (c >>> 1) ^ 0xedb88320 : c >>> 1;
+  }
+  return c;
+});
+
 function crc32(buf: Uint8Array): number {
   let c = 0xffffffff;
   for (let i = 0; i < buf.length; i++) {
-    c ^= buf[i];
-    for (let k = 0; k < 8; k++) {
-      c = c & 1 ? (c >>> 1) ^ 0xedb88320 : c >>> 1;
-    }
+    c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
   }
   return (c ^ 0xffffffff) >>> 0;
 }
