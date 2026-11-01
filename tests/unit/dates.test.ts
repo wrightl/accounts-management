@@ -12,6 +12,9 @@ import {
   ordinalDay,
   ordinalDayFromIso,
   friendlyDayLabel,
+  formatIsoDate,
+  formatInstantDate,
+  formatInstantDateTime,
 } from "@/lib/dates";
 
 describe("financial year month conversion", () => {
@@ -190,5 +193,52 @@ describe("friendlyDayLabel", () => {
     expect(friendlyDayLabel("2026-08-20", "2026-08-23")).toBe(
       "Thursday, 20 August 2026",
     );
+  });
+});
+
+describe("user date formats", () => {
+  it.each([
+    ["dmy", "31/03/2026"],
+    ["d-mon-y", "31 Mar 2026"],
+    ["iso", "2026-03-31"],
+    ["mdy", "03/31/2026"],
+  ] as const)("formats a calendar date as %s", (format, expected) => {
+    expect(formatIsoDate("2026-03-31", format)).toBe(expected);
+  });
+
+  it("handles a leap day and a single-digit day", () => {
+    expect(formatIsoDate("2028-02-29", "dmy")).toBe("29/02/2028");
+    expect(formatIsoDate("2026-01-05", "d-mon-y")).toBe("5 Jan 2026");
+  });
+
+  it("returns values that are not ISO dates unchanged", () => {
+    expect(formatIsoDate("not a date", "dmy")).toBe("not a date");
+    expect(formatIsoDate("2026-02-30", "dmy")).toBe("2026-02-30");
+  });
+
+  it("uses the London calendar day for late-evening BST timestamps", () => {
+    const lateBst = new Date("2026-06-30T23:30:00Z");
+    expect(formatInstantDate(lateBst, "iso")).toBe("2026-07-01");
+    expect(formatInstantDateTime(lateBst, "dmy")).toBe("01/07/2026, 00:30:00");
+  });
+
+  it("shows a dash for empty timestamps", () => {
+    expect(formatInstantDate(null, "dmy")).toBe("—");
+    expect(formatInstantDateTime(undefined, "dmy")).toBe("—");
+  });
+
+  it("keeps Today and Yesterday when a format is chosen", () => {
+    expect(friendlyDayLabel("2026-03-31", "2026-03-31", "iso")).toBe("Today");
+    expect(friendlyDayLabel("2026-03-30", "2026-03-31", "iso")).toBe("Yesterday");
+    expect(friendlyDayLabel("2026-03-01", "2026-03-31", "iso")).toBe("2026-03-01");
+  });
+
+  it("applies the format to custom period labels", () => {
+    const period = resolvePeriod("custom", 3, {
+      from: "2026-03-01",
+      to: "2026-03-31",
+      dateFormat: "iso",
+    });
+    expect(period.label).toBe("2026-03-01 – 2026-03-31");
   });
 });

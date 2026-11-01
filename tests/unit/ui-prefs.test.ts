@@ -5,6 +5,7 @@ import {
   parseUiPrefsCookie,
   parseUiPrefsInput,
   serializeUiPrefsCookie,
+  uiPrefsFromFormData,
   uiPrefsHtmlAttributes,
 } from "@/lib/ui-prefs";
 import {
@@ -113,5 +114,27 @@ describe("toast store", () => {
     expect(toastHasTimer(id!)).toBe(false);
     vi.advanceTimersByTime(10_000);
     expect(getToastSnapshot()).toHaveLength(1);
+  });
+});
+
+describe("dateFormat preference", () => {
+  it("defaults to dmy for prefs saved before the setting existed", () => {
+    expect(parseUiPrefs({ motion: "reduce" }).dateFormat).toBe("dmy");
+    expect(parseUiPrefsCookie(JSON.stringify({ text: "large" }))?.dateFormat).toBe("dmy");
+  });
+
+  it("reads a chosen format from form data", () => {
+    const formData = new FormData();
+    formData.set("dateFormat", "iso");
+    const parsed = parseUiPrefsInput(uiPrefsFromFormData(formData));
+    expect(parsed.ok && parsed.data.dateFormat).toBe("iso");
+  });
+
+  it("rejects an unknown format", () => {
+    expect(parseUiPrefsInput({ dateFormat: "yy/mm/dd" }).ok).toBe(false);
+  });
+
+  it("adds no html attribute", () => {
+    expect(uiPrefsHtmlAttributes({ ...DEFAULT_UI_PREFS, dateFormat: "iso" })).toEqual({});
   });
 });

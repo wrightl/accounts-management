@@ -12,6 +12,7 @@ import { Input, Label } from "@/components/ui/form";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { formatGBP } from "@/lib/money";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
+import { DisplayDate } from "@/components/date-format-provider";
 
 export default async function DividendsPage({
   searchParams,
@@ -119,7 +120,7 @@ export default async function DividendsPage({
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className="font-medium">
-                      {d.declaredAt} · {d.totalFormatted}
+                      <DisplayDate value={d.declaredAt} /> · {d.totalFormatted}
                     </p>
                     {d.notes && (
                       <p className="text-sm text-muted">{d.notes}</p>

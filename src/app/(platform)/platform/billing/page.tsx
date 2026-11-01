@@ -8,7 +8,7 @@ import {
 import { formatGBP } from "@/lib/money";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { StatusPill } from "@/components/platform/status-pill";
-import { formatDateUk } from "@/lib/dates";
+import { DisplayDate } from "@/components/date-format-provider";
 
 export default async function PlatformBillingPage() {
   await requirePlatformAdmin();
@@ -118,9 +118,9 @@ export default async function PlatformBillingPage() {
                     </TD>
                     <TD className="text-xs text-muted">
                       {c.trialEndsAt
-                        ? `Trial ends ${formatDateUk(c.trialEndsAt)}`
+                        ? <>Trial ends <DisplayDate value={c.trialEndsAt} /></>
                         : c.currentPeriodEnd
-                          ? `Period ends ${formatDateUk(c.currentPeriodEnd)}`
+                          ? <>Period ends <DisplayDate value={c.currentPeriodEnd} /></>
                           : "—"}
                     </TD>
                   </TR>

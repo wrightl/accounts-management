@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { guardTenantPage } from "@/lib/auth";
-import { formatIsoDateUk } from "@/lib/dates";
 import { companiesHouseConfigured } from "@/lib/companies-house/client";
 import { listIncomeCategoriesWithUsage } from "@/lib/bank/income-category-catalog";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
@@ -10,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { IncomeCategoriesPanel } from "@/components/settings/income-categories-panel";
 import { DeleteCompanyDangerZone } from "@/components/settings/delete-company-danger-zone";
 import { SettingsPageHeader, SETTINGS_FORM_WIDTH } from "@/components/settings/settings-page-header";
+import { DisplayDate } from "@/components/date-format-provider";
 
 export default async function BusinessSettingsPage() {
   const { companyId } = await guardTenantPage("settings:manage");
@@ -38,7 +38,7 @@ export default async function BusinessSettingsPage() {
               </Link>
               .
               {settings.companiesHouseSyncedAt
-                ? ` Last updated from Companies House on ${formatIsoDateUk(settings.companiesHouseSyncedAt.toISOString().slice(0, 10))}.`
+                ? <> Last updated from Companies House on <DisplayDate value={settings.companiesHouseSyncedAt} />.</>
                 : null}
             </p>
             <CompaniesHouseForm

@@ -4,9 +4,10 @@ import { redirect } from "next/navigation";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { SafeToPayAssumptionsForm } from "@/components/safe-to-pay/assumptions-form";
 import { buttonClasses } from "@/components/ui/button";
-import { formatIsoDateUk } from "@/lib/dates";
 import { formatGBP } from "@/lib/money";
 import { getSafeToPay } from "@/lib/safe-to-pay/queries";
+import { DisplayDate } from "@/components/date-format-provider";
+import { getDateFormat } from "@/lib/date-format.server";
 
 export const metadata: Metadata = { title: "Safe to pay yourself" };
 
@@ -54,7 +55,7 @@ export default async function SafeToPayPage() {
     hasPermission("settings:manage"),
     hasPermission("accounts:write"),
   ]);
-  const data = await getSafeToPay(companyId);
+  const data = await getSafeToPay(companyId, undefined, await getDateFormat());
   const { result, cash } = data;
 
   return (
@@ -100,7 +101,7 @@ export default async function SafeToPayPage() {
           ) : null}
         </div>
         <div className="rounded-2xl border border-border bg-surface p-5">
-          <p className="text-sm text-muted">By {formatIsoDateUk(data.until)}, if clients pay on time</p>
+          <p className="text-sm text-muted">By <DisplayDate value={data.until} />, if clients pay on time</p>
           <p className="mt-1 font-display text-4xl font-semibold tabular-nums">
             {formatGBP(result.safeLaterPence)}
           </p>
@@ -125,8 +126,8 @@ export default async function SafeToPayPage() {
             {cash.known ? (
               <span className="block text-xs">
                 {cash.source === "statement"
-                  ? `From the latest statement balance, ${formatIsoDateUk(cash.asOf)}`
-                  : `Opening cash plus transactions to ${formatIsoDateUk(cash.asOf)}`}
+                  ? <>From the latest statement balance, <DisplayDate value={cash.asOf} /></>
+                  : <>Opening cash plus transactions to <DisplayDate value={cash.asOf} /></>}
               </span>
             ) : null}
           </Row>
@@ -163,7 +164,7 @@ export default async function SafeToPayPage() {
         </dl>
 
         <h3 className="mt-8 text-sm font-medium">
-          Expected in by {formatIsoDateUk(data.until)}
+          Expected in by <DisplayDate value={data.until} />
         </h3>
         <dl className="mt-2 grid grid-cols-[1fr_auto] gap-x-6 gap-y-1 text-sm">
           {data.expectedParts.map((p) => (

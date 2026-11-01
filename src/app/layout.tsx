@@ -7,6 +7,7 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 import { brand } from "@/lib/brand";
 import { PRODUCT_LOCKUP, PRODUCT_TAGLINE, MAKER_DISPLAY } from "@/lib/product";
 import { AppProviders } from "@/components/providers";
+import { DateFormatProvider } from "@/components/date-format-provider";
 import {
   DEFAULT_UI_PREFS,
   parseUiPrefsCookie,
@@ -116,7 +117,9 @@ export default async function RootLayout({
       {...uiAttrs}
     >
       <body className="flex min-h-full flex-col bg-background font-sans text-foreground">
-        <AppProviders>{children}</AppProviders>
+        <AppProviders>
+          <DateFormatProvider format={prefs.dateFormat}>{children}</DateFormatProvider>
+        </AppProviders>
         <Analytics />
         <SpeedInsights />
       </body>

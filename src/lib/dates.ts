@@ -165,16 +165,12 @@ export function periodPresetLabel(preset: PeriodPreset): string {
 }
 
 /** Short UK label for a custom from–to range. */
-export function formatPeriodRangeLabel(from: string, to: string): string {
-  const fmt = (iso: string) => {
-    const { year, month, day } = parseIso(iso);
-    return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString("en-GB", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      timeZone: "UTC",
-    });
-  };
+export function formatPeriodRangeLabel(
+  from: string,
+  to: string,
+  format: DateFormat = "d-mon-y",
+): string {
+  const fmt = (iso: string) => formatIsoDate(iso, format);
   if (from === to) return fmt(from);
   return `${fmt(from)} – ${fmt(to)}`;
 }
@@ -290,6 +286,7 @@ function resolveCustomPeriod(
   fromRaw: string,
   toRaw: string,
   today: string = todayIsoDate(),
+  dateFormat?: DateFormat,
 ): ResolvedSpendingPeriod {
   const { year, month } = parseIso(today);
   const defaultFrom = startOfMonth(year, month);
@@ -309,7 +306,7 @@ function resolveCustomPeriod(
     compareFrom,
     compareTo,
     buckets,
-    label: formatPeriodRangeLabel(from, to),
+    label: formatPeriodRangeLabel(from, to, dateFormat),
     compareLabel: "Prior period",
   };
 }
@@ -317,11 +314,11 @@ function resolveCustomPeriod(
 export function resolvePeriod(
   preset: PeriodPreset,
   fyEndMonth: number,
-  options?: { from?: string; to?: string; today?: string },
+  options?: { from?: string; to?: string; today?: string; dateFormat?: DateFormat },
 ): ResolvedSpendingPeriod {
   const today = options?.today ?? todayIsoDate();
   if (preset === "custom") {
-    return resolveCustomPeriod(options?.from ?? "", options?.to ?? "", today);
+    return resolveCustomPeriod(options?.from ?? "", options?.to ?? "", today, options?.dateFormat);
   }
   return resolveSpendingPeriod(preset, fyEndMonth, today);
 }
@@ -367,11 +364,17 @@ export function ordinalDayFromIso(iso: string): string {
 }
 
 /**
- * Group heading for a booked date: "Today", "Yesterday", or a long UK date.
+ * Group heading for a booked date: "Today", "Yesterday", then the date in
+ * `format`, or a long UK date when no format is given.
  */
-export function friendlyDayLabel(iso: string, today: string = todayIsoDate()): string {
+export function friendlyDayLabel(
+  iso: string,
+  today: string = todayIsoDate(),
+  format?: DateFormat,
+): string {
   if (iso === today) return "Today";
   if (iso === addDays(today, -1)) return "Yesterday";
+  if (format) return formatIsoDate(iso, format);
   const { year, month, day } = parseIso(iso);
   return new Date(Date.UTC(year, month - 1, day, 12)).toLocaleDateString("en-GB", {
     weekday: "long",
@@ -386,6 +389,7 @@ export function friendlyDayLabel(iso: string, today: string = todayIsoDate()): s
 export function formatChartTooltipDate(
   iso: string,
   buckets: "day" | "month",
+  format: DateFormat = "d-mon-y",
 ): string {
   if (buckets === "month") {
     const [year, month] = iso.split("-").map(Number);
@@ -395,13 +399,7 @@ export function formatChartTooltipDate(
       timeZone: "UTC",
     });
   }
-  const { year, month, day } = parseIso(iso);
-  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+  return formatIsoDate(iso, format);
 }
 
 /** UK short date for PDFs and client-facing documents, e.g. 31/03/2026. */
@@ -427,26 +425,57 @@ export function formatIsoDateLong(iso: string): string {
   });
 }
 
+/** Date formats a user can choose for the signed-in app. */
+export const DATE_FORMATS = ["dmy", "d-mon-y", "iso", "mdy"] as const;
+
+export type DateFormat = (typeof DATE_FORMATS)[number];
+
+export const DEFAULT_DATE_FORMAT: DateFormat = "dmy";
+
+/**
+ * A calendar date in the user's chosen format. Anything that is not a valid
+ * ISO date is returned unchanged rather than shown as a wrong date.
+ */
+export function formatIsoDate(iso: string, format: DateFormat): string {
+  if (!parseIsoDate(iso)) return iso;
+  const { year, month, day } = parseIso(iso.trim());
+  const dd = String(day).padStart(2, "0");
+  const mm = String(month).padStart(2, "0");
+  switch (format) {
+    case "dmy":
+      return `${dd}/${mm}/${year}`;
+    case "d-mon-y":
+      return `${day} ${monthName(month).slice(0, 3)} ${year}`;
+    case "iso":
+      return `${year}-${mm}-${dd}`;
+    case "mdy":
+      return `${mm}/${dd}/${year}`;
+  }
+}
+
+/** Calendar date of a timestamp in UK civil time, in the user's chosen format. */
+export function formatInstantDate(
+  value: Date | null | undefined,
+  format: DateFormat,
+): string {
+  if (!value) return "—";
+  return formatIsoDate(todayIsoDate(value), format);
+}
+
+/** Date and 24-hour time of a timestamp in UK civil time, in the user's chosen format. */
+export function formatInstantDateTime(
+  value: Date | null | undefined,
+  format: DateFormat,
+): string {
+  if (!value) return "—";
+  const time = new Intl.DateTimeFormat("en-GB", {
+    timeZone: APP_TIMEZONE,
+    timeStyle: "medium",
+  }).format(value);
+  return `${formatInstantDate(value, format)}, ${time}`;
+}
+
 /** Whether an ISO calendar date falls on a Monday. */
 export function isMonday(isoDate: string): boolean {
   return new Date(`${isoDate}T12:00:00Z`).getUTCDay() === 1;
-}
-
-/** Date and time in UK civil time, for timestamps shown in the UI. */
-export function formatDateTimeUk(value: Date | null | undefined): string {
-  if (!value) return "—";
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: APP_TIMEZONE,
-    dateStyle: "short",
-    timeStyle: "medium",
-  }).format(value);
-}
-
-/** Calendar date in UK civil time. */
-export function formatDateUk(value: Date | null | undefined): string {
-  if (!value) return "—";
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: APP_TIMEZONE,
-    dateStyle: "short",
-  }).format(value);
 }

@@ -9,7 +9,7 @@ import {
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { ExpandableText } from "@/components/platform/expandable-text";
 import { ClearFilters, Pager, parseOffset } from "@/components/platform/pager";
-import { formatDateTimeUk } from "@/lib/dates";
+import { DisplayDate } from "@/components/date-format-provider";
 
 const PAGE_SIZE = 50;
 
@@ -101,7 +101,7 @@ export default async function PlatformActivityPage({
               {rows.map((r) => (
                 <TR key={r.id}>
                   <TD className="whitespace-nowrap text-muted">
-                    {formatDateTimeUk(r.createdAt)}
+                    <DisplayDate value={r.createdAt} withTime />
                   </TD>
                   <TD>
                     {r.companyId ? (

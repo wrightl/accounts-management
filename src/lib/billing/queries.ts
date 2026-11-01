@@ -11,6 +11,7 @@ import { ensureCompanyBilling } from "@/lib/billing/company-billing";
 import { isStripeConfigured, getStripeCatalog } from "@/lib/billing/catalog";
 import type { StripeCatalog } from "@/lib/billing/catalog-types";
 import { getStripe } from "@/lib/billing/stripe";
+import { DEFAULT_DATE_FORMAT, formatInstantDate, type DateFormat } from "@/lib/dates";
 
 export type BillingPaymentMethodSummary = {
   brand: string;
@@ -184,6 +185,7 @@ export type BillingBanner = {
 
 export async function getBillingBanner(
   companyId: string,
+  dateFormat: DateFormat = DEFAULT_DATE_FORMAT,
 ): Promise<BillingBanner> {
   try {
     await ensureCompanyBilling(companyId);
@@ -234,7 +236,7 @@ export async function getBillingBanner(
     if (e.cancelAtPeriodEnd && e.currentPeriodEnd) {
       return {
         tone: "warn",
-        message: `Your subscription cancels on ${e.currentPeriodEnd.toLocaleDateString("en-GB")}.`,
+        message: `Your subscription cancels on ${formatInstantDate(e.currentPeriodEnd, dateFormat)}.`,
         ctaHref: "/settings/billing",
         ctaLabel: "Manage billing",
       };

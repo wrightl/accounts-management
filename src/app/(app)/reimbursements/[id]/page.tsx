@@ -10,6 +10,7 @@ import { ReimbursementActions } from "@/components/reimbursements/actions";
 import { buttonClasses } from "@/components/ui/button";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
+import { DisplayDate } from "@/components/date-format-provider";
 
 export default async function ReimbursementDetailPage({
   params,
@@ -55,7 +56,7 @@ export default async function ReimbursementDetailPage({
             {detail.reimbursement.paidAt
               ? ` · Paid ${detail.reimbursement.paidAt.toISOString().slice(0, 10)}`
               : detail.reimbursement.reimbursementDate
-                ? ` · Reimbursement date ${detail.reimbursement.reimbursementDate}`
+                ? <> · Reimbursement date <DisplayDate value={detail.reimbursement.reimbursementDate} /></>
                 : null}
           </p>
           {detail.reimbursement.reference ? (

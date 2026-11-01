@@ -3,8 +3,8 @@ import { requirePlatformAdmin } from "@/lib/platform";
 import { hasDatabaseClient } from "@/db";
 import { getPlatformOverviewStats } from "@/lib/platform/queries";
 import { getPlatformSettings } from "@/lib/platform-settings";
-import { formatDateTimeUk } from "@/lib/dates";
 import { cn } from "@/lib/utils";
+import { DisplayDate } from "@/components/date-format-provider";
 
 export default async function PlatformOverviewPage() {
   await requirePlatformAdmin();
@@ -84,7 +84,7 @@ export default async function PlatformOverviewPage() {
       <h1 className="font-display text-2xl font-semibold">Overview</h1>
       <p className="mt-1 text-muted">
         Platform health at a glance. Last daily cron:{" "}
-        {settings.lastCronDailyAt ? formatDateTimeUk(settings.lastCronDailyAt) : "never"}
+        {settings.lastCronDailyAt ? <DisplayDate value={settings.lastCronDailyAt} withTime /> : "never"}
         .
       </p>
 

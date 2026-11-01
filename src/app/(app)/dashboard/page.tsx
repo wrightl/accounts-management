@@ -26,6 +26,9 @@ import {
 } from "@/components/dashboard/nav";
 import { getMenuState } from "@/lib/menu/queries";
 import { getMenuSuggestions, type MenuSuggestion } from "@/lib/menu/suggestions";
+import { DisplayDate } from "@/components/date-format-provider";
+import { getDateFormat } from "@/lib/date-format.server";
+import { todayIsoDate } from "@/lib/dates";
 
 type MenuPrompt =
   | { kind: "questions" }
@@ -97,7 +100,7 @@ export default async function DashboardOverview({
       overview = await getDashboardOverview(user.companyId, user, sp.period);
       if (user.entityType === "limited_company" && can(user.role, "reports:read")) {
         // Secondary figure: never let it break the dashboard.
-        safeToPay = await getSafeToPay(user.companyId).catch(() => null);
+        safeToPay = await getSafeToPay(user.companyId, undefined, await getDateFormat()).catch(() => null);
       }
       // Secondary too: a failed suggestion must not break the dashboard.
       menuPrompt = await loadMenuPrompt(user).catch(() => null);
@@ -131,7 +134,7 @@ export default async function DashboardOverview({
             Welcome{user.name ? `, ${user.name.split(" ")[0]}` : ""}
           </h1>
           <p className="mt-1 text-muted">
-            {overview ? overview.todayLabel : "Business overview"}
+            {overview ? <DisplayDate value={todayIsoDate()} /> : "Business overview"}
             {" · "}
             <Link
               href="/help"

@@ -18,6 +18,7 @@ import {
   lineNetPence,
 } from "@/lib/money";
 import { clientDisplayName } from "@/lib/clients/display";
+import { DisplayDate } from "@/components/date-format-provider";
 
 export default async function CreditNoteDetailPage({
   params,
@@ -56,7 +57,7 @@ export default async function CreditNoteDetailPage({
             <Link href={`/clients/${client.id}`} className="text-foreground hover:underline">
               {clientDisplayName(client)}
             </Link>
-            {` · Issued ${creditNote.issueDate} · Credits `}
+            <> · Issued <DisplayDate value={creditNote.issueDate} /> · Credits </>
             <Link href={`/invoices/${invoice.id}`} className="text-foreground hover:underline">
               {invoice.number}
             </Link>

@@ -45,6 +45,8 @@ import {
   normalizeExpensePaymentFields,
   parseExpenseInput,
 } from "@/lib/expenses/schema";
+import { useDateFormat } from "@/components/date-format-provider";
+import { formatIsoDate } from "@/lib/dates";
 
 type ExpenseStatusOption = "" | "recorded" | "reimbursable" | "company_paid";
 
@@ -137,6 +139,7 @@ export function ExpenseForm({
   const formRef = useRef<HTMLFormElement>(null);
   const [pending, startTransition] = useTransition();
   const today = new Date().toISOString().slice(0, 10);
+  const dateFormat = useDateFormat();
   const [description, setDescription] = useState(
     expense?.description ?? fromBankTransaction?.description ?? "",
   );
@@ -567,7 +570,7 @@ export function ExpenseForm({
   } else if (currentRate.foreignPerGbp == null) {
     rateHint = `No ${currency} exchange rate is available, so enter the amount in GBP.`;
   } else {
-    const rateText = `£1 = ${currentRate.foreignPerGbp} ${currency} (Bank of England, ${currentRate.observationDate})`;
+    const rateText = `£1 = ${currentRate.foreignPerGbp} ${currency} (Bank of England, ${currentRate.observationDate ? formatIsoDate(currentRate.observationDate, dateFormat) : ""})`;
     rateHint = gbpFollowsRate
       ? `Converted at ${rateText}. Change it to what your bank charged if you know it.`
       : `The Bank of England rate is ${rateText}.`;

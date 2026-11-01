@@ -4,6 +4,7 @@ import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import type { BankTransactionSummaryData } from "@/lib/bank/summary-types";
 import { cn } from "@/lib/utils";
+import { DisplayDate } from "@/components/date-format-provider";
 
 const SLICE_COLORS: Record<string, string> = {
   Incoming: "var(--periwinkle)",
@@ -187,7 +188,7 @@ export function TransactionsSummaryPanel({
               <dd className="text-right">
                 <CardValue className="mt-0 text-lg">{summary.statementBalanceFormatted}</CardValue>
                 {summary.statementBalanceDate && (
-                  <p className="text-xs text-muted">as at {summary.statementBalanceDate}</p>
+                  <p className="text-xs text-muted">as at <DisplayDate value={summary.statementBalanceDate} /></p>
                 )}
               </dd>
             </div>

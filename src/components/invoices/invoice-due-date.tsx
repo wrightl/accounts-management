@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import type { InvoiceStatus } from "@/lib/invoices/status";
+import { DisplayDate } from "@/components/date-format-provider";
 
 export function InvoiceDueDate({
   dueDate,
@@ -16,7 +17,7 @@ export function InvoiceDueDate({
     return <span className={cn("text-muted", className)}>—</span>;
   }
 
-  const label = `${prefix ?? ""}${dueDate}`;
+  const label = <>{prefix ?? ""}<DisplayDate value={dueDate} /></>;
 
   if (status === "overdue") {
     return (

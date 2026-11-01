@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Table, THead, TBody, TR, TD } from "@/components/ui/table";
 import { sortHeaders } from "@/components/ui/sortable-th";
 import { defineTableSort, parseTableSort, rankIn, sortRows } from "@/lib/table-sort";
+import { DisplayDate } from "@/components/date-format-provider";
 
 /** "created" is the loaded order (newest first) and has no header. */
 const SORT = defineTableSort({
@@ -80,7 +81,7 @@ export default async function CreditNotesPage({
                   <TD>
                     <CreditNoteStatusBadge status={cn.status} />
                   </TD>
-                  <TD>{cn.issueDate}</TD>
+                  <TD><DisplayDate value={cn.issueDate} /></TD>
                   <TD className="text-right">{cn.grossFormatted}</TD>
                 </TR>
               ))}

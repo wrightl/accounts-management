@@ -9,7 +9,7 @@ import {
 import { getLatestCronRuns } from "@/lib/platform/queries";
 import { ExpandableText } from "@/components/platform/expandable-text";
 import { StatusPill } from "@/components/platform/status-pill";
-import { formatDateTimeUk } from "@/lib/dates";
+import { DisplayDate } from "@/components/date-format-provider";
 
 type CronRun = Awaited<ReturnType<typeof getLatestCronRuns>>["daily"] | null;
 
@@ -18,7 +18,7 @@ function CronResult({ label, at, run }: { label: string; at: Date | null | undef
     <div className="space-y-1 border-t border-border pt-3 first:border-0 first:pt-0">
       <div className="flex justify-between gap-4">
         <dt className="text-muted">{label}</dt>
-        <dd>{at ? formatDateTimeUk(at) : "never"}</dd>
+        <dd>{at ? <DisplayDate value={at} withTime /> : "never"}</dd>
       </div>
       {run ? (
         <dd className="space-y-1">
@@ -29,7 +29,7 @@ function CronResult({ label, at, run }: { label: string; at: Date | null | undef
               tone={run.level === "error" ? "danger" : run.level === "warn" ? "warning" : "success"}
             />
             {run.source.endsWith(".manual") ? "manual run" : "scheduled"} ·{" "}
-            {formatDateTimeUk(run.createdAt)}
+            <DisplayDate value={run.createdAt} withTime />
           </div>
           <ExpandableText
             text={run.meta ? JSON.stringify(run.meta, null, 2) : run.message}

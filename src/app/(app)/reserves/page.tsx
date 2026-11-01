@@ -5,7 +5,7 @@ import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { OpeningBalancesForm } from "@/components/ledger/opening-balances-form";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
-import { financialYearStartDate, formatIsoDateUk } from "@/lib/dates";
+import { financialYearStartDate } from "@/lib/dates";
 import { addDays, ctPaymentDueDate } from "@/lib/ledger/corporation-tax";
 import {
   getDirectorLoanBalances,
@@ -13,6 +13,7 @@ import {
   listDirectorOpeningBalances,
 } from "@/lib/ledger/queries";
 import { formatGBP } from "@/lib/money";
+import { DisplayDate } from "@/components/date-format-provider";
 
 export const metadata: Metadata = { title: "Tax & reserves" };
 
@@ -76,13 +77,13 @@ export default async function ReservesPage() {
           <CardTitle>Profit this year to date</CardTitle>
           <CardValue>{formatGBP(currentYear.profitPence)}</CardValue>
           <p className="mt-1 text-xs text-muted">
-            {formatIsoDateUk(currentYear.start)} to {formatIsoDateUk(position.asOf)}
+            <DisplayDate value={currentYear.start} /> to <DisplayDate value={position.asOf} />
           </p>
         </Card>
         <Card>
           <CardTitle>Corporation tax so far</CardTitle>
           <CardValue>{formatGBP(currentYear.tax.taxPence)}</CardValue>
-          <p className="mt-1 text-xs text-muted">Due {formatIsoDateUk(taxDue)}</p>
+          <p className="mt-1 text-xs text-muted">Due <DisplayDate value={taxDue} /></p>
         </Card>
       </div>
 
@@ -114,8 +115,8 @@ export default async function ReservesPage() {
           </dd>
         </dl>
         <p className="mt-3 max-w-2xl text-xs text-muted">
-          Worked out on accounting profit for {formatIsoDateUk(currentYear.start)} to{" "}
-          {formatIsoDateUk(currentYear.end)} at current rates
+          Worked out on accounting profit for <DisplayDate value={currentYear.start} /> to{" "}
+          <DisplayDate value={currentYear.end} /> at current rates
           {settings.associatedCompanies > 0
             ? `, with the limits shared across ${settings.associatedCompanies + 1} associated companies`
             : ""}
@@ -142,7 +143,7 @@ export default async function ReservesPage() {
               {position.years.map((y) => (
                 <TR key={y.start}>
                   <TD>
-                    Year to {formatIsoDateUk(y.end)}
+                    Year to <DisplayDate value={y.end} />
                     {y.current ? <span className="text-muted"> (so far)</span> : null}
                   </TD>
                   <TD className="text-right tabular-nums">
@@ -166,7 +167,7 @@ export default async function ReservesPage() {
         {position.hasOpeningBalances ? (
           <p className="mt-3 text-xs text-muted">
             Starts from retained earnings of {formatGBP(settings.openingReservesPence ?? 0)} at{" "}
-            {formatIsoDateUk(settings.openingBalancesAsAt)}.
+            <DisplayDate value={settings.openingBalancesAsAt} />.
           </p>
         ) : null}
         <p className="mt-1 text-xs text-muted">

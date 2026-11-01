@@ -15,6 +15,8 @@ import {
 } from "@/lib/dates";
 import { bankListHref, type BankListParams } from "@/lib/bank/list-params";
 import { cn } from "@/lib/utils";
+import { useDateFormat } from "@/components/date-format-provider";
+import type { DateFormat } from "@/lib/dates";
 
 const ALL_TIME = { value: "", label: "All time" } as const;
 
@@ -26,10 +28,10 @@ function defaultCustomRange(): { from: string; to: string } {
 
 type PeriodRange = { period: PeriodPreset | ""; from: string; to: string };
 
-function periodButtonLabel(params: PeriodRange): string {
+function periodButtonLabel(params: PeriodRange, dateFormat: DateFormat): string {
   if (!params.period) return ALL_TIME.label;
   if (params.period === "custom" && params.from && params.to) {
-    return formatPeriodRangeLabel(params.from, params.to);
+    return formatPeriodRangeLabel(params.from, params.to, dateFormat);
   }
   return periodPresetLabel(params.period);
 }
@@ -52,6 +54,7 @@ export function PeriodRangeSelect({
   value: PeriodRange;
   onSelect: (range: PeriodRange) => void;
 }) {
+  const dateFormat = useDateFormat();
   const uid = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -104,7 +107,7 @@ export function PeriodRangeSelect({
             "w-full justify-between gap-2 font-normal",
           )}
         >
-          <span className="truncate">{periodButtonLabel(params)}</span>
+          <span className="truncate">{periodButtonLabel(params, dateFormat)}</span>
           <ChevronDown
             className={cn("h-4 w-4 shrink-0 transition-transform", open && "rotate-180")}
             aria-hidden

@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { guardTenantPage } from "@/lib/auth";
 import { ForecastView } from "@/components/forecast/forecast-view";
-import { formatIsoDateUk } from "@/lib/dates";
 import { getForecastInputs } from "@/lib/forecast/queries";
 import { formatGBP } from "@/lib/money";
+import { DisplayDate } from "@/components/date-format-provider";
 
 export const metadata: Metadata = { title: "Cash forecast" };
 
@@ -60,8 +60,8 @@ export default async function ForecastPage() {
             {inputs.cash.known
               ? `${formatGBP(inputs.cash.cashPence)} ${
                   inputs.cash.source === "statement"
-                    ? `from the latest statement balance on ${formatIsoDateUk(inputs.cash.asOf)}`
-                    : `from opening cash plus transactions to ${formatIsoDateUk(inputs.cash.asOf)}`
+                    ? <>from the latest statement balance on <DisplayDate value={inputs.cash.asOf} /></>
+                    : <>from opening cash plus transactions to <DisplayDate value={inputs.cash.asOf} /></>
                 }`
               : "unknown"}
             .

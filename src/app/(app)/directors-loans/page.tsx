@@ -7,10 +7,11 @@ import {
   DirectorLoanEntryForm,
 } from "@/components/ledger/director-loan-entry-form";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
-import { formatIsoDateUk, todayIsoDate } from "@/lib/dates";
+import { todayIsoDate } from "@/lib/dates";
 import type { DirectorLoanWarning } from "@/lib/ledger/director-loan";
 import { getDirectorLoanAccounts, listDirectorLoanEntries } from "@/lib/ledger/queries";
 import { formatGBP } from "@/lib/money";
+import { DisplayDate } from "@/components/date-format-provider";
 
 export const metadata: Metadata = { title: "Director's loans" };
 
@@ -26,7 +27,7 @@ function WarningText({ warning }: { warning: DirectorLoanWarning }) {
       return (
         <>
           {formatGBP(warning.outstandingPence)} was still owed at the year end on{" "}
-          {formatIsoDateUk(warning.yearEnd)}. Repay it by {formatIsoDateUk(warning.repayBy)} or
+          <DisplayDate value={warning.yearEnd} />. Repay it by <DisplayDate value={warning.repayBy} /> or
           the company pays {formatGBP(warning.taxPence)} of section 455 tax (33.75%), refunded
           only once the loan is repaid.
         </>
@@ -34,8 +35,8 @@ function WarningText({ warning }: { warning: DirectorLoanWarning }) {
     case "overdrawn":
       return (
         <>
-          If it&apos;s still overdrawn at the year end on {formatIsoDateUk(warning.yearEnd)} and
-          not repaid by {formatIsoDateUk(warning.repayBy)}, the company pays section 455 tax of
+          If it&apos;s still overdrawn at the year end on <DisplayDate value={warning.yearEnd} /> and
+          not repaid by <DisplayDate value={warning.repayBy} />, the company pays section 455 tax of
           about {formatGBP(warning.taxPence)}.
         </>
       );
@@ -155,7 +156,7 @@ export default async function DirectorsLoansPage() {
               <TBody>
                 {entries.map((e) => (
                   <TR key={e.id}>
-                    <TD>{formatIsoDateUk(e.entryDate)}</TD>
+                    <TD><DisplayDate value={e.entryDate} /></TD>
                     <TD>{e.directorName}</TD>
                     <TD>{KIND_LABEL[e.kind]}</TD>
                     <TD className="text-muted">{e.description}</TD>
@@ -173,7 +174,7 @@ export default async function DirectorsLoansPage() {
         )}
         {accounts.settings.openingBalancesAsAt ? (
           <p className="mt-3 text-xs text-muted">
-            Opening balances are at {formatIsoDateUk(accounts.settings.openingBalancesAsAt)}. Set
+            Opening balances are at <DisplayDate value={accounts.settings.openingBalancesAsAt} />. Set
             them on{" "}
             <Link href="/reserves" className="underline">
               Tax &amp; reserves

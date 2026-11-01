@@ -6,6 +6,7 @@ import type { BankTransactionSummaryData } from "@/lib/bank/summary-types";
 import { getDb } from "@/db";
 import { bankAccounts, bankTransactions, companies, reconciliationMatches } from "@/db/schema";
 import { formatGBP, poundsToPence } from "@/lib/money";
+import { formatIsoDate, type DateFormat } from "@/lib/dates";
 
 export type BankTransactionSummary = BankTransactionSummaryData;
 
@@ -24,14 +25,8 @@ export function parseStatementBalancePence(raw: unknown): number | null {
   return null;
 }
 
-function formatSummaryPeriod(from: string, to: string): string {
-  const fmt = (iso: string) =>
-    new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-GB", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      timeZone: "UTC",
-    });
+function formatSummaryPeriod(from: string, to: string, dateFormat: DateFormat): string {
+  const fmt = (iso: string) => formatIsoDate(iso, dateFormat);
   if (from && to) return `${fmt(from)} – ${fmt(to)}`;
   if (from) return `From ${fmt(from)}`;
   if (to) return `Through ${fmt(to)}`;
@@ -43,6 +38,7 @@ export async function getBankTransactionSummary(
   filters: Partial<
     Pick<BankListParams, "q" | "type" | "category" | "reconciliation" | "from" | "to">
   >,
+  dateFormat: DateFormat = "d-mon-y",
 ): Promise<BankTransactionSummary> {
   const db = getDb();
   const where = bankListWhere(companyId, filters);
@@ -140,7 +136,7 @@ export async function getBankTransactionSummary(
   const openingCashAsAt = company?.openingCashAsAt ?? null;
 
   return {
-    periodLabel: formatSummaryPeriod(filters.from ?? "", filters.to ?? ""),
+    periodLabel: formatSummaryPeriod(filters.from ?? "", filters.to ?? "", dateFormat),
     incomingPence,
     outgoingPence,
     netPence,

@@ -15,8 +15,8 @@ import {
 } from '@/lib/bank/list-params';
 import { nextTableSort } from '@/lib/table-sort';
 import type { BankTransactionListItem } from '@/lib/bank/queries';
-import { friendlyDayLabel } from '@/lib/dates';
 import { cn } from '@/lib/utils';
+import { FriendlyDay } from "@/components/date-format-provider";
 
 function CategoryDisplay({
     row,
@@ -316,13 +316,13 @@ export function BankTransactionCardList({
     canWrite: boolean;
     showAccount?: boolean;
 }) {
-    const groups = groupByBookedAt(rows, (iso) => friendlyDayLabel(iso));
+    const groups = groupByBookedAt(rows, (iso) => iso);
     return (
         <div className="space-y-8">
             {groups.map((group) => (
                 <section key={group.date}>
                     <h2 className="font-display text-lg font-semibold">
-                        {group.label}
+                        <FriendlyDay iso={group.date} />
                     </h2>
                     <div className="mt-3 grid gap-3">
                         {group.items.map((r) => (

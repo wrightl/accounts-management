@@ -18,6 +18,7 @@ import {
 } from "@/components/dashboard/nav";
 import { getMenuFeatures } from "@/lib/menu/queries";
 import { DashboardShell } from "@/components/dashboard/shell";
+import { DateFormatProvider } from "@/components/date-format-provider";
 import { SyncUiPrefsCookie } from "@/components/users/sync-ui-prefs-cookie";
 import { parseUiPrefs } from "@/lib/ui-prefs";
 
@@ -125,7 +126,7 @@ export default async function AppLayout({
     }
     try {
       const { getBillingBanner } = await import("@/lib/billing/queries");
-      billingBanner = await getBillingBanner(user.companyId);
+      billingBanner = await getBillingBanner(user.companyId, parseUiPrefs(uiPrefsRaw).dateFormat);
     } catch {
       billingBanner = null;
     }
@@ -137,36 +138,38 @@ export default async function AppLayout({
   return (
     <>
       <SyncUiPrefsCookie prefs={uiPrefs} />
-      <DashboardShell
-        groups={groups}
-        hiddenGroups={hiddenGroups}
-        settingsPages={settingsPages}
-        canEditMenu={Boolean(localUserId && hasDatabaseClient())}
-        role={user.role}
-        userName={user.name}
-        avatarUrl={avatarUrl}
-        companyId={user.companyId}
-        companyName={company.name}
-        companyLogoUrl={company.logoUrl}
-        memberships={memberships.map((m) => ({
-          companyId: m.companyId,
-          companyName: m.companyName,
-          logoUrl: m.logoUrl,
-        }))}
-        navCollapsed={navCollapsed}
-        overdueInvoiceCount={overdueInvoiceCount}
-        showPlatformLink={showPlatformLink}
-        maintenanceBanner={maintenanceBanner}
-        billingBanner={billingBanner}
-        suspendedReason={
-          company.suspendedAt
-            ? company.suspendedReason ??
-              "This company is suspended. Contact support for help."
-            : null
-        }
-      >
-        {children}
-      </DashboardShell>
+      <DateFormatProvider format={uiPrefs.dateFormat}>
+        <DashboardShell
+          groups={groups}
+          hiddenGroups={hiddenGroups}
+          settingsPages={settingsPages}
+          canEditMenu={Boolean(localUserId && hasDatabaseClient())}
+          role={user.role}
+          userName={user.name}
+          avatarUrl={avatarUrl}
+          companyId={user.companyId}
+          companyName={company.name}
+          companyLogoUrl={company.logoUrl}
+          memberships={memberships.map((m) => ({
+            companyId: m.companyId,
+            companyName: m.companyName,
+            logoUrl: m.logoUrl,
+          }))}
+          navCollapsed={navCollapsed}
+          overdueInvoiceCount={overdueInvoiceCount}
+          showPlatformLink={showPlatformLink}
+          maintenanceBanner={maintenanceBanner}
+          billingBanner={billingBanner}
+          suspendedReason={
+            company.suspendedAt
+              ? company.suspendedReason ??
+                "This company is suspended. Contact support for help."
+              : null
+          }
+        >
+          {children}
+        </DashboardShell>
+      </DateFormatProvider>
     </>
   );
 }

@@ -12,8 +12,8 @@ import {
 import { dismissBankMatch } from "@/actions/bank";
 import { Button } from "@/components/ui/button";
 import { FieldError } from "@/components/ui/form";
-import { formatIsoDateUk } from "@/lib/dates";
 import { formatGBP } from "@/lib/money";
+import { DisplayDate } from "@/components/date-format-provider";
 
 export type CategorySuggestionRow = {
   id: string;
@@ -127,7 +127,7 @@ export function CategorySuggestionList({
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium">
                 {r.counterparty ?? "Unknown payee"} · {formatGBP(-r.amountPence)}
-                <span className="font-normal text-muted"> · {formatIsoDateUk(r.bookedAt)}</span>
+                <span className="font-normal text-muted"> · <DisplayDate value={r.bookedAt} /></span>
               </p>
               <p className="mt-0.5 text-sm">
                 → {r.categoryLabel}
@@ -194,11 +194,11 @@ export function ReceiptMatchList({ rows, canWrite }: { rows: ReceiptMatchRow[]; 
               <div className="min-w-0 flex-1 text-sm">
                 <p className="font-medium">
                   {r.expenseDescription} · {formatGBP(r.expenseAmountPence)}
-                  {r.spentAt ? <span className="font-normal text-muted"> · {formatIsoDateUk(r.spentAt)}</span> : null}
+                  {r.spentAt ? <span className="font-normal text-muted"> · <DisplayDate value={r.spentAt} /></span> : null}
                 </p>
                 <p className="mt-0.5">
                   → {r.counterparty ?? "Card payment"} · {formatGBP(bank)}
-                  <span className="text-muted"> · {formatIsoDateUk(r.bookedAt)}</span>
+                  <span className="text-muted"> · <DisplayDate value={r.bookedAt} /></span>
                 </p>
                 <p className="mt-0.5 text-xs text-muted">{r.explanation}</p>
                 {canWrite && differs ? (

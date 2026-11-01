@@ -28,7 +28,7 @@ export default async function ProfilePage() {
     <div>
       <SettingsPageHeader
         title="Profile and display"
-        description="Your name, photo, and how the app looks and moves."
+        description="Your name, photo, and how the app looks, moves, and shows dates."
       />
       <div className={`${SETTINGS_FORM_WIDTH} space-y-8`}>
         <ProfilePictureField

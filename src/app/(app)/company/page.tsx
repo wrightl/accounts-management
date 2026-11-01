@@ -2,10 +2,12 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { guardTenantPage } from "@/lib/auth";
 import { can } from "@/lib/roles";
-import { formatIsoDateUk, monthName } from "@/lib/dates";
+import { formatIsoDate, monthName } from "@/lib/dates";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { Card } from "@/components/ui/card";
 import { SettingsPageHeader, SETTINGS_FORM_WIDTH } from "@/components/settings/settings-page-header";
+import { DisplayDate } from "@/components/date-format-provider";
+import { getDateFormat } from "@/lib/date-format.server";
 
 function Field({
   label,
@@ -79,16 +81,16 @@ export default async function CompanyPage() {
               </Link>
               .
               {settings.companiesHouseSyncedAt
-                ? ` Last updated from Companies House on ${formatIsoDateUk(settings.companiesHouseSyncedAt.toISOString().slice(0, 10))}.`
+                ? <> Last updated from Companies House on <DisplayDate value={settings.companiesHouseSyncedAt} />.</>
                 : null}
             </p>
             <dl className="mt-4 grid gap-4 sm:grid-cols-2">
-              <Field label="Incorporated on" value={formatIsoDateUk(settings.incorporatedOn)} />
+              <Field label="Incorporated on" value={settings.incorporatedOn ? formatIsoDate(settings.incorporatedOn, await getDateFormat()) : null} />
               <Field
                 label="Confirmation statement due"
-                value={formatIsoDateUk(settings.confirmationStatementDue)}
+                value={settings.confirmationStatementDue ? formatIsoDate(settings.confirmationStatementDue, await getDateFormat()) : null}
               />
-              <Field label="Next accounts due" value={formatIsoDateUk(settings.accountsDue)} />
+              <Field label="Next accounts due" value={settings.accountsDue ? formatIsoDate(settings.accountsDue, await getDateFormat()) : null} />
               <Field label="Directors" value={settings.directorNames} />
             </dl>
           </Card>

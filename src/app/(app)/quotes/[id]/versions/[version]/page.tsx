@@ -13,6 +13,7 @@ import {
   lineNetPence,
 } from "@/lib/money";
 import { clientDisplayName } from "@/lib/clients/display";
+import { DisplayDate } from "@/components/date-format-provider";
 
 export default async function QuoteVersionPage({
   params,
@@ -52,8 +53,8 @@ export default async function QuoteVersionPage({
             {detail.quote.status} · {clientDisplayName(detail.client)}
           </p>
           <p className="mt-1 text-sm text-muted">
-            Issued {detail.quote.issueDate}
-            {detail.quote.validUntil ? ` · Valid until ${detail.quote.validUntil}` : null}
+            Issued <DisplayDate value={detail.quote.issueDate} />
+            {detail.quote.validUntil ? <> · Valid until <DisplayDate value={detail.quote.validUntil} /></> : null}
           </p>
         </div>
         <Card className="min-w-[140px]">

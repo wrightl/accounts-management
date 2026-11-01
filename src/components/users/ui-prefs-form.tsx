@@ -103,7 +103,7 @@ export function UiPrefsForm({ prefs: rawPrefs }: { prefs: unknown }) {
       <div>
         <h2 className="font-display text-lg font-semibold">Display and focus</h2>
         <p className="mt-1 text-sm text-muted">
-          Adjust motion, text size, contrast, font, and success messages. These stay on
+          Adjust motion, text size, contrast, font, success messages, and date format. These stay on
           this account. See{" "}
           <Link
             href="/help#easier"
@@ -188,6 +188,23 @@ export function UiPrefsForm({ prefs: rawPrefs }: { prefs: unknown }) {
         options={[
           { value: "auto", label: "Dismiss after a few seconds" },
           { value: "stay", label: "Stay until I dismiss" },
+        ]}
+      />
+
+      <PrefField
+        id="dateFormat"
+        name="dateFormat"
+        label="Date format"
+        help="Used across the app. Date pickers follow your browser or device, and invoices, quotes and client emails stay in UK format."
+        defaultValue={prefs.dateFormat}
+        disabled={pending}
+        error={fieldErrors.dateFormat}
+        onClear={() => clearField("dateFormat")}
+        options={[
+          { value: "dmy", label: "31/03/2026" },
+          { value: "d-mon-y", label: "31 Mar 2026" },
+          { value: "iso", label: "2026-03-31" },
+          { value: "mdy", label: "03/31/2026" },
         ]}
       />
 

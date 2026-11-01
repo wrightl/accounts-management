@@ -13,7 +13,7 @@ import {
 import { parseStatementBalancePence } from "@/lib/bank/summary";
 import { listMilestonesReadyToBill } from "@/lib/close/checklist";
 import { creditAdjustmentsByInvoice } from "@/lib/credit-notes/adjustments";
-import { formatIsoDateUk, todayIsoDate } from "@/lib/dates";
+import { DEFAULT_DATE_FORMAT, formatIsoDate, todayIsoDate, type DateFormat } from "@/lib/dates";
 import { splitDividendPence } from "@/lib/dividends/split";
 import { invoiceAmountDuePence } from "@/lib/invoices/balance";
 import { addDays, ctPaymentDueDate } from "@/lib/ledger/corporation-tax";
@@ -95,7 +95,12 @@ export async function getCashAtBank(companyId: string): Promise<CashAtBank> {
 }
 
 /** VAT for the quarter so far, plus last quarter's until its payment deadline. */
-async function getVatOwed(companyId: string, firstQuarterEndMonth: number, today: string) {
+async function getVatOwed(
+  companyId: string,
+  firstQuarterEndMonth: number,
+  today: string,
+  dateFormat: DateFormat,
+) {
   const current = vatQuarterFor(today, firstQuarterEndMonth);
   const previous = vatQuarterFor(addDays(current.start, -1), firstQuarterEndMonth);
   const previousDue = vatDueDate(previous.end);
@@ -106,8 +111,8 @@ async function getVatOwed(companyId: string, firstQuarterEndMonth: number, today
       : Promise.resolve(null),
   ]);
   const parts = [
-    { label: `This quarter to date (ends ${formatIsoDateUk(current.end)})`, pence: now.netVatPence },
-    ...(last ? [{ label: `Last quarter, due ${formatIsoDateUk(previousDue)}`, pence: last.netVatPence }] : []),
+    { label: `This quarter to date (ends ${formatIsoDate(current.end, dateFormat)})`, pence: now.netVatPence },
+    ...(last ? [{ label: `Last quarter, due ${formatIsoDate(previousDue, dateFormat)}`, pence: last.netVatPence }] : []),
   ];
   return { pence: Math.max(0, parts.reduce((t, p) => t + p.pence, 0)), parts };
 }
@@ -186,7 +191,11 @@ async function recurringDueSoonPence(companyId: string, today: string, until: st
 }
 
 /** Everything behind the "safe to pay yourself" figure. */
-export async function getSafeToPay(companyId: string, today: string = todayIsoDate()) {
+export async function getSafeToPay(
+  companyId: string,
+  today: string = todayIsoDate(),
+  dateFormat: DateFormat = DEFAULT_DATE_FORMAT,
+) {
   const db = getDb();
   const [company] = await db
     .select({
@@ -204,7 +213,7 @@ export async function getSafeToPay(companyId: string, today: string = todayIsoDa
     await Promise.all([
       getCashAtBank(companyId),
       company.vatRegistered
-        ? getVatOwed(companyId, company.vatQuarterEndMonth, today)
+        ? getVatOwed(companyId, company.vatQuarterEndMonth, today, dateFormat)
         : Promise.resolve({ pence: 0, parts: [] }),
       getReservesPosition(companyId, today),
       getReimbursementBalances(companyId),
@@ -221,7 +230,7 @@ export async function getSafeToPay(companyId: string, today: string = todayIsoDa
   const taxParts = [
     { label: "This year so far", pence: reserves.currentYear.tax.taxPence },
     ...(lastYear && lastYearTaxDue && today <= lastYearTaxDue && lastYear.tax.taxPence > 0
-      ? [{ label: `Last year, due ${formatIsoDateUk(lastYearTaxDue)}`, pence: lastYear.tax.taxPence }]
+      ? [{ label: `Last year, due ${formatIsoDate(lastYearTaxDue, dateFormat)}`, pence: lastYear.tax.taxPence }]
       : []),
   ];
   const milestonesPence = milestones.reduce((t, m) => t + m.amountPence, 0);

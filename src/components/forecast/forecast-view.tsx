@@ -15,7 +15,6 @@ import {
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Input, Label, Select } from "@/components/ui/form";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
-import { formatIsoDateUk } from "@/lib/dates";
 import {
   applyWhatIfs,
   buildForecast,
@@ -23,6 +22,7 @@ import {
   type WhatIf,
 } from "@/lib/forecast/engine";
 import { formatGBP, poundsToPence } from "@/lib/money";
+import { DisplayDate } from "@/components/date-format-provider";
 
 function shortDate(iso: string): string {
   return new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-GB", {
@@ -116,10 +116,10 @@ export function ForecastView({
           className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm"
         >
           {forecast.firstNegative
-            ? `Cash runs out in the week of ${formatIsoDateUk(forecast.firstNegative.start)}, `
-            : `Cash drops below ${formatGBP(forecast.lowCashPence)} in the week of ${formatIsoDateUk(warning.start)}, `}
+            ? <>Cash runs out in the week of <DisplayDate value={forecast.firstNegative.start} />, </>
+            : <>Cash drops below {formatGBP(forecast.lowCashPence)} in the week of <DisplayDate value={warning.start} />, </>}
           reaching {formatGBP(forecast.lowest.closingPence)} at its lowest (week of{" "}
-          {formatIsoDateUk(forecast.lowest.start)}).
+          <DisplayDate value={forecast.lowest.start} />).
         </p>
       ) : (
         <p role="status" className="rounded-xl bg-wash px-4 py-3 text-sm">
@@ -135,12 +135,12 @@ export function ForecastView({
         <Card>
           <CardTitle>Lowest point</CardTitle>
           <CardValue>{formatGBP(forecast.lowest.closingPence)}</CardValue>
-          <p className="mt-1 text-xs text-muted">Week of {formatIsoDateUk(forecast.lowest.start)}</p>
+          <p className="mt-1 text-xs text-muted">Week of <DisplayDate value={forecast.lowest.start} /></p>
         </Card>
         <Card>
           <CardTitle>In 13 weeks</CardTitle>
           <CardValue>{formatGBP(last.closingPence)}</CardValue>
-          <p className="mt-1 text-xs text-muted">Week of {formatIsoDateUk(last.start)}</p>
+          <p className="mt-1 text-xs text-muted">Week of <DisplayDate value={last.start} /></p>
         </Card>
       </div>
 
@@ -283,7 +283,7 @@ export function ForecastView({
                       aria-expanded={openWeek === w.index}
                       onClick={() => setOpenWeek(openWeek === w.index ? null : w.index)}
                     >
-                      {formatIsoDateUk(w.start)}
+                      <DisplayDate value={w.start} />
                     </button>
                     {openWeek === w.index ? (
                       <ul className="mt-2 space-y-1 text-xs text-muted">
