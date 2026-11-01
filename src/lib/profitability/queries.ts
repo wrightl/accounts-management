@@ -1,4 +1,8 @@
 import "server-only";
+import { 
+  creditNoteCountsInAccounts,
+  invoiceCountsInAccounts,
+ } from "@/lib/invoices/accounts-scope";
 import { and, desc, eq, gte, inArray, isNotNull, lte, ne, notInArray, sql, sum, type SQL } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
@@ -365,7 +369,14 @@ export async function listClientProfitability(
     db
       .select({ clientId: invoices.clientId, net: sum(invoices.netPence).mapWith(Number) })
       .from(invoices)
-      .where(and(eq(invoices.companyId, companyId), BOOKED, inPeriod(invoices.issueDate)))
+      .where(
+        and(
+          eq(invoices.companyId, companyId),
+          BOOKED,
+          invoiceCountsInAccounts,
+          inPeriod(invoices.issueDate),
+        ),
+      )
       .groupBy(invoices.clientId),
     db
       .select({ clientId: creditNotes.clientId, net: sum(creditNotes.netPence).mapWith(Number) })
@@ -374,6 +385,7 @@ export async function listClientProfitability(
         and(
           eq(creditNotes.companyId, companyId),
           eq(creditNotes.status, "issued"),
+          creditNoteCountsInAccounts(creditNotes.issueDate),
           inPeriod(creditNotes.issueDate),
         ),
       )

@@ -30,6 +30,7 @@ export const entityTypeEnum = pgEnum("entity_type", [
   "limited_company",
   "sole_trader",
 ]);
+export const invoiceSourceEnum = pgEnum("invoice_source", ["alfa", "import"]);
 export const invoiceStatusEnum = pgEnum("invoice_status", [
   "draft",
   "sent",
@@ -153,6 +154,8 @@ export const companies = pgTable("companies", {
    * reserves and directors' opening loan balances are as at this date, and
    * earlier records are left out of reserves and director's loan figures.
    */
+  /** Imported invoices dated before this are brought forward, outside the accounts. */
+  invoiceCutoverDate: date("invoice_cutover_date"),
   openingBalancesAsAt: date("opening_balances_as_at"),
   /** Retained earnings (distributable reserves) at openingBalancesAsAt. */
   openingReservesPence: integer("opening_reserves_pence"),
@@ -389,8 +392,15 @@ export const invoices = pgTable(
       .default(sql`replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '')`),
     /** First time the client opened the public page. */
     viewedAt: timestamp("viewed_at", { withTimezone: true }),
+    source: invoiceSourceEnum("source").notNull().default("alfa"),
+    /** Imported and dated before the company cutover: still owed, but outside the accounts. */
+    broughtForward: boolean("brought_forward").notNull().default(false),
   },
   (t) => [
+    check(
+      "invoices_brought_forward_requires_import",
+      sql`NOT ${t.broughtForward} OR ${t.source} = 'import'`,
+    ),
     uniqueIndex("uniq_invoices_company_number").on(t.companyId, t.number),
     /** One non-void invoice per payment milestone (matches drizzle/0012). */
     uniqueIndex("uniq_invoice_milestone_active")

@@ -24,6 +24,12 @@ import {
 import { clientDisplayNameSql } from "@/lib/clients/sql";
 import { monthName } from "@/lib/dates";
 import { safeFilename } from "@/lib/files";
+import {
+  creditNoteCountsInAccounts,
+  invoiceCountsInAccounts,
+  paymentCountsInAccounts,
+} from "@/lib/invoices/accounts-scope";
+import { invoiceBalancePence } from "@/lib/invoices/balance";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
 import { renderCreditNotePdf, renderInvoicePdfV2 } from "@/lib/invoices/pdf-v2";
 import { getCreditNoteDetail } from "@/lib/credit-notes/queries";
@@ -109,6 +115,7 @@ export async function streamAccountantPack({
         eq(invoices.companyId, companyId),
         ne(invoices.status, "draft"),
         ne(invoices.status, "void"),
+        invoiceCountsInAccounts,
         gte(invoices.issueDate, from),
         lte(invoices.issueDate, to),
       ),
@@ -143,12 +150,14 @@ export async function streamAccountantPack({
       method: payments.method,
       reference: payments.reference,
       receivedAt: payments.receivedAt,
+      broughtForward: invoices.broughtForward,
     })
     .from(payments)
     .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
     .where(
       and(
         eq(invoices.companyId, companyId),
+        paymentCountsInAccounts,
         gte(payments.receivedAt, new Date(`${from}T00:00:00Z`)),
         lte(payments.receivedAt, new Date(`${to}T23:59:59.999Z`)),
       ),
@@ -289,6 +298,7 @@ export async function streamAccountantPack({
       refundedPence: creditNotes.refundedPence,
       refundedAt: creditNotes.refundedAt,
       refundReference: creditNotes.refundReference,
+      broughtForward: invoices.broughtForward,
     })
     .from(creditNotes)
     .innerJoin(invoices, eq(creditNotes.invoiceId, invoices.id))
@@ -296,11 +306,72 @@ export async function streamAccountantPack({
     .where(
       and(
         eq(creditNotes.companyId, companyId),
+        creditNoteCountsInAccounts(creditNotes.issueDate),
         gte(creditNotes.issueDate, from),
         lte(creditNotes.issueDate, to),
       ),
     )
     .orderBy(creditNotes.issueDate, creditNotes.number);
+
+  // All brought-forward invoices, whatever the period: open ones explain aged debtors.
+  const broughtForwardRows = await db
+    .select({
+      id: invoices.id,
+      number: invoices.number,
+      status: invoices.status,
+      issueDate: invoices.issueDate,
+      dueDate: invoices.dueDate,
+      netPence: invoices.netPence,
+      vatPence: invoices.vatPence,
+      grossPence: invoices.grossPence,
+      clientName: clientDisplayNameSql.as("client_name"),
+      paidPence: sql<number>`coalesce((select sum(p.amount_pence) from payments p where p.invoice_id = ${invoices.id}), 0)`.mapWith(Number),
+      creditedPence: sql<number>`coalesce((select sum(c.gross_pence) from credit_notes c where c.invoice_id = ${invoices.id} and c.status = 'issued'), 0)`.mapWith(Number),
+      refundedPence: sql<number>`coalesce((select sum(c.refunded_pence) from credit_notes c where c.invoice_id = ${invoices.id} and c.status = 'issued'), 0)`.mapWith(Number),
+    })
+    .from(invoices)
+    .innerJoin(clients, eq(invoices.clientId, clients.id))
+    .where(
+      and(
+        eq(invoices.companyId, companyId),
+        eq(invoices.broughtForward, true),
+        ne(invoices.status, "draft"),
+        ne(invoices.status, "void"),
+      ),
+    )
+    .orderBy(invoices.issueDate, invoices.number);
+  const broughtForwardCsvRows = broughtForwardRows.map((r) => ({
+    ...r,
+    balancePence: invoiceBalancePence(r),
+  }));
+  const openBroughtForward = broughtForwardCsvRows.filter((r) => r.balancePence > 0);
+  const broughtForwardCsv = (rows: typeof broughtForwardCsvRows) =>
+    toCsv(
+      [
+        "id",
+        "number",
+        "client",
+        "status",
+        "issue_date",
+        "due_date",
+        "net_gbp",
+        "vat_gbp",
+        "gross_gbp",
+        "balance_gbp",
+      ],
+      rows.map((r) => [
+        r.id,
+        r.number,
+        r.clientName,
+        r.status,
+        r.issueDate ?? "",
+        r.dueDate ?? "",
+        gbp(r.netPence),
+        gbp(r.vatPence),
+        gbp(r.grossPence),
+        gbp(r.balancePence),
+      ]),
+    );
 
   const creditNoteIds = creditNoteRows.map((r) => r.id);
   const creditNoteLineRows =
@@ -385,6 +456,21 @@ export async function streamAccountantPack({
           company.openingCashAsAt ?? "",
           "spreadsheet migration cutover date",
         ],
+        [
+          "invoice_cutover_date",
+          company.invoiceCutoverDate ?? "",
+          "imported invoices before this are brought forward, outside P&L and VAT",
+        ],
+        [
+          "brought_forward_invoices",
+          String(broughtForwardCsvRows.length),
+          "see reference/brought-forward-invoices.csv",
+        ],
+        [
+          "open_brought_forward_gbp",
+          gbp(openBroughtForward.reduce((acc, r) => acc + r.balancePence, 0)),
+          "included in aged receivables; see reference/open-brought-forward.csv",
+        ],
       ],
     ),
     "summary/vat.csv": toCsv(
@@ -402,9 +488,11 @@ export async function streamAccountantPack({
         ["current", aged.current.replace(/[£,]/g, "")],
         ["1_30_days", aged.d30.replace(/[£,]/g, "")],
         ["31_60_days", aged.d60.replace(/[£,]/g, "")],
-        ["90_plus_days", aged.d90.replace(/[£,]/g, "")],
+        ["61_plus_days", aged.d90.replace(/[£,]/g, "")],
       ],
     ),
+    "reference/brought-forward-invoices.csv": broughtForwardCsv(broughtForwardCsvRows),
+    "reference/open-brought-forward.csv": broughtForwardCsv(openBroughtForward),
     "invoices.csv": toCsv(
       [
         "id",
@@ -474,6 +562,7 @@ export async function streamAccountantPack({
         "refunded_gbp",
         "refunded_at",
         "refund_reference",
+        "on_brought_forward_invoice",
       ],
       creditNoteRows.map((r) => [
         r.id,
@@ -489,6 +578,7 @@ export async function streamAccountantPack({
         gbp(r.refundedPence),
         r.refundedAt ?? "",
         r.refundReference ?? "",
+        r.broughtForward ? "yes" : "no",
       ]),
     ),
     "credit-note-line-items.csv": toCsv(
@@ -522,6 +612,7 @@ export async function streamAccountantPack({
         "method",
         "reference",
         "received_at",
+        "on_brought_forward_invoice",
       ],
       payRows.map((r) => [
         r.id,
@@ -531,6 +622,7 @@ export async function streamAccountantPack({
         r.method ?? "",
         r.reference ?? "",
         r.receivedAt.toISOString(),
+        r.broughtForward ? "yes" : "no",
       ]),
     ),
     "expenses.csv": toCsv(
@@ -919,12 +1011,15 @@ function buildReadme({
     "  recurring-invoices.csv — current schedules (not period-filtered)",
     "  bank-transactions.csv + reconciliation-matches.csv",
     "  other-income.csv   — explained bank credits (cash, by bank date)",
+    "  reference/        — imported invoices brought forward from before cutover (all dates)",
     "",
     "Basis notes:",
     "  Invoiced income is accrual (by issue date), less credit notes by their issue date.",
     "  Other income is cash on the bank date.",
     "  Payments CSV is cash received. Expenses exclude pending email submissions.",
     "  Invoices link to recurring schedules via recurring_schedule when generated from one.",
+    "  Imported invoices dated before the cutover are brought forward: excluded from P&L, VAT and invoices.csv, but still in aged receivables.",
+    "  Payments and credit notes on them count from the cutover date onwards, and are flagged on_brought_forward_invoice.",
   ];
   if (warnings.length > 0) {
     lines.push("", "Warnings:", ...warnings.map((w) => `  - ${w}`));

@@ -16,6 +16,7 @@ import {
   advanceInvoiceSequences,
   allocateInvoiceNumber,
 } from "@/lib/invoices/allocate";
+import { isBroughtForward } from "@/lib/invoices/cutover";
 import {
   invoiceImportHasErrors,
   parseInvoiceImportCsv,
@@ -569,6 +570,11 @@ export async function commitInvoiceImport(
               sentAt,
               paidAt,
               createdByUserId: localUserId,
+              source: "import",
+              broughtForward: isBroughtForward(
+                row.issueDate,
+                company.invoiceCutoverDate,
+              ),
             })
             .returning({ id: invoices.id });
 
