@@ -28,6 +28,7 @@ import type { SortDir } from '@/lib/table-sort';
 import { getDb } from '@/db';
 import {
     bankAccounts,
+    bankTransactionLabels,
     bankTransactions,
     clients,
     expenses,
@@ -38,6 +39,7 @@ import {
     users,
 } from '@/db/schema';
 import { formatGBP } from '@/lib/money';
+import { labelsForBankTransactions, type RowLabel } from '@/lib/labels/queries';
 import { payReimbursementRun } from '@/lib/reimbursements/pay';
 import type { ParsedBankRow, GenericCsvMapping } from '@/lib/bank/types';
 import {
@@ -211,6 +213,8 @@ export type BankTransactionListItem = {
     spendingCategory: string | null;
     bankAccountName: string;
     tags: string[];
+    notes: string | null;
+    labels: RowLabel[];
     amountFormatted: string;
     matchId: string | null;
     matchType: string | null;
@@ -309,7 +313,7 @@ export function bankListWhere(
     filters: Partial<
         Pick<
             BankListParams,
-            'q' | 'type' | 'category' | 'reconciliation' | 'from' | 'to'
+            'q' | 'type' | 'category' | 'reconciliation' | 'labels' | 'from' | 'to'
         >
     >,
 ): SQL | undefined {
@@ -337,6 +341,13 @@ export function bankListWhere(
         conditions.push(confirmedReconciliationExists);
     if (filters.reconciliation === 'unreconciled') {
         conditions.push(sql`NOT ${confirmedReconciliationExists}`);
+    }
+    if (filters.labels?.length) {
+        conditions.push(sql`EXISTS (
+          SELECT 1 FROM ${bankTransactionLabels}
+          WHERE ${bankTransactionLabels.bankTransactionId} = ${bankTransactions.id}
+            AND ${inArray(bankTransactionLabels.labelId, filters.labels)}
+        )`);
     }
     if (filters.from)
         conditions.push(gte(bankTransactions.bookedAt, filters.from));
@@ -550,6 +561,7 @@ export async function listBankTransactions(
             | 'type'
             | 'category'
             | 'reconciliation'
+            | 'labels'
             | 'from'
             | 'to'
             | 'page'
@@ -606,9 +618,10 @@ export async function listBankTransactions(
         }
     }
 
-    const [labelByMatchId, hrefByMatchId] = await Promise.all([
+    const [labelByMatchId, hrefByMatchId, labelsByTx] = await Promise.all([
         buildMatchLabels(db, matches),
         buildMatchHrefs(db, matches),
+        labelsForBankTransactions(pageTx.map((tx) => tx.id)),
     ]);
 
     const accountIds = [...new Set(pageTx.map((tx) => tx.bankAccountId))];
@@ -633,6 +646,8 @@ export async function listBankTransactions(
             spendingCategory: tx.spendingCategory,
             bankAccountName: accountNameById.get(tx.bankAccountId) ?? '',
             tags: tx.tags ?? [],
+            notes: tx.notes,
+            labels: labelsByTx.get(tx.id) ?? [],
             amountFormatted: formatGBP(tx.amountPence),
             matchId: match?.id ?? null,
             matchType: match?.matchType ?? null,

@@ -39,6 +39,10 @@ import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { getPaymentSourceSuggestions } from "@/lib/expenses/payment-source-queries";
 import { paymentSourceListLabel } from "@/lib/expenses/payment-source";
 import { DisplayDate } from "@/components/date-format-provider";
+import { ManageLabelsButton } from "@/components/labels/manage-labels";
+import { RowLabels } from "@/components/labels/row-labels";
+import { RowNote } from "@/components/labels/row-note";
+import { listLabels } from "@/lib/labels/queries";
 
 export default async function ExpensesPage({
   searchParams,
@@ -50,12 +54,18 @@ export default async function ExpensesPage({
   const user = await requireUser();
   const parsed = parseExpenseListParams(await searchParams);
 
-  const [localUser, settings] = await Promise.all([
+  const [localUser, settings, labels] = await Promise.all([
     findLocalUser(user.userId),
     getOrCreateCompanySettings(companyId),
+    listLabels(companyId),
   ]);
   const localUserId = localUser?.id ?? null;
-  const params = { ...parsed, mine: parsed.mine && Boolean(localUserId) };
+  const params = {
+    ...parsed,
+    mine: parsed.mine && Boolean(localUserId),
+    // A link can outlive a label; a deleted one shouldn't empty the list.
+    labels: parsed.labels.filter((id) => labels.some((l) => l.id === id)),
+  };
   const myReimbursable = params.mine;
   const dateRange = resolveExpenseListDateRange(params, settings.financialYearEndMonth);
   const filtered = hasActiveExpenseFilters(params);
@@ -69,6 +79,7 @@ export default async function ExpensesPage({
       paidByUserId: myReimbursable ? localUserId! : params.paidBy,
       billable: params.billable,
       status: myReimbursable ? "reimbursable" : params.status,
+      labels: params.labels,
       sort: { sort: params.sort, dir: params.dir },
     }),
     listFounders(companyId),
@@ -108,6 +119,7 @@ export default async function ExpensesPage({
         </div>
         {canWrite && (
           <div className="flex flex-wrap gap-2">
+            <ManageLabelsButton labels={labels} />
             <ExpenseImportButton canWrite={canWrite} />
             <Link href="/expenses/new" className={buttonClasses("primary")}>
               New expense
@@ -167,6 +179,7 @@ export default async function ExpensesPage({
           params={params}
           categories={EXPENSE_CATEGORIES}
           founders={founders.map((f) => ({ id: f.id, label: f.name || f.email }))}
+          labels={labels}
         />
       </div>
 
@@ -192,6 +205,9 @@ export default async function ExpensesPage({
           <Table>
             <THead>
               <TR>
+                <TH className="w-8 pr-0">
+                  <span className="sr-only">Notes</span>
+                </TH>
                 {sortHeader("Date", "date")}
                 {sortHeader("Description", "description")}
                 {sortHeader("Category", "category")}
@@ -205,6 +221,9 @@ export default async function ExpensesPage({
             <TBody>
               {rows.map((e) => (
                 <TR key={e.id} className={e.status === "pending" ? "bg-amber-50/50 dark:bg-amber-950/20" : undefined}>
+                  <TD className="w-8 pr-0">
+                    <RowNote kind="expense" rowId={e.id} note={e.notes} canWrite={canWrite} />
+                  </TD>
                   <TD className="text-muted"><DisplayDate value={e.spentAt} /></TD>
                   <TD>
                     <Link
@@ -224,6 +243,13 @@ export default async function ExpensesPage({
                         Sent by {e.externalSenderEmail}, check before approving
                       </span>
                     ) : null}
+                    <RowLabels
+                      kind="expense"
+                      rowId={e.id}
+                      labels={e.labels}
+                      allLabels={labels}
+                      canWrite={canWrite}
+                    />
                   </TD>
                   <TD>{e.category ?? "—"}</TD>
                   <TD>{e.paidByName ?? "—"}</TD>

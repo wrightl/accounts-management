@@ -21,6 +21,7 @@ import { takeBankListPosition } from "@/lib/bank/list-position";
 import { BANK_PAGE_SIZE } from "@/lib/bank/list-params";
 import type { BankListParams } from "@/lib/bank/list-params";
 import type { BankTransactionListItem } from "@/lib/bank/queries";
+import type { RowLabel } from "@/lib/labels/queries";
 
 export function BankCardsFeed({
   initialRows,
@@ -30,6 +31,7 @@ export function BankCardsFeed({
   filters,
   customCategories,
   incomeCategories,
+  allLabels,
   canWrite,
   showAccount = false,
 }: {
@@ -37,9 +39,10 @@ export function BankCardsFeed({
   initialPage: number;
   pageCount: number;
   total: number;
-  filters: Pick<BankListParams, "q" | "type" | "category" | "reconciliation" | "from" | "to">;
+  filters: Pick<BankListParams, "q" | "type" | "category" | "reconciliation" | "labels" | "from" | "to">;
   customCategories: readonly string[];
   incomeCategories: readonly string[];
+  allLabels: readonly RowLabel[];
   canWrite: boolean;
   showAccount?: boolean;
 }) {
@@ -67,6 +70,7 @@ export function BankCardsFeed({
     filters.type !== prevFilters.type ||
     filters.category !== prevFilters.category ||
     filters.reconciliation !== prevFilters.reconciliation ||
+    filters.labels.join() !== prevFilters.labels.join() ||
     filters.from !== prevFilters.from ||
     filters.to !== prevFilters.to
   ) {
@@ -80,6 +84,7 @@ export function BankCardsFeed({
       filters.type === prevFilters.type &&
       filters.category === prevFilters.category &&
       filters.reconciliation === prevFilters.reconciliation &&
+      filters.labels.join() === prevFilters.labels.join() &&
       filters.from === prevFilters.from &&
       filters.to === prevFilters.to;
     if (sameList && page > initialPage) {
@@ -204,6 +209,7 @@ export function BankCardsFeed({
           rows={rows}
           customCategories={customCategories}
           incomeCategories={incomeCategories}
+          allLabels={allLabels}
           canWrite={canWrite}
           showAccount={showAccount}
         />

@@ -40,7 +40,7 @@ vi.mock("@/components/bank/bank-list", () => ({
 
 const loadMock = vi.mocked(loadBankTransactionsPage);
 const row = (id: string) => ({ id }) as BankTransactionListItem;
-const filters = { q: "", type: "", category: "", reconciliation: "", from: "", to: "" } as const;
+const filters = { q: "", type: "", category: "", reconciliation: "", labels: [], from: "", to: "" };
 
 function pageResult(page: number) {
   return {

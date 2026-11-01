@@ -10,6 +10,7 @@ import {
   setTableSortParams,
   type SortDir,
 } from "@/lib/table-sort";
+import { parseLabelIds } from "@/lib/labels/params";
 
 export const BANK_PAGE_SIZE = 25;
 
@@ -32,6 +33,8 @@ export interface BankListParams {
   type: BankTxType | "";
   category: string;
   reconciliation: BankReconciliationFilter | "";
+  /** Label ids; a transaction matches if it has any of them. */
+  labels: string[];
   period: PeriodPreset | "";
   from: string;
   to: string;
@@ -82,6 +85,7 @@ export function parseBankListParams(
     type,
     category: first(sp, "category").slice(0, 80),
     reconciliation,
+    labels: parseLabelIds(sp.labels),
     period,
     from: parsedFrom,
     to: parsedTo,
@@ -93,7 +97,14 @@ export function parseBankListParams(
 }
 
 export function hasActiveBankFilters(params: BankListParams): boolean {
-  return Boolean(params.q || params.type || params.category || params.reconciliation || params.period);
+  return Boolean(
+    params.q ||
+      params.type ||
+      params.category ||
+      params.reconciliation ||
+      params.labels.length > 0 ||
+      params.period,
+  );
 }
 
 export function resolveBankListDateRange(
@@ -119,6 +130,7 @@ export function bankListHref(
   if (next.type) qs.set("type", next.type);
   if (next.category) qs.set("category", next.category);
   if (next.reconciliation) qs.set("reconciliation", next.reconciliation);
+  if (next.labels.length > 0) qs.set("labels", next.labels.join(","));
   if (next.period) {
     qs.set("period", next.period);
     if (next.period === "custom") {

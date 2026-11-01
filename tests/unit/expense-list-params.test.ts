@@ -12,6 +12,7 @@ const PAYER = "0b6f3c1e-8a52-4d0e-9a3b-2f1c4e5d6a7b";
 describe("parseExpenseListParams", () => {
   it("applies defaults", () => {
     expect(parseExpenseListParams({})).toEqual({
+      labels: [],
       q: "",
       period: "",
       from: "",

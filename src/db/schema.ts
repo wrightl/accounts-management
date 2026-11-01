@@ -561,6 +561,7 @@ export const expenses = pgTable(
      * or anyone who knows the address). The reviewer should check it first.
      */
     externalSenderEmail: text("external_sender_email"),
+    notes: text("notes"),
     /** The inbound email this expense came from; one email can create several. */
     inboundEmailJobId: uuid("inbound_email_job_id").references(
       (): AnyPgColumn => inboundEmailJobs.id,
@@ -741,6 +742,7 @@ export const bankTransactions = pgTable(
       .notNull()
       .default(false),
     tags: text("tags").array().notNull().default([]),
+    notes: text("notes"),
     raw: jsonb("raw"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -748,6 +750,64 @@ export const bankTransactions = pgTable(
     index("idx_bank_tx_account").on(t.bankAccountId),
     index("idx_bank_tx_booked").on(t.bookedAt),
     uniqueIndex("uniq_bank_tx_external").on(t.bankAccountId, t.externalId),
+  ],
+);
+
+/** User-defined coloured labels, shared by bank transactions and expenses. */
+export const labels = pgTable(
+  "labels",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    color: text("color").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("uniq_label_company_name").on(t.companyId, sql`lower(${t.name})`),
+    check(
+      "labels_color_known",
+      sql`${t.color} in (
+        'slate', 'red', 'orange', 'amber', 'green',
+        'teal', 'blue', 'indigo', 'purple', 'pink'
+      )`,
+    ),
+  ],
+);
+
+export const bankTransactionLabels = pgTable(
+  "bank_transaction_labels",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bankTransactionId: uuid("bank_transaction_id")
+      .notNull()
+      .references(() => bankTransactions.id, { onDelete: "cascade" }),
+    labelId: uuid("label_id")
+      .notNull()
+      .references(() => labels.id, { onDelete: "cascade" }),
+  },
+  (t) => [
+    uniqueIndex("uniq_bank_transaction_label").on(t.bankTransactionId, t.labelId),
+    index("idx_bank_transaction_labels_label").on(t.labelId),
+  ],
+);
+
+export const expenseLabels = pgTable(
+  "expense_labels",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    expenseId: uuid("expense_id")
+      .notNull()
+      .references(() => expenses.id, { onDelete: "cascade" }),
+    labelId: uuid("label_id")
+      .notNull()
+      .references(() => labels.id, { onDelete: "cascade" }),
+  },
+  (t) => [
+    uniqueIndex("uniq_expense_label").on(t.expenseId, t.labelId),
+    index("idx_expense_labels_label").on(t.labelId),
   ],
 );
 
@@ -1604,6 +1664,9 @@ export const schema = {
   auditLog,
   bankAccounts,
   bankSpendingCategories,
+  labels,
+  bankTransactionLabels,
+  expenseLabels,
   bankTransactions,
   reconciliationMatches,
   fxRates,

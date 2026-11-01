@@ -3,6 +3,7 @@
 import { eq } from "drizzle-orm";
 import { requireActionPermission } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
+import { parseLabelIds } from "@/lib/labels/params";
 import { mutate, mutateWide } from "@/lib/mutate";
 import { getDb } from "@/db";
 import { companies } from "@/db/schema";
@@ -118,6 +119,7 @@ export async function loadBankTransactionsPage(input: {
   type?: BankListParams["type"];
   category?: string;
   reconciliation?: BankListParams["reconciliation"];
+  labels?: string[];
   from?: string;
   to?: string;
   page: number;
@@ -141,6 +143,7 @@ export async function loadBankTransactionsPage(input: {
     type: input.type,
     category: input.category,
     reconciliation: input.reconciliation,
+    labels: parseLabelIds(input.labels),
     from: input.from,
     to: input.to,
     page,
