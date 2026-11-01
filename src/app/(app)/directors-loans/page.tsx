@@ -53,7 +53,7 @@ function WarningText({ warning }: { warning: DirectorLoanWarning }) {
 const KIND_LABEL = { drawing: "Took out", paid_in: "Paid in", opening: "Opening" } as const;
 
 export default async function DirectorsLoansPage() {
-  const { companyId, entityType } = await guardTenantPage("accounts:read");
+  const { companyId, entityType } = await guardTenantPage("filing:read");
   if (entityType !== "limited_company") redirect("/dashboard");
   const canWrite = await hasPermission("accounts:write");
   const today = todayIsoDate();

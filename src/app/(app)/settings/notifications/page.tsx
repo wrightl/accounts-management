@@ -12,7 +12,7 @@ import { buttonClasses } from "@/components/ui/button";
 import { SettingsPageHeader, SETTINGS_FORM_WIDTH } from "@/components/settings/settings-page-header";
 
 export default async function NotificationSettingsPage() {
-  const session = await guardTenantPage("accounts:read");
+  const session = await guardTenantPage("workspace:read");
   const userId =
     session.localUserId ?? (await ensureLocalUser(session));
   const canManageCompany = can(session.role, "settings:manage");

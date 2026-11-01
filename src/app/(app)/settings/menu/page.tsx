@@ -8,7 +8,7 @@ import { MenuSettingsForm } from "@/components/menu/menu-settings-form";
 import { SettingsPageHeader, SETTINGS_FORM_WIDTH } from "@/components/settings/settings-page-header";
 
 export default async function MenuSettingsPage() {
-  const session = await guardTenantPage("accounts:read");
+  const session = await guardTenantPage("workspace:read");
   const localUserId = await ensureLocalUser(session);
   const enabled = await getMenuFeatures(localUserId, session.companyId);
 

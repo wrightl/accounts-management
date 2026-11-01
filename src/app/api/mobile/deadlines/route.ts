@@ -9,7 +9,7 @@ import { ensureLocalUser } from "@/lib/users";
 /** The deadlines page's list: overdue, due soon, upcoming and recently done. */
 export async function GET() {
   try {
-    const authz = await requireMobileAuth("accounts:read");
+    const authz = await requireMobileAuth("filing:read");
     if (!authz.ok) return authz.response;
 
     const { deadlines, missingCompaniesHouse } = await getDeadlines(authz.user.companyId);

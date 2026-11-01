@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { TENANT_ROLES } from "@/lib/roles";
+import { INVITABLE_ROLES, TENANT_ROLES } from "@/lib/roles";
 import { parseWithFieldErrors } from "@/lib/validation/field-errors";
 
 const roleSchema = z.enum(TENANT_ROLES, {
@@ -21,7 +21,7 @@ export const inviteUserSchema = z.object({
     .min(1, "Enter an email address")
     .email("Enter a valid email address"),
   name: optionalName,
-  role: roleSchema,
+  role: z.enum(INVITABLE_ROLES, { error: "Select a role" }),
 });
 
 export const updateUserSchema = z.object({
@@ -57,7 +57,7 @@ export function inviteUserRawFromFormData(
   return {
     email: formData.get("email"),
     name: formData.get("name") || undefined,
-    role: formData.get("role") ?? "pending",
+    role: formData.get("role"),
   };
 }
 

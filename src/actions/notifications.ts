@@ -23,7 +23,7 @@ import {
 import { ensureLocalUser } from "@/lib/users";
 
 async function requireNotificationUser() {
-  const authz = await requireActionPermission("accounts:read");
+  const authz = await requireActionPermission("workspace:read");
   if (!authz.ok) return authz;
   if (!authz.user.companyId) {
     return { ok: false as const, error: "Complete onboarding first." };

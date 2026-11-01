@@ -67,7 +67,7 @@ export const HELP_NAV_ITEM: NavItem = {
     href: '/help',
     label: 'Help',
     icon: 'help',
-    permission: 'accounts:read',
+    permission: 'workspace:read',
 };
 
 /**
@@ -96,7 +96,7 @@ export const SETTINGS_PAGES: SettingsPage[] = [
         label: 'Your menu',
         description: 'Choose which pages show in your sidebar.',
         icon: 'menu',
-        permission: 'accounts:read',
+        permission: 'workspace:read',
         section: 'you',
     },
     {
@@ -104,7 +104,7 @@ export const SETTINGS_PAGES: SettingsPage[] = [
         label: 'Profile and display',
         description: 'Your name, photo, text size, contrast, and motion.',
         icon: 'profile',
-        permission: 'accounts:read',
+        permission: 'workspace:read',
         section: 'you',
     },
     {
@@ -112,7 +112,7 @@ export const SETTINGS_PAGES: SettingsPage[] = [
         label: 'Notifications',
         description: 'Which events reach you in the app, by email, or as alerts.',
         icon: 'notifications',
-        permission: 'accounts:read',
+        permission: 'workspace:read',
         section: 'you',
     },
     {
@@ -120,7 +120,7 @@ export const SETTINGS_PAGES: SettingsPage[] = [
         label: 'Company profile',
         description: 'Registered details, Companies House dates, and bank details.',
         icon: 'company',
-        permission: 'accounts:read',
+        permission: 'filing:read',
         // Admins see and edit all of this on Business settings.
         hideWithPermission: 'settings:manage',
         section: 'business',
@@ -319,7 +319,7 @@ export const NAV_GROUPS: NavGroup[] = [
                 href: '/directors-loans',
                 label: "Director's loans",
                 icon: 'directorLoans',
-                permission: 'accounts:read',
+                permission: 'filing:read',
                 feature: 'directorsLoans',
             },
             {
@@ -333,7 +333,7 @@ export const NAV_GROUPS: NavGroup[] = [
                 href: '/reserves',
                 label: 'Tax & reserves',
                 icon: 'reserves',
-                permission: 'reports:read',
+                permission: 'filing:read',
                 feature: 'reserves',
             },
         ],
@@ -346,7 +346,7 @@ export const NAV_GROUPS: NavGroup[] = [
                 href: '/reports',
                 label: 'Reports',
                 icon: 'reports',
-                permission: 'reports:read',
+                permission: 'filing:read',
             },
             {
                 href: '/profitability',
@@ -366,7 +366,7 @@ export const NAV_GROUPS: NavGroup[] = [
                 href: '/deadlines',
                 label: 'Deadlines',
                 icon: 'deadlines',
-                permission: 'accounts:read',
+                permission: 'filing:read',
             },
         ],
     },
@@ -377,7 +377,7 @@ export const NAV_GROUPS: NavGroup[] = [
                 href: '/settings',
                 label: 'Settings',
                 icon: 'settings',
-                permission: 'accounts:read',
+                permission: 'workspace:read',
                 activePrefixes: SETTINGS_HUB_PREFIXES,
             },
         ],

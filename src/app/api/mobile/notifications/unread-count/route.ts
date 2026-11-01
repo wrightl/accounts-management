@@ -4,7 +4,7 @@ import { ensureLocalUser } from "@/lib/users";
 import { countUnreadNotifications } from "@/lib/notifications";
 
 export async function GET() {
-  const auth = await requireMobileAuth("accounts:read");
+  const auth = await requireMobileAuth("workspace:read");
   if (!auth.ok) return auth.response;
 
   const userId =

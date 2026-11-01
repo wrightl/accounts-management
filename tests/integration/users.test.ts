@@ -13,6 +13,7 @@ import {
 import {
   countAdminUsers,
   ensureLocalUser,
+  findLocalUser,
   findUserByEmail,
   getMembership,
   listUserMemberships,
@@ -21,7 +22,7 @@ import {
 } from "@/lib/users";
 import { listFounders } from "@/lib/expenses/queries";
 import { seedCompany } from "@/lib/test/seed-company";
-import type { Role } from "@/lib/roles";
+import { can, type Role } from "@/lib/roles";
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -197,6 +198,39 @@ describe("inviteUser", () => {
     const listed = await listUsers(companyId);
     expect(listed.map((u) => u.email)).toContain("accountant@example.com");
     expect(await countAdminUsers(companyId)).toBe(1);
+  });
+
+  it("keeps the accountant role and filing-only access once the invite is claimed", async () => {
+    await seedAdmin();
+    const form = new FormData();
+    form.set("email", "accountant@example.com");
+    form.set("role", "accountant");
+    expect((await inviteUser(form)).ok).toBe(true);
+
+    await ensureLocalUser({
+      userId: "user_clerk_accountant",
+      email: "accountant@example.com",
+      name: "Alex Accountant",
+    });
+
+    const claimed = await findLocalUser("user_clerk_accountant");
+    expect(claimed?.role).toBe("accountant");
+    expect(claimed?.companyId).toBe(companyId);
+    expect(await getMembership(claimed!.id, companyId)).toEqual({ role: "accountant" });
+    expect(can(claimed?.role, "filing:read")).toBe(true);
+    expect(can(claimed?.role, "accounts:read")).toBe(false);
+  });
+
+  it.each([["pending"], [""]])("refuses to invite with role %j", async (role) => {
+    await seedAdmin();
+    const form = new FormData();
+    form.set("email", "someone@example.com");
+    form.set("role", role);
+
+    const result = await inviteUser(form);
+    expect(result).toMatchObject({ ok: false, fieldErrors: { role: "Select a role" } });
+    expect(await findUserByEmail("someone@example.com")).toBeNull();
+    expect(createInvitation).not.toHaveBeenCalled();
   });
 
   it("rejects when the email is already a member of this company", async () => {

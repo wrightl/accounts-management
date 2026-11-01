@@ -14,7 +14,7 @@ import { can } from "@/lib/roles";
 import { saveCompanyChannelDefaults } from "@/lib/notifications/prefs";
 
 export async function GET() {
-  const auth = await requireMobileAuth("accounts:read");
+  const auth = await requireMobileAuth("workspace:read");
   if (!auth.ok) return auth.response;
 
   const userId =
@@ -69,7 +69,7 @@ export async function PUT(request: Request) {
     return NextResponse.json({ success: true });
   }
 
-  const auth = await requireMobileAuth("accounts:read");
+  const auth = await requireMobileAuth("workspace:read");
   if (!auth.ok) return auth.response;
   const userId =
     auth.user.localUserId ?? (await ensureLocalUser(auth.user));

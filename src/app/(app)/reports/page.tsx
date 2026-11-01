@@ -25,9 +25,10 @@ export default async function ReportsPage({
 }: {
     searchParams: Promise<Record<string, string | undefined>>;
 }) {
-    const { companyId } = await guardTenantPage('reports:read');
+    const { companyId } = await guardTenantPage('filing:read');
     const canExport = await hasPermission('reports:export');
     const canLock = await hasPermission('books:lock');
+    const canOpenClose = await hasPermission('accounts:read');
     const sp = await searchParams;
 
     const [defaults, company] = await Promise.all([
@@ -77,10 +78,14 @@ export default async function ReportsPage({
                         {lastClose
                             ? <> · last weekly close <DisplayDate value={lastClose.closedAt} />{lastClose.closedByName ? ` by ${lastClose.closedByName}` : ''}</>
                             : ''}
-                        {' · '}
-                        <Link href="/close" className="underline">
-                            Weekly close
-                        </Link>
+                        {canOpenClose ? (
+                            <>
+                                {' · '}
+                                <Link href="/close" className="underline">
+                                    Weekly close
+                                </Link>
+                            </>
+                        ) : null}
                     </p>
                 </div>
                 {canExport && (

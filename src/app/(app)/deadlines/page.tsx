@@ -28,7 +28,7 @@ function statusText(d: DeadlineRow): string {
 }
 
 export default async function DeadlinesPage() {
-  const { companyId } = await guardTenantPage("accounts:read");
+  const { companyId } = await guardTenantPage("filing:read");
   const [canWrite, canManage] = await Promise.all([
     hasPermission("accounts:write"),
     hasPermission("settings:manage"),
