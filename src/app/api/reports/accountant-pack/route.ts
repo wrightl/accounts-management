@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import { requirePermission, ForbiddenError } from "@/lib/auth";
-import { buildAccountantPack } from "@/lib/reports/accountant-pack";
+import { streamAccountantPack } from "@/lib/reports/accountant-pack";
 import { defaultReportPeriod } from "@/lib/reports/queries";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
-/** Accountant pack: zip of CSVs, summary reports, invoice PDFs, and receipt files. */
+/**
+ * Accountant pack: zip of CSVs, summary reports, invoice PDFs, and receipt files.
+ * Streamed, because Vercel caps buffered responses at 4.5 MB.
+ */
 export async function GET(request: Request) {
   let user;
   try {
@@ -30,14 +34,14 @@ export async function GET(request: Request) {
   const from = url.searchParams.get("from") ?? defaults.from;
   const to = url.searchParams.get("to") ?? defaults.to;
 
-  const { filename, zip } = await buildAccountantPack({
+  const { filename, stream } = await streamAccountantPack({
     companyId: user.companyId,
     from,
     to,
     includeVat: entitlements.vatExport,
   });
 
-  return new NextResponse(Buffer.from(zip), {
+  return new NextResponse(stream, {
     status: 200,
     headers: {
       "Content-Type": "application/zip",

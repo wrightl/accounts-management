@@ -19,14 +19,20 @@ import {
 } from "@/db/schema";
 import { seedCompany } from "@/lib/test/seed-company";
 import {
-  buildAccountantPack,
-  buildStoreZip,
   listStoreZipEntries,
+  streamAccountantPack,
   toCsv,
+  zipStoreStream,
+  type ZipEntry,
 } from "@/lib/reports/accountant-pack";
+import { renderVatSummaryPdf } from "@/lib/reports/vat-pdf";
 import { getStorage } from "@/lib/storage";
 
 vi.mock("server-only", () => ({}));
+vi.mock("@/lib/reports/vat-pdf", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/reports/vat-pdf")>();
+  return { ...actual, renderVatSummaryPdf: vi.fn(actual.renderVatSummaryPdf) };
+});
 
 let ctx: Awaited<ReturnType<typeof createTestDb>>;
 let db: TestDatabase;
@@ -55,6 +61,53 @@ async function storePdf(path: string, label: string) {
   const storage = getStorage();
   await storage.put(path, Buffer.from(fakePdf(label)), "application/pdf");
   return path;
+}
+
+async function collect(stream: ReadableStream<Uint8Array>) {
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+async function buildPack(options: Parameters<typeof streamAccountantPack>[0]) {
+  const { stream } = await streamAccountantPack(options);
+  return { zip: await collect(stream) };
+}
+
+async function insertExpense() {
+  const [user] = await db
+    .insert(users)
+    .values({ companyId, email: "payer@example.com", role: "user" })
+    .returning();
+  const [expense] = await db
+    .insert(expenses)
+    .values({
+      companyId,
+      description: "Receipts test",
+      category: "Travel",
+      spentAt: "2026-04-12",
+      amountPence: 4500,
+      vatPence: 0,
+      status: "recorded",
+      source: "manual",
+      paidByUserId: user.id,
+    })
+    .returning();
+  return expense;
+}
+
+async function insertReceipt(
+  expenseId: string,
+  blobPath: string,
+  filename: string,
+  data?: Uint8Array,
+) {
+  if (data) await getStorage().put(blobPath, data, "image/jpeg");
+  await db.insert(expenseReceipts).values({
+    expenseId,
+    blobPath,
+    filename,
+    contentType: "image/jpeg",
+    sizeBytes: data?.byteLength ?? 0,
+  });
 }
 
 describe("accountant pack integration", () => {
@@ -171,7 +224,7 @@ describe("accountant pack integration", () => {
       confirmed: true,
     });
 
-    const { zip } = await buildAccountantPack({ companyId, ...PERIOD });
+    const { zip } = await buildPack({ companyId, ...PERIOD });
     const entries = listStoreZipEntries(zip);
 
     expect(entries).toContain("invoices.csv");
@@ -295,7 +348,7 @@ describe("accountant pack integration", () => {
       },
     ]);
 
-    const { zip } = await buildAccountantPack({ companyId, ...PERIOD });
+    const { zip } = await buildPack({ companyId, ...PERIOD });
     const entries = listStoreZipEntries(zip);
 
     const invoicesCsv = extractZipText(zip, "invoices.csv");
@@ -379,7 +432,7 @@ describe("accountant pack integration", () => {
     ]);
     expect(pending.paidAt).toBeNull();
 
-    const { zip } = await buildAccountantPack({ companyId, ...PERIOD });
+    const { zip } = await buildPack({ companyId, ...PERIOD });
 
     const csv = extractZipText(zip, "reimbursements.csv");
     expect(csv).toContain("PAID-IN-APRIL");
@@ -395,7 +448,7 @@ describe("accountant pack integration", () => {
   });
 
   it("leaves out the VAT summary when the plan has no VAT export", async () => {
-    const { zip } = await buildAccountantPack({ companyId, ...PERIOD, includeVat: false });
+    const { zip } = await buildPack({ companyId, ...PERIOD, includeVat: false });
     const entries = listStoreZipEntries(zip);
 
     expect(entries).toContain("summary/pnl.csv");
@@ -406,22 +459,146 @@ describe("accountant pack integration", () => {
       "VAT summary needs Essentials or Premium",
     );
   });
-});
 
-describe("buildStoreZip", () => {
-  it("round-trips text and binary entries", () => {
-    const pdf = fakePdf("test");
-    const zip = buildStoreZip({
-      "hello.txt": "hello",
-      "bin/test.pdf": pdf,
-    });
-    const entries = listStoreZipEntries(zip);
-    expect(entries).toEqual(["hello.txt", "bin/test.pdf"]);
+  it("streams a pack larger than Vercel's 4.5 MB limit on buffered responses", async () => {
+    const expense = await insertExpense();
+    const receiptSize = 2_000_000;
+    for (let i = 0; i < 4; i++) {
+      await insertReceipt(
+        expense.id,
+        `receipts/large/${i}.jpg`,
+        `large-${i}.jpg`,
+        new Uint8Array(receiptSize).fill(i + 1),
+      );
+    }
+
+    const { zip } = await buildPack({ companyId, ...PERIOD });
+
+    expect(zip.byteLength).toBeGreaterThan(4_500_000);
+    for (let i = 0; i < 4; i++) {
+      const data = extractZipEntry(zip, `receipts/${expense.id}/large-${i}.jpg`);
+      expect(data.byteLength).toBe(receiptSize);
+      expect(data.every((byte) => byte === i + 1)).toBe(true);
+    }
+    expect(readCentralDirectory(zip)).toContain("README.txt");
+  });
+
+  it("marks an unavailable receipt as missing and still finishes the pack", async () => {
+    const expense = await insertExpense();
+    await insertReceipt(expense.id, "receipts/gone.jpg", "gone.jpg");
+
+    const { zip } = await buildPack({ companyId, ...PERIOD });
+
+    expect(listStoreZipEntries(zip)).not.toContain(`receipts/${expense.id}/gone.jpg`);
+    expect(extractZipText(zip, "receipts-index.csv")).toContain("MISSING");
+    expect(extractZipText(zip, "README.txt")).toContain("Receipt file missing: gone.jpg");
+  });
+
+  it("keeps both receipts when an expense has two with the same filename", async () => {
+    const expense = await insertExpense();
+    const first = new Uint8Array([1, 1, 1]);
+    const second = new Uint8Array([2, 2, 2]);
+    await insertReceipt(expense.id, "receipts/same-a.jpg", "receipt.jpg", first);
+    await insertReceipt(expense.id, "receipts/same-b.jpg", "receipt.jpg", second);
+
+    const { zip } = await buildPack({ companyId, ...PERIOD });
+
+    const dir = `receipts/${expense.id}`;
+    const paths = [`${dir}/receipt.jpg`, `${dir}/receipt-2.jpg`];
+    const contents = paths.map((path) => [...extractZipEntry(zip, path)]);
+    expect(contents).toEqual(expect.arrayContaining([[...first], [...second]]));
+    const index = extractZipText(zip, "receipts-index.csv");
+    for (const path of paths) expect(index).toContain(path);
+  });
+
+  it("reports a failed VAT PDF in the README", async () => {
+    vi.mocked(renderVatSummaryPdf).mockRejectedValueOnce(new Error("render failed"));
+
+    const { zip } = await buildPack({ companyId, ...PERIOD });
+
+    expect(listStoreZipEntries(zip)).not.toContain("summary/vat.pdf");
+    expect(extractZipText(zip, "README.txt")).toContain("VAT PDF skipped: render failed");
   });
 });
 
+async function* zipEntries(files: Record<string, ZipEntry>) {
+  yield* Object.entries(files);
+}
+
+describe("zipStoreStream", () => {
+  it("round-trips text and binary entries", async () => {
+    const pdf = fakePdf("test");
+    const zip = await collect(
+      zipStoreStream(zipEntries({ "hello.txt": "hello", "bin/test.pdf": pdf })),
+    );
+
+    expect(listStoreZipEntries(zip)).toEqual(["hello.txt", "bin/test.pdf"]);
+    expect(extractZipEntry(zip, "bin/test.pdf")).toEqual(pdf);
+    expect(readCentralDirectory(zip)).toEqual(["hello.txt", "bin/test.pdf"]);
+  });
+
+  it("writes the standard CRC-32 to both headers", async () => {
+    const zip = await collect(zipStoreStream(zipEntries({ "hello.txt": "hello" })));
+    const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+
+    expect(view.getUint32(14, true)).toBe(0x3610a686);
+    const centralStart = 30 + "hello.txt".length + "hello".length;
+    expect(view.getUint32(centralStart + 16, true)).toBe(0x3610a686);
+  });
+
+  it("fails the stream when an entry fails, rather than ending as a valid zip", async () => {
+    async function* failing(): AsyncGenerator<[string, ZipEntry]> {
+      yield ["first.txt", "first"];
+      throw new Error("storage down");
+    }
+
+    await expect(collect(zipStoreStream(failing()))).rejects.toThrow("storage down");
+  });
+
+  it("stops reading entries when the download is cancelled", async () => {
+    let finished = false;
+    async function* entries(): AsyncGenerator<[string, ZipEntry]> {
+      try {
+        yield ["first.txt", "first"];
+        yield ["second.txt", "second"];
+      } finally {
+        finished = true;
+      }
+    }
+
+    const reader = zipStoreStream(entries()).getReader();
+    await reader.read();
+    await reader.cancel();
+
+    expect(finished).toBe(true);
+  });
+});
+
+/** Read names from the central directory, which is what most unzip tools use. */
+function readCentralDirectory(zip: Uint8Array): string[] {
+  const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+  const endStart = zip.byteLength - 22;
+  expect(view.getUint32(endStart, true)).toBe(0x06054b50);
+  const count = view.getUint16(endStart + 10, true);
+  let offset = view.getUint32(endStart + 16, true);
+  const names: string[] = [];
+  for (let i = 0; i < count; i++) {
+    expect(view.getUint32(offset, true)).toBe(0x02014b50);
+    const nameLen = view.getUint16(offset + 28, true);
+    const localOffset = view.getUint32(offset + 42, true);
+    expect(view.getUint32(localOffset, true)).toBe(0x04034b50);
+    names.push(new TextDecoder().decode(zip.subarray(offset + 46, offset + 46 + nameLen)));
+    offset += 46 + nameLen;
+  }
+  return names;
+}
+
 /** Read a text entry from a store-only ZIP by scanning local headers. */
 function extractZipText(zip: Uint8Array, target: string): string {
+  return new TextDecoder().decode(extractZipEntry(zip, target));
+}
+
+function extractZipEntry(zip: Uint8Array, target: string): Uint8Array {
   const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
   let offset = 0;
   while (offset + 30 <= zip.byteLength) {
@@ -435,9 +612,7 @@ function extractZipText(zip: Uint8Array, target: string): string {
     );
     const dataStart = nameStart + nameLen + extraLen;
     if (name === target) {
-      return new TextDecoder().decode(
-        zip.subarray(dataStart, dataStart + compSize),
-      );
+      return zip.subarray(dataStart, dataStart + compSize);
     }
     offset = dataStart + compSize;
   }
