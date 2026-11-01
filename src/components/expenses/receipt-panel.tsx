@@ -8,7 +8,12 @@ import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-
 import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
 import { useFieldErrors } from "@/components/ui/use-field-errors";
 import { deleteReceipt, uploadReceipt } from "@/actions/expenses";
-import { isPreviewableReceipt } from "@/lib/expenses/receipt-file";
+import type { ActionResult } from "@/actions/result";
+import {
+  isPreviewableReceipt,
+  RECEIPT_UPLOAD_FAILED_MESSAGE,
+  receiptSizeError,
+} from "@/lib/expenses/receipt-file";
 
 export function ReceiptPanel({
   expenseId,
@@ -29,7 +34,7 @@ export function ReceiptPanel({
     fieldErrors,
     error,
     clearAll,
-    clearField,
+    setFieldErrors,
     applyFail,
     applyActionResult,
   } = useFieldErrors();
@@ -103,7 +108,13 @@ export function ReceiptPanel({
               return;
             }
             startTransition(async () => {
-              const result = await uploadReceipt(expenseId, formData);
+              // The action rejects, rather than returns, if the request is refused.
+              const result = await uploadReceipt(expenseId, formData).catch(
+                (): ActionResult => ({
+                  ok: false,
+                  error: RECEIPT_UPLOAD_FAILED_MESSAGE,
+                }),
+              );
               if (applyActionResult(result)) {
                 router.refresh();
               } else if (!result.ok) {
@@ -130,7 +141,16 @@ export function ReceiptPanel({
               aria-describedby={
                 fieldErrors.receipt ? "receipt-error" : undefined
               }
-              onChange={() => clearField("receipt")}
+              onChange={(e) => {
+                clearAll();
+                const sizeError = receiptSizeError(
+                  e.target.files?.[0]?.size ?? 0,
+                );
+                if (sizeError) {
+                  e.target.value = "";
+                  setFieldErrors({ receipt: sizeError });
+                }
+              }}
             />
             <FieldError id="receipt-error">{fieldErrors.receipt}</FieldError>
           </div>

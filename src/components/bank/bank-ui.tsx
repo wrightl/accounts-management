@@ -1030,7 +1030,7 @@ export function ReconciliationCell({
           label="Expense actions"
           icon={Receipt}
           items={[
-            { key: "attach", label: "Attach…", onSelect: () => setAttachOpen(true) },
+            { key: "attach", label: "Link existing expense…", onSelect: () => setAttachOpen(true) },
             createExpenseItem,
           ]}
         />

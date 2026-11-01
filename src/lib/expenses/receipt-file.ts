@@ -1,6 +1,18 @@
 import { safeFilename } from "@/lib/files";
 
-export const MAX_RECEIPT_BYTES = 8 * 1024 * 1024;
+const MAX_RECEIPT_MB = 20;
+export const MAX_RECEIPT_BYTES = MAX_RECEIPT_MB * 1024 * 1024;
+
+/** Shown when a request fails before the action can answer, e.g. rejected for size. */
+export const RECEIPT_UPLOAD_FAILED_MESSAGE =
+  "Could not upload the receipt. Try again, or use a smaller file";
+
+/** Shared by browser and server so an oversized file is refused before it's sent. */
+export function receiptSizeError(sizeBytes: number): string | null {
+  if (sizeBytes <= MAX_RECEIPT_BYTES) return null;
+  const sizeMb = (sizeBytes / (1024 * 1024)).toFixed(1);
+  return `This file is ${sizeMb} MB. Receipts can be up to ${MAX_RECEIPT_MB} MB`;
+}
 
 export const ALLOWED_RECEIPT_TYPES = new Set([
   "image/jpeg",
@@ -84,9 +96,8 @@ export function parseReceiptFile(
   if (!(file instanceof File) || file.size === 0) {
     return receiptFail(fieldName, "Choose a receipt file");
   }
-  if (file.size > MAX_RECEIPT_BYTES) {
-    return receiptFail(fieldName, "Receipt must be under 8 MB");
-  }
+  const sizeError = receiptSizeError(file.size);
+  if (sizeError) return receiptFail(fieldName, sizeError);
   const contentType = file.type || "application/octet-stream";
   const allowed =
     ALLOWED_RECEIPT_TYPES.has(contentType) ||

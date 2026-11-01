@@ -15,7 +15,7 @@ export async function POST(
     if (!authz.ok) return authz.response;
     const { user } = authz;
 
-    // Same validation as web uploads: 8 MB cap and sniffed image/PDF type.
+    // Same validation as web uploads: size cap and sniffed image/PDF type.
     const localUserId = await ensureLocalUser(user);
     const result = await storeExpenseReceipt(
       { companyId: user.companyId, localUserId },

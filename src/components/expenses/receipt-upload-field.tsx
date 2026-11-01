@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label } from "@/components/ui/form";
 import { extractReceiptFields } from "@/actions/expenses";
+import { receiptSizeError } from "@/lib/expenses/receipt-file";
 import type { ReceiptExtraction } from "@/lib/expenses/receipt-parse";
 import { receiptOcrProviderLabel } from "@/lib/expenses/receipt-parse";
 
@@ -69,6 +70,13 @@ export function ReceiptUploadField({
   }
 
   function handleFileSelected(selected: File | null) {
+    const sizeError = selected && receiptSizeError(selected.size);
+    if (sizeError) {
+      clearFile();
+      setExtractError(sizeError);
+      return;
+    }
+
     setExtractError(null);
     setExtractMessage(null);
     setFile(selected);
@@ -81,7 +89,11 @@ export function ReceiptUploadField({
     const formData = new FormData();
     formData.set("receipt", selected);
     startTransition(async () => {
-      const result = await extractReceiptFields(formData);
+      // The action rejects, rather than returns, if the request is refused.
+      const result = await extractReceiptFields(formData).catch(() => ({
+        ok: false as const,
+        error: "Could not read this receipt — fill in the details manually.",
+      }));
       if (!result.ok) {
         setExtractError(result.error);
         return;

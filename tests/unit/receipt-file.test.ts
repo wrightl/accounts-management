@@ -4,6 +4,7 @@ import {
   resolveReceiptContentType,
   sniffReceiptContentType,
   MAX_RECEIPT_BYTES,
+  receiptSizeError,
   ALLOWED_RECEIPT_TYPES,
 } from "@/lib/expenses/receipt-file";
 
@@ -57,7 +58,14 @@ describe("receipt file constants", () => {
     expect(ALLOWED_RECEIPT_TYPES.has("application/pdf")).toBe(true);
   });
 
-  it("sets 8 MB limit", () => {
-    expect(MAX_RECEIPT_BYTES).toBe(8 * 1024 * 1024);
+  it("sets 20 MB limit", () => {
+    expect(MAX_RECEIPT_BYTES).toBe(20 * 1024 * 1024);
+  });
+
+  it("accepts a file at the limit and names the size of one over it", () => {
+    expect(receiptSizeError(MAX_RECEIPT_BYTES)).toBeNull();
+    expect(receiptSizeError(23.4 * 1024 * 1024)).toBe(
+      "This file is 23.4 MB. Receipts can be up to 20 MB",
+    );
   });
 });
