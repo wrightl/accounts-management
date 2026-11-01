@@ -15,6 +15,9 @@ import {
 } from '@/lib/bank/list-params';
 import { nextTableSort } from '@/lib/table-sort';
 import type { BankTransactionListItem } from '@/lib/bank/queries';
+import { RowLabels } from '@/components/labels/row-labels';
+import { RowNote } from '@/components/labels/row-note';
+import type { RowLabel } from '@/lib/labels/queries';
 import { cn } from '@/lib/utils';
 import { FriendlyDay } from "@/components/date-format-provider";
 import { DisplayDate } from '@/components/date-format-provider';
@@ -171,6 +174,7 @@ export function BankTransactionTable({
     rows,
     customCategories,
     incomeCategories,
+    allLabels,
     canWrite,
     showAccount = false,
 }: {
@@ -178,6 +182,7 @@ export function BankTransactionTable({
     rows: BankTransactionListItem[];
     customCategories: readonly string[];
     incomeCategories: readonly string[];
+    allLabels: readonly RowLabel[];
     canWrite: boolean;
     showAccount?: boolean;
 }) {
@@ -201,6 +206,9 @@ export function BankTransactionTable({
         <Table>
             <THead>
                 <TR>
+                    <TH className="w-8 pr-0">
+                        <span className="sr-only">Notes</span>
+                    </TH>
                     {sortHeader('Date', 'date')}
                     {sortHeader('Counterparty', 'counterparty')}
                     {showAccount ? <TH>Account</TH> : null}
@@ -213,10 +221,25 @@ export function BankTransactionTable({
             <TBody>
                 {rows.map((r) => (
                     <TR key={r.id}>
+                        <TD className="w-8 pr-0">
+                            <RowNote
+                                kind="bank"
+                                rowId={r.id}
+                                note={r.notes}
+                                canWrite={canWrite}
+                            />
+                        </TD>
                         <TD className="text-muted"><DisplayDate value={r.bookedAt} /></TD>
                         <TD>
                             {r.counterparty ?? r.description ?? '—'}
                             <TagsLine tags={r.tags} />
+                            <RowLabels
+                                kind="bank"
+                                rowId={r.id}
+                                labels={r.labels}
+                                allLabels={allLabels}
+                                canWrite={canWrite}
+                            />
                         </TD>
                         {showAccount ? (
                             <TD className="text-muted">{r.bankAccountName || '—'}</TD>
@@ -250,12 +273,14 @@ function BankTransactionCard({
     row,
     customCategories,
     incomeCategories,
+    allLabels,
     canWrite,
     showAccount = false,
 }: {
     row: BankTransactionListItem;
     customCategories: readonly string[];
     incomeCategories: readonly string[];
+    allLabels: readonly RowLabel[];
     canWrite: boolean;
     showAccount?: boolean;
 }) {
@@ -264,6 +289,12 @@ function BankTransactionCard({
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
+                        <RowNote
+                            kind="bank"
+                            rowId={row.id}
+                            note={row.notes}
+                            canWrite={canWrite}
+                        />
                         <p className="font-medium">
                             {row.counterparty ?? row.description ?? '—'}
                         </p>
@@ -274,6 +305,13 @@ function BankTransactionCard({
                         />
                     </div>
                     <TagsLine tags={row.tags} />
+                    <RowLabels
+                        kind="bank"
+                        rowId={row.id}
+                        labels={row.labels}
+                        allLabels={allLabels}
+                        canWrite={canWrite}
+                    />
                     <p className="mt-0.5 text-sm text-muted">
                         {row.reference ?? '—'}
                         {showAccount && row.bankAccountName
@@ -308,12 +346,14 @@ export function BankTransactionCardList({
     rows,
     customCategories,
     incomeCategories,
+    allLabels,
     canWrite,
     showAccount = false,
 }: {
     rows: BankTransactionListItem[];
     customCategories: readonly string[];
     incomeCategories: readonly string[];
+    allLabels: readonly RowLabel[];
     canWrite: boolean;
     showAccount?: boolean;
 }) {
@@ -332,6 +372,7 @@ export function BankTransactionCardList({
                                 row={r}
                                 customCategories={customCategories}
                                 incomeCategories={incomeCategories}
+                                allLabels={allLabels}
                                 canWrite={canWrite}
                                 showAccount={showAccount}
                             />
@@ -347,12 +388,14 @@ export function BankTransactionCards({
     rows,
     customCategories,
     incomeCategories,
+    allLabels,
     canWrite,
     showAccount = false,
 }: {
     rows: BankTransactionListItem[];
     customCategories: readonly string[];
     incomeCategories: readonly string[];
+    allLabels: readonly RowLabel[];
     canWrite: boolean;
     showAccount?: boolean;
 }) {
@@ -361,6 +404,7 @@ export function BankTransactionCards({
             rows={rows}
             customCategories={customCategories}
             incomeCategories={incomeCategories}
+            allLabels={allLabels}
             canWrite={canWrite}
             showAccount={showAccount}
         />

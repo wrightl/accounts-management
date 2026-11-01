@@ -1,9 +1,10 @@
 import "server-only";
 import { alias } from "drizzle-orm/pg-core";
-import { and, asc, count, desc, eq, gte, ilike, lte, or, sql, sum, type AnyColumn, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, inArray, lte, or, sql, sum, type AnyColumn, type SQL } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   clients,
+  expenseLabels,
   expenseReceipts,
   expenses,
   reconciliationMatches,
@@ -15,6 +16,7 @@ import type { ExpenseStatus } from "@/lib/expenses/categories";
 import type { ExpenseSortColumn } from "@/lib/expenses/list-sort";
 import type { TableSort } from "@/lib/table-sort";
 import { bankSearchPattern } from "@/lib/bank/list-params";
+import { labelsForExpenses } from "@/lib/labels/queries";
 
 export interface ExpenseFilters {
   /** Matches description or client name. */
@@ -25,6 +27,8 @@ export interface ExpenseFilters {
   paidByUserId?: string;
   billable?: "true" | "false" | "";
   status?: string;
+  /** Matches expenses carrying any of these labels. */
+  labels?: string[];
   sort?: TableSort<ExpenseSortColumn>;
 }
 
@@ -102,6 +106,13 @@ export async function listExpenses(companyId: string, filters: ExpenseFilters = 
   if (filters.status) {
     conditions.push(eq(expenses.status, filters.status as ExpenseStatus));
   }
+  if (filters.labels?.length) {
+    conditions.push(sql`exists (
+      select 1 from ${expenseLabels}
+      where ${expenseLabels.expenseId} = ${expenses.id}
+        and ${inArray(expenseLabels.labelId, filters.labels)}
+    )`);
+  }
 
   const rows = await db
     .select({
@@ -116,6 +127,7 @@ export async function listExpenses(companyId: string, filters: ExpenseFilters = 
       billable: expenses.billable,
       source: expenses.source,
       externalSenderEmail: expenses.externalSenderEmail,
+      notes: expenses.notes,
       createdAt: expenses.createdAt,
       paidByName: paidBy.name,
       createdByName: createdBy.name,
@@ -142,6 +154,8 @@ export async function listExpenses(companyId: string, filters: ExpenseFilters = 
       }),
     );
 
+  const labelsByExpense = await labelsForExpenses(rows.map((r) => r.id));
+
   return rows.map((r) => {
     const createdByDisplay =
       r.createdByName ||
@@ -161,6 +175,8 @@ export async function listExpenses(companyId: string, filters: ExpenseFilters = 
       billable: r.billable,
       source: r.source,
       externalSenderEmail: r.externalSenderEmail,
+      notes: r.notes,
+      labels: labelsByExpense.get(r.id) ?? [],
       createdAt: r.createdAt,
       paidByName: r.paidByName,
       createdByName: createdByDisplay,

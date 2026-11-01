@@ -21,6 +21,8 @@ import { listBankSpendingCategoriesWithUsage } from "@/lib/bank/spending-categor
 import { listIncomeCategoryNames } from "@/lib/bank/income-category-catalog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getDateFormat } from "@/lib/date-format.server";
+import { ManageLabelsButton } from "@/components/labels/manage-labels";
+import { listLabels } from "@/lib/labels/queries";
 
 export default async function TransactionsPage({
   searchParams,
@@ -29,9 +31,17 @@ export default async function TransactionsPage({
 }) {
   const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
-  const params = parseBankListParams(await searchParams);
+  const parsed = parseBankListParams(await searchParams);
 
-  const settings = await getOrCreateCompanySettings(companyId);
+  const [settings, labels] = await Promise.all([
+    getOrCreateCompanySettings(companyId),
+    listLabels(companyId),
+  ]);
+  // A link can outlive a label; a deleted one shouldn't empty the list.
+  const params = {
+    ...parsed,
+    labels: parsed.labels.filter((id) => labels.some((l) => l.id === id)),
+  };
   const dateRange = resolveBankListDateRange(params, settings.financialYearEndMonth);
 
   const listFilters =
@@ -41,6 +51,7 @@ export default async function TransactionsPage({
           type: params.type,
           category: params.category,
           reconciliation: params.reconciliation,
+          labels: params.labels,
           from: dateRange.from,
           to: dateRange.to,
           page: 1,
@@ -51,6 +62,7 @@ export default async function TransactionsPage({
           type: params.type,
           category: params.category,
           reconciliation: params.reconciliation,
+          labels: params.labels,
           from: dateRange.from,
           to: dateRange.to,
           page: params.page,
@@ -64,6 +76,7 @@ export default async function TransactionsPage({
     type: params.type,
     category: params.category,
     reconciliation: params.reconciliation,
+    labels: params.labels,
     from: dateRange.from,
     to: dateRange.to,
   };
@@ -117,10 +130,11 @@ export default async function TransactionsPage({
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_280px] xl:grid-cols-[1fr_320px]">
         <div>
-          <BankFilters params={params} customCategories={customCategoryNames} />
+          <BankFilters params={params} customCategories={customCategoryNames} labels={labels} />
 
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
             <BankViewToggle params={params} />
+            {canWrite ? <ManageLabelsButton labels={labels} /> : null}
           </div>
 
           <div className="mt-4">
@@ -146,11 +160,13 @@ export default async function TransactionsPage({
                   type: params.type,
                   category: params.category,
                   reconciliation: params.reconciliation,
+                  labels: params.labels,
                   from: dateRange.from,
                   to: dateRange.to,
                 }}
                 customCategories={customCategoryNames}
                 incomeCategories={incomeCategories}
+                allLabels={labels}
                 canWrite={canWrite}
                 showAccount={showAccount}
               />
@@ -160,6 +176,7 @@ export default async function TransactionsPage({
                 rows={rows}
                 customCategories={customCategoryNames}
                 incomeCategories={incomeCategories}
+                allLabels={labels}
                 canWrite={canWrite}
                 showAccount={showAccount}
               />

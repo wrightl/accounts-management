@@ -36,7 +36,7 @@ function formatSummaryPeriod(from: string, to: string, dateFormat: DateFormat): 
 export async function getBankTransactionSummary(
   companyId: string,
   filters: Partial<
-    Pick<BankListParams, "q" | "type" | "category" | "reconciliation" | "from" | "to">
+    Pick<BankListParams, "q" | "type" | "category" | "reconciliation" | "labels" | "from" | "to">
   >,
   dateFormat: DateFormat = "d-mon-y",
 ): Promise<BankTransactionSummary> {

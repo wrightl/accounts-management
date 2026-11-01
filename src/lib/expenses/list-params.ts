@@ -7,6 +7,7 @@ import {
 import { parseTableSort, setTableSortParams, type SortDir } from "@/lib/table-sort";
 import type { ExpenseStatus } from "@/lib/expenses/categories";
 import { EXPENSE_SORT, type ExpenseSortColumn } from "@/lib/expenses/list-sort";
+import { parseLabelIds } from "@/lib/labels/params";
 
 /**
  * Session cookie holding the last expenses list query, so "← Expenses" and the
@@ -31,6 +32,8 @@ export interface ExpenseListParams {
   status: ExpenseStatus | "";
   paidBy: string;
   billable: "true" | "false" | "";
+  /** Label ids; an expense matches if it has any of them. */
+  labels: string[];
   /** My reimbursable: overrides status and paidBy with the viewer's own. */
   mine: boolean;
   sort: ExpenseSortColumn;
@@ -69,6 +72,7 @@ export function parseExpenseListParams(
     status,
     paidBy: UUID.test(paidByRaw) ? paidByRaw : "",
     billable: billableRaw === "true" || billableRaw === "false" ? billableRaw : "",
+    labels: parseLabelIds(sp.labels),
     mine: first(sp, "mine") === "1",
     ...parseTableSort(sp, EXPENSE_SORT),
   };
@@ -82,7 +86,8 @@ export function hasActiveExpenseFilters(params: ExpenseListParams): boolean {
       params.category ||
       params.status ||
       params.paidBy ||
-      params.billable,
+      params.billable ||
+      params.labels.length > 0,
   );
 }
 
@@ -126,6 +131,7 @@ export function expenseListSearchParams(
   if (next.status) qs.set("status", next.status);
   if (next.paidBy) qs.set("paidBy", next.paidBy);
   if (next.billable) qs.set("billable", next.billable);
+  if (next.labels.length > 0) qs.set("labels", next.labels.join(","));
   setTableSortParams(qs, EXPENSE_SORT, { sort: next.sort, dir: next.dir });
   return qs;
 }

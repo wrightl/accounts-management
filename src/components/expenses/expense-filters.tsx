@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useTransition } from "react";
+import { LabelFilter } from "@/components/labels/label-filter";
 import { PeriodRangeSelect } from "@/components/period/bank-period-range-select";
 import { buttonClasses } from "@/components/ui/button";
 import { Input, Label, Select } from "@/components/ui/form";
@@ -13,6 +14,7 @@ import {
   hasActiveExpenseFilters,
   type ExpenseListParams,
 } from "@/lib/expenses/list-params";
+import type { RowLabel } from "@/lib/labels/queries";
 import { cn } from "@/lib/utils";
 
 /**
@@ -24,10 +26,12 @@ export function ExpenseFilters({
   params,
   categories,
   founders,
+  labels,
 }: {
   params: ExpenseListParams;
   categories: readonly string[];
   founders: { id: string; label: string }[];
+  labels: readonly RowLabel[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -143,6 +147,15 @@ export function ExpenseFilters({
           </Select>
         </div>
       )}
+      {labels.length > 0 ? (
+        <div>
+          <LabelFilter
+            labels={labels}
+            selected={params.labels}
+            onChange={(ids) => apply({ labels: ids })}
+          />
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-end gap-3 sm:col-span-2 lg:col-span-6">
         <button type="submit" className={buttonClasses("secondary")}>
           Search
@@ -158,6 +171,7 @@ export function ExpenseFilters({
               status: "",
               paidBy: "",
               billable: "",
+              labels: [],
             })}
             scroll={false}
             className="text-sm text-muted hover:text-foreground hover:underline"
