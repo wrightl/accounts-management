@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   auditLog,
@@ -27,39 +27,41 @@ export async function purgeAbandonedImports(): Promise<number> {
     .orderBy(desc(invoiceImportBatches.createdAt))
     .limit(200);
   if (batches.length === 0) return 0;
-  const ids = batches.map((b) => b.id);
-
-  const files = await db
-    .select({ path: invoiceImportDrafts.documentPath })
-    .from(invoiceImportDrafts)
-    .where(
-      and(
-        inArray(invoiceImportDrafts.batchId, ids),
-        isNotNull(invoiceImportDrafts.documentPath),
-      ),
+  for (const batch of batches) {
+    const scope = and(
+      eq(invoiceImportDrafts.batchId, batch.id),
+      eq(invoiceImportDrafts.companyId, batch.companyId),
     );
-  await db.transaction(async (tx) => {
-    await tx.delete(invoiceImportDrafts).where(inArray(invoiceImportDrafts.batchId, ids));
-    await tx
-      .update(invoiceImportBatches)
-      .set({ status: "discarded" })
-      .where(inArray(invoiceImportBatches.id, ids));
-    await tx.insert(auditLog).values(
-      batches.map((batch) => ({
+    const files = await db
+      .select({ path: invoiceImportDrafts.documentPath })
+      .from(invoiceImportDrafts)
+      .where(and(scope, isNotNull(invoiceImportDrafts.documentPath)));
+    await db.transaction(async (tx) => {
+      await tx.delete(invoiceImportDrafts).where(scope);
+      await tx
+        .update(invoiceImportBatches)
+        .set({ status: "discarded" })
+        .where(
+          and(
+            eq(invoiceImportBatches.id, batch.id),
+            eq(invoiceImportBatches.companyId, batch.companyId),
+          ),
+        );
+      await tx.insert(auditLog).values({
         companyId: batch.companyId,
         actorUserId: null,
         action: "invoice_import.discard",
         entityType: "invoice_import_batch",
         entityId: batch.id,
         meta: { reason: "abandoned" },
-      })),
-    );
-  });
-  for (const file of files) {
-    try {
-      await getStorage().delete(file.path!);
-    } catch {
-      /* ignore */
+      });
+    });
+    for (const file of files) {
+      try {
+        await getStorage().delete(file.path!);
+      } catch {
+        /* ignore */
+      }
     }
   }
   return batches.length;
