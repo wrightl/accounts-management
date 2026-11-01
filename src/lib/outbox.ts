@@ -132,6 +132,12 @@ export async function processSendJob(jobId: string): Promise<{ ok: boolean; erro
         .where(eq(sendJobs.id, jobId));
     } else {
       const delivered = await deliverReminder(job.invoiceId, job.actorUserId, job.reminderStep);
+      if (delivered === "chase_off") {
+        // Nothing was sent, so remove the job. Left in place, it would count as
+        // this step being done and stop it being queued if chasing is turned back on.
+        await db.delete(sendJobs).where(eq(sendJobs.id, jobId));
+        return { ok: true };
+      }
       // Paid or cancelled since it was queued: nothing to chase, so close the job.
       await db
         .update(sendJobs)
@@ -332,7 +338,7 @@ async function deliverReminder(
   invoiceId: string,
   actorUserId?: string | null,
   step?: number | null,
-): Promise<boolean> {
+): Promise<boolean | "chase_off"> {
   const db = getDb();
   const [row] = await db
     .select({
@@ -347,7 +353,7 @@ async function deliverReminder(
   if (!row) throw new Error("Invoice not found");
   if (storedStatus(row.invoice.status) !== "sent") return false;
   // A job queued before the user stopped chasing must not go out.
-  if (!row.invoice.chaseEnabled) return false;
+  if (!row.invoice.chaseEnabled) return "chase_off";
   if (!row.clientEmail) throw new Error("Client has no email address");
 
   const company = await getCompanySettings(row.invoice.companyId);

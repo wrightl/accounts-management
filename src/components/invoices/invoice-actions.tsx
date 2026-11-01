@@ -139,7 +139,7 @@ export function InvoiceActions({
               }
               clearAll();
               startTransition(async () => {
-                const result = await sendInvoice(invoiceId);
+                const result = await sendInvoice(invoiceId, { confirmedImported: isImported });
                 if (!result.ok) setError(result.error);
                 else refresh();
               });
