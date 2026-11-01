@@ -134,14 +134,15 @@ describe("issue-date filters", () => {
     });
   }
 
-  it("only appear alongside the accounts rules", () => {
-    const missing = sourceFiles("src").filter((path) => {
-      const text = readFileSync(path, "utf8");
-      return (
-        /(gte|lte|inPeriod)\(invoices\.issueDate/.test(text) &&
-        !text.includes("invoiceCountsInAccounts") &&
-        !EXEMPT.has(path)
-      );
+  it("only appear next to the accounts rules", () => {
+    const missing = sourceFiles("src").flatMap((path) => {
+      if (EXEMPT.has(path)) return [];
+      const lines = readFileSync(path, "utf8").split("\n");
+      return lines.flatMap((line, i) => {
+        if (!/(gte|inPeriod)\(invoices\.issueDate/.test(line)) return [];
+        const nearby = lines.slice(Math.max(0, i - 5), i + 1).join("\n");
+        return nearby.includes("invoiceCountsInAccounts") ? [] : [`${path}:${i + 1}`];
+      });
     });
     expect(missing).toEqual([]);
   });

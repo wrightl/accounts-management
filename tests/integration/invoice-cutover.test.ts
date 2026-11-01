@@ -17,6 +17,16 @@ import {
   saveInvoiceCutover,
 } from "@/actions/invoice-cutover";
 import { commitInvoiceImport } from "@/actions/invoices";
+import { sumRefundsInPeriod, refundsByMonth } from "@/lib/credit-notes/period";
+import {
+  getCollectedByMonth,
+  getCollectedInPeriod,
+  getDaysSalesOutstanding,
+  getInvoicedGrossByMonth,
+  getInvoicedGrossInPeriod,
+  getTopClientsByRevenue,
+} from "@/lib/dashboard/queries";
+import { getDashboardKpis } from "@/lib/invoices/queries";
 import { getReservesPosition } from "@/lib/ledger/queries";
 import { listClientProfitability } from "@/lib/profitability/queries";
 import { streamAccountantPack } from "@/lib/reports/accountant-pack";
@@ -26,6 +36,7 @@ import {
   getProfitAndLoss,
   getVatSummary,
 } from "@/lib/reports/queries";
+import { todayIsoDate } from "@/lib/dates";
 import { seedCompany } from "@/lib/test/seed-company";
 
 vi.mock("server-only", () => ({}));
@@ -266,6 +277,71 @@ describe("cutover in the accounts", () => {
     expect(position.years[0].closingReservesPence).toBeGreaterThan(0);
   });
 
+  it("counts refunds only from the cutover", async () => {
+    const old = await addInvoice("OLD-R", "2026-02-10", 50_000);
+    const refund = (number: string, refundedAt: string) =>
+      db.insert(creditNotes).values({
+        companyId,
+        invoiceId: old.id,
+        clientId,
+        number,
+        issueDate: "2026-02-20",
+        reason: "Overcharged",
+        refundedPence: 500,
+        refundedAt,
+      });
+    await refund("CN-R1", "2026-03-10");
+    await refund("CN-R2", "2026-05-10");
+    await setCutover(CUTOVER);
+
+    expect(await sumRefundsInPeriod(companyId, FROM, TO)).toBe(500);
+    expect([...(await refundsByMonth(companyId, FROM, TO))]).toEqual([
+      ["2026-05", 500],
+    ]);
+  });
+
+  it("applies the rules to dashboard cash and invoiced figures", async () => {
+    await seedScenario();
+    await setCutover(CUTOVER);
+
+    // The payment after cutover only; the one before it stays out.
+    expect(await getCollectedInPeriod(companyId, FROM, TO)).toBe(7_000);
+    expect(await getCollectedByMonth(companyId, FROM, TO)).toEqual([
+      { month: "2026-05", totalPence: 7_000 },
+    ]);
+
+    // 120,000 + 24,000 gross, less the 1,200 credit note after cutover.
+    expect(await getInvoicedGrossInPeriod(companyId, FROM, TO)).toBe(142_800);
+    const months = await getInvoicedGrossByMonth(companyId, FROM, TO);
+    expect(months.reduce((acc, m) => acc + m.totalPence, 0)).toBe(142_800);
+
+    const [top] = await getTopClientsByRevenue(companyId, FROM, TO);
+    expect(top.grossPence).toBe(142_800);
+  });
+
+  it("leaves brought-forward invoices out of invoiced this month", async () => {
+    const today = todayIsoDate();
+    const inv = await addInvoice("MONTH-1", today, 10_000);
+    expect((await getDashboardKpis(companyId)).invoicedThisMonthPence).toBe(12_000);
+    await db
+      .update(invoices)
+      .set({ broughtForward: true })
+      .where(eq(invoices.id, inv.id));
+    expect((await getDashboardKpis(companyId)).invoicedThisMonthPence).toBe(0);
+  });
+
+  it("leaves every import out of average days to pay, with or without a cutover", async () => {
+    const own = await addInvoice("OWN", "2026-03-01", 1_000, "alfa");
+    const imported = await addInvoice("IMP", "2026-03-01", 1_000);
+    await db
+      .update(invoices)
+      .set({ status: "paid" })
+      .where(eq(invoices.companyId, companyId));
+    await addPayment(own.id, "2026-03-11", 1_200);
+    await addPayment(imported.id, "2026-05-30", 1_200);
+    expect(await getDaysSalesOutstanding(companyId)).toBe(10);
+  });
+
   it("marks new imports using the current cutover", async () => {
     await setCutover(CUTOVER);
     const row = {
@@ -426,6 +502,14 @@ describe("0071 backfill", () => {
     });
     await runBackfill();
     expect(await sourceOf("PAID")).toBe("import");
+    const [record] = await db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.action, "invoice.source_backfill"));
+    expect(record.meta).toMatchObject({
+      basis: "payment_method",
+      invoiceIds: [inv.id],
+    });
   });
 
   it("finds unpaid imports only when the audit count matches", async () => {
@@ -466,6 +550,7 @@ describe("0071 backfill", () => {
       .from(auditLog)
       .where(eq(auditLog.action, "invoice.source_backfill"));
     expect(record.companyId).toBe(companyId);
+    expect(record.meta).toMatchObject({ basis: "audit_count" });
     expect((record.meta as { invoiceIds: string[] }).invoiceIds).toHaveLength(2);
   });
 });
