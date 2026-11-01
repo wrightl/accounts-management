@@ -242,6 +242,24 @@ describe("serving the original", () => {
     expect(zip.toString("latin1")).toContain("Original invoice missing, using a generated record: GONE-1");
   });
 
+  it("warns in the accountant pack when a brought-forward original has gone", async () => {
+    const inv = await addInvoice({
+      number: "GONE-BF",
+      issueDate: "2026-01-01",
+      broughtForward: true,
+    });
+    await attachInvoiceDocument(inv.id, pdfForm());
+    await getStorage().delete((await reload(inv.id)).originalDocumentPath!);
+
+    const { stream } = await streamAccountantPack({
+      companyId,
+      from: "2026-04-01",
+      to: "2026-06-30",
+    });
+    const zip = Buffer.from(await new Response(stream).arrayBuffer());
+    expect(zip.toString("latin1")).toContain("Original invoice missing: GONE-BF");
+  });
+
   it("is in the accountant pack, for counted and brought-forward invoices", async () => {
     const counted = await addInvoice({ number: "NEW-1", issueDate: "2026-05-01" });
     await attachInvoiceDocument(counted.id, pdfForm());
@@ -296,6 +314,15 @@ describe("public page for an imported invoice", () => {
     const html = await renderPage(inv.publicToken);
     expect(html).toContain("The PDF is the original");
     expect(html).not.toContain("issued elsewhere");
+  });
+
+  it("doesn't claim an original when the file has gone", async () => {
+    const inv = await addInvoice();
+    await attachInvoiceDocument(inv.id, pdfForm());
+    await getStorage().delete((await reload(inv.id)).originalDocumentPath!);
+    const html = await renderPage(inv.publicToken);
+    expect(html).toContain("issued elsewhere");
+    expect(html).not.toContain("The PDF is the original");
   });
 
   it("shows no notice for an invoice created in Alfa", async () => {
