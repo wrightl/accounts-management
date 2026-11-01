@@ -156,6 +156,21 @@ describe("receipt preview", () => {
     }
   });
 
+  it("streams the stored file", async () => {
+    const pdf = await receipt("application/pdf", "bill.pdf");
+    const res = await getReceipt(pdf.id);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("application/pdf");
+    expect(res.body).toBeInstanceOf(ReadableStream);
+    expect(await res.text()).toBe("bytes");
+  });
+
+  it("answers 404 when the stored file is missing", async () => {
+    const pdf = await receipt("application/pdf", "bill.pdf");
+    await getStorage().delete(pdf.blobPath);
+    expect((await getReceipt(pdf.id)).status).toBe(404);
+  });
+
   it("won't let an error be framed", async () => {
     const res = await getReceipt(crypto.randomUUID(), "?inline=1");
     expect(res.status).toBe(404);

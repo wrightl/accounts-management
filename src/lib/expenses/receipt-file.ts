@@ -1,7 +1,7 @@
 import { safeFilename } from "@/lib/files";
 
-const MAX_RECEIPT_MB = 20;
-export const MAX_RECEIPT_BYTES = MAX_RECEIPT_MB * 1024 * 1024;
+/** Vercel refuses function bodies over 4.5 MB; this leaves room for form overhead. */
+export const MAX_RECEIPT_BYTES = 4_480_000;
 
 /** Shown when a request fails before the action can answer, e.g. rejected for size. */
 export const RECEIPT_UPLOAD_FAILED_MESSAGE =
@@ -10,8 +10,8 @@ export const RECEIPT_UPLOAD_FAILED_MESSAGE =
 /** Shared by browser and server so an oversized file is refused before it's sent. */
 export function receiptSizeError(sizeBytes: number): string | null {
   if (sizeBytes <= MAX_RECEIPT_BYTES) return null;
-  const sizeMb = (sizeBytes / (1024 * 1024)).toFixed(1);
-  return `This file is ${sizeMb} MB. Receipts can be up to ${MAX_RECEIPT_MB} MB`;
+  const sizeMb = (sizeBytes / 1_000_000).toFixed(2);
+  return `This file is ${sizeMb} MB. Receipts can be up to 4.5 MB`;
 }
 
 export const ALLOWED_RECEIPT_TYPES = new Set([

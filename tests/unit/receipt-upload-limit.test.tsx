@@ -45,7 +45,7 @@ function fileOfSize(size: number) {
 }
 
 const oversized = fileOfSize(MAX_RECEIPT_BYTES + 1);
-const sizeMessage = /Receipts can be up to 20 MB/;
+const sizeMessage = /Receipts can be up to 4\.5 MB/;
 
 function renderPanel() {
   render(<ReceiptPanel expenseId="expense-1" receipts={[]} canWrite />);

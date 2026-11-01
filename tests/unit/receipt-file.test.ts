@@ -58,14 +58,15 @@ describe("receipt file constants", () => {
     expect(ALLOWED_RECEIPT_TYPES.has("application/pdf")).toBe(true);
   });
 
-  it("sets 20 MB limit", () => {
-    expect(MAX_RECEIPT_BYTES).toBe(20 * 1024 * 1024);
+  it("keeps a file at the limit and its form overhead under Vercel's 4.5 MB", () => {
+    expect(MAX_RECEIPT_BYTES + 20_000).toBeLessThanOrEqual(4_500_000);
   });
 
   it("accepts a file at the limit and names the size of one over it", () => {
     expect(receiptSizeError(MAX_RECEIPT_BYTES)).toBeNull();
-    expect(receiptSizeError(23.4 * 1024 * 1024)).toBe(
-      "This file is 23.4 MB. Receipts can be up to 20 MB",
+    expect(receiptSizeError(MAX_RECEIPT_BYTES + 1)).not.toBeNull();
+    expect(receiptSizeError(6_250_000)).toBe(
+      "This file is 6.25 MB. Receipts can be up to 4.5 MB",
     );
   });
 });

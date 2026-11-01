@@ -17,6 +17,8 @@ export interface StorageProvider {
   readonly name: string;
   put(path: string, data: Buffer | Uint8Array, contentType?: string): Promise<StoredObject>;
   get(path: string): Promise<{ body: ArrayBuffer; contentType: string | null }>;
+  /** For responses to the browser: Vercel caps buffered responses at 4.5 MB, not streamed ones. */
+  getStream(path: string): Promise<{ stream: ReadableStream<Uint8Array>; contentType: string | null }>;
   delete(path: string): Promise<void>;
 }
 
@@ -56,6 +58,10 @@ class MemoryStorage implements StorageProvider {
       contentType: entry.contentType,
     };
   }
+  async getStream(path: string) {
+    const { body, contentType } = await this.get(path);
+    return { stream: new Blob([body]).stream(), contentType };
+  }
   async delete(path: string) {
     this.store.delete(path);
   }
@@ -81,6 +87,15 @@ class VercelBlobStorage implements StorageProvider {
   }
 
   async get(path: string) {
+    const { stream, contentType } = await this.getStream(path);
+    return {
+      // Blob SDK returns a Web ReadableStream; Response handles both web & node runtimes.
+      body: await new Response(stream).arrayBuffer(),
+      contentType,
+    };
+  }
+
+  async getStream(path: string) {
     const { get: getBlob } = await import("@vercel/blob");
     const token = serverEnv().BLOB_READ_WRITE_TOKEN;
     const result = await getBlob(path, { access: "private", token });
@@ -88,8 +103,7 @@ class VercelBlobStorage implements StorageProvider {
       throw new Error(`Object not found: ${path}`);
     }
     return {
-      // Blob SDK returns a Web ReadableStream; Response handles both web & node runtimes.
-      body: await new Response(result.stream).arrayBuffer(),
+      stream: result.stream,
       contentType: result.blob.contentType ?? null,
     };
   }
