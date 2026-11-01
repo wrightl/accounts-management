@@ -172,7 +172,7 @@ export default async function ExpenseDetailPage({
         <div className="mb-6 rounded-lg border border-border bg-wash/50 px-4 py-3 text-sm">
           On reimbursement run for {linkedRun.payeeLabel}
           {linkedRun.status === "paid" && linkedRun.paidAt
-            ? ` · paid ${linkedRun.paidAt.toISOString().slice(0, 10)}`
+            ? <> · paid <DisplayDate value={linkedRun.paidAt} /></>
             : ` · ${linkedRun.status}`}
           .{" "}
           <Link

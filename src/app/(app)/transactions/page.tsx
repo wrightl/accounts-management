@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { countBankAccounts, listBankTransactions } from "@/lib/bank/queries";
 import { listBankAccountCards } from "@/lib/bank/company-cards";
@@ -13,6 +12,10 @@ import {
   BankViewToggle,
 } from "@/components/bank/bank-list";
 import { BankCardsFeed } from "@/components/bank/bank-cards-feed";
+import {
+  BankListPositionRestorer,
+  NewExpenseFromBankListLink,
+} from "@/components/bank/bank-list-position";
 import { TransactionsSummaryPanel } from "@/components/bank/transactions-summary";
 import { listBankSpendingCategoriesWithUsage } from "@/lib/bank/spending-categories";
 import { listIncomeCategoryNames } from "@/lib/bank/income-category-catalog";
@@ -95,12 +98,12 @@ export default async function TransactionsPage({
           {canWrite ? (
             <p className="mt-1 text-sm text-muted">
               Paid for something from a personal account?{" "}
-              <Link
-                href="/expenses/new?status=reimbursable"
+              <NewExpenseFromBankListLink
+                params={{ status: "reimbursable" }}
                 className="font-medium text-navy underline underline-offset-2 hover:no-underline"
               >
                 Add it as a reimbursable expense
-              </Link>
+              </NewExpenseFromBankListLink>
               .
             </p>
           ) : null}
@@ -178,6 +181,7 @@ export default async function TransactionsPage({
           <TransactionsSummaryPanel summary={summary} />
         </aside>
       </div>
+      <BankListPositionRestorer />
     </div>
   );
 }

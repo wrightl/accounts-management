@@ -24,6 +24,7 @@ import { clientDisplayName } from "@/lib/clients/display";
 import { publicQuoteUrl } from "@/lib/quotes/public-token";
 import { getDateFormat } from "@/lib/date-format.server";
 import { formatInstantDateTime, type DateFormat } from "@/lib/dates";
+import { DisplayDate } from "@/components/date-format-provider";
 
 function formatTs(d: Date | string | null | undefined, format: DateFormat): string | null {
   if (!d) return null;
@@ -217,7 +218,7 @@ export default async function QuoteDetailPage({
                         : "—"}
                   </TD>
                   <TD className="text-right text-muted">
-                    {m.dueDate ?? (m.dueInDays != null ? `${m.dueInDays} days` : "—")}
+                    {m.dueDate ? <DisplayDate value={m.dueDate} /> : m.dueInDays != null ? `${m.dueInDays} days` : "—"}
                   </TD>
                 </TR>
               ))}

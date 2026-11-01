@@ -10,6 +10,7 @@ import { Table, THead, TBody, TR, TD } from "@/components/ui/table";
 import { sortHeaders } from "@/components/ui/sortable-th";
 import type { InvoiceStatus } from "@/lib/invoices/status";
 import { defineTableSort, parseTableSort, rankIn, sortRows } from "@/lib/table-sort";
+import { DisplayDate } from "@/components/date-format-provider";
 
 /** "created" is the loaded order (newest first) and has no header. */
 const SORT = defineTableSort({
@@ -110,7 +111,7 @@ export default async function InvoicesPage({
                   <TD>
                     <StatusBadge status={inv.status as InvoiceStatus} />
                   </TD>
-                  <TD className="text-muted">{inv.issueDate ?? "—"}</TD>
+                  <TD className="text-muted"><DisplayDate value={inv.issueDate} /></TD>
                   <TD>
                     <InvoiceDueDate
                       dueDate={inv.dueDate}

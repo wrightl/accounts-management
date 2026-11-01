@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import type { BankSettlement } from "@/lib/bank/settlements";
+import { DisplayDate } from "@/components/date-format-provider";
 
 /** "Settled by bank transaction" note with links back to the Transactions page. */
 export function BankSettlements({
@@ -23,7 +24,7 @@ export function BankSettlements({
       <ul className="mt-1 space-y-1">
         {settlements.map((s) => (
           <li key={s.bankTransactionId} className="text-muted">
-            {s.bookedAt} · {s.amountFormatted}
+            <DisplayDate value={s.bookedAt} /> · {s.amountFormatted}
             {s.counterparty ? ` · ${s.counterparty}` : null}
             {s.bankAccountName ? ` · ${s.bankAccountName}` : null}{" "}
             <Link

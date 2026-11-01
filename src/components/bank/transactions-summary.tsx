@@ -176,7 +176,7 @@ export function TransactionsSummaryPanel({
                 </CardValue>
                 {summary.openingCashAsAt ? (
                   <p className="text-xs text-muted">
-                    as at {summary.openingCashAsAt}
+                    as at <DisplayDate value={summary.openingCashAsAt} />
                   </p>
                 ) : null}
               </dd>

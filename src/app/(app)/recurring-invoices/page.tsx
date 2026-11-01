@@ -4,6 +4,7 @@ import { listRecurringInvoices } from '@/lib/invoices/recurring-queries';
 import { buttonClasses } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
+import { DisplayDate } from '@/components/date-format-provider';
 
 export default async function RecurringInvoicesPage() {
     const { companyId } = await guardTenantPage('accounts:read');
@@ -70,7 +71,7 @@ export default async function RecurringInvoicesPage() {
                                         {row.dayOfMonth}
                                     </TD>
                                     <TD className="text-muted">
-                                        {row.nextRunOn ?? '—'}
+                                        <DisplayDate value={row.nextRunOn} />
                                     </TD>
                                     <TD className="capitalize text-muted">
                                         {row.onGenerate}

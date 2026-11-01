@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useEffectEvent, useState, useTransition, type ReactNode } from "react";
+import { NewExpenseFromBankListLink } from "@/components/bank/bank-list-position";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { useAlert } from "@/components/ui/alert-dialog";
 import { Dialog, DialogActions } from "@/components/ui/dialog";
@@ -241,12 +241,12 @@ export function AttachExpenseDialog({
         linkExpenseToBankTransactionAction({ expenseId, bankTransactionId: transactionId })
       }
       footer={
-        <Link
-          href={`/expenses/new?bankTransactionId=${encodeURIComponent(transactionId)}`}
+        <NewExpenseFromBankListLink
+          params={{ bankTransactionId: transactionId }}
           className="text-sm font-medium underline-offset-2 hover:underline"
         >
           Create a new expense instead →
-        </Link>
+        </NewExpenseFromBankListLink>
       }
     />
   );

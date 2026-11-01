@@ -18,6 +18,7 @@ import {
   setTableSortParams,
   sortRows,
 } from "@/lib/table-sort";
+import { DisplayDate } from "@/components/date-format-provider";
 
 const SORT = defineTableSort({
   columns: ["payee", "status", "reference", "date", "created", "total"],
@@ -165,9 +166,9 @@ export default async function ReimbursementsPage({
                   </TD>
                   <TD className="capitalize">{r.status}</TD>
                   <TD className="text-muted">{r.reference ?? "—"}</TD>
-                  <TD className="text-muted">{r.reimbursementDate ?? "—"}</TD>
+                  <TD className="text-muted"><DisplayDate value={r.reimbursementDate} /></TD>
                   <TD className="text-muted">
-                    {r.createdAt.toISOString().slice(0, 10)}
+                    <DisplayDate value={r.createdAt} />
                   </TD>
                   <TD className="text-right font-medium">{r.totalFormatted}</TD>
                   {canWrite ? (

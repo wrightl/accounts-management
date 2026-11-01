@@ -70,6 +70,7 @@ export function ExpenseForm({
   fromBankTransaction,
   linkedToBank = false,
   listHref = "/expenses",
+  returnHref,
   receiptCount,
   suggestedApproveStatus = null,
 }: {
@@ -123,6 +124,8 @@ export function ExpenseForm({
   linkedToBank?: boolean;
   /** The remembered (filtered) expenses list to return to after delete or reject. */
   listHref?: string;
+  /** New expense started from the transactions list: where to go back to on save. */
+  returnHref?: string | null;
   /** Receipts on the expense; approving one with none asks for confirmation. */
   receiptCount?: number;
   /** How a pending emailed expense was probably paid, to pre-select on approval. */
@@ -456,7 +459,8 @@ export function ExpenseForm({
       clearAll();
       setSavedSnapshot(snapshot);
 
-      let targetUrl = `/expenses/${result.id}`;
+      const detailUrl = `/expenses/${result.id}`;
+      let targetUrl = detailUrl;
       if (result.bankLinkError) {
         targetUrl = `/expenses/${result.id}?bankLinkFailed=${encodeURIComponent(result.bankLinkError)}`;
       }
@@ -474,7 +478,12 @@ export function ExpenseForm({
         }
       }
 
-      router.push(targetUrl);
+      // A failed link or upload is explained on the expense page, so stay on it.
+      if (mode === "create" && returnHref && targetUrl === detailUrl) {
+        router.push(returnHref, { scroll: false });
+      } else {
+        router.push(targetUrl);
+      }
       router.refresh();
     });
   }

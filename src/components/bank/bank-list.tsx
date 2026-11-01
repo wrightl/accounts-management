@@ -17,6 +17,7 @@ import { nextTableSort } from '@/lib/table-sort';
 import type { BankTransactionListItem } from '@/lib/bank/queries';
 import { cn } from '@/lib/utils';
 import { FriendlyDay } from "@/components/date-format-provider";
+import { DisplayDate } from '@/components/date-format-provider';
 
 function CategoryDisplay({
     row,
@@ -212,7 +213,7 @@ export function BankTransactionTable({
             <TBody>
                 {rows.map((r) => (
                     <TR key={r.id}>
-                        <TD className="text-muted">{r.bookedAt}</TD>
+                        <TD className="text-muted"><DisplayDate value={r.bookedAt} /></TD>
                         <TD>
                             {r.counterparty ?? r.description ?? '—'}
                             <TagsLine tags={r.tags} />

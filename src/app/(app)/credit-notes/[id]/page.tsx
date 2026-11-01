@@ -62,7 +62,7 @@ export default async function CreditNoteDetailPage({
               {invoice.number}
             </Link>
             {creditNote.sentAt
-              ? ` · Sent ${creditNote.sentAt.toISOString().slice(0, 10)}`
+              ? <> · Sent <DisplayDate value={creditNote.sentAt} /></>
               : null}
           </p>
           <div className="mt-3">
@@ -132,7 +132,7 @@ export default async function CreditNoteDetailPage({
         <div className="mt-8">
           <h2 className="mb-2 font-display text-lg font-semibold">Refund</h2>
           <p className="text-sm text-muted">
-            {creditNote.refundedFormatted} refunded on {creditNote.refundedAt}
+            {creditNote.refundedFormatted} refunded on <DisplayDate value={creditNote.refundedAt} />
             {creditNote.refundReference ? ` · Ref ${creditNote.refundReference}` : null}
           </p>
         </div>

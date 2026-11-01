@@ -13,6 +13,7 @@ import type { InvoiceStatus } from "@/lib/invoices/status";
 import { formatGBP } from "@/lib/money";
 import { listClientProfitability, listProjectExpenses } from "@/lib/profitability/queries";
 import { MarginCards, ProjectExpenses } from "@/components/profitability/project-costs";
+import { DisplayDate } from "@/components/date-format-provider";
 
 export default async function ClientDetailPage({
   params,
@@ -161,7 +162,7 @@ export default async function ClientDetailPage({
                       <TD>
                         <StatusBadge status={inv.status as InvoiceStatus} />
                       </TD>
-                      <TD className="text-muted">{inv.issueDate ?? "—"}</TD>
+                      <TD className="text-muted"><DisplayDate value={inv.issueDate} /></TD>
                       <TD>
                         <InvoiceDueDate
                           dueDate={inv.dueDate}

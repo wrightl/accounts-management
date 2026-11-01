@@ -145,7 +145,7 @@ export function ReimbursementActions({
                 >
                   {matches.map((m) => (
                     <option key={m.bankTransactionId} value={m.bankTransactionId}>
-                      {m.bookedAt} · {m.amountFormatted}
+                      {formatIsoDate(m.bookedAt, dateFormat)} · {m.amountFormatted}
                       {m.counterparty ? ` · ${m.counterparty}` : ""}
                     </option>
                   ))}

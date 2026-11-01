@@ -14,6 +14,7 @@ import {
   parseUpdateReimbursementInput,
   reimbursementUpdateRawFromFormData,
 } from "@/lib/reimbursements/schema";
+import { DisplayDate } from "@/components/date-format-provider";
 
 export function EditReimbursementForm({
   id,
@@ -125,7 +126,7 @@ export function EditReimbursementForm({
                   disabled={pending}
                 />
                 <span className="flex-1">
-                  {e.spentAt ?? "—"} · {e.description}
+                  <DisplayDate value={e.spentAt} /> · {e.description}
                 </span>
                 <span className="font-medium">{formatGBP(e.amountPence)}</span>
               </li>
