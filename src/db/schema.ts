@@ -466,6 +466,19 @@ export const invoiceImportBatches = pgTable(
   (t) => [index("idx_invoice_import_batches_company").on(t.companyId, t.createdAt)],
 );
 
+/** PDFs read per calendar month (YYYY-MM), which deleting a draft doesn't reduce. */
+export const invoicePdfReads = pgTable(
+  "invoice_pdf_reads",
+  {
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    month: text("month").notNull(),
+    reads: integer("reads").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.companyId, t.month] })],
+);
+
 /** One invoice staged from a batch, reviewed before it becomes a real invoice. */
 export const invoiceImportDrafts = pgTable(
   "invoice_import_drafts",
@@ -484,12 +497,20 @@ export const invoiceImportDrafts = pgTable(
     parsed: jsonb("parsed").$type<ParsedInvoice>().notNull(),
     errors: jsonb("errors").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
     warnings: jsonb("warnings").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    /** The uploaded PDF, which becomes the invoice's original when the draft is saved. */
+    documentPath: text("document_path"),
+    documentFilename: text("document_filename"),
+    documentSize: integer("document_size"),
+    documentSha256: text("document_sha256"),
     invoiceId: uuid("invoice_id").references((): AnyPgColumn => invoices.id, {
       onDelete: "set null",
     }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index("idx_invoice_import_drafts_batch").on(t.batchId, t.position)],
+  (t) => [
+    index("idx_invoice_import_drafts_batch").on(t.batchId, t.position),
+    index("idx_invoice_import_drafts_company_sha").on(t.companyId, t.documentSha256),
+  ],
 );
 
 export const invoiceLineItems = pgTable(

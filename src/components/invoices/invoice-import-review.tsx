@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { Fragment, useState, useTransition } from "react";
 import {
   commitInvoiceImportChunk,
   discardInvoiceImport,
@@ -11,7 +11,9 @@ import {
   setNextInvoiceSequence,
   undoInvoiceImport,
 } from "@/actions/invoice-import";
+import { approveImportDrafts } from "@/actions/invoice-import-pdf";
 import { DisplayDate } from "@/components/date-format-provider";
+import { InvoiceDraftEditor } from "@/components/invoices/invoice-draft-editor";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { useAlert } from "@/components/ui/alert-dialog";
 import { FieldError, Input, Label, Select } from "@/components/ui/form";
@@ -41,6 +43,7 @@ export function InvoiceImportReview({
   const [progress, setProgress] = useState<string | null>(null);
   const [kept, setKept] = useState<{ number: string; reason: string }[]>([]);
   const [nextSeq, setNextSeq] = useState(String(review.nextSeq));
+  const [openDraft, setOpenDraft] = useState<string | null>(null);
   const { batch, counts, cutover } = review;
   const isOpen = batch.status === "draft";
   const hasProblems = counts.needs_review > 0;
@@ -128,7 +131,7 @@ export function InvoiceImportReview({
         </h2>
         <ul className="mt-2 space-y-1">
           <li>{counts.ready + counts.committed} invoices {isOpen ? "ready" : "imported"}</li>
-          {counts.needs_review > 0 ? <li>{counts.needs_review} with problems to sort out</li> : null}
+          {counts.needs_review > 0 ? <li>{counts.needs_review} {batch.kind === "pdf" ? "to check and approve" : "with problems to sort out"}</li> : null}
           {counts.skipped > 0 ? <li>{counts.skipped} left out</li> : null}
           {batch.skippedRows.length > 0 ? <li>{batch.skippedRows.length} skipped from the file (listed below)</li> : null}
         </ul>
@@ -288,6 +291,16 @@ export function InvoiceImportReview({
       <section>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-display text-lg font-semibold">Invoices</h2>
+          {isOpen && batch.kind === "pdf" && review.approvable > 0 ? (
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={pending}
+              onClick={() => run(() => approveImportDrafts(batch.id, { allWithoutProblems: true }))}
+            >
+              Approve all {review.approvable} without problems
+            </Button>
+          ) : null}
           {isOpen && hasProblems ? (
             <Button
               type="button"
@@ -297,7 +310,7 @@ export function InvoiceImportReview({
                 run(() => setImportDraftsSkipped(batch.id, { allWithErrors: true }, true))
               }
             >
-              Leave out all with problems
+              Leave out all {batch.kind === "pdf" ? "unapproved" : "with problems"}
             </Button>
           ) : null}
         </div>
@@ -323,8 +336,14 @@ export function InvoiceImportReview({
               {review.drafts.map((draft) => {
                 const { parsed } = draft;
                 return (
-                  <TR key={draft.id}>
-                    <TD>{parsed.number ?? "To be created"}</TD>
+                  <Fragment key={draft.id}>
+                  <TR>
+                    <TD>
+                      {parsed.number ?? "To be created"}
+                      {draft.documentFilename ? (
+                        <div className="text-xs text-muted">{draft.documentFilename}</div>
+                      ) : null}
+                    </TD>
                     <TD>{parsed.client.companyName || parsed.client.name || parsed.client.email}</TD>
                     <TD>{parsed.issueDate ? <DisplayDate value={parsed.issueDate} /> : "—"}</TD>
                     <TD>{draft.status === "skipped" ? "Left out" : parsed.status === "paid" ? "Paid" : "Unpaid"}</TD>
@@ -339,6 +358,15 @@ export function InvoiceImportReview({
                     </TD>
                     {isOpen ? (
                       <TD>
+                        {draft.documentPath && draft.status !== "committed" && draft.status !== "skipped" ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => setOpenDraft(openDraft === draft.id ? null : draft.id)}
+                          >
+                            {openDraft === draft.id ? "Close" : "Check"}
+                          </Button>
+                        ) : null}
                         {draft.status !== "committed" ? (
                           <Button
                             type="button"
@@ -360,6 +388,21 @@ export function InvoiceImportReview({
                       </TD>
                     ) : null}
                   </TR>
+                  {openDraft === draft.id ? (
+                    <TR>
+                      <TD colSpan={7}>
+                        <InvoiceDraftEditor
+                          batchId={batch.id}
+                          draftId={draft.id}
+                          invoice={parsed}
+                          errors={draft.errors}
+                          warnings={draft.warnings}
+                          approved={draft.status === "ready"}
+                        />
+                      </TD>
+                    </TR>
+                  ) : null}
+                  </Fragment>
                 );
               })}
             </TBody>

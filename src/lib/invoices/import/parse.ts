@@ -385,6 +385,49 @@ function buildDraft(
   };
 }
 
+/** Checks for an invoice that was read from a PDF or edited by hand. */
+export function validateParsedInvoice(invoice: ParsedInvoice): string[] {
+  const errors: string[] = [];
+  const amounts = [invoice.netPence, invoice.vatPence, invoice.grossPence, invoice.amountPaidPence];
+  if (amounts.some((a) => !Number.isFinite(a))) errors.push("An amount isn't a number");
+  if (!invoice.client.name && !invoice.client.companyName && !invoice.client.email) {
+    errors.push("Needs a client name or email");
+  }
+  if (invoice.client.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(invoice.client.email)) {
+    errors.push(`Client email isn't valid: ${invoice.client.email}`);
+  }
+  if (!parseImportDate(invoice.issueDate, "dmy")) errors.push("Needs an issue date");
+  for (const [value, label] of [
+    [invoice.dueDate, "Due date"],
+    [invoice.paidDate, "Paid date"],
+  ] as const) {
+    if (value && !parseImportDate(value, "dmy")) errors.push(`${label} isn't a real date`);
+  }
+  if (invoice.paidDate && invoice.amountPaidPence === 0) {
+    errors.push("There's a paid date but no amount paid");
+  }
+  if (invoice.status === "paid" && invoice.amountPaidPence < invoice.grossPence) {
+    errors.push("Marked paid, but the amount paid is less than the total");
+  }
+  if (invoice.netPence + invoice.vatPence !== invoice.grossPence) {
+    errors.push("Gross total doesn't equal net plus VAT");
+  }
+  if (invoice.vatPence < 0) errors.push("VAT can't be negative");
+  if (invoice.grossPence < 0) {
+    errors.push("A negative total looks like a credit note, which this import doesn't bring in");
+  }
+  if (invoice.amountPaidPence < 0) errors.push("Amount paid can't be negative");
+  if (invoice.amountPaidPence > invoice.grossPence) {
+    errors.push("Amount paid is more than the invoice total");
+  }
+  if (invoice.lines.length === 0) errors.push("Needs at least one line");
+  const lineTotal = invoice.lines.reduce((acc, line) => acc + lineNetPence(line), 0);
+  if (Math.abs(lineTotal - invoice.netPence) > invoice.lines.length) {
+    errors.push("The lines don't add up to the invoice's net total");
+  }
+  return errors;
+}
+
 /** Pure parse, grouping and per-invoice validation. Rows with the same number form one invoice. */
 export function parseInvoiceImport(
   csvText: string,

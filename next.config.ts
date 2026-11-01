@@ -50,8 +50,12 @@ const securityHeaders = [
     { key: 'Content-Security-Policy', value: cspDirectives },
 ];
 
-/** Routes the app frames itself: receipt previews and the stored email body. */
-const FRAMEABLE_PATHS = ['api/receipts/[^/]+', 'api/expenses/[^/]+/email-body'];
+/** Routes the app frames itself: receipt and imported invoice previews, and the stored email body. */
+const FRAMEABLE_PATHS = [
+    'api/receipts/[^/]+',
+    'api/expenses/[^/]+/email-body',
+    'api/invoice-imports/drafts/[^/]+/document',
+];
 
 const nextConfig: NextConfig = {
     reactStrictMode: true,
