@@ -247,6 +247,30 @@ describe("imported invoices and reminders", () => {
   });
 });
 
+describe("chasing in bulk across companies", () => {
+  it("leaves another company's imports alone", async () => {
+    const other = await seedCompany(db, { name: "Other" });
+    const [theirClient] = await db
+      .insert(clients)
+      .values({ companyId: other.id, name: "Theirs" })
+      .returning();
+    const [theirs] = await db
+      .insert(invoices)
+      .values({
+        companyId: other.id,
+        clientId: theirClient.id,
+        number: "THEIRS",
+        status: "sent",
+        source: "import",
+        chaseEnabled: false,
+      })
+      .returning();
+    await chaseAllImportedInvoices();
+    const [after] = await db.select().from(invoices).where(eq(invoices.id, theirs.id));
+    expect(after.chaseEnabled).toBe(false);
+  });
+});
+
 describe("in-app alerts for imported invoices", () => {
   it("raises no overdue notification until chasing is on", async () => {
     const inv = await addInvoice("IMP-6");
