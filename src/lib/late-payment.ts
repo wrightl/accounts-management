@@ -37,6 +37,12 @@ export function daysBetween(from: string, to: string): number {
   return Math.round((toUtc(to) - toUtc(from)) / DAY_MS);
 }
 
+/** False for debts older than the rate table, where no charge can be worked out. */
+export function hasReferenceRate(dueDate: string): boolean {
+  const overdueFrom = new Date(toUtc(dueDate) + DAY_MS).toISOString().slice(0, 10);
+  return overdueFrom >= REFERENCE_RATES[0]!.appliesFrom;
+}
+
 /** Base rate for a debt that became overdue on the day after `dueDate`. */
 export function referenceBaseRate(dueDate: string): { basePercent: number; known: boolean } {
   const overdueFrom = new Date(toUtc(dueDate) + DAY_MS).toISOString().slice(0, 10);
@@ -78,6 +84,7 @@ export function latePaymentCharge(params: {
 }): LatePaymentCharge | null {
   const daysLate = daysBetween(params.dueDate, params.asOf);
   if (daysLate <= 0 || params.amountDuePence <= 0) return null;
+  if (!hasReferenceRate(params.dueDate)) return null;
   const { basePercent, known } = referenceBaseRate(params.dueDate);
   const ratePercent = basePercent + STATUTORY_MARGIN_PERCENT;
   const daily = (params.amountDuePence * ratePercent) / 100 / 365;

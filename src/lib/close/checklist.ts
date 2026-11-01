@@ -173,7 +173,7 @@ export async function getWeeklyCloseChecklist(companyId: string, today: string =
   const [bank, receipts, overdueRows, milestones, reimbursements] = await Promise.all([
     getBankReconciledThrough(companyId),
     countPendingReceipts(companyId),
-    listOverdueInvoices(companyId, 1000),
+    listOverdueInvoices(companyId, 1000, { chasableOnly: true }),
     listMilestonesReadyToBill(companyId, today),
     getReimbursementBalances(companyId),
   ]);

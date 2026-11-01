@@ -296,3 +296,39 @@ export async function getForecastInputs(companyId: string, today: string = today
 }
 
 export type ForecastInputs = Awaited<ReturnType<typeof getForecastInputs>>;
+
+/** Still owed on brought-forward invoices, all of it past due in the forecast. */
+export async function getBroughtForwardDebtsPence(companyId: string): Promise<number> {
+  const db = getDb();
+  const open = await db
+    .select({ id: invoices.id, grossPence: invoices.grossPence })
+    .from(invoices)
+    .where(
+      and(
+        eq(invoices.companyId, companyId),
+        eq(invoices.status, "sent"),
+        eq(invoices.broughtForward, true),
+      ),
+    );
+  if (open.length === 0) return 0;
+  const ids = open.map((i) => i.id);
+  const [paidRows, credits] = await Promise.all([
+    db
+      .select({ invoiceId: payments.invoiceId, total: sum(payments.amountPence).mapWith(Number) })
+      .from(payments)
+      .where(inArray(payments.invoiceId, ids))
+      .groupBy(payments.invoiceId),
+    creditAdjustmentsByInvoice(db, ids),
+  ]);
+  const paid = new Map(paidRows.map((r) => [r.invoiceId, r.total ?? 0]));
+  return open.reduce(
+    (acc, inv) =>
+      acc +
+      invoiceAmountDuePence({
+        grossPence: inv.grossPence,
+        paidPence: paid.get(inv.id) ?? 0,
+        ...credits.get(inv.id),
+      }),
+    0,
+  );
+}

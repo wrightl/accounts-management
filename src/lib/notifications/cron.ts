@@ -158,6 +158,7 @@ async function scanOverdueInvoices(): Promise<number> {
     .where(
       and(
         eq(invoices.status, "sent"),
+        eq(invoices.chaseEnabled, true),
         lt(invoices.dueDate, today),
         isNull(companies.suspendedAt),
       ),

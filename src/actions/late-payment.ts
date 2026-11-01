@@ -9,7 +9,7 @@ import { formatIsoDateUk, todayIsoDate } from "@/lib/dates";
 import { allocateInvoiceNumber } from "@/lib/invoices/allocate";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
 import { defaultDueDate, storedStatus } from "@/lib/invoices/status";
-import { latePaymentCharge } from "@/lib/late-payment";
+import { hasReferenceRate, latePaymentCharge } from "@/lib/late-payment";
 import { formatGBP } from "@/lib/money";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import type { ActionResult } from "@/actions/result";
@@ -37,7 +37,15 @@ export async function raiseLatePaymentInvoice(invoiceId: string): Promise<Action
               asOf: today,
             })
           : null;
-      if (!charge) return { ok: false, error: "This invoice isn't overdue" };
+      if (!charge) {
+        return {
+          ok: false,
+          error:
+            invoice.dueDate && !hasReferenceRate(invoice.dueDate)
+              ? "This debt is older than the interest rates Alfa holds, so work out any claim separately"
+              : "This invoice isn't overdue",
+        };
+      }
 
       const db = getDb();
       const [existing] = await db

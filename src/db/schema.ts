@@ -395,6 +395,8 @@ export const invoices = pgTable(
     source: invoiceSourceEnum("source").notNull().default("alfa"),
     /** Imported and dated before the company cutover: still owed, but outside the accounts. */
     broughtForward: boolean("brought_forward").notNull().default(false),
+    /** Whether reminders and overdue alerts apply. Imports start off until the user opts in. */
+    chaseEnabled: boolean("chase_enabled").notNull().default(true),
   },
   (t) => [
     check(

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
-import { listInvoices } from "@/lib/invoices/queries";
+import { UnchasedImportsBanner } from "@/components/invoices/imported-invoice-chase";
+import { getUnchasedImports, listInvoices } from "@/lib/invoices/queries";
 import { InvoiceImportButton } from "@/components/invoices/invoice-import-panel";
 import { buttonClasses } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
@@ -28,6 +29,7 @@ export default async function InvoicesPage({
   const { companyId } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
   const sp = await searchParams;
+  const unchased = await getUnchasedImports(companyId);
   const sort = parseTableSort(sp, SORT);
   const th = sortHeaders("/invoices", sp, SORT, sort);
 
@@ -62,6 +64,15 @@ export default async function InvoicesPage({
           ) : null}
         </div>
       </div>
+
+      {unchased.count > 0 ? (
+        <UnchasedImportsBanner
+          count={unchased.count}
+          totalFormatted={unchased.totalFormatted}
+          withoutEmail={unchased.withoutEmail}
+          canWrite={canWrite}
+        />
+      ) : null}
 
       <div className="mt-6">
         {rows.length === 0 ? (

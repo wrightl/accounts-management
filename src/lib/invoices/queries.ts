@@ -230,8 +230,61 @@ export async function getDashboardKpis(companyId: string): Promise<DashboardKpis
   };
 }
 
+/** Open imported invoices nobody is chasing yet, for the invoice list banner. */
+export async function getUnchasedImports(companyId: string) {
+  const db = getDb();
+  const open = await db
+    .select({
+      id: invoices.id,
+      grossPence: invoices.grossPence,
+      clientEmail: clients.email,
+    })
+    .from(invoices)
+    .innerJoin(clients, eq(invoices.clientId, clients.id))
+    .where(
+      and(
+        eq(invoices.companyId, companyId),
+        eq(invoices.source, "import"),
+        eq(invoices.status, "sent"),
+        eq(invoices.chaseEnabled, false),
+      ),
+    );
+  if (open.length === 0) return { count: 0, totalFormatted: formatGBP(0), withoutEmail: 0 };
+
+  const ids = open.map((i) => i.id);
+  const paidRows = await db
+    .select({
+      invoiceId: payments.invoiceId,
+      total: sum(payments.amountPence).mapWith(Number),
+    })
+    .from(payments)
+    .where(inArray(payments.invoiceId, ids))
+    .groupBy(payments.invoiceId);
+  const paid = new Map(paidRows.map((r) => [r.invoiceId, r.total ?? 0]));
+  const credits = await creditAdjustmentsByInvoice(db, ids);
+
+  const owed = open
+    .map((inv) => ({
+      ...inv,
+      balancePence: invoiceAmountDuePence({
+        grossPence: inv.grossPence,
+        paidPence: paid.get(inv.id) ?? 0,
+        ...credits.get(inv.id),
+      }),
+    }))
+    .filter((inv) => inv.balancePence > 0);
+  return {
+    count: owed.length,
+    totalFormatted: formatGBP(owed.reduce((acc, inv) => acc + inv.balancePence, 0)),
+    withoutEmail: owed.filter((inv) => !inv.clientEmail).length,
+  };
+}
+
 /** Count open invoices with an outstanding balance past due date. */
-export async function countOverdueInvoices(companyId: string): Promise<number> {
+export async function countOverdueInvoices(
+  companyId: string,
+  options: { chasableOnly?: boolean } = {},
+): Promise<number> {
   const db = getDb();
   const today = todayIsoDate();
 
@@ -249,6 +302,7 @@ export async function countOverdueInvoices(companyId: string): Promise<number> {
         ne(invoices.status, "draft"),
         ne(invoices.status, "void"),
         ne(invoices.status, "paid"),
+        options.chasableOnly ? eq(invoices.chaseEnabled, true) : undefined,
       ),
     );
 
@@ -295,6 +349,7 @@ export type OverdueInvoiceRow = {
 export async function listOverdueInvoices(
   companyId: string,
   limit = 5,
+  options: { chasableOnly?: boolean } = {},
 ): Promise<OverdueInvoiceRow[]> {
   const db = getDb();
   const today = todayIsoDate();
@@ -316,6 +371,7 @@ export async function listOverdueInvoices(
         ne(invoices.status, "draft"),
         ne(invoices.status, "void"),
         ne(invoices.status, "paid"),
+        options.chasableOnly ? eq(invoices.chaseEnabled, true) : undefined,
       ),
     );
 

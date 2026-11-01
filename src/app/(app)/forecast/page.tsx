@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { guardTenantPage } from "@/lib/auth";
 import { ForecastView } from "@/components/forecast/forecast-view";
-import { getForecastInputs } from "@/lib/forecast/queries";
+import { getBroughtForwardDebtsPence, getForecastInputs } from "@/lib/forecast/queries";
 import { formatGBP } from "@/lib/money";
 import { DisplayDate } from "@/components/date-format-provider";
 
@@ -16,7 +16,10 @@ const SPEND_BASIS = {
 
 export default async function ForecastPage() {
   const { companyId, entityType } = await guardTenantPage("reports:read");
-  const inputs = await getForecastInputs(companyId);
+  const [inputs, oldDebtsPence] = await Promise.all([
+    getForecastInputs(companyId),
+    getBroughtForwardDebtsPence(companyId),
+  ]);
   const isLtd = entityType === "limited_company";
 
   return (
@@ -26,6 +29,13 @@ export default async function ForecastPage() {
         Cash at the end of each of the next 13 weeks, from the money you&apos;re owed and the
         bills you know about.
       </p>
+
+      {oldDebtsPence > 0 ? (
+        <p className="mt-6 rounded-xl bg-wash px-4 py-3 text-sm">
+          Week one includes {formatGBP(oldDebtsPence)} still owed on invoices brought forward from
+          before your cutover. These may be slow to collect, so treat that week as optimistic.
+        </p>
+      ) : null}
 
       {!inputs.cash.known ? (
         <p className="mt-6 rounded-xl bg-wash px-4 py-3 text-sm">

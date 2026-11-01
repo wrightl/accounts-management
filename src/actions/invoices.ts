@@ -265,7 +265,10 @@ export async function voidInvoice(id: string): Promise<ActionResult> {
   );
 }
 
-export async function sendInvoice(id: string): Promise<ActionResult> {
+export async function sendInvoice(
+  id: string,
+  options: { confirmedImported?: boolean } = {},
+): Promise<ActionResult> {
   return mutate(
     "accounts:write",
     async ({ companyId, localUserId }) => {
@@ -278,6 +281,9 @@ export async function sendInvoice(id: string): Promise<ActionResult> {
       }
       if (!detail.client.email) {
         return { ok: false, error: "Client has no email address" };
+      }
+      if (detail.invoice.source === "import" && !options.confirmedImported) {
+        return { ok: false, error: "Confirm before emailing an imported invoice" };
       }
       if (from === "draft") {
         const locked = await checkPeriodOpen(companyId, detail.invoice.issueDate);
@@ -582,6 +588,7 @@ export async function commitInvoiceImport(
               paidAt,
               createdByUserId: localUserId,
               source: "import",
+              chaseEnabled: false,
               broughtForward: isBroughtForward(row.issueDate, cutover),
             })
             .returning({ id: invoices.id });

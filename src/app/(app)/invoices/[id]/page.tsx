@@ -14,6 +14,7 @@ import { BankSettlements } from "@/components/bank/bank-settlements";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { buttonClasses } from "@/components/ui/button";
+import { InvoiceChaseToggle } from "@/components/invoices/imported-invoice-chase";
 import { InvoiceActions } from "@/components/invoices/invoice-actions";
 import { InvoiceDueDate } from "@/components/invoices/invoice-due-date";
 import { InvoiceStatusSelect } from "@/components/invoices/invoice-status-select";
@@ -178,6 +179,7 @@ export default async function InvoiceDetailPage({
                 balanceFormatted={balanceFormatted}
                 clientName={client.name}
                 companyName={client.companyName}
+                isImported={invoice.source === "import"}
               />
               {canCredit ? (
                 <Link
@@ -244,6 +246,14 @@ export default async function InvoiceDetailPage({
           </Link>
           .
         </p>
+      ) : null}
+
+      {canWrite && invoice.source === "import" && stored === "sent" ? (
+        <InvoiceChaseToggle
+          invoiceId={invoice.id}
+          enabled={invoice.chaseEnabled}
+          hasClientEmail={Boolean(client.email)}
+        />
       ) : null}
 
       {lateCharge ? (

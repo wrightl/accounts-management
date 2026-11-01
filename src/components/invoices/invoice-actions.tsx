@@ -8,6 +8,7 @@ import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-
 import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
 import { useFieldErrors } from "@/components/ui/use-field-errors";
 import { sendInvoice } from "@/actions/invoices";
+import { useAlert } from "@/components/ui/alert-dialog";
 import { findInvoiceBankMatches, type InvoiceBankMatch } from "@/actions/bank";
 import { recordPayment } from "@/actions/payments";
 import {
@@ -35,6 +36,7 @@ export function InvoiceActions({
   balanceFormatted,
   clientName,
   companyName,
+  isImported = false,
 }: {
   invoiceId: string;
   invoiceNumber: string;
@@ -43,6 +45,8 @@ export function InvoiceActions({
   balanceFormatted: string;
   clientName: string;
   companyName: string | null;
+  /** Sending an imported invoice emails a client about something issued elsewhere. */
+  isImported?: boolean;
 }) {
   const router = useRouter();
   const {
@@ -54,6 +58,7 @@ export function InvoiceActions({
     applyActionResult,
     setError,
   } = useFieldErrors();
+  const { confirm } = useAlert();
   const [pending, startTransition] = useTransition();
   const dateFormat = useDateFormat();
   const [showPayment, setShowPayment] = useState(false);
@@ -123,10 +128,18 @@ export function InvoiceActions({
           <Button
             type="button"
             disabled={pending}
-            onClick={() => {
+            onClick={async () => {
+              if (isImported) {
+                const ok = await confirm({
+                  title: "Email this imported invoice",
+                  message: `${clientName} will be emailed about ${invoiceNumber}, which you issued before using Alfa.`,
+                  confirmLabel: "Send email",
+                });
+                if (!ok) return;
+              }
               clearAll();
               startTransition(async () => {
-                const result = await sendInvoice(invoiceId);
+                const result = await sendInvoice(invoiceId, { confirmedImported: isImported });
                 if (!result.ok) setError(result.error);
                 else refresh();
               });
