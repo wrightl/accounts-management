@@ -7,6 +7,7 @@ import {
   clients,
   invoices,
   notifications,
+  payments,
   sendJobs,
   users,
 } from "@/db/schema";
@@ -14,11 +15,12 @@ import {
   chaseAllImportedInvoices,
   setInvoiceChase,
 } from "@/actions/invoice-chase";
-import { commitInvoiceImport } from "@/actions/invoices";
+import { commitInvoiceImport, sendInvoice } from "@/actions/invoices";
 import { raiseLatePaymentInvoice } from "@/actions/late-payment";
 import { getWeeklyCloseChecklist } from "@/lib/close/checklist";
 import { todayIsoDate } from "@/lib/dates";
 import { sendEmail } from "@/lib/email";
+import { getBroughtForwardDebtsPence } from "@/lib/forecast/queries";
 import {
   countOverdueInvoices,
   getUnchasedImports,
@@ -187,6 +189,30 @@ describe("imported invoices and reminders", () => {
     expect(sendEmail).not.toHaveBeenCalled();
   });
 
+  it("can queue a skipped step again when chasing is turned back on", async () => {
+    const inv = await addInvoice("IMP-10", { chaseEnabled: true });
+    await enqueueOverdueReminders();
+    const [job] = await jobsFor(inv.id);
+    await setInvoiceChase(inv.id, false);
+    await processSendJob(job.id);
+    expect(await jobsFor(inv.id)).toHaveLength(0);
+
+    await setInvoiceChase(inv.id, true);
+    await enqueueOverdueReminders();
+    const [requeued] = await jobsFor(inv.id);
+    expect(requeued.reminderStep).toBe(job.reminderStep);
+    await processSendJob(requeued.id);
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it("won't email an imported invoice without confirmation", async () => {
+    const inv = await addInvoice("IMP-11");
+    expect((await sendInvoice(inv.id)).ok).toBe(false);
+    expect(sendEmail).not.toHaveBeenCalled();
+    expect((await sendInvoice(inv.id, { confirmedImported: true })).ok).toBe(true);
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+  });
+
   it("opts in every open import in bulk, and nothing else", async () => {
     const open = await addInvoice("IMP-4");
     const paid = await addInvoice("IMP-5", { status: "paid" });
@@ -259,6 +285,20 @@ describe("in-app alerts for imported invoices", () => {
     const summary = await getUnchasedImports(companyId);
     expect(summary).toMatchObject({ count: 2, withoutEmail: 1 });
     expect(summary.totalFormatted).toContain("200");
+  });
+});
+
+describe("forecast note", () => {
+  it("totals what's still owed on brought-forward invoices only", async () => {
+    const old = await addInvoice("BF-OWED", { broughtForward: true });
+    await addInvoice("BF-PAID", { broughtForward: true, status: "paid" });
+    await addInvoice("COUNTED");
+    await db.insert(payments).values({
+      invoiceId: old.id,
+      amountPence: 4_000,
+      receivedAt: new Date(),
+    });
+    expect(await getBroughtForwardDebtsPence(companyId)).toBe(6_000);
   });
 });
 
