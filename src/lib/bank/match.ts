@@ -139,7 +139,13 @@ export function pickBestMatch<T extends MatchCandidate>(
   let bestBreakdown: MatchScoreBreakdown | null = null;
   for (const candidate of candidates) {
     const breakdown = scoreMatchWithBreakdown(tx, candidate);
-    if (breakdown.total > (bestBreakdown?.total ?? 0)) {
+    // Two identical old debts for a client score the same: settle the oldest first.
+    const beatsTie =
+      best != null &&
+      candidate.oldDebt &&
+      breakdown.total === bestBreakdown?.total &&
+      candidate.date < best.date;
+    if (breakdown.total > (bestBreakdown?.total ?? 0) || beatsTie) {
       best = candidate;
       bestBreakdown = breakdown;
     }
