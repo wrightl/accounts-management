@@ -991,65 +991,77 @@ export function zipStoreStream(
   let centralSize = 0;
   let offset = 0;
 
+  const writeNextEntry = async (
+    controller: ReadableStreamDefaultController<Uint8Array>,
+  ) => {
+    const next = await iterator.next();
+    if (next.done) {
+      const end = new Uint8Array(22);
+      const ev = new DataView(end.buffer);
+      ev.setUint32(0, 0x06054b50, true);
+      ev.setUint16(8, central.length, true);
+      ev.setUint16(10, central.length, true);
+      ev.setUint32(12, centralSize, true);
+      ev.setUint32(16, offset, true);
+      for (const c of central) controller.enqueue(c);
+      controller.enqueue(end);
+      controller.close();
+      return;
+    }
+
+    const [name, content] = next.value;
+    const nameBytes = encoder.encode(name);
+    const data =
+      typeof content === "string" ? encoder.encode(content) : content;
+    const crc = crc32(data);
+    const local = new Uint8Array(30 + nameBytes.length);
+
+    // Past these, the format needs ZIP64 and the headers would wrap around.
+    const entrySize = local.length + data.length;
+    const cenSize = 46 + nameBytes.length;
+    if (
+      central.length >= 0xfffe ||
+      offset + entrySize + centralSize + cenSize >= 0xffffffff
+    ) {
+      throw new Error("Accountant pack is too large for a ZIP file");
+    }
+
+    const view = new DataView(local.buffer);
+    view.setUint32(0, 0x04034b50, true);
+    view.setUint16(8, 0, true);
+    view.setUint32(14, crc, true);
+    view.setUint32(18, data.length, true);
+    view.setUint32(22, data.length, true);
+    view.setUint16(26, nameBytes.length, true);
+    local.set(nameBytes, 30);
+    controller.enqueue(local);
+    controller.enqueue(data);
+
+    const cen = new Uint8Array(cenSize);
+    const cv = new DataView(cen.buffer);
+    cv.setUint32(0, 0x02014b50, true);
+    cv.setUint16(10, 0, true);
+    cv.setUint32(16, crc, true);
+    cv.setUint32(20, data.length, true);
+    cv.setUint32(24, data.length, true);
+    cv.setUint16(28, nameBytes.length, true);
+    cv.setUint32(42, offset, true);
+    cen.set(nameBytes, 46);
+    central.push(cen);
+
+    centralSize += cenSize;
+    offset += entrySize;
+  };
+
   return new ReadableStream<Uint8Array>({
     async pull(controller) {
-      const next = await iterator.next();
-      if (next.done) {
-        const end = new Uint8Array(22);
-        const ev = new DataView(end.buffer);
-        ev.setUint32(0, 0x06054b50, true);
-        ev.setUint16(8, central.length, true);
-        ev.setUint16(10, central.length, true);
-        ev.setUint32(12, centralSize, true);
-        ev.setUint32(16, offset, true);
-        for (const c of central) controller.enqueue(c);
-        controller.enqueue(end);
-        controller.close();
-        return;
+      try {
+        await writeNextEntry(controller);
+      } catch (err) {
+        // The 200 has already gone out, so nothing else will report this.
+        console.error("Accountant pack stream failed:", err);
+        throw err;
       }
-
-      const [name, content] = next.value;
-      const nameBytes = encoder.encode(name);
-      const data =
-        typeof content === "string" ? encoder.encode(content) : content;
-      const crc = crc32(data);
-      const local = new Uint8Array(30 + nameBytes.length);
-
-      // Past these, the format needs ZIP64 and the headers would wrap around.
-      const entrySize = local.length + data.length;
-      const cenSize = 46 + nameBytes.length;
-      if (
-        central.length >= 0xfffe ||
-        offset + entrySize + centralSize + cenSize >= 0xffffffff
-      ) {
-        throw new Error("Accountant pack is too large for a ZIP file");
-      }
-
-      const view = new DataView(local.buffer);
-      view.setUint32(0, 0x04034b50, true);
-      view.setUint16(8, 0, true);
-      view.setUint32(14, crc, true);
-      view.setUint32(18, data.length, true);
-      view.setUint32(22, data.length, true);
-      view.setUint16(26, nameBytes.length, true);
-      local.set(nameBytes, 30);
-      controller.enqueue(local);
-      controller.enqueue(data);
-
-      const cen = new Uint8Array(cenSize);
-      const cv = new DataView(cen.buffer);
-      cv.setUint32(0, 0x02014b50, true);
-      cv.setUint16(10, 0, true);
-      cv.setUint32(16, crc, true);
-      cv.setUint32(20, data.length, true);
-      cv.setUint32(24, data.length, true);
-      cv.setUint16(28, nameBytes.length, true);
-      cv.setUint32(42, offset, true);
-      cen.set(nameBytes, 46);
-      central.push(cen);
-
-      centralSize += cenSize;
-      offset += entrySize;
     },
     async cancel() {
       await iterator.return?.();

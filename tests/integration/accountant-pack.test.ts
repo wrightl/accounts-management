@@ -551,8 +551,15 @@ describe("zipStoreStream", () => {
       yield ["first.txt", "first"];
       throw new Error("storage down");
     }
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
 
     await expect(collect(zipStoreStream(failing()))).rejects.toThrow("storage down");
+
+    expect(logged).toHaveBeenCalledWith(
+      "Accountant pack stream failed:",
+      expect.objectContaining({ message: "storage down" }),
+    );
+    logged.mockRestore();
   });
 
   it("stops reading entries when the download is cancelled", async () => {
