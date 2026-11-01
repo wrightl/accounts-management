@@ -35,7 +35,12 @@ export async function getImportBatchReview(companyId: string, batchId: string) {
     db
       .select()
       .from(invoiceImportDrafts)
-      .where(eq(invoiceImportDrafts.batchId, batchId))
+      .where(
+        and(
+          eq(invoiceImportDrafts.batchId, batchId),
+          eq(invoiceImportDrafts.companyId, companyId),
+        ),
+      )
       .orderBy(asc(invoiceImportDrafts.position)),
     db
       .select({

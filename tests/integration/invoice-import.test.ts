@@ -390,6 +390,61 @@ describe("saving safely", () => {
     expect((await commitInvoiceImportChunk(batchId)).ok).toBe(false);
   });
 
+  it("keeps both of two client choices made together", async () => {
+    const [first, second] = await db
+      .insert(clients)
+      .values([
+        { companyId, name: "First Existing" },
+        { companyId, name: "Second Existing" },
+      ])
+      .returning();
+    const batchId = await stageCsv(
+      [
+        HEAD,
+        "A-1,Alpha,,,01/05/2026,,Work,10.00,0,sent,,,",
+        "B-1,Beta,,,01/05/2026,,Work,10.00,0,sent,,,",
+      ].join("\n"),
+    );
+    const keys = (await draftsOf(batchId)).map((d) => d.parsed.client.key);
+    const results = await Promise.all([
+      setImportClientResolution(batchId, keys[0], first.id),
+      setImportClientResolution(batchId, keys[1], second.id),
+    ]);
+    expect(results.every((r) => r.ok)).toBe(true);
+    const [batch] = await db
+      .select()
+      .from(invoiceImportBatches)
+      .where(eq(invoiceImportBatches.id, batchId));
+    expect(batch.clientResolutions).toEqual({
+      [keys[0]]: first.id,
+      [keys[1]]: second.id,
+    });
+  });
+
+  it("saves nothing when a chosen client has since been deleted", async () => {
+    const [gone] = await db
+      .insert(clients)
+      .values({ companyId, name: "Gone Client" })
+      .returning();
+    const batchId = await stageCsv(
+      [
+        HEAD,
+        "A-1,Alpha,,,01/05/2026,,Work,10.00,0,sent,,,",
+        "B-1,Beta,,,01/05/2026,,Work,10.00,0,sent,,,",
+      ].join("\n"),
+    );
+    const drafts = await draftsOf(batchId);
+    const beta = drafts.find((d) => d.parsed.number === "B-1")!;
+    await setImportClientResolution(batchId, beta.parsed.client.key, gone.id);
+    await db.delete(clients).where(eq(clients.id, gone.id));
+
+    const result = await commitInvoiceImportChunk(batchId);
+    expect(result.ok).toBe(false);
+    expect(await allInvoices()).toHaveLength(0);
+    expect(await db.select().from(clients).where(eq(clients.companyId, companyId))).toHaveLength(0);
+    expect((await draftsOf(batchId)).every((d) => d.status === "ready")).toBe(true);
+  });
+
   it("records what was imported in the audit log", async () => {
     const batchId = await importCsv(SAMPLE);
     const [audit] = await db

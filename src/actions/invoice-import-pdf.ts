@@ -264,7 +264,12 @@ export async function uploadInvoicePdf(
           position: sql<number>`coalesce(max(${invoiceImportDrafts.position}), -1) + 1`.mapWith(Number),
         })
         .from(invoiceImportDrafts)
-        .where(eq(invoiceImportDrafts.batchId, batchId));
+        .where(
+          and(
+            eq(invoiceImportDrafts.batchId, batchId),
+            eq(invoiceImportDrafts.companyId, companyId),
+          ),
+        );
       const [draft] = await db
         .insert(invoiceImportDrafts)
         .values({
