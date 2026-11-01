@@ -1,7 +1,7 @@
 /**
- * Invoice / quote number formatting and allocation.
+ * Invoice / quote number formatting and parsing.
  * Format: `{prefix}-{YYYY}-{NNNN}` e.g. DD-2026-0001, Q-2026-0001.
- * Sequence resets when the issue-date calendar year changes.
+ * Each issue-date calendar year has its own series; see allocate.ts.
  */
 
 import { todayIsoDate } from "@/lib/dates";
@@ -27,89 +27,26 @@ export function parseIssueYear(issueDate: string | Date | null | undefined): num
   return Number(todayIsoDate().slice(0, 4));
 }
 
-export interface NumberingState {
-  invoiceNumberPrefix: string;
-  invoiceNextSeq: number;
-  invoiceSeqYear: number | null;
-}
-
 /**
- * Given current settings and the issue-date year, return the number to assign
- * and the next settings values after allocation.
+ * Highest sequence per year among numbers in `{prefix}-{YYYY}-{N}` format.
+ * Numbers in any other format are ignored.
  */
-export function nextInvoiceNumber(
-  state: NumberingState,
-  year: number,
-): { number: string; nextSeq: number; seqYear: number } {
-  const prefix = state.invoiceNumberPrefix || "DD";
-  const sameYear = state.invoiceSeqYear === year;
-  const seq = sameYear ? state.invoiceNextSeq : 1;
-  return {
-    number: formatInvoiceNumber(prefix, year, seq),
-    nextSeq: seq + 1,
-    seqYear: year,
-  };
+export function highestSeqByYear(
+  prefix: string,
+  numbers: string[],
+): Map<number, number> {
+  const re = new RegExp(`^${escapeRegExp(prefix)}-(\\d{4})-(\\d{1,9})$`, "i");
+  const highest = new Map<number, number>();
+  for (const num of numbers) {
+    const m = re.exec(num.trim());
+    if (!m) continue;
+    const year = Number(m[1]);
+    const seq = Number(m[2]);
+    if (seq > (highest.get(year) ?? 0)) highest.set(year, seq);
+  }
+  return highest;
 }
 
-export interface QuoteNumberingState {
-  quoteNumberPrefix: string;
-  quoteNextSeq: number;
-  quoteSeqYear: number | null;
-}
-
-/** Quote numbers: {prefix}-{YYYY}-{NNNN}. */
-export function nextQuoteNumber(
-  state: QuoteNumberingState,
-  year: number,
-): { number: string; nextSeq: number; seqYear: number } {
-  const prefix = state.quoteNumberPrefix || "Q";
-  const sameYear = state.quoteSeqYear === year;
-  const seq = sameYear ? state.quoteNextSeq : 1;
-  return {
-    number: formatInvoiceNumber(prefix, year, seq),
-    nextSeq: seq + 1,
-    seqYear: year,
-  };
-}
-
-export interface OrderNumberingState {
-  orderNumberPrefix: string;
-  orderNextSeq: number;
-  orderSeqYear: number | null;
-}
-
-/** Order numbers: {prefix}-{YYYY}-{NNNN}. */
-export function nextOrderNumber(
-  state: OrderNumberingState,
-  year: number,
-): { number: string; nextSeq: number; seqYear: number } {
-  const prefix = state.orderNumberPrefix || "O";
-  const sameYear = state.orderSeqYear === year;
-  const seq = sameYear ? state.orderNextSeq : 1;
-  return {
-    number: formatInvoiceNumber(prefix, year, seq),
-    nextSeq: seq + 1,
-    seqYear: year,
-  };
-}
-
-export interface CreditNoteNumberingState {
-  creditNoteNumberPrefix: string;
-  creditNoteNextSeq: number;
-  creditNoteSeqYear: number | null;
-}
-
-/** Credit note numbers: {prefix}-{YYYY}-{NNNN}. */
-export function nextCreditNoteNumber(
-  state: CreditNoteNumberingState,
-  year: number,
-): { number: string; nextSeq: number; seqYear: number } {
-  const prefix = state.creditNoteNumberPrefix || "CN";
-  const sameYear = state.creditNoteSeqYear === year;
-  const seq = sameYear ? state.creditNoteNextSeq : 1;
-  return {
-    number: formatInvoiceNumber(prefix, year, seq),
-    nextSeq: seq + 1,
-    seqYear: year,
-  };
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

@@ -3,6 +3,7 @@ import {
   type AnyPgColumn,
   pgTable,
   pgEnum,
+  primaryKey,
   uuid,
   text,
   integer,
@@ -110,14 +111,11 @@ export const companies = pgTable("companies", {
   quoteNumberPrefix: text("quote_number_prefix").notNull().default("Q"),
   /** Order number prefix, e.g. "O" → O-2026-0001. */
   orderNumberPrefix: text("order_number_prefix").notNull().default("O"),
-  /** Next sequence number to allocate for the current invoiceSeqYear. */
+  /** Superseded by documentSequences, as are the other *NextSeq and *SeqYear columns; no longer read or written. */
   invoiceNextSeq: integer("invoice_next_seq").notNull().default(1),
-  /** Calendar year the sequence applies to; null until the first invoice. */
   invoiceSeqYear: integer("invoice_seq_year"),
-  /** Next quote sequence for the current quoteSeqYear. */
   quoteNextSeq: integer("quote_next_seq").notNull().default(1),
   quoteSeqYear: integer("quote_seq_year"),
-  /** Next order sequence for the current orderSeqYear. */
   orderNextSeq: integer("order_next_seq").notNull().default(1),
   orderSeqYear: integer("order_seq_year"),
   /** Credit note number prefix, e.g. "CN" → CN-2026-0001. */
@@ -201,6 +199,27 @@ export const companies = pgTable("companies", {
 
 /** @deprecated Use `companies`. Alias kept for gradual migration of imports. */
 export const companySettings = companies;
+
+export const documentSequenceKindEnum = pgEnum("document_sequence_kind", [
+  "invoice",
+  "quote",
+  "order",
+  "credit_note",
+]);
+
+/** The next number for each company, document kind and issue-date calendar year. */
+export const documentSequences = pgTable(
+  "document_sequences",
+  {
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    kind: documentSequenceKindEnum("kind").notNull(),
+    year: integer("year").notNull(),
+    nextSeq: integer("next_seq").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.companyId, t.kind, t.year] })],
+);
 
 /** Local mirror of Clerk users, with the app role and optional tenant.
  *  Platform operators use role `platform_admin` and have no company.
