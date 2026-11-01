@@ -2,10 +2,10 @@ import Link from "next/link";
 import { buttonClasses } from "@/components/ui/button";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
-import { formatIsoDateUk } from "@/lib/dates";
 import { formatGBP } from "@/lib/money";
 import type { Margin } from "@/lib/profitability/rebill";
 import type { ProjectExpense } from "@/lib/profitability/queries";
+import { DisplayDate } from "@/components/date-format-provider";
 
 export function marginLabel(m: Margin): string {
   return m.marginPercent == null ? "—" : `${m.marginPercent}%`;
@@ -94,7 +94,7 @@ export function ProjectExpenses({
                     {e.description}
                   </Link>
                   {e.spentAt ? (
-                    <span className="ml-2 text-xs text-muted">{formatIsoDateUk(e.spentAt)}</span>
+                    <span className="ml-2 text-xs text-muted"><DisplayDate value={e.spentAt} /></span>
                   ) : null}
                 </TD>
                 {showOrder ? <TD className="text-muted">{e.orderNumber ?? "—"}</TD> : null}

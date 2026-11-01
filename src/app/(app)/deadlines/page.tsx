@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
-import { formatIsoDateUk, monthName } from "@/lib/dates";
+import { monthName } from "@/lib/dates";
 import { getDeadlines, type DeadlineRow } from "@/lib/deadlines/queries";
 import type { DeadlineStatus } from "@/lib/deadlines/calc";
 import { DeadlineDoneButton } from "@/components/deadlines/deadline-done-button";
@@ -9,6 +9,7 @@ import { VatQuartersForm } from "@/components/deadlines/vat-quarters-form";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { DisplayDate } from "@/components/date-format-provider";
 
 export const metadata: Metadata = { title: "Deadlines" };
 
@@ -80,7 +81,7 @@ export default async function DeadlinesPage() {
           <CardTitle>Next deadline</CardTitle>
           {next ? (
             <>
-              <CardValue>{formatIsoDateUk(next.dueDate)}</CardValue>
+              <CardValue><DisplayDate value={next.dueDate} /></CardValue>
               <p className="mt-1 text-sm text-muted">{next.label}</p>
             </>
           ) : (
@@ -110,7 +111,7 @@ export default async function DeadlinesPage() {
                 {deadlines.map((d) => (
                   <TR key={`${d.kind}:${d.dueDate}`}>
                     <TD className="whitespace-nowrap align-top tabular-nums">
-                      {formatIsoDateUk(d.dueDate)}
+                      <DisplayDate value={d.dueDate} />
                     </TD>
                     <TD className="align-top">
                       <p className={cn("font-medium", d.status === "done" && "text-muted")}>
@@ -125,7 +126,7 @@ export default async function DeadlinesPage() {
                         <p className="mt-1 max-w-xl text-xs text-muted">{d.detail}</p>
                       ) : d.filedOn ? (
                         <p className="mt-1 text-xs text-muted">
-                          Marked done {formatIsoDateUk(d.filedOn)}
+                          Marked done <DisplayDate value={d.filedOn} />
                           {d.filedByName ? ` by ${d.filedByName}` : ""}
                         </p>
                       ) : null}

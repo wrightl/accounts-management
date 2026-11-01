@@ -23,7 +23,6 @@ import {
   sumInvoicedPenceForOrder,
 } from "@/lib/orders/invoice-from-order";
 import type { PaymentMilestoneInput } from "@/lib/quotes/payment-schedule";
-import { APP_TIMEZONE } from "@/lib/dates";
 
 export async function listOrders(companyId: string) {
   const db = getDb();
@@ -47,15 +46,6 @@ export async function listOrders(companyId: string) {
     ...r,
     grossFormatted: formatGBP(r.grossPence),
   }));
-}
-
-function formatCreatedDate(createdAt: Date): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: APP_TIMEZONE,
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  }).format(createdAt);
 }
 
 export async function getOrderDetail(companyId: string, id: string) {
@@ -126,7 +116,6 @@ export async function getOrderDetail(companyId: string, id: string) {
     order: {
       ...order,
       grossFormatted: formatGBP(order.grossPence),
-      createdDateFormatted: formatCreatedDate(order.createdAt),
     },
     client: rows[0].client,
     quote: rows[0].quote,

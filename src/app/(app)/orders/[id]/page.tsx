@@ -21,6 +21,7 @@ import { defaultDueDate, todayIsoDate } from "@/lib/invoices/status";
 import type { InvoiceStatus } from "@/lib/invoices/status";
 import { getOrderProfitability, listProjectExpenses } from "@/lib/profitability/queries";
 import { MarginCards, ProjectExpenses, marginLabel } from "@/components/profitability/project-costs";
+import { DisplayDate } from "@/components/date-format-provider";
 
 export default async function OrderDetailPage({
   params,
@@ -61,7 +62,7 @@ export default async function OrderDetailPage({
               {clientDisplayName(detail.client)}
             </Link>
             {" · Created "}
-            {detail.order.createdDateFormatted}
+            <DisplayDate value={detail.order.createdAt} />
           </p>
           {detail.quote ? (
             <p className="mt-1 text-sm">

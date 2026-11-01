@@ -28,9 +28,11 @@ import { expenseOriginalAmount, needsAmountCheck } from "@/lib/expenses/currency
 import { getExpenseRebill, listOrderOptions } from "@/lib/profitability/queries";
 import { getPaymentSourceSuggestion } from "@/lib/expenses/payment-source-queries";
 import { paymentSourceSummary } from "@/lib/expenses/payment-source";
-import { formatDateTimeUk } from "@/lib/dates";
+import { formatInstantDateTime } from "@/lib/dates";
 import { getInboundEmailSummary } from "@/lib/expenses/inbound-email";
 import { EmailBodyPanel } from "@/components/expenses/email-body-panel";
+import { DisplayDate } from "@/components/date-format-provider";
+import { getDateFormat } from "@/lib/date-format.server";
 
 export default async function ExpenseDetailPage({
   params,
@@ -212,7 +214,7 @@ export default async function ExpenseDetailPage({
             <ExpenseTitle fallback={detail.expense.description} />
             <p className="mt-1 text-muted">
               {expenseStatusLabel(detail.expense.status as ExpenseStatus)}
-              {detail.expense.spentAt ? ` · ${detail.expense.spentAt}` : null}
+              {detail.expense.spentAt ? <> · <DisplayDate value={detail.expense.spentAt} /></> : null}
               {detail.paidBy ? ` · Paid by ${detail.paidBy.name || detail.paidBy.email}` : null}
             </p>
           </div>
@@ -252,7 +254,7 @@ export default async function ExpenseDetailPage({
                 email={{
                   fromEmail: inboundJob.fromEmail,
                   subject: inboundJob.subject,
-                  receivedAt: formatDateTimeUk(inboundJob.createdAt),
+                  receivedAt: formatInstantDateTime(inboundJob.createdAt, await getDateFormat()),
                   hasHtml: inboundJob.hasHtml,
                   hasText: inboundJob.hasText,
                 }}

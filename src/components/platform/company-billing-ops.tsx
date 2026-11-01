@@ -11,9 +11,9 @@ import { buttonClasses } from "@/components/ui/button";
 import { useAlert } from "@/components/ui/alert-dialog";
 import { toast } from "@/components/ui/toast";
 import { StatusPill } from "@/components/platform/status-pill";
-import { formatDateTimeUk } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import type { ActionResult } from "@/actions/result";
+import { DisplayDate } from "@/components/date-format-provider";
 
 function StripeId({ id, href }: { id: string | null; href: string | null }) {
   if (!id) return <dd className="font-mono text-xs">—</dd>;
@@ -114,12 +114,12 @@ export function CompanyBillingOpsForm({
         ) : null}
         {trialEndsAt ? (
           <Row label="Trial ends">
-            <dd>{formatDateTimeUk(trialEndsAt)}</dd>
+            <dd><DisplayDate value={trialEndsAt} withTime /></dd>
           </Row>
         ) : null}
         {currentPeriodEnd ? (
           <Row label="Period end">
-            <dd>{formatDateTimeUk(currentPeriodEnd)}</dd>
+            <dd><DisplayDate value={currentPeriodEnd} withTime /></dd>
           </Row>
         ) : null}
         <Row label="Stripe customer">
@@ -136,7 +136,7 @@ export function CompanyBillingOpsForm({
         ) : null}
         {complimentaryExpiresAt ? (
           <Row label="Comp expires">
-            <dd>{formatDateTimeUk(complimentaryExpiresAt)}</dd>
+            <dd><DisplayDate value={complimentaryExpiresAt} withTime /></dd>
           </Row>
         ) : null}
       </dl>

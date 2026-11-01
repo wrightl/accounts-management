@@ -22,18 +22,14 @@ import {
 } from "@/lib/money";
 import { clientDisplayName } from "@/lib/clients/display";
 import { publicQuoteUrl } from "@/lib/quotes/public-token";
+import { getDateFormat } from "@/lib/date-format.server";
+import { formatInstantDateTime, type DateFormat } from "@/lib/dates";
 
-function formatTs(d: Date | string | null | undefined): string | null {
+function formatTs(d: Date | string | null | undefined, format: DateFormat): string | null {
   if (!d) return null;
   const date = typeof d === "string" ? new Date(d) : d;
   if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatInstantDateTime(date, format);
 }
 
 export default async function QuoteDetailPage({
@@ -64,10 +60,11 @@ export default async function QuoteDetailPage({
     publicUrl,
   });
 
-  const sentLabel = formatTs(detail.quote.sentAt);
-  const viewedLabel = formatTs(detail.quote.viewedAt);
-  const acceptedLabel = formatTs(detail.quote.acceptedAt);
-  const declinedLabel = formatTs(detail.quote.declinedAt);
+  const dateFormat = await getDateFormat();
+  const sentLabel = formatTs(detail.quote.sentAt, dateFormat);
+  const viewedLabel = formatTs(detail.quote.viewedAt, dateFormat);
+  const acceptedLabel = formatTs(detail.quote.acceptedAt, dateFormat);
+  const declinedLabel = formatTs(detail.quote.declinedAt, dateFormat);
 
   return (
     <div>

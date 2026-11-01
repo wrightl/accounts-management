@@ -17,6 +17,7 @@ import {
     lineNetPence,
 } from '@/lib/money';
 import type { InvoiceStatus } from '@/lib/invoices/status';
+import { DisplayDate } from "@/components/date-format-provider";
 
 export default async function RecurringInvoiceDetailPage({
     params,
@@ -78,7 +79,7 @@ export default async function RecurringInvoiceDetailPage({
                     </p>
                     <p className="mt-1 text-sm text-muted">
                         Next run: {template.nextRunOn ?? '—'}
-                        {template.endsOn ? ` · Ends ${template.endsOn}` : ''}
+                        {template.endsOn ? <> · Ends <DisplayDate value={template.endsOn} /></> : ''}
                         {template.maxOccurrences != null
                             ? ` · ${template.occurrenceCount}/${template.maxOccurrences} invoices`
                             : ` · ${template.occurrenceCount} generated`}

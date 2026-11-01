@@ -16,6 +16,7 @@ import {
 } from "@/components/spending/spending-ui";
 import { buttonClasses } from "@/components/ui/button";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
+import { getDateFormat } from "@/lib/date-format.server";
 
 export default async function SpendingPage({
   searchParams,
@@ -31,6 +32,7 @@ export default async function SpendingPage({
   const breakdown = sp.breakdown === "merchant" ? "merchant" : "category";
 
   const resolved = resolvePeriod(period, settings.financialYearEndMonth, {
+    dateFormat: await getDateFormat(),
     from: sp.from,
     to: sp.to,
   });

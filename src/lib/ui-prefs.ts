@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DATE_FORMATS, DEFAULT_DATE_FORMAT } from "@/lib/dates";
 import { parseWithFieldErrors } from "@/lib/validation/field-errors";
 
 export const UI_PREFS_COOKIE = "alfa_ui_prefs";
@@ -8,6 +9,7 @@ export const uiTextSchema = z.enum(["default", "large"]);
 export const uiContrastSchema = z.enum(["default", "high"]);
 export const uiFontSchema = z.enum(["default", "readable"]);
 export const uiToastsSchema = z.enum(["auto", "stay"]);
+export const uiDateFormatSchema = z.enum(DATE_FORMATS);
 
 export const uiPrefsSchema = z.object({
   motion: uiMotionSchema.default("system"),
@@ -15,6 +17,7 @@ export const uiPrefsSchema = z.object({
   contrast: uiContrastSchema.default("default"),
   font: uiFontSchema.default("default"),
   toasts: uiToastsSchema.default("auto"),
+  dateFormat: uiDateFormatSchema.default(DEFAULT_DATE_FORMAT),
 });
 
 export type UiPrefs = z.infer<typeof uiPrefsSchema>;
@@ -25,6 +28,7 @@ export const DEFAULT_UI_PREFS: UiPrefs = {
   contrast: "default",
   font: "default",
   toasts: "auto",
+  dateFormat: DEFAULT_DATE_FORMAT,
 };
 
 /** Normalise unknown JSON (DB / cookie) into a full prefs object. */
@@ -41,6 +45,7 @@ export function uiPrefsFromFormData(formData: FormData): Record<string, unknown>
     contrast: formData.get("contrast") || "default",
     font: formData.get("font") || "default",
     toasts: formData.get("toasts") || "auto",
+    dateFormat: formData.get("dateFormat") || DEFAULT_DATE_FORMAT,
   };
 }
 

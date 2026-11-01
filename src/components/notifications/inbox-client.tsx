@@ -11,17 +11,7 @@ import {
   markNotificationReadAction,
 } from "@/actions/notifications";
 import type { Notification } from "@/db/schema";
-
-function formatWhen(iso: Date | string): string {
-  const d = typeof iso === "string" ? new Date(iso) : iso;
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(d);
-}
+import { DisplayDate } from "@/components/date-format-provider";
 
 export function InboxClient({
   initial,
@@ -149,7 +139,7 @@ export function InboxClient({
                         {n.body}
                       </p>
                       <p className="mt-1 text-[11px] text-muted/80">
-                        {formatWhen(n.createdAt)}
+                        <DisplayDate value={new Date(n.createdAt)} withTime />
                       </p>
                     </div>
                   </button>
@@ -169,7 +159,7 @@ export function InboxClient({
                   {selected.title}
                 </h2>
                 <p className="mt-1 text-xs text-muted">
-                  {formatWhen(selected.createdAt)}
+                  <DisplayDate value={new Date(selected.createdAt)} withTime />
                 </p>
               </div>
               <button

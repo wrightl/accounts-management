@@ -14,6 +14,7 @@ import type { BillingPageData } from "@/lib/billing/queries";
 import { formatCatalogPounds } from "@/lib/billing/catalog-format";
 import { formatGBP } from "@/lib/money";
 import { toast } from "@/components/ui/toast";
+import { DisplayDate } from "@/components/date-format-provider";
 
 function planLabel(plan: string): string {
   switch (plan) {
@@ -149,11 +150,7 @@ export function BillingSettingsPanel({ data }: { data: BillingPageData }) {
             <div>
               <dt className="text-muted">Trial ends</dt>
               <dd className="font-medium">
-                {e.trialEndsAt.toLocaleDateString("en-GB", {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                })}
+                <DisplayDate value={e.trialEndsAt} />
               </dd>
             </div>
           ) : null}
@@ -163,11 +160,7 @@ export function BillingSettingsPanel({ data }: { data: BillingPageData }) {
                 {e.cancelAtPeriodEnd ? "Access until" : "Renews"}
               </dt>
               <dd className="font-medium">
-                {e.currentPeriodEnd.toLocaleDateString("en-GB", {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                })}
+                <DisplayDate value={e.currentPeriodEnd} />
               </dd>
             </div>
           ) : null}
@@ -312,10 +305,7 @@ export function BillingSettingsPanel({ data }: { data: BillingPageData }) {
               {invoices.map((inv) => {
                 const amount =
                   inv.status === "paid" ? inv.amountPaid : inv.amountDue;
-                const date = new Date(inv.created * 1000).toLocaleDateString(
-                  "en-GB",
-                  { day: "numeric", month: "short", year: "numeric" },
-                );
+                const date = <DisplayDate value={new Date(inv.created * 1000)} />;
                 const href = inv.hostedInvoiceUrl ?? inv.invoicePdf;
                 return (
                   <li
@@ -362,11 +352,7 @@ export function BillingSettingsPanel({ data }: { data: BillingPageData }) {
               <p className="mt-1 text-sm text-muted">
                 Your plan stays active until{" "}
                 {e.currentPeriodEnd
-                  ? e.currentPeriodEnd.toLocaleDateString("en-GB", {
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                    })
+                  ? <DisplayDate value={e.currentPeriodEnd} />
                   : "the end of the billing period"}
                 . You can keep the subscription to resume billing.
               </p>

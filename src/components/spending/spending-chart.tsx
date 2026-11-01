@@ -13,6 +13,7 @@ import {
 import { formatChartTooltipDate } from "@/lib/dates";
 import { penceToPounds } from "@/lib/money";
 import type { SpendingSeriesPoint } from "@/lib/spending/series";
+import { useDateFormat } from "@/components/date-format-provider";
 
 function formatAxis(value: number): string {
   if (value >= 1000) return `£${(value / 1000).toFixed(value % 1000 === 0 ? 0 : 1)}k`;
@@ -44,6 +45,7 @@ function SpendingTooltip({
   periodLabel: string;
   compareLabel: string;
 }) {
+  const dateFormat = useDateFormat();
   if (!active || !payload?.length) return null;
 
   const point = payload[0]?.payload as ChartPoint | undefined;
@@ -52,14 +54,14 @@ function SpendingTooltip({
   const rows = [
     point.currentDate
       ? {
-          date: formatChartTooltipDate(point.currentDate, buckets),
+          date: formatChartTooltipDate(point.currentDate, buckets, dateFormat),
           label: periodLabel,
           value: point.current,
         }
       : null,
     point.compareDate
       ? {
-          date: formatChartTooltipDate(point.compareDate, buckets),
+          date: formatChartTooltipDate(point.compareDate, buckets, dateFormat),
           label: compareLabel,
           value: point.previous,
         }

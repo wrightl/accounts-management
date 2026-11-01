@@ -6,7 +6,7 @@ import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { ExpandableText } from "@/components/platform/expandable-text";
 import { StatusPill } from "@/components/platform/status-pill";
 import { ClearFilters, Pager, parseOffset } from "@/components/platform/pager";
-import { formatDateTimeUk } from "@/lib/dates";
+import { DisplayDate } from "@/components/date-format-provider";
 
 const PAGE_SIZE = 100;
 
@@ -118,7 +118,7 @@ export default async function PlatformLogsPage({
               {rows.map((r) => (
                 <TR key={r.id}>
                   <TD className="whitespace-nowrap text-muted">
-                    {formatDateTimeUk(r.createdAt)}
+                    <DisplayDate value={r.createdAt} withTime />
                   </TD>
                   <TD>
                     <StatusPill

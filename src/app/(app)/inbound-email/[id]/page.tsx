@@ -16,11 +16,7 @@ import {
 } from "@/components/inbound-email/job-actions";
 import { Card, CardTitle } from "@/components/ui/card";
 import { SettingsPageHeader } from "@/components/settings/settings-page-header";
-
-function formatWhen(date: Date | null): string {
-  if (!date) return "—";
-  return date.toISOString().replace("T", " ").slice(0, 19);
-}
+import { DisplayDate } from "@/components/date-format-provider";
 
 export default async function InboundEmailJobPage({
   params,
@@ -60,7 +56,7 @@ export default async function InboundEmailJobPage({
           <dl className="mt-4 grid gap-3 text-sm">
             <div className="grid grid-cols-[8rem_1fr] gap-2">
               <dt className="text-muted">Received</dt>
-              <dd>{formatWhen(job.createdAt)}</dd>
+              <dd><DisplayDate value={job.createdAt} withTime /></dd>
             </div>
             <div className="grid grid-cols-[8rem_1fr] gap-2">
               <dt className="text-muted">To</dt>
@@ -76,7 +72,7 @@ export default async function InboundEmailJobPage({
             </div>
             <div className="grid grid-cols-[8rem_1fr] gap-2">
               <dt className="text-muted">Processed</dt>
-              <dd>{formatWhen(job.processedAt)}</dd>
+              <dd><DisplayDate value={job.processedAt} withTime /></dd>
             </div>
             {jobExpenses.length > 1 ? (
               <div className="grid grid-cols-[8rem_1fr] gap-2">

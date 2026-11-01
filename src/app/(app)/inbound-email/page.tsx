@@ -18,6 +18,7 @@ import {
 import { buttonClasses } from "@/components/ui/button";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { SettingsPageHeader } from "@/components/settings/settings-page-header";
+import { DisplayDate } from "@/components/date-format-provider";
 
 const FILTERS: { value: InboundEmailJobListFilter; label: string }[] = [
   { value: "attention", label: "Needs attention" },
@@ -27,10 +28,6 @@ const FILTERS: { value: InboundEmailJobListFilter; label: string }[] = [
   { value: "rejected", label: "Rejected" },
   { value: "processed", label: "Processed" },
 ];
-
-function formatWhen(date: Date): string {
-  return date.toISOString().replace("T", " ").slice(0, 19);
-}
 
 export default async function InboundEmailPage({
   searchParams,
@@ -98,7 +95,7 @@ export default async function InboundEmailPage({
                 );
                 return (
                   <TR key={job.id}>
-                    <TD className="whitespace-nowrap text-muted">{formatWhen(job.createdAt)}</TD>
+                    <TD className="whitespace-nowrap text-muted"><DisplayDate value={job.createdAt} withTime /></TD>
                     <TD className="max-w-[12rem] truncate">{job.fromEmail}</TD>
                     <TD>
                       <Link

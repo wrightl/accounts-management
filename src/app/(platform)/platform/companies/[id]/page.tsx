@@ -15,7 +15,7 @@ import { CompanyBillingOpsForm } from "@/components/platform/company-billing-ops
 import { MemberActions } from "@/components/platform/member-actions";
 import { StatusPill } from "@/components/platform/status-pill";
 import { stripeDashboardUrl } from "@/lib/billing/stripe-dashboard";
-import { formatDateTimeUk } from "@/lib/dates";
+import { DisplayDate } from "@/components/date-format-provider";
 
 export default async function PlatformCompanyDetailPage({
   params,
@@ -91,7 +91,7 @@ export default async function PlatformCompanyDetailPage({
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-muted">Created</dt>
-              <dd>{formatDateTimeUk(company.createdAt)}</dd>
+              <dd><DisplayDate value={company.createdAt} withTime /></dd>
             </div>
           </dl>
         </section>
@@ -211,7 +211,7 @@ export default async function PlatformCompanyDetailPage({
                 <p className="whitespace-pre-wrap">{n.body}</p>
                 <p className="mt-2 text-xs text-muted">
                   {n.authorName ?? n.authorEmail ?? "Unknown"} ·{" "}
-                  {formatDateTimeUk(n.createdAt)}
+                  <DisplayDate value={n.createdAt} withTime />
                 </p>
               </li>
             ))
@@ -258,7 +258,7 @@ export default async function PlatformCompanyDetailPage({
                 {recentAudit.map((r) => (
                   <TR key={r.id}>
                     <TD className="whitespace-nowrap text-muted">
-                      {formatDateTimeUk(r.createdAt)}
+                      <DisplayDate value={r.createdAt} withTime />
                     </TD>
                     <TD>{r.actorName ?? r.actorEmail ?? "—"}</TD>
                     <TD className="font-mono text-xs">{r.action}</TD>

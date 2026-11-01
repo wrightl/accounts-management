@@ -17,6 +17,7 @@ import { TransactionsSummaryPanel } from "@/components/bank/transactions-summary
 import { listBankSpendingCategoriesWithUsage } from "@/lib/bank/spending-categories";
 import { listIncomeCategoryNames } from "@/lib/bank/income-category-catalog";
 import { EmptyState } from "@/components/ui/empty-state";
+import { getDateFormat } from "@/lib/date-format.server";
 
 export default async function TransactionsPage({
   searchParams,
@@ -73,7 +74,7 @@ export default async function TransactionsPage({
     accountCards,
   ] = await Promise.all([
     listBankTransactions(companyId, listFilters),
-    getBankTransactionSummary(companyId, summaryFilters),
+    getBankTransactionSummary(companyId, summaryFilters, await getDateFormat()),
     listBankSpendingCategoriesWithUsage(companyId),
     listIncomeCategoryNames(companyId),
     countBankAccounts(companyId),

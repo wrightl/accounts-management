@@ -10,6 +10,8 @@ import { useFieldErrors } from "@/components/ui/use-field-errors";
 import { findReimbursementBankMatchesAction } from "@/actions/bank";
 import { markReimbursementPaid } from "@/actions/reimbursements";
 import type { ReimbursementBankMatch } from "@/lib/bank/queries";
+import { useDateFormat } from "@/components/date-format-provider";
+import { formatIsoDate } from "@/lib/dates";
 
 export function ReimbursementActions({
   id,
@@ -30,6 +32,7 @@ export function ReimbursementActions({
   const { fieldErrors, error, clearAll, clearField, applyActionResult } =
     useFieldErrors();
   const [pending, startTransition] = useTransition();
+  const dateFormat = useDateFormat();
   const [matches, setMatches] = useState<ReimbursementBankMatch[] | null>(null);
   const [selectedMatchId, setSelectedMatchId] = useState<string>("");
   const loadingMatches =
@@ -70,7 +73,7 @@ export function ReimbursementActions({
       message: selectedMatchId
         ? "Mark this reimbursement as paid and link the bank transaction? It will be dated from the bank transaction."
         : reimbursementDate
-          ? `Mark this reimbursement as paid on ${reimbursementDate}?`
+          ? `Mark this reimbursement as paid on ${formatIsoDate(reimbursementDate, dateFormat)}?`
           : "Mark this reimbursement as paid today?",
       confirmLabel: "Mark as paid",
     });

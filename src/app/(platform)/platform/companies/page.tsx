@@ -9,7 +9,7 @@ import {
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { StatusPill } from "@/components/platform/status-pill";
 import { ClearFilters, Pager, parseOffset } from "@/components/platform/pager";
-import { formatDateUk } from "@/lib/dates";
+import { DisplayDate } from "@/components/date-format-provider";
 
 const PAGE_SIZE = 50;
 
@@ -146,10 +146,10 @@ export default async function PlatformCompaniesPage({
                     )}
                   </TD>
                   <TD className="whitespace-nowrap text-muted">
-                    {formatDateUk(r.lastAuditAt)}
+                    <DisplayDate value={r.lastAuditAt} />
                   </TD>
                   <TD className="whitespace-nowrap text-muted">
-                    {formatDateUk(r.createdAt)}
+                    <DisplayDate value={r.createdAt} />
                   </TD>
                   <TD>
                     {r.suspendedAt ? (

@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Card, CardTitle } from "@/components/ui/card";
 import type { DashboardAttentionData } from "@/lib/dashboard/queries";
 import { cn } from "@/lib/utils";
+import { DisplayDate } from "@/components/date-format-provider";
 
 function InboxSection({
   title,
@@ -107,7 +108,7 @@ export function AttentionPanel({
                     <span className="mt-1 block tabular-nums text-destructive">
                       {invoice.balanceFormatted}
                       {invoice.dueDate ? (
-                        <span className="ml-2 text-muted">due {invoice.dueDate}</span>
+                        <span className="ml-2 text-muted">due <DisplayDate value={invoice.dueDate} /></span>
                       ) : null}
                     </span>
                   </Link>
@@ -138,7 +139,7 @@ export function AttentionPanel({
                     <span className="mt-1 block tabular-nums">
                       {quote.grossFormatted}
                       <span className="ml-2 text-brand">
-                        until {quote.validUntil}
+                        until <DisplayDate value={quote.validUntil} />
                       </span>
                     </span>
                   </Link>

@@ -6,6 +6,7 @@ import {
   getNotificationForUser,
   markNotificationRead,
 } from "@/lib/notifications";
+import { DisplayDate } from "@/components/date-format-provider";
 
 export default async function InboxDetailPage({
   params,
@@ -44,13 +45,7 @@ export default async function InboxDetailPage({
           {notification.title}
         </h1>
         <p className="mt-1 text-xs text-muted">
-          {new Intl.DateTimeFormat("en-GB", {
-            day: "numeric",
-            month: "short",
-            year: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-          }).format(notification.createdAt)}
+          <DisplayDate value={notification.createdAt} withTime />
         </p>
         <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed">
           {notification.body}

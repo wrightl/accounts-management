@@ -9,23 +9,12 @@ import {
   listWeeklyCloses,
   type CloseItemKey,
 } from "@/lib/close/checklist";
-import { formatIsoDateUk } from "@/lib/dates";
 import { DIGEST_DEADLINE_DAYS } from "@/lib/close/digest";
 import { getUpcomingDeadlines } from "@/lib/deadlines/queries";
 import { formatGBP } from "@/lib/money";
+import { DisplayDate } from "@/components/date-format-provider";
 
 export const metadata: Metadata = { title: "Weekly close" };
-
-function formatClosedAt(d: Date): string {
-  return d.toLocaleString("en-GB", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Europe/London",
-  });
-}
 
 function openCount(snapshot: unknown): number {
   const counts = snapshot as Partial<Record<CloseItemKey, number>>;
@@ -58,12 +47,12 @@ export default async function WeeklyClosePage() {
       <div className="mt-6 rounded-2xl border border-border bg-surface p-5">
         <p className="font-display text-lg font-semibold">
           {checklist.bankReconciledThrough
-            ? `Bank reconciled to ${formatIsoDateUk(checklist.bankReconciledThrough)}`
+            ? <>Bank reconciled to <DisplayDate value={checklist.bankReconciledThrough} /></>
             : "No bank transactions imported yet"}
         </p>
         <p className="mt-1 text-sm text-muted">
           {last
-            ? `Last closed ${formatClosedAt(last.closedAt)}${last.closedByName ? ` by ${last.closedByName}` : ""}.`
+            ? <>Last closed <DisplayDate value={last.closedAt} withTime />{last.closedByName ? ` by ${last.closedByName}` : ""}.</>
             : "The week hasn't been closed yet."}{" "}
           {checklist.bankReconciledThrough ? (
             <>
@@ -108,7 +97,7 @@ export default async function WeeklyClosePage() {
                         <Link href={`/orders/${m.orderId}`} className="underline">
                           {m.orderNumber}
                         </Link>{" "}
-                        {m.label} · {formatGBP(m.amountPence)} · due {formatIsoDateUk(m.dueDate)}
+                        {m.label} · {formatGBP(m.amountPence)} · due <DisplayDate value={m.dueDate} />
                       </li>
                     ))}
                   </ul>
@@ -121,7 +110,7 @@ export default async function WeeklyClosePage() {
                           {inv.number}
                         </Link>{" "}
                         {inv.clientName} · {inv.balanceFormatted}
-                        {inv.dueDate ? ` · due ${formatIsoDateUk(inv.dueDate)}` : ""}
+                        {inv.dueDate ? <> · due <DisplayDate value={inv.dueDate} /></> : ""}
                       </li>
                     ))}
                   </ul>
@@ -144,7 +133,7 @@ export default async function WeeklyClosePage() {
             {deadlines.map((d) => (
               <li key={`${d.kind}:${d.dueDate}`}>
                 <span className={d.status === "overdue" ? "font-medium text-destructive" : undefined}>
-                  {d.status === "overdue" ? "Overdue" : "Due"} {formatIsoDateUk(d.dueDate)}
+                  {d.status === "overdue" ? "Overdue" : "Due"} <DisplayDate value={d.dueDate} />
                 </span>{" "}
                 · {d.label}
                 {d.period ? <span className="text-muted"> · {d.period}</span> : null}
@@ -175,9 +164,9 @@ export default async function WeeklyClosePage() {
               <TBody>
                 {closes.map((c) => (
                   <TR key={c.id}>
-                    <TD>{formatClosedAt(c.closedAt)}</TD>
+                    <TD><DisplayDate value={c.closedAt} withTime /></TD>
                     <TD>{c.closedByName ?? "—"}</TD>
-                    <TD>{formatIsoDateUk(c.bankReconciledThrough) ?? "—"}</TD>
+                    <TD><DisplayDate value={c.bankReconciledThrough} /></TD>
                     <TD className="text-right">{openCount(c.snapshot) || "None"}</TD>
                   </TR>
                 ))}

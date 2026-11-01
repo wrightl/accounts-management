@@ -9,7 +9,7 @@ import { useAlert } from "@/components/ui/alert-dialog";
 import { FieldError, Input, Label } from "@/components/ui/form";
 import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
 import { useFieldErrors } from "@/components/ui/use-field-errors";
-import { formatIsoDateUk } from "@/lib/dates";
+import { DisplayDate } from "@/components/date-format-provider";
 
 export function PeriodLockCard({
   lockedThrough,
@@ -63,7 +63,7 @@ export function PeriodLockCard({
         <div className="min-w-0 flex-1">
           <h2 className="font-display text-lg font-semibold">
             {lockedThrough
-              ? `Books locked up to ${formatIsoDateUk(lockedThrough)}`
+              ? <>Books locked up to <DisplayDate value={lockedThrough} /></>
               : "Books are open"}
           </h2>
           <p className="mt-1 text-sm text-muted">

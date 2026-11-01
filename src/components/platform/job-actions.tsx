@@ -11,7 +11,6 @@ import { useAlert } from "@/components/ui/alert-dialog";
 import { toast } from "@/components/ui/toast";
 import { StatusPill } from "@/components/platform/status-pill";
 import { ExpandableText } from "@/components/platform/expandable-text";
-import { formatDateTimeUk } from "@/lib/dates";
 import {
   platformBulkInboundJobs,
   platformBulkRetrySendJobs,
@@ -21,6 +20,7 @@ import {
   type BulkJobResult,
 } from "@/actions/platform";
 import type { ActionResult } from "@/actions/result";
+import { DisplayDate } from "@/components/date-format-provider";
 
 export type InboundJobRow = {
   id: string;
@@ -234,7 +234,7 @@ export function InboundJobsTable({ jobs }: { jobs: InboundJobRow[] }) {
                     />
                   ) : null}
                 </TD>
-                <TD className="whitespace-nowrap text-muted">{formatDateTimeUk(j.createdAt)}</TD>
+                <TD className="whitespace-nowrap text-muted"><DisplayDate value={j.createdAt} withTime /></TD>
                 <TD>
                   <CompanyLink id={j.companyId} name={j.companyName} />
                 </TD>
@@ -367,7 +367,7 @@ export function SendJobsTable({ jobs }: { jobs: SendJobRow[] }) {
                   />
                 ) : null}
               </TD>
-              <TD className="whitespace-nowrap text-muted">{formatDateTimeUk(j.createdAt)}</TD>
+              <TD className="whitespace-nowrap text-muted"><DisplayDate value={j.createdAt} withTime /></TD>
               <TD>
                 <CompanyLink id={j.companyId} name={j.companyName} />
               </TD>

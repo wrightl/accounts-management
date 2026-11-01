@@ -32,7 +32,8 @@ import { clientDisplayName } from "@/lib/clients/display";
 import { RaiseLatePaymentButton } from "@/components/invoices/raise-late-payment-button";
 import { getLatePaymentClaims } from "@/lib/invoices/late-payment-queries";
 import { latePaymentCharge } from "@/lib/late-payment";
-import { formatIsoDateUk, todayIsoDate } from "@/lib/dates";
+import { todayIsoDate } from "@/lib/dates";
+import { DisplayDate } from "@/components/date-format-provider";
 
 export default async function InvoiceDetailPage({
   params,
@@ -112,7 +113,7 @@ export default async function InvoiceDetailPage({
             >
               {clientDisplayName(client)}
             </Link>
-            {invoice.issueDate ? ` · Issued ${invoice.issueDate}` : null}
+            {invoice.issueDate ? <> · Issued <DisplayDate value={invoice.issueDate} /></> : null}
             {invoice.dueDate ? (
               <>
                 {" · "}
@@ -267,7 +268,7 @@ export default async function InvoiceDetailPage({
           <p className="mt-2 text-xs text-muted">
             {lateCharge.ratePercent}% is the Bank of England base rate of {lateCharge.basePercent}%
             {lateCharge.rateKnown ? "" : " (latest known)"} plus 8%. Interest adds{" "}
-            {formatGBP(lateCharge.dailyInterestPence)} a day from {formatIsoDateUk(invoice.dueDate)}.
+            {formatGBP(lateCharge.dailyInterestPence)} a day from <DisplayDate value={invoice.dueDate} />.
           </p>
           <div className="mt-4">
             {latePayment.claim ? (
@@ -313,7 +314,7 @@ export default async function InvoiceDetailPage({
                       {cn.number}
                     </Link>
                   </TD>
-                  <TD>{cn.issueDate}</TD>
+                  <TD><DisplayDate value={cn.issueDate} /></TD>
                   <TD className="max-w-xs truncate text-muted">{cn.reason}</TD>
                   <TD>
                     <CreditNoteStatusBadge status={cn.status} />

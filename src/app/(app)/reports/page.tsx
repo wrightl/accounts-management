@@ -1,5 +1,5 @@
 import { guardTenantPage, hasPermission } from '@/lib/auth';
-import { financialYearStartDate, formatIsoDateUk, monthName, todayIsoDate } from '@/lib/dates';
+import { financialYearStartDate, monthName, todayIsoDate } from '@/lib/dates';
 import { PeriodLockCard } from '@/components/reports/period-lock-card';
 import Link from 'next/link';
 import { getBankReconciledThrough, getLastWeeklyClose } from '@/lib/close/checklist';
@@ -17,6 +17,7 @@ import { buttonClasses } from '@/components/ui/button';
 import { Card, CardTitle, CardValue } from '@/components/ui/card';
 import { Input, Label } from '@/components/ui/form';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
+import { DisplayDate } from "@/components/date-format-provider";
 
 export default async function ReportsPage({
     searchParams,
@@ -70,10 +71,10 @@ export default async function ReportsPage({
                     </p>
                     <p className="mt-2 text-sm">
                         {bank.reconciledThrough
-                            ? `Books up to date to ${formatIsoDateUk(bank.reconciledThrough)} (bank reconciled)`
+                            ? <>Books up to date to <DisplayDate value={bank.reconciledThrough} /> (bank reconciled)</>
                             : 'No bank transactions imported yet'}
                         {lastClose
-                            ? ` · last weekly close ${formatIsoDateUk(lastClose.closedAt.toISOString().slice(0, 10))}${lastClose.closedByName ? ` by ${lastClose.closedByName}` : ''}`
+                            ? <> · last weekly close <DisplayDate value={lastClose.closedAt} />{lastClose.closedByName ? ` by ${lastClose.closedByName}` : ''}</>
                             : ''}
                         {' · '}
                         <Link href="/close" className="underline">
