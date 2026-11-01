@@ -14,6 +14,7 @@ export async function runDailyCron() {
 
   let reminders: Record<string, unknown> = { skipped: "no database" };
   let purged = 0;
+  let abandonedImports = 0;
   let billingEmails: Record<string, unknown> = { skipped: "no database" };
   let notifications: Record<string, unknown> = { skipped: "no database" };
   let weeklyClose: Record<string, unknown> = { skipped: "no database" };
@@ -23,6 +24,8 @@ export async function runDailyCron() {
     const drained = await drainSendJobs();
     reminders = { queued, ...drained };
     purged = await purgeOldPlatformLogs(90);
+    const { purgeAbandonedImports } = await import("@/lib/invoices/import/purge");
+    abandonedImports = await purgeAbandonedImports();
     const { processBillingLifecycleEmails } = await import("@/lib/billing/emails");
     billingEmails = await processBillingLifecycleEmails();
     const { runNotificationScanners } = await import("@/lib/notifications");
@@ -32,5 +35,5 @@ export async function runDailyCron() {
     await updatePlatformSettings({ lastCronDailyAt: new Date() });
   }
 
-  return { recurring, reminders, purged, billingEmails, notifications, weeklyClose };
+  return { recurring, reminders, purged, abandonedImports, billingEmails, notifications, weeklyClose };
 }

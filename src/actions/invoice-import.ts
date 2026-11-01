@@ -53,6 +53,17 @@ function readCsvFile(formData: FormData): { file: File } | { error: string } {
   return { file };
 }
 
+async function deleteFiles(paths: (string | null)[]) {
+  for (const path of paths) {
+    if (!path) continue;
+    try {
+      await getStorage().delete(path);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 export type InspectResult =
   | { ok: true; headers: string[]; mapping: ColumnMapping; rowCount: number }
   | { ok: false; error: string };
@@ -333,7 +344,7 @@ export async function commitInvoiceImportChunk(
     "accounts:write",
     async ({ companyId, localUserId }) => {
       const db = getDb();
-      return db.transaction(async (tx): Promise<CommitChunkResult> => {
+      const result = await db.transaction(async (tx): Promise<CommitChunkResult> => {
         // Under the lock saveInvoiceCutover takes, so a cutover saved while this
         // runs can't leave rows flagged against the old date.
         await tx.execute(
@@ -498,6 +509,10 @@ export async function commitInvoiceImportChunk(
               chaseEnabled: false,
               broughtForward: isBroughtForward(parsed.issueDate, cutover),
               importBatchId: batchId,
+              originalDocumentPath: draft.documentPath,
+              originalDocumentFilename: draft.documentFilename,
+              originalDocumentSize: draft.documentSize,
+              originalDocumentSha256: draft.documentSha256,
             })
             .returning({ id: invoices.id });
           createdInvoiceIds.push(invoice.id);
@@ -566,6 +581,22 @@ export async function commitInvoiceImportChunk(
         });
         return { ok: true, committed: drafts.length, remaining: left };
       });
+
+      // Files for drafts the user left out aren't needed once the import is saved.
+      if (result.ok && result.remaining === 0) {
+        const leftOut = await db
+          .select({ path: invoiceImportDrafts.documentPath })
+          .from(invoiceImportDrafts)
+          .where(
+            and(
+              eq(invoiceImportDrafts.batchId, batchId),
+              eq(invoiceImportDrafts.companyId, companyId),
+              eq(invoiceImportDrafts.status, "skipped"),
+            ),
+          );
+        await deleteFiles(leftOut.map((f) => f.path));
+      }
+      return result;
     },
     { paths: PATHS },
   );
@@ -705,16 +736,9 @@ export async function undoInvoiceImport(batchId: string): Promise<UndoResult> {
       });
       if (!outcome.ok) return outcome;
 
-      for (const row of outcome.removable) {
-        for (const path of [row.originalDocumentPath, row.pdfBlobPath]) {
-          if (!path) continue;
-          try {
-            await getStorage().delete(path);
-          } catch {
-            /* ignore */
-          }
-        }
-      }
+      await deleteFiles(
+        outcome.removable.flatMap((row) => [row.originalDocumentPath, row.pdfBlobPath]),
+      );
       return { ok: true, removed: outcome.removable.length, kept: outcome.kept };
     },
     { paths: PATHS },
@@ -740,6 +764,15 @@ export async function discardInvoiceImport(batchId: string): Promise<ActionResul
         )
         .limit(1);
       if (partial) return { ok: false, error: "Part of this import is committed. Undo it instead." };
+      const files = await db
+        .select({ path: invoiceImportDrafts.documentPath })
+        .from(invoiceImportDrafts)
+        .where(
+          and(
+            eq(invoiceImportDrafts.batchId, batchId),
+            eq(invoiceImportDrafts.companyId, companyId),
+          ),
+        );
       await db.transaction(async (tx) => {
         await tx
           .delete(invoiceImportDrafts)
@@ -766,6 +799,7 @@ export async function discardInvoiceImport(batchId: string): Promise<ActionResul
           entityId: batchId,
         });
       });
+      await deleteFiles(files.map((f) => f.path));
       return { ok: true };
     },
     { paths: ["/invoices"] },

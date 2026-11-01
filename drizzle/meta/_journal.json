@@ -526,6 +526,13 @@
             "when": 1791200000000,
             "tag": "0074_invoice_import_batches",
             "breakpoints": true
+        },
+        {
+            "idx": 75,
+            "version": "7",
+            "when": 1791300000000,
+            "tag": "0075_invoice_import_documents",
+            "breakpoints": true
         }
     ]
 }

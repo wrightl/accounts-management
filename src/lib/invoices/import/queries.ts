@@ -112,6 +112,9 @@ export async function getImportBatchReview(companyId: string, batchId: string) {
     totalDrafts: drafts.length,
     counts,
     clients: [...clientRows.values()],
+    approvable: drafts.filter(
+      (d) => d.status === "needs_review" && d.errors.length === 0,
+    ).length,
     existingClients: existingClients.map((c) => ({
       id: c.id,
       label: clientDisplayName(c),

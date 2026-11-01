@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { InvoiceImportStart } from "@/components/invoices/invoice-import-start";
+import { InvoicePdfImport } from "@/components/invoices/invoice-pdf-import";
 import { buttonClasses } from "@/components/ui/button";
+import { aiGatewayConfigured } from "@/lib/ai/models";
 import { guardTenantPage } from "@/lib/auth";
 
 // Server Actions on this page stage and commit large files.
@@ -22,6 +24,7 @@ export default async function InvoiceImportPage() {
         contacted.
       </p>
       <InvoiceImportStart />
+      {aiGatewayConfigured() ? <InvoicePdfImport /> : null}
     </div>
   );
 }
