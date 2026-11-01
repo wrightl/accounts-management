@@ -5,7 +5,6 @@ import { z } from "zod";
 import { getDb } from "@/db";
 import {
   clients,
-  companies,
   invoiceLineItems,
   invoices,
   payments,
@@ -13,15 +12,16 @@ import {
 import { writeAudit } from "@/lib/audit";
 import { mutate, mutateWide } from "@/lib/mutate";
 import { invoiceTotals, poundsToPence } from "@/lib/money";
-import { allocateInvoiceNumber } from "@/lib/invoices/allocate";
 import {
-  bumpInvoiceSeqAfterImport,
+  advanceInvoiceSequences,
+  allocateInvoiceNumber,
+} from "@/lib/invoices/allocate";
+import {
   invoiceImportHasErrors,
   parseInvoiceImportCsv,
   parseInvoiceImportCsvFile,
   type ParsedInvoiceImportRow,
 } from "@/lib/invoices/import-csv";
-import { parseIssueYear } from "@/lib/invoices/numbering";
 import {
   canEditInvoice,
   canTransition,
@@ -514,30 +514,8 @@ export async function commitInvoiceImport(
         .filter((n): n is string => Boolean(n));
 
       await db.transaction(async (tx) => {
-        // Bump sequence for historical numbers before allocating blanks
-        const year = parseIssueYear(todayIsoDate());
-        const bumped = bumpInvoiceSeqAfterImport(
-          {
-            invoiceNumberPrefix: company.invoiceNumberPrefix,
-            invoiceNextSeq: company.invoiceNextSeq,
-            invoiceSeqYear: company.invoiceSeqYear,
-          },
-          historicalNumbers,
-          year,
-        );
-        if (
-          bumped.invoiceNextSeq !== company.invoiceNextSeq ||
-          bumped.invoiceSeqYear !== company.invoiceSeqYear
-        ) {
-          await tx
-            .update(companies)
-            .set({
-              invoiceNextSeq: bumped.invoiceNextSeq,
-              invoiceSeqYear: bumped.invoiceSeqYear,
-              updatedAt: new Date(),
-            })
-            .where(eq(companies.id, companyId));
-        }
+        // Advance the series past historical numbers before allocating blanks
+        await advanceInvoiceSequences(tx, companyId, historicalNumbers);
 
         for (const row of rows) {
           let clientId: string | null = null;

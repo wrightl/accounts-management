@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  bumpInvoiceSeqAfterImport,
   invoiceImportHasErrors,
   parseInvoiceImportCsv,
   type InvoiceImportContext,
@@ -92,34 +91,5 @@ describe("parseInvoiceImportCsv", () => {
     ].join("\n");
     const rows = parseInvoiceImportCsv(csv, baseCtx());
     expect(rows[0].status).toBe("sent");
-  });
-});
-
-describe("bumpInvoiceSeqAfterImport", () => {
-  it("advances next seq past imported numbers for the current year", () => {
-    const bumped = bumpInvoiceSeqAfterImport(
-      {
-        invoiceNumberPrefix: "DD",
-        invoiceNextSeq: 1,
-        invoiceSeqYear: null,
-      },
-      ["DD-2026-0005", "DD-2025-0099", "OTHER-1"],
-      2026,
-    );
-    expect(bumped.invoiceSeqYear).toBe(2026);
-    expect(bumped.invoiceNextSeq).toBe(6);
-  });
-
-  it("does not lower an already higher sequence", () => {
-    const bumped = bumpInvoiceSeqAfterImport(
-      {
-        invoiceNumberPrefix: "DD",
-        invoiceNextSeq: 20,
-        invoiceSeqYear: 2026,
-      },
-      ["DD-2026-0005"],
-      2026,
-    );
-    expect(bumped.invoiceNextSeq).toBe(20);
   });
 });

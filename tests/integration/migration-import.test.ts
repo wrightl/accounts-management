@@ -161,14 +161,6 @@ describe("migration CSV import (PGlite)", () => {
     expect(lines).toHaveLength(1);
     expect(lines[0].unitPricePence).toBe(100000);
 
-    const [after] = await db
-      .select()
-      .from(companies)
-      .where(eq(companies.id, companyId));
-    // Historical 0010 bumps to at least 11; blank row may allocate 0011
-    expect(after.invoiceNextSeq).toBeGreaterThanOrEqual(11);
-    expect(after.invoiceSeqYear).toBe(2026);
-
     // Blank-number row should have been allocated above 0010
     const auto = invRows.find((i) => i.number !== "DD-2026-0010");
     expect(auto?.number).toMatch(/^DD-2026-\d{4}$/);

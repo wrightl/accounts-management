@@ -1,9 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   formatInvoiceNumber,
-  nextCreditNoteNumber,
-  nextInvoiceNumber,
-  nextQuoteNumber,
+  highestSeqByYear,
   parseIssueYear,
 } from "@/lib/invoices/numbering";
 
@@ -17,68 +15,29 @@ describe("invoice numbering", () => {
     expect(parseIssueYear("2026-03-15")).toBe(2026);
     expect(parseIssueYear(null)).toBe(new Date().getFullYear());
   });
-
-  it("continues the sequence within the same year", () => {
-    const result = nextInvoiceNumber(
-      { invoiceNumberPrefix: "DD", invoiceNextSeq: 3, invoiceSeqYear: 2026 },
-      2026,
-    );
-    expect(result.number).toBe("DD-2026-0003");
-    expect(result.nextSeq).toBe(4);
-    expect(result.seqYear).toBe(2026);
-  });
-
-  it("resets the sequence when the year changes", () => {
-    const result = nextInvoiceNumber(
-      { invoiceNumberPrefix: "DD", invoiceNextSeq: 12, invoiceSeqYear: 2025 },
-      2026,
-    );
-    expect(result.number).toBe("DD-2026-0001");
-    expect(result.nextSeq).toBe(2);
-    expect(result.seqYear).toBe(2026);
-  });
-
-  it("starts at 1 when seq year is unset", () => {
-    const result = nextInvoiceNumber(
-      { invoiceNumberPrefix: "ACME", invoiceNextSeq: 99, invoiceSeqYear: null },
-      2026,
-    );
-    expect(result.number).toBe("ACME-2026-0001");
-  });
 });
 
-describe("quote numbering", () => {
-  it("formats prefix-year-seq and resets on year change", () => {
-    const a = nextQuoteNumber(
-      { quoteNumberPrefix: "Q", quoteNextSeq: 3, quoteSeqYear: 2026 },
-      2026,
-    );
-    expect(a.number).toBe("Q-2026-0003");
-    expect(a.nextSeq).toBe(4);
-    const b = nextQuoteNumber(
-      { quoteNumberPrefix: "Q", quoteNextSeq: 12, quoteSeqYear: 2025 },
-      2026,
-    );
-    expect(b.number).toBe("Q-2026-0001");
+describe("highestSeqByYear", () => {
+  it("finds the highest sequence for each year", () => {
+    const highest = highestSeqByYear("DD", [
+      "DD-2026-0005",
+      "DD-2026-0002",
+      "dd-2025-0099",
+    ]);
+    expect([...highest]).toEqual([
+      [2026, 5],
+      [2025, 99],
+    ]);
   });
 
-  it("uses a configurable prefix", () => {
-    const result = nextQuoteNumber(
-      { quoteNumberPrefix: "QT", quoteNextSeq: 1, quoteSeqYear: 2026 },
-      2026,
-    );
-    expect(result.number).toBe("QT-2026-0001");
+  it("ignores other formats and prefixes", () => {
+    expect(
+      highestSeqByYear("DD", ["OTHER-1", "INV-0043", "XX-2026-0009"]).size,
+    ).toBe(0);
   });
-});
 
-describe("credit note numbering", () => {
-  it("defaults to CN and resets each calendar year", () => {
-    const state = { creditNoteNumberPrefix: "", creditNoteNextSeq: 7, creditNoteSeqYear: 2026 };
-    expect(nextCreditNoteNumber(state, 2026)).toEqual({
-      number: "CN-2026-0007",
-      nextSeq: 8,
-      seqYear: 2026,
-    });
-    expect(nextCreditNoteNumber(state, 2027).number).toBe("CN-2027-0001");
+  it("treats the prefix literally", () => {
+    expect(highestSeqByYear("A.B", ["AxB-2026-0001"]).size).toBe(0);
+    expect(highestSeqByYear("A.B", ["A.B-2026-0001"]).get(2026)).toBe(1);
   });
 });

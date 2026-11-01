@@ -1,22 +1,36 @@
 import "server-only";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { Database } from "@/db";
-import { companies } from "@/db/schema";
 import {
-  nextCreditNoteNumber,
-  nextInvoiceNumber,
-  nextOrderNumber,
-  nextQuoteNumber,
+  companies,
+  creditNotes,
+  documentSequences,
+  invoices,
+  orders,
+  quotes,
+} from "@/db/schema";
+import {
+  formatInvoiceNumber,
+  highestSeqByYear,
   parseIssueYear,
 } from "@/lib/invoices/numbering";
 
 export type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
-async function lockCompany(tx: Tx, companyId: string) {
-  await tx.execute(
-    sql`select id from companies where id = ${companyId} for update`,
-  );
+type DocumentKind = (typeof documentSequences.$inferSelect)["kind"];
 
+const NUMBERED_TABLES = {
+  invoice: invoices,
+  quote: quotes,
+  order: orders,
+  credit_note: creditNotes,
+} as const;
+
+async function loadPrefix(
+  tx: Tx,
+  companyId: string,
+  kind: DocumentKind,
+): Promise<string> {
   const [settings] = await tx
     .select()
     .from(companies)
@@ -26,124 +40,121 @@ async function lockCompany(tx: Tx, companyId: string) {
   if (!settings) {
     throw new Error(`Company not found: ${companyId}`);
   }
-  return settings;
+  switch (kind) {
+    case "invoice":
+      return settings.invoiceNumberPrefix || "DD";
+    case "quote":
+      return settings.quoteNumberPrefix || "Q";
+    case "order":
+      return settings.orderNumberPrefix || "O";
+    case "credit_note":
+      return settings.creditNoteNumberPrefix || "CN";
+  }
 }
 
 /**
- * Atomically allocate the next invoice number for the given issue date.
- * Locks the company row inside the transaction.
+ * Take the next number in the series for the issue date's year. The upsert
+ * holds the series row until the transaction ends, so concurrent allocations
+ * queue here. Numbers that already exist, such as imported ones, are skipped.
  */
-export async function allocateInvoiceNumber(
+async function allocateNumber(
   tx: Tx,
   companyId: string,
+  kind: DocumentKind,
   issueDate: string | null | undefined,
 ): Promise<string> {
   const year = parseIssueYear(issueDate);
-  const current = await lockCompany(tx, companyId);
-  const allocated = nextInvoiceNumber(
-    {
-      invoiceNumberPrefix: current.invoiceNumberPrefix,
-      invoiceNextSeq: current.invoiceNextSeq,
-      invoiceSeqYear: current.invoiceSeqYear,
-    },
-    year,
-  );
+  const prefix = await loadPrefix(tx, companyId, kind);
+  const table = NUMBERED_TABLES[kind];
 
-  await tx
-    .update(companies)
-    .set({
-      invoiceNextSeq: allocated.nextSeq,
-      invoiceSeqYear: allocated.seqYear,
-      updatedAt: new Date(),
-    })
-    .where(eq(companies.id, current.id));
+  for (;;) {
+    const [series] = await tx
+      .insert(documentSequences)
+      .values({ companyId, kind, year, nextSeq: 2 })
+      .onConflictDoUpdate({
+        target: [
+          documentSequences.companyId,
+          documentSequences.kind,
+          documentSequences.year,
+        ],
+        set: { nextSeq: sql`${documentSequences.nextSeq} + 1` },
+      })
+      .returning({ nextSeq: documentSequences.nextSeq });
 
-  return allocated.number;
+    const number = formatInvoiceNumber(prefix, year, series.nextSeq - 1);
+    const [taken] = await tx
+      .select({ id: table.id })
+      .from(table)
+      .where(
+        and(
+          eq(table.companyId, companyId),
+          sql`lower(${table.number}) = lower(${number})`,
+        ),
+      )
+      .limit(1);
+    if (!taken) return number;
+  }
 }
 
-/** Atomically allocate the next quote number (Q-YYYY-NNNN) under the same lock. */
-export async function allocateQuoteNumber(
+/** Atomically allocate the next invoice number for the given issue date. */
+export function allocateInvoiceNumber(
   tx: Tx,
   companyId: string,
   issueDate: string | null | undefined,
 ): Promise<string> {
-  const year = parseIssueYear(issueDate);
-  const current = await lockCompany(tx, companyId);
-  const allocated = nextQuoteNumber(
-    {
-      quoteNumberPrefix: current.quoteNumberPrefix,
-      quoteNextSeq: current.quoteNextSeq,
-      quoteSeqYear: current.quoteSeqYear,
-    },
-    year,
-  );
-
-  await tx
-    .update(companies)
-    .set({
-      quoteNextSeq: allocated.nextSeq,
-      quoteSeqYear: allocated.seqYear,
-      updatedAt: new Date(),
-    })
-    .where(eq(companies.id, current.id));
-
-  return allocated.number;
+  return allocateNumber(tx, companyId, "invoice", issueDate);
 }
 
-/** Atomically allocate the next order number under the same lock. */
-export async function allocateOrderNumber(
+/** Atomically allocate the next quote number for the given issue date. */
+export function allocateQuoteNumber(
   tx: Tx,
   companyId: string,
   issueDate: string | null | undefined,
 ): Promise<string> {
-  const year = parseIssueYear(issueDate);
-  const current = await lockCompany(tx, companyId);
-  const allocated = nextOrderNumber(
-    {
-      orderNumberPrefix: current.orderNumberPrefix,
-      orderNextSeq: current.orderNextSeq,
-      orderSeqYear: current.orderSeqYear,
-    },
-    year,
-  );
-
-  await tx
-    .update(companies)
-    .set({
-      orderNextSeq: allocated.nextSeq,
-      orderSeqYear: allocated.seqYear,
-      updatedAt: new Date(),
-    })
-    .where(eq(companies.id, current.id));
-
-  return allocated.number;
+  return allocateNumber(tx, companyId, "quote", issueDate);
 }
 
-/** Atomically allocate the next credit note number under the same lock. */
-export async function allocateCreditNoteNumber(
+/** Atomically allocate the next order number for the given issue date. */
+export function allocateOrderNumber(
   tx: Tx,
   companyId: string,
   issueDate: string | null | undefined,
 ): Promise<string> {
-  const year = parseIssueYear(issueDate);
-  const current = await lockCompany(tx, companyId);
-  const allocated = nextCreditNoteNumber(
-    {
-      creditNoteNumberPrefix: current.creditNoteNumberPrefix,
-      creditNoteNextSeq: current.creditNoteNextSeq,
-      creditNoteSeqYear: current.creditNoteSeqYear,
-    },
-    year,
-  );
+  return allocateNumber(tx, companyId, "order", issueDate);
+}
 
-  await tx
-    .update(companies)
-    .set({
-      creditNoteNextSeq: allocated.nextSeq,
-      creditNoteSeqYear: allocated.seqYear,
-      updatedAt: new Date(),
-    })
-    .where(eq(companies.id, current.id));
+/** Atomically allocate the next credit note number for the given issue date. */
+export function allocateCreditNoteNumber(
+  tx: Tx,
+  companyId: string,
+  issueDate: string | null | undefined,
+): Promise<string> {
+  return allocateNumber(tx, companyId, "credit_note", issueDate);
+}
 
-  return allocated.number;
+/**
+ * Move each year's invoice series past imported numbers in the company's own
+ * format. A series never moves backwards, and other formats leave it alone.
+ */
+export async function advanceInvoiceSequences(
+  tx: Tx,
+  companyId: string,
+  importedNumbers: string[],
+): Promise<void> {
+  const prefix = await loadPrefix(tx, companyId, "invoice");
+  for (const [year, seq] of highestSeqByYear(prefix, importedNumbers)) {
+    await tx
+      .insert(documentSequences)
+      .values({ companyId, kind: "invoice", year, nextSeq: seq + 1 })
+      .onConflictDoUpdate({
+        target: [
+          documentSequences.companyId,
+          documentSequences.kind,
+          documentSequences.year,
+        ],
+        set: {
+          nextSeq: sql`greatest(${documentSequences.nextSeq}, ${seq + 1})`,
+        },
+      });
+  }
 }
