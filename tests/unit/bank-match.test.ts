@@ -126,7 +126,21 @@ describe("old debts", () => {
     ).toBeGreaterThanOrEqual(70);
   });
 
-  it("still rejects a different amount", () => {
+  it("settles the oldest of two identical debts first", () => {
+    const candidate = (id: string, date: string) => ({
+      ...old,
+      id,
+      date,
+      clientName: "Acme",
+    });
+    const credit = { ...tx, counterparty: "Acme" };
+    const older = candidate("older", "2023-01-01");
+    const newer = candidate("newer", "2024-06-01");
+    expect(pickBestMatch(credit, [newer, older])?.candidate.id).toBe("older");
+    expect(pickBestMatch(credit, [older, newer])?.candidate.id).toBe("older");
+  });
+
+    it("still rejects a different amount", () => {
     expect(scoreMatch({ ...tx, amountPence: 1 }, old)).toBe(0);
   });
 

@@ -275,6 +275,15 @@ describe("numbering", () => {
       );
     expect(series.nextSeq).toBe(50);
   });
+
+  it("sets the next number before any invoice exists this year", async () => {
+    expect((await setNextInvoiceSequence(200)).ok).toBe(true);
+    const year = new Date().getFullYear();
+    const number = await db.transaction((tx) =>
+      allocateInvoiceNumber(tx as never, companyId, `${year}-06-01`),
+    );
+    expect(number).toBe(`DD-${year}-0200`);
+  });
 });
 
 describe("duplicates", () => {
@@ -480,6 +489,47 @@ describe("undo", () => {
       .where(eq(companies.id, companyId));
     const result = await undoInvoiceImport(batchId);
     expect(result.ok && result.kept.map((k) => k.number)).toEqual(["NEW-1"]);
+  });
+});
+
+describe("undo and the period lock", () => {
+  const lock = (date: string) =>
+    db
+      .update(companies)
+      .set({ booksLockedThrough: date })
+      .where(eq(companies.id, companyId));
+
+  it("keeps a brought-forward invoice whose payment from cutover is locked", async () => {
+    const batchId = await importCsv(
+      [
+        "number,client name,issue date,description,net,amount paid,paid date",
+        "U-1,Acme,01/02/2026,W,10.00,5.00,20/04/2026",
+        "U-2,Acme,01/02/2026,W,10.00,5.00,20/03/2026",
+      ].join("\n"),
+    );
+    await lock("2026-04-30");
+    const result = await undoInvoiceImport(batchId);
+    // U-2's payment predates cutover, so it moved no figures and can go.
+    expect(result.ok && result.kept.map((k) => k.number)).toEqual(["U-1"]);
+    expect(result.ok && result.removed).toBe(1);
+  });
+
+  it("keeps a counted invoice whose paid date is locked, though issued after", async () => {
+    await lock("2026-05-31");
+    const batchId = await importCsv(
+      [
+        "number,client name,issue date,description,net",
+        "U-3,Acme,01/06/2026,W,10.00",
+      ].join("\n"),
+    );
+    await db.insert(payments).values({
+      invoiceId: (await byNumber("U-3")).id,
+      amountPence: 100,
+      receivedAt: new Date("2026-05-20T12:00:00Z"),
+      method: "import",
+    });
+    const result = await undoInvoiceImport(batchId);
+    expect(result.ok && result.kept.map((k) => k.number)).toEqual(["U-3"]);
   });
 });
 
