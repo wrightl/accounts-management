@@ -571,6 +571,7 @@ export async function commitInvoiceImport(
               paidAt,
               createdByUserId: localUserId,
               source: "import",
+              chaseEnabled: false,
               broughtForward: isBroughtForward(
                 row.issueDate,
                 company.invoiceCutoverDate,

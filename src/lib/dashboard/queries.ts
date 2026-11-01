@@ -688,7 +688,7 @@ export async function getDashboardOverview(
       compareTo: spendingPeriod.compareTo,
       buckets: spendingPeriod.buckets,
     }),
-    listOverdueInvoices(companyId, 5),
+    listOverdueInvoices(companyId, 5, { chasableOnly: true }),
     listExpiringQuotes(companyId, 5),
     listPendingExpenses(companyId, 5),
     can(user.role, "users:manage")

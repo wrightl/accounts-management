@@ -101,7 +101,7 @@ export default async function AppLayout({
     can(user.role, "accounts:read")
   ) {
     try {
-      overdueInvoiceCount = await countOverdueInvoices(user.companyId);
+      overdueInvoiceCount = await countOverdueInvoices(user.companyId, { chasableOnly: true });
     } catch (err) {
       console.warn(
         JSON.stringify({

@@ -208,6 +208,7 @@ export async function enqueueOverdueReminders(): Promise<number> {
     .where(
       and(
         eq(invoices.status, "sent"),
+        eq(invoices.chaseEnabled, true),
         isNotNull(invoices.dueDate),
         isNotNull(clients.email),
         eq(companies.remindersEnabled, true),
@@ -344,6 +345,8 @@ async function deliverReminder(
     .limit(1);
   if (!row) throw new Error("Invoice not found");
   if (storedStatus(row.invoice.status) !== "sent") return false;
+  // A job queued before the user stopped chasing must not go out.
+  if (!row.invoice.chaseEnabled) return false;
   if (!row.clientEmail) throw new Error("Client has no email address");
 
   const company = await getCompanySettings(row.invoice.companyId);
@@ -380,7 +383,8 @@ async function deliverReminder(
     : `Invoice <strong>${number}</strong> was due on ${due} and ${amount} remains unpaid.`;
 
   const charge =
-    !beforeDue && company.latePaymentCharges
+    // Payment history on imports can be incomplete, so interest could be wrong.
+    !beforeDue && company.latePaymentCharges && row.invoice.source !== "import"
       ? latePaymentCharge({ amountDuePence, dueDate, asOf: todayIsoDate() })
       : null;
   const chargeText = charge
