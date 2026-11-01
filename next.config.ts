@@ -86,11 +86,8 @@ const nextConfig: NextConfig = {
     },
     ...(devOrigin ? { allowedDevOrigins: [devOrigin] } : {}),
     experimental: {
-        // 20 MB receipts plus multipart overhead. proxy.ts sits in front of every
-        // action and silently truncates bodies over its limit, so keep these equal.
-        proxyClientMaxBodySize: '21mb',
         serverActions: {
-            bodySizeLimit: '21mb',
+            bodySizeLimit: '5mb',
         },
     },
     async headers() {

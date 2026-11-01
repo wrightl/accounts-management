@@ -52,8 +52,8 @@ export async function GET(
     new URL(request.url).searchParams.get("inline") === "1" &&
     isPreviewableReceipt(receipt.contentType);
   try {
-    const obj = await getStorage().get(receipt.blobPath);
-    return new NextResponse(Buffer.from(obj.body), {
+    const obj = await getStorage().getStream(receipt.blobPath);
+    return new NextResponse(obj.stream, {
       status: 200,
       headers: {
         "Content-Type": receipt.contentType ?? obj.contentType ?? "application/octet-stream",
