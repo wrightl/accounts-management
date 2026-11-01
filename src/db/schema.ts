@@ -18,6 +18,7 @@ import {
   numeric,
 } from "drizzle-orm/pg-core";
 import type { GenericCsvMapping } from "@/lib/bank/types";
+import type { ParsedInvoice } from "@/lib/invoices/import/parse";
 
 export const roleEnum = pgEnum("role", [
   "admin",
@@ -402,6 +403,9 @@ export const invoices = pgTable(
     originalDocumentFilename: text("original_document_filename"),
     originalDocumentSize: integer("original_document_size"),
     originalDocumentSha256: text("original_document_sha256"),
+    importBatchId: uuid("import_batch_id").references((): AnyPgColumn => invoiceImportBatches.id, {
+      onDelete: "set null",
+    }),
   },
   (t) => [
     check(
@@ -421,6 +425,71 @@ export const invoices = pgTable(
     index("idx_invoices_payment_milestone").on(t.paymentMilestoneId),
     uniqueIndex("uniq_invoices_public_token").on(t.publicToken),
   ],
+);
+
+/** One uploaded file of invoices issued before the company joined alfa. */
+export const invoiceImportBatches = pgTable(
+  "invoice_import_batches",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<"csv" | "pdf">().notNull(),
+    status: text("status")
+      .$type<"draft" | "committed" | "undone" | "discarded">()
+      .notNull()
+      .default("draft"),
+    filename: text("filename"),
+    columnMapping: jsonb("column_mapping").$type<Record<string, string>>(),
+    dateFormat: text("date_format"),
+    /** How each client in the file resolves: an existing client id, or null to create one. */
+    clientResolutions: jsonb("client_resolutions")
+      .$type<Record<string, string | null>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdClientIds: uuid("created_client_ids")
+      .array()
+      .notNull()
+      .default(sql`'{}'::uuid[]`),
+    skippedRows: jsonb("skipped_rows")
+      .$type<{ rows: number[]; number: string | null; reason: string }[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    committedAt: timestamp("committed_at", { withTimezone: true }),
+    undoneAt: timestamp("undone_at", { withTimezone: true }),
+  },
+  (t) => [index("idx_invoice_import_batches_company").on(t.companyId, t.createdAt)],
+);
+
+/** One invoice staged from a batch, reviewed before it becomes a real invoice. */
+export const invoiceImportDrafts = pgTable(
+  "invoice_import_drafts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    batchId: uuid("batch_id")
+      .notNull()
+      .references(() => invoiceImportBatches.id, { onDelete: "cascade" }),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    status: text("status")
+      .$type<"needs_review" | "ready" | "skipped" | "committed">()
+      .notNull(),
+    parsed: jsonb("parsed").$type<ParsedInvoice>().notNull(),
+    errors: jsonb("errors").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    warnings: jsonb("warnings").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    invoiceId: uuid("invoice_id").references((): AnyPgColumn => invoices.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("idx_invoice_import_drafts_batch").on(t.batchId, t.position)],
 );
 
 export const invoiceLineItems = pgTable(

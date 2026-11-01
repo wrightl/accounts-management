@@ -2,7 +2,6 @@ import Link from "next/link";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { UnchasedImportsBanner } from "@/components/invoices/imported-invoice-chase";
 import { getUnchasedImports, listInvoices } from "@/lib/invoices/queries";
-import { InvoiceImportButton } from "@/components/invoices/invoice-import-panel";
 import { buttonClasses } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -56,7 +55,9 @@ export default async function InvoicesPage({
           </Link>
           {canWrite ? (
             <>
-              <InvoiceImportButton canWrite={canWrite} />
+              <Link href="/invoices/import" className={buttonClasses("ghost")}>
+                Import invoices
+              </Link>
               <Link href="/invoices/new" className={buttonClasses("primary")}>
                 New invoice
               </Link>

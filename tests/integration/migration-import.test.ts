@@ -5,9 +5,6 @@ import { setTestDb, type Database } from "@/db";
 import {
   clients,
   companies,
-  invoiceLineItems,
-  invoices,
-  payments,
   users,
 } from "@/db/schema";
 import { seedCompany } from "@/lib/test/seed-company";
@@ -15,14 +12,7 @@ import {
   commitClientImport,
   previewClientImport,
 } from "@/actions/clients";
-import {
-  commitInvoiceImport,
-  previewInvoiceImport,
-} from "@/actions/invoices";
 import { updateCompany } from "@/actions/settings";
-import { allocateInvoiceNumber } from "@/lib/invoices/allocate";
-import { parseInvoiceImportCsv } from "@/lib/invoices/import-csv";
-import { financialYearStartDate, todayIsoDate } from "@/lib/dates";
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -105,98 +95,6 @@ describe("migration CSV import (PGlite)", () => {
     expect(jane?.notes).toBe("Updated");
   });
 
-  it("commits invoices with create-client, partial payment, and seq bump", async () => {
-    const [company] = await db
-      .select()
-      .from(companies)
-      .where(eq(companies.id, companyId));
-    const fyStart = financialYearStartDate(
-      company.financialYearEndMonth,
-      todayIsoDate(),
-    );
-
-    const csv = [
-      "client_email,client_name,client_company,issue_date,number,description,net_gbp,vat_gbp,status,amount_paid_gbp,paid_at,payment_reference",
-      `new@client.example,New Client,New Co,${fyStart},DD-2026-0010,Retainer,1000.00,200.00,sent,400.00,${fyStart},PART-1`,
-      `new@client.example,New Client,New Co,${fyStart},,Extra work,500.00,100.00,sent,,`,
-    ].join("\n");
-
-    const form = csvFile("invoices.csv", csv);
-    const preview = await previewInvoiceImport(form);
-    expect(preview.ok).toBe(true);
-    if (!preview.ok) return;
-    expect(preview.rows.every((r) => r.errors.length === 0)).toBe(true);
-
-    const committed = await commitInvoiceImport(JSON.stringify(preview.rows));
-    expect(committed.ok).toBe(true);
-    expect(committed.ok && committed.count).toBe(2);
-
-    const clientRows = await db
-      .select()
-      .from(clients)
-      .where(eq(clients.companyId, companyId));
-    expect(clientRows).toHaveLength(1);
-    expect(clientRows[0].email).toBe("new@client.example");
-
-    const invRows = await db
-      .select()
-      .from(invoices)
-      .where(eq(invoices.companyId, companyId));
-    expect(invRows).toHaveLength(2);
-    const withNumber = invRows.find((i) => i.number === "DD-2026-0010");
-    expect(withNumber?.status).toBe("sent");
-    expect(withNumber?.grossPence).toBe(120000);
-
-    const pays = await db
-      .select()
-      .from(payments)
-      .where(eq(payments.invoiceId, withNumber!.id));
-    expect(pays).toHaveLength(1);
-    expect(pays[0].amountPence).toBe(40000);
-    expect(pays[0].reference).toBe("PART-1");
-
-    const lines = await db
-      .select()
-      .from(invoiceLineItems)
-      .where(eq(invoiceLineItems.invoiceId, withNumber!.id));
-    expect(lines).toHaveLength(1);
-    expect(lines[0].unitPricePence).toBe(100000);
-
-    // Blank-number row should have been allocated above 0010
-    const auto = invRows.find((i) => i.number !== "DD-2026-0010");
-    expect(auto?.number).toMatch(/^DD-2026-\d{4}$/);
-    const seq = Number(auto!.number.split("-")[2]);
-    expect(seq).toBeGreaterThanOrEqual(11);
-  });
-
-  it("advances a past year's series when importing its numbers", async () => {
-    const row = {
-      rowNumber: 2,
-      clientEmail: null,
-      clientName: "Past Client",
-      clientCompany: null,
-      issueDate: "2025-06-01",
-      dueDate: "2025-06-15",
-      number: "DD-2025-0005",
-      description: "Past work",
-      netPence: 10000,
-      vatPence: 0,
-      grossPence: 10000,
-      status: "sent",
-      amountPaidPence: 0,
-      paidAt: null,
-      paymentReference: null,
-      errors: [],
-    };
-    const result = await commitInvoiceImport(JSON.stringify([row]));
-    expect(result.ok).toBe(true);
-
-    const number = await db.transaction((tx) =>
-      allocateInvoiceNumber(tx as never, companyId, "2025-07-01"),
-    );
-    expect(number).toBe("DD-2025-0006");
-  });
-
   it("saves and reads opening cash cutover fields", async () => {
     const form = new FormData();
     form.set("name", "Test Co");
@@ -225,27 +123,5 @@ describe("migration CSV import (PGlite)", () => {
       .where(eq(companies.id, companyId));
     expect(row.openingCashPence).toBe(1_250_050);
     expect(row.openingCashAsAt).toBe("2026-04-01");
-  });
-
-  it("rejects old paid rows at parse time used by preview", async () => {
-    const [company] = await db
-      .select()
-      .from(companies)
-      .where(eq(companies.id, companyId));
-    const fyStart = financialYearStartDate(
-      company.financialYearEndMonth,
-      todayIsoDate(),
-    );
-    const oldPaid = [
-      "client_name,issue_date,description,net_gbp,status,amount_paid_gbp",
-      "Acme,2020-01-01,Ancient,100.00,paid,100.00",
-    ].join("\n");
-    const rows = parseInvoiceImportCsv(oldPaid, {
-      fyStart,
-      vatRegistered: true,
-      existingNumbers: new Set(),
-      paymentTermsDays: 14,
-    });
-    expect(rows[0].errors.length).toBeGreaterThan(0);
   });
 });
