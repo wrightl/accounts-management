@@ -721,8 +721,10 @@ export function HelpGuide({
                 year-end month, and invoice bank details without editing Settings.
               </>,
               <>
-                Invite them as an <strong>Accountant</strong> so they can read
-                and export, and lock the books, but not change them.
+                Invite them as an <strong>Accountant</strong> so they can see
+                what they need to file and export the accountant pack, and lock
+                the books, but not change them or open day-to-day pages such as
+                clients, invoices and quotes.
               </>,
               <>
                 Admins can review sensitive changes in the{" "}
@@ -745,7 +747,9 @@ export function HelpGuide({
             </Term>
             <Term name="Co-founder">day-to-day books and reports.</Term>
             <Term name="Accountant">
-              look and export, and lock the books once they have filed.
+              reports, tax and reserves, director&apos;s loans, deadlines, the
+              company profile and the accountant pack, and lock the books once
+              they have filed. No day-to-day pages such as clients or invoices.
             </Term>
             <Term name="Pending access">
               signed in, waiting for an admin to assign a role.

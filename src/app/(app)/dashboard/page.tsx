@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { AgedReceivablesChart } from "@/components/dashboard/aged-receivables-chart";
 import { AttentionPanel } from "@/components/dashboard/attention-panel";
 import { CashVsInvoicedChart } from "@/components/dashboard/cash-vs-invoiced-chart";
@@ -84,6 +85,11 @@ export default async function DashboardOverview({
         </p>
       </div>
     );
+  }
+
+  // The Overview is built from day-to-day records; accountants start at Reports.
+  if (!can(user.role, "accounts:read") && can(user.role, "filing:read")) {
+    redirect("/reports");
   }
 
   let overview: Awaited<ReturnType<typeof getDashboardOverview>> | null = null;

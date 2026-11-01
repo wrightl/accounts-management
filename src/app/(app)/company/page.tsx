@@ -30,7 +30,7 @@ function Field({
  * (co-founders and accountants). Admins edit the same details there.
  */
 export default async function CompanyPage() {
-  const { companyId, role } = await guardTenantPage("accounts:read");
+  const { companyId, role } = await guardTenantPage("filing:read");
   if (can(role, "settings:manage")) redirect("/settings/business");
   const settings = await getOrCreateCompanySettings(companyId);
 

@@ -74,7 +74,7 @@ async function seedAdmin(companyId: string) {
 }
 
 describe("mobile API authz and tenant isolation", () => {
-  it("allows accountant to list expenses but refuses writes", async () => {
+  it("refuses accountant both listing and writing expenses", async () => {
     const company = await seedCompany(db, { name: "Mobile Co" });
     await db.insert(users).values({
       companyId: company.id,
@@ -102,10 +102,7 @@ describe("mobile API authz and tenant isolation", () => {
     const listRes = await listExpenses(
       new Request("http://localhost/api/mobile/expenses") as never,
     );
-    expect(listRes.status).toBe(200);
-    const listBody = await listRes.json();
-    expect(listBody.success).toBe(true);
-    expect(listBody.data).toHaveLength(1);
+    expect(listRes.status).toBe(403);
 
     const createRes = await createExpense(
       new Request("http://localhost/api/mobile/expenses", {
@@ -523,6 +520,7 @@ describe("mobile session carries permissions and menu", () => {
 
     const body = await (await validateSession()).json();
     expect(body.user.permissions).not.toContain("accounts:write");
-    expect(body.user.permissions).toContain("accounts:read");
+    expect(body.user.permissions).not.toContain("accounts:read");
+    expect(body.user.permissions).toContain("filing:read");
   });
 });

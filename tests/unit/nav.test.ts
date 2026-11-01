@@ -60,10 +60,24 @@ describe("flattenNavItems", () => {
 
 describe("filterNavGroups", () => {
   it("shows every item when no menu choice has been made", () => {
-    for (const role of ["admin", "user", "accountant"] as const) {
+    for (const role of ["admin", "user"] as const) {
       const groups = filterNavGroups(NAV_GROUPS, { permissionCheck: forRole(role) });
       expect(flattenNavItems(groups)).toHaveLength(22);
     }
+  });
+
+  it("shows accountants only the pages needed to file the accounts", () => {
+    const groups = filterNavGroups(NAV_GROUPS, {
+      permissionCheck: forRole("accountant"),
+      entityType: "limited_company",
+    });
+    expect(flattenNavItems(groups).map((i) => i.href).sort()).toEqual([
+      "/deadlines",
+      "/directors-loans",
+      "/reports",
+      "/reserves",
+      "/settings",
+    ]);
   });
 
   it("drops limited-company items for sole traders", () => {

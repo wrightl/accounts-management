@@ -13,7 +13,7 @@ export default async function InboxDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const session = await guardTenantPage("accounts:read");
+  const session = await guardTenantPage("workspace:read");
   const { id } = await params;
   const userId =
     session.localUserId ?? (await ensureLocalUser(session));

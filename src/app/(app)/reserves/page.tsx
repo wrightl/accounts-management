@@ -29,7 +29,7 @@ function percent(rate: number): string {
 }
 
 export default async function ReservesPage() {
-  const { companyId, entityType } = await guardTenantPage("reports:read");
+  const { companyId, entityType } = await guardTenantPage("filing:read");
   if (entityType !== "limited_company") redirect("/reports");
   const canSetOpening = await hasPermission("books:lock");
 

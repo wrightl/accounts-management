@@ -8,18 +8,15 @@ import { FieldError, Select } from "@/components/ui/form";
 import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
 import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
 import { useFieldErrors } from "@/components/ui/use-field-errors";
-import type { TenantRole } from "@/lib/roles";
+import {
+  assignableRoles,
+  roleLabel as labelForRole,
+  type TenantRole,
+} from "@/lib/roles";
 import {
   parseRoleUpdateInput,
   roleUpdateRawFromFormData,
 } from "@/lib/users/schema";
-
-const OPTIONS: { value: TenantRole; label: string }[] = [
-  { value: "pending", label: "Pending access" },
-  { value: "user", label: "Co-founder" },
-  { value: "accountant", label: "Accountant" },
-  { value: "admin", label: "Administrator" },
-];
 
 export function UserRoleForm({
   userId,
@@ -85,9 +82,9 @@ export function UserRoleForm({
         aria-describedby={fieldErrors.role ? "role-error" : undefined}
         onChange={() => clearField("role")}
       >
-        {OPTIONS.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
+        {assignableRoles(role).map((value) => (
+          <option key={value} value={value}>
+            {labelForRole(value)}
           </option>
         ))}
       </Select>

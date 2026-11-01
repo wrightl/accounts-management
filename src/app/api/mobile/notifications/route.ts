@@ -7,7 +7,7 @@ import {
 } from "@/lib/notifications";
 
 export async function GET(request: Request) {
-  const auth = await requireMobileAuth("accounts:read");
+  const auth = await requireMobileAuth("workspace:read");
   if (!auth.ok) return auth.response;
 
   const userId =

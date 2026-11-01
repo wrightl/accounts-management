@@ -17,7 +17,7 @@ const deleteSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const auth = await requireMobileAuth("accounts:read");
+  const auth = await requireMobileAuth("workspace:read");
   if (!auth.ok) return auth.response;
 
   let json: unknown;
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const auth = await requireMobileAuth("accounts:read");
+  const auth = await requireMobileAuth("workspace:read");
   if (!auth.ok) return auth.response;
 
   let json: unknown;

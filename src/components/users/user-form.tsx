@@ -11,20 +11,18 @@ import { FormStickyActions } from "@/components/ui/form-sticky-actions";
 import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
 import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
 import { useFieldErrors } from "@/components/ui/use-field-errors";
-import type { TenantRole } from "@/lib/roles";
+import {
+  assignableRoles,
+  INVITABLE_ROLES,
+  roleLabel,
+  type TenantRole,
+} from "@/lib/roles";
 import {
   inviteUserRawFromFormData,
   parseInviteUserInput,
   parseUpdateUserInput,
   updateUserRawFromFormData,
 } from "@/lib/users/schema";
-
-const ROLE_OPTIONS: { value: TenantRole; label: string }[] = [
-  { value: "pending", label: "Pending access" },
-  { value: "user", label: "Co-founder" },
-  { value: "accountant", label: "Accountant" },
-  { value: "admin", label: "Administrator" },
-];
 
 type EditUser = {
   id: string;
@@ -58,6 +56,7 @@ export function UserForm({
   const [pending, startTransition] = useTransition();
 
   const emailReadOnly = mode === "edit" && Boolean(user?.clerkUserId);
+  const roleOptions = user ? assignableRoles(user.role) : INVITABLE_ROLES;
 
   function onSubmit(formData: FormData) {
     clearAll();
@@ -134,15 +133,16 @@ export function UserForm({
         <Select
           id="role"
           name="role"
-          defaultValue={user?.role ?? "pending"}
+          defaultValue={user?.role ?? ""}
+          placeholder="Select a role"
           disabled={pending || isSelf}
           aria-invalid={Boolean(fieldErrors.role)}
           aria-describedby={fieldErrors.role ? "role-error" : undefined}
           onChange={() => clearField("role")}
         >
-          {ROLE_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
+          {roleOptions.map((value) => (
+            <option key={value} value={value}>
+              {roleLabel(value)}
             </option>
           ))}
         </Select>

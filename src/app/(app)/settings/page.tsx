@@ -12,7 +12,7 @@ const SECTIONS: { id: SettingsPage["section"]; label: string }[] = [
 ];
 
 export default async function SettingsHubPage() {
-  const session = await guardTenantPage("accounts:read");
+  const session = await guardTenantPage("workspace:read");
   const pages = visibleSettingsPages((permission) => can(session.role, permission));
 
   return (

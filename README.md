@@ -94,7 +94,7 @@ Clerk is identity only. Role and company come from Postgres
 | -------------- | ------------------------------------------------------------ |
 | **admin**      | Full access, including users and settings.                   |
 | **user**       | Co-founder: day-to-day accounting, reports, and export.      |
-| **accountant** | Read-only + export. May belong to **multiple** companies.    |
+| **accountant** | Filing pages + export only. May belong to **multiple** companies. |
 | **pending**    | Signed in, no books access. Assigned from Dashboard → Users. |
 
 Self-serve onboarding creates a company and makes that user **admin**. Invited

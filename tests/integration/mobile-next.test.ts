@@ -92,6 +92,16 @@ afterEach(async () => {
   await ctx.client.close();
 });
 
+describe("accountant access on mobile", () => {
+  it("allows deadlines but refuses day-to-day data", async () => {
+    await seedUser("accountant");
+    expect((await listDeadlines()).status).toBe(200);
+    expect((await getDashboard(new NextRequest("http://localhost/api/mobile/dashboard"))).status).toBe(403);
+    expect((await getClose()).status).toBe(403);
+    expect((await getBookkeeper()).status).toBe(403);
+  });
+});
+
 describe("mobile receipt reading", () => {
   it("validates the upload like the web form", async () => {
     await seedUser("admin");
@@ -245,11 +255,11 @@ describe("mobile AI bookkeeper", () => {
     expect(tx.spendingCategory).toBeNull();
   });
 
-  it("lets an accountant look but not accept", async () => {
+  it("refuses an accountant both looking and accepting", async () => {
     await seedUser("accountant");
     const id = await seedSuggestion();
 
-    expect((await getBookkeeper()).status).toBe(200);
+    expect((await getBookkeeper()).status).toBe(403);
     const res = await bookkeeperAction(json({ action: "accept_categories", ids: [id] }));
     expect(res.status).toBe(403);
   });

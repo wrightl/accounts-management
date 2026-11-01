@@ -9,7 +9,7 @@ describe("RBAC for invoicing writes", () => {
 
   it("denies accountant write access (server actions use requirePermission)", () => {
     expect(can("accountant", "accounts:write")).toBe(false);
-    expect(can("accountant", "accounts:read")).toBe(true);
+    expect(can("accountant", "accounts:read")).toBe(false);
     expect(can("accountant", "settings:manage")).toBe(false);
   });
 });

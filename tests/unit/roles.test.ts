@@ -29,9 +29,10 @@ describe("roles", () => {
     expect(can("user", "settings:manage")).toBe(false);
   });
 
-  it("restricts the accountant to read + export only", () => {
-    expect(can("accountant", "accounts:read")).toBe(true);
-    expect(can("accountant", "reports:read")).toBe(true);
+  it("restricts the accountant to filing pages + export only", () => {
+    expect(can("accountant", "accounts:read")).toBe(false);
+    expect(can("accountant", "reports:read")).toBe(false);
+    expect(can("accountant", "filing:read")).toBe(true);
     expect(can("accountant", "reports:export")).toBe(true);
     expect(can("accountant", "accounts:write")).toBe(false);
     expect(can("accountant", "users:manage")).toBe(false);

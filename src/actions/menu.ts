@@ -21,11 +21,11 @@ import {
 import type { ActionResult } from "@/actions/result";
 
 /**
- * Menu choices are personal, like display settings: anyone who can read the
- * books can change their own menu, even when the company is read-only.
+ * Menu choices are personal, like display settings: any member with a role can
+ * change their own menu, even when the company is read-only.
  */
 async function menuContext() {
-  const authz = await requireActionPermission("accounts:read");
+  const authz = await requireActionPermission("workspace:read");
   if (!authz.ok) return authz;
   const { user } = authz;
   if (!user.companyId) {

@@ -52,8 +52,9 @@ describe("canAccessResource", () => {
     expect(canAccessResource("dividends", user({ role: "user" }))).toBe(true);
   });
 
-  it("lets every role that can read the books see the lists", () => {
-    expect(canAccessResource("invoices", user({ role: "accountant" }))).toBe(true);
+  it("lets only roles that can read the books see the lists", () => {
+    expect(canAccessResource("invoices", user({ role: "user" }))).toBe(true);
+    expect(canAccessResource("invoices", user({ role: "accountant" }))).toBe(false);
     expect(canAccessResource("invoices", user({ role: "pending" }))).toBe(false);
   });
 
