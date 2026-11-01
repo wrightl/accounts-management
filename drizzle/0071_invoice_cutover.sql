@@ -11,13 +11,20 @@ ALTER TABLE "invoices" ADD COLUMN "brought_forward" boolean DEFAULT false NOT NU
 --> statement-breakpoint
 ALTER TABLE "invoices" ADD CONSTRAINT "invoices_brought_forward_requires_import" CHECK (NOT "brought_forward" OR "source" = 'import');
 --> statement-breakpoint
--- Past imports with a payment are marked by the payment method.
+-- Past imports with a payment are marked by the payment method. Every marked invoice is recorded in
+-- the audit log per company, so a wrong mark can be found.
+WITH marked AS (
 UPDATE "invoices" SET "source" = 'import'
-WHERE "id" IN (SELECT "invoice_id" FROM "payments" WHERE "method" = 'import');
+WHERE "id" IN (SELECT "invoice_id" FROM "payments" WHERE "method" = 'import')
+RETURNING "id", "company_id"
+)
+INSERT INTO "audit_log" ("company_id", "action", "entity_type", "meta")
+SELECT "company_id", 'invoice.source_backfill', 'invoice', jsonb_build_object('basis', 'payment_method', 'invoiceIds', jsonb_agg("id"))
+FROM marked
+GROUP BY "company_id";
 --> statement-breakpoint
 -- Past imports without a payment left no marker. Each import inserted its rows in one transaction,
 -- so they share a created_at, and the audit row written just afterwards records how many there were.
--- This is an inference, so each company's marked invoices are recorded in the audit log to review.
 WITH marked AS (
 UPDATE "invoices" i SET "source" = 'import'
 FROM "audit_log" a
@@ -42,6 +49,6 @@ WHERE a."action" = 'invoice.import'
 RETURNING i."id", i."company_id"
 )
 INSERT INTO "audit_log" ("company_id", "action", "entity_type", "meta")
-SELECT "company_id", 'invoice.source_backfill', 'invoice', jsonb_build_object('invoiceIds', jsonb_agg("id"))
+SELECT "company_id", 'invoice.source_backfill', 'invoice', jsonb_build_object('basis', 'audit_count', 'invoiceIds', jsonb_agg("id"))
 FROM marked
 GROUP BY "company_id";

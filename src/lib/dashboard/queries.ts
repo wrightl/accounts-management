@@ -182,7 +182,7 @@ export type DashboardOverviewData = {
   };
 };
 
-async function getCollectedInPeriod(
+export async function getCollectedInPeriod(
   companyId: string,
   from: string,
   to: string,
@@ -206,7 +206,7 @@ async function getCollectedInPeriod(
   return (row?.total ?? 0) - refunds;
 }
 
-async function getCollectedByMonth(
+export async function getCollectedByMonth(
   companyId: string,
   from: string,
   to: string,
@@ -240,7 +240,7 @@ async function getCollectedByMonth(
   );
 }
 
-async function getInvoicedGrossInPeriod(
+export async function getInvoicedGrossInPeriod(
   companyId: string,
   from: string,
   to: string,
@@ -263,7 +263,7 @@ async function getInvoicedGrossInPeriod(
   return (row?.total ?? 0) - credits.grossPence;
 }
 
-async function getInvoicedGrossByMonth(
+export async function getInvoicedGrossByMonth(
   companyId: string,
   from: string,
   to: string,
@@ -461,7 +461,7 @@ async function getRecurringUpcoming(companyId: string): Promise<number> {
   return total;
 }
 
-async function getDaysSalesOutstanding(companyId: string): Promise<number | null> {
+export async function getDaysSalesOutstanding(companyId: string): Promise<number | null> {
   const db = getDb();
   const paid = await db
     .select({
@@ -473,7 +473,8 @@ async function getDaysSalesOutstanding(companyId: string): Promise<number | null
       and(
         eq(invoices.companyId, companyId),
         eq(invoices.status, "paid"),
-        // Imported payment dates are often estimates, so they'd skew the average.
+        // Applies with or without a cutover: imported payment dates are often
+        // estimates, so they would skew the average.
         eq(invoices.source, "alfa"),
       ),
     );
