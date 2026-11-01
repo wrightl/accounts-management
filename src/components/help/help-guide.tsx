@@ -226,9 +226,9 @@ export function HelpGuide({
             Migration from spreadsheets
           </SectionHeading>
           <p className="mt-3 text-sm text-muted">
-            Moving from a spreadsheet? Bring across open work and the current
-            financial year — not a full balance sheet. Pick a cutover date and
-            follow this order.
+            Moving from a spreadsheet or another system? Bring across your invoice
+            history, then pick a cutover date so older invoices stay out of your
+            P&amp;L and VAT. Follow this order.
           </p>
           <StepList
             items={[
@@ -239,11 +239,13 @@ export function HelpGuide({
                 client.
               </>,
               <>
-                Import invoices from CSV on{" "}
-                <HelpLink href="/invoices">Invoices</HelpLink>: unpaid or partly
-                paid invoices (any issue date), plus fully paid invoices issued
-                in the <strong>current financial year</strong>. Older paid
-                history stays in your spreadsheet archive.
+                Set your <strong>cutover date</strong> on{" "}
+                <HelpLink href="/reports">Reports</HelpLink>, then import invoices
+                from CSV on <HelpLink href="/invoices/import">Import invoices</HelpLink>.
+                You can bring in all your history. Invoices dated before cutover
+                stay in what clients owe you but out of P&amp;L and VAT, and you
+                review everything before it&apos;s saved. Clients aren&apos;t
+                contacted, and unpaid imports aren&apos;t chased until you turn it on.
               </>,
               <>
                 Optionally set <strong>opening cash</strong> (bank balance

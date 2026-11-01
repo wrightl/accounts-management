@@ -16,7 +16,6 @@ import {
   previewInvoiceCutover,
   saveInvoiceCutover,
 } from "@/actions/invoice-cutover";
-import { commitInvoiceImport } from "@/actions/invoices";
 import { sumRefundsInPeriod, refundsByMonth } from "@/lib/credit-notes/period";
 import {
   getCollectedByMonth,
@@ -37,6 +36,7 @@ import {
   getVatSummary,
 } from "@/lib/reports/queries";
 import { todayIsoDate } from "@/lib/dates";
+import { importCsv } from "@/lib/test/import-invoices";
 import { seedCompany } from "@/lib/test/seed-company";
 
 vi.mock("server-only", () => ({}));
@@ -344,29 +344,13 @@ describe("cutover in the accounts", () => {
 
   it("marks new imports using the current cutover", async () => {
     await setCutover(CUTOVER);
-    const row = {
-      rowNumber: 2,
-      clientEmail: null,
-      clientName: "Imported",
-      clientCompany: null,
-      dueDate: null,
-      description: "Work",
-      netPence: 1000,
-      vatPence: 0,
-      grossPence: 1000,
-      status: "sent",
-      amountPaidPence: 0,
-      paidAt: null,
-      paymentReference: null,
-      errors: [],
-    };
-    const result = await commitInvoiceImport(
-      JSON.stringify([
-        { ...row, number: "IMP-BEFORE", issueDate: "2026-03-01" },
-        { ...row, number: "IMP-AFTER", issueDate: "2026-04-01" },
-      ]),
+    await importCsv(
+      [
+        "invoice number,client name,issue date,description,net,status",
+        "IMP-BEFORE,Imported,01/03/2026,Work,10.00,sent",
+        "IMP-AFTER,Imported,01/04/2026,Work,10.00,sent",
+      ].join("\n"),
     );
-    expect(result.ok).toBe(true);
     const rows = await db
       .select()
       .from(invoices)

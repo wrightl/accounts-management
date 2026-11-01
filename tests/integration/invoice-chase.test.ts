@@ -5,6 +5,7 @@ import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
 import {
   clients,
+  companies,
   invoices,
   notifications,
   payments,
@@ -15,7 +16,7 @@ import {
   chaseAllImportedInvoices,
   setInvoiceChase,
 } from "@/actions/invoice-chase";
-import { commitInvoiceImport, sendInvoice } from "@/actions/invoices";
+import { sendInvoice } from "@/actions/invoices";
 import { raiseLatePaymentInvoice } from "@/actions/late-payment";
 import { getWeeklyCloseChecklist } from "@/lib/close/checklist";
 import { todayIsoDate } from "@/lib/dates";
@@ -28,6 +29,7 @@ import {
 import { addDays } from "@/lib/ledger/corporation-tax";
 import { runNotificationScanners } from "@/lib/notifications/cron";
 import { enqueueOverdueReminders, processSendJob } from "@/lib/outbox";
+import { importCsv } from "@/lib/test/import-invoices";
 import { seedCompany } from "@/lib/test/seed-company";
 
 vi.mock("server-only", () => ({}));
@@ -117,29 +119,16 @@ describe("imported invoices and reminders", () => {
   });
 
   it("starts imports with chasing off", async () => {
-    const result = await commitInvoiceImport(
-      JSON.stringify([
-        {
-          rowNumber: 2,
-          clientEmail: "client@example.com",
-          clientName: "Client",
-          clientCompany: null,
-          issueDate: overdueDate(),
-          dueDate: overdueDate(),
-          number: "IMP-CSV",
-          description: "Work",
-          netPence: 10_000,
-          vatPence: 0,
-          grossPence: 10_000,
-          status: "sent",
-          amountPaidPence: 0,
-          paidAt: null,
-          paymentReference: null,
-          errors: [],
-        },
-      ]),
+    await db
+      .update(companies)
+      .set({ invoiceCutoverDate: "2020-01-01" })
+      .where(eq(companies.id, companyId));
+    await importCsv(
+      [
+        "invoice number,client email,client name,issue date,due date,description,net,status",
+        `IMP-CSV,client@example.com,Client,${overdueDate()},${overdueDate()},Work,100.00,sent`,
+      ].join("\n"),
     );
-    expect(result.ok).toBe(true);
     const [inv] = await db
       .select()
       .from(invoices)
