@@ -27,6 +27,7 @@ import { expenseCurrencySymbol, formatGBP, penceToPounds, poundsToPence } from "
 import { useReportExpenseSummary } from "@/components/expenses/expense-summary";
 import { clientDisplayName } from "@/lib/clients/display";
 import { ReceiptUploadField } from "@/components/expenses/receipt-upload-field";
+import { RECEIPT_UPLOAD_FAILED_MESSAGE } from "@/lib/expenses/receipt-file";
 import { isForeignCurrency, type ReceiptExtraction } from "@/lib/expenses/receipt-parse";
 import {
   EXPENSE_CURRENCIES,
@@ -414,6 +415,8 @@ export function ExpenseForm({
   function onSubmit(formData: FormData) {
     // Enter in a field submits even while the save button is disabled.
     if (mode === "edit" && !dirty) return;
+    // The receipt is uploaded on its own once the expense exists.
+    formData.delete("receipt");
     formData.set("description", description);
     formData.set("spentAt", spentAt);
     formData.set("status", status);
@@ -460,7 +463,11 @@ export function ExpenseForm({
       if (mode === "create" && pendingReceipt && result.id) {
         const receiptForm = new FormData();
         receiptForm.set("receipt", pendingReceipt);
-        const uploadResult = await uploadReceipt(result.id, receiptForm);
+        // The action rejects, rather than returns, if the request is refused.
+        const uploadResult = await uploadReceipt(result.id, receiptForm).catch(() => ({
+          ok: false as const,
+          error: RECEIPT_UPLOAD_FAILED_MESSAGE,
+        }));
         if (!uploadResult.ok) {
           const sep = targetUrl.includes("?") ? "&" : "?";
           targetUrl = `${targetUrl}${sep}receiptUploadFailed=${encodeURIComponent(uploadResult.error)}`;
@@ -1086,7 +1093,7 @@ export function ExpenseForm({
             </>
           ) : (
             <Button type="submit" disabled={pending || (mode === "edit" && !dirty)}>
-              {pending ? "Saving…" : mode === "create" ? "Create expense" : "Save changes"}
+              {pending ? "Saving…" : mode === "create" ? "Save" : "Save changes"}
             </Button>
           )}
           {mode === "edit" && expense?.status !== "reimbursed" && !isPending && !linkedToBank && (
