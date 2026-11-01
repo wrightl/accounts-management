@@ -3,8 +3,7 @@
 import { z } from "zod";
 import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { companies, creditNotes, invoices, payments } from "@/db/schema";
-import { writeAudit } from "@/lib/audit";
+import { auditLog, companies, creditNotes, invoices, payments } from "@/db/schema";
 import { todayIsoDate } from "@/lib/dates";
 import {
   cutoverImpact,
@@ -177,7 +176,7 @@ export async function saveInvoiceCutover(
     "books:lock",
     async ({ companyId, localUserId }) => {
       const db = getDb();
-      const outcome = await db.transaction(async (tx) => {
+      const locked = await db.transaction(async (tx) => {
         await tx.execute(
           sql`select id from companies where id = ${companyId} for update`,
         );
@@ -186,14 +185,14 @@ export async function saveInvoiceCutover(
           .from(companies)
           .where(eq(companies.id, companyId));
         const current = company.invoiceCutoverDate;
-        if (current === next) return { changed: false as const };
+        if (current === next) return null;
 
         const impact = await loadImpact(tx, companyId, current, next);
-        const locked = periodLockError(
+        const lockError = periodLockError(
           company.booksLockedThrough,
           ...impact.affectedDates,
         );
-        if (locked) return { changed: false as const, locked };
+        if (lockError) return lockError;
 
         await tx
           .update(companies)
@@ -212,34 +211,33 @@ export async function saveInvoiceCutover(
               eq(invoices.source, "import"),
             ),
           );
-        return { changed: true as const, current, impact };
+        // In the transaction, so the figures can't move without a record of it.
+        await tx.insert(auditLog).values({
+          companyId,
+          actorUserId: localUserId,
+          action: "invoice.cutover_change",
+          entityType: "company",
+          entityId: companyId,
+          meta: {
+            from: current,
+            to: next,
+            invoicesBroughtForward: impact.invoicesBroughtForward,
+            invoicesCounted: impact.invoicesCounted,
+            incomeChangePence: impact.incomeChangePence,
+            vatChangePence: impact.vatChangePence,
+            activityChanged: impact.activityChanged,
+          },
+        });
+        return null;
       });
 
-      if (!outcome.changed) {
-        if (!outcome.locked) return { ok: true, id: companyId };
+      if (locked) {
         return {
           ok: false,
           error: FORM_FIELD_ERROR_SUMMARY,
-          fieldErrors: { cutover: outcome.locked },
+          fieldErrors: { cutover: locked },
         };
       }
-
-      await writeAudit({
-        companyId,
-        actorUserId: localUserId,
-        action: "invoice.cutover_change",
-        entityType: "company",
-        entityId: companyId,
-        meta: {
-          from: outcome.current,
-          to: next,
-          invoicesBroughtForward: outcome.impact.invoicesBroughtForward,
-          invoicesCounted: outcome.impact.invoicesCounted,
-          incomeChangePence: outcome.impact.incomeChangePence,
-          vatChangePence: outcome.impact.vatChangePence,
-          activityChanged: outcome.impact.activityChanged,
-        },
-      });
       return { ok: true, id: companyId };
     },
     { paths: ["/reports", "/dashboard", "/invoices", "/reserves"] },

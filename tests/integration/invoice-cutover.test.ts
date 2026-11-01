@@ -340,6 +340,47 @@ describe("saving a cutover", () => {
     expect(old.broughtForward).toBe(false);
   });
 
+  it("needs permission to preview or save", async () => {
+    await seedScenario();
+    await db.update(users).set({ role: "user" }).where(eq(users.id, userId));
+
+    expect((await previewInvoiceCutover(cutoverForm(CUTOVER))).ok).toBe(false);
+    expect((await saveInvoiceCutover(cutoverForm(CUTOVER))).ok).toBe(false);
+    const [company] = await db
+      .select()
+      .from(companies)
+      .where(eq(companies.id, companyId));
+    expect(company.invoiceCutoverDate).toBeNull();
+  });
+
+  it("leaves other companies alone", async () => {
+    const other = await seedCompany(db, { name: "Other Co" });
+    const [otherClient] = await db
+      .insert(clients)
+      .values({ companyId: other.id, name: "Their client" })
+      .returning();
+    await db.insert(invoices).values({
+      companyId: other.id,
+      clientId: otherClient.id,
+      number: "THEIRS",
+      issueDate: "2026-02-10",
+      status: "sent",
+      netPence: 9_000,
+      grossPence: 9_000,
+      source: "import",
+    });
+
+    await seedScenario();
+    await setCutover(CUTOVER);
+
+    const [theirs] = await db
+      .select()
+      .from(invoices)
+      .where(eq(invoices.number, "THEIRS"));
+    expect(theirs.broughtForward).toBe(false);
+    expect((await getProfitAndLoss(other.id, FROM, TO)).incomePence).toBe(9_000);
+  });
+
   it("rejects a future date", async () => {
     const result = await saveInvoiceCutover(cutoverForm("2999-01-01"));
     expect(result.ok).toBe(false);
@@ -419,5 +460,12 @@ describe("0071 backfill", () => {
     expect(await sourceOf("BATCH-1")).toBe("import");
     expect(await sourceOf("BATCH-2")).toBe("import");
     expect(await sourceOf("LONE")).toBe("alfa");
+
+    const [record] = await db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.action, "invoice.source_backfill"));
+    expect(record.companyId).toBe(companyId);
+    expect((record.meta as { invoiceIds: string[] }).invoiceIds).toHaveLength(2);
   });
 });

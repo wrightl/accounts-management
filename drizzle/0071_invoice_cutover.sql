@@ -17,6 +17,8 @@ WHERE "id" IN (SELECT "invoice_id" FROM "payments" WHERE "method" = 'import');
 --> statement-breakpoint
 -- Past imports without a payment left no marker. Each import inserted its rows in one transaction,
 -- so they share a created_at, and the audit row written just afterwards records how many there were.
+-- This is an inference, so each company's marked invoices are recorded in the audit log to review.
+WITH marked AS (
 UPDATE "invoices" i SET "source" = 'import'
 FROM "audit_log" a
 WHERE a."action" = 'invoice.import'
@@ -35,4 +37,11 @@ WHERE a."action" = 'invoice.import'
 		WHERE s."company_id" = i."company_id"
 			AND s."created_by_user_id" = i."created_by_user_id"
 			AND s."created_at" = i."created_at"
-	) = (a."meta"->>'count')::integer;
+	) = (a."meta"->>'count')::integer
+	AND i."source" = 'alfa'
+RETURNING i."id", i."company_id"
+)
+INSERT INTO "audit_log" ("company_id", "action", "entity_type", "meta")
+SELECT "company_id", 'invoice.source_backfill', 'invoice', jsonb_build_object('invoiceIds', jsonb_agg("id"))
+FROM marked
+GROUP BY "company_id";
