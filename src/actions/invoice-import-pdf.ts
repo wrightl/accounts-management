@@ -1,18 +1,21 @@
 "use server";
 
 import { createHash, randomUUID } from "node:crypto";
-import { and, count, eq, gte, isNotNull, ne, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
+import { z } from "zod";
 import { getDb } from "@/db";
 import {
   clients,
   companies,
   invoiceImportBatches,
   invoiceImportDrafts,
+  invoicePdfReads,
   invoices,
 } from "@/db/schema";
 import type { ActionResult } from "@/actions/result";
 import { aiGatewayConfigured } from "@/lib/ai/models";
 import { getEntitlements } from "@/lib/billing/entitlements";
+import { todayIsoDate } from "@/lib/dates";
 import { MAX_RECEIPT_BYTES, sniffReceiptContentType } from "@/lib/expenses/receipt-file";
 import { suggestClient } from "@/lib/invoices/import/clients";
 import {
@@ -51,9 +54,24 @@ export async function createPdfImportBatch(): Promise<PdfBatchResult> {
   });
 }
 
-function monthStart(): Date {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+/**
+ * Count one read against this month's allowance, or return false if it's used
+ * up. A single statement, so parallel uploads can't both take the last one.
+ */
+async function reservePdfRead(companyId: string, limit: number | null): Promise<boolean> {
+  const db = getDb();
+  const month = todayIsoDate().slice(0, 7);
+  if (limit != null && limit <= 0) return false;
+  const reserved = await db
+    .insert(invoicePdfReads)
+    .values({ companyId, month, reads: 1 })
+    .onConflictDoUpdate({
+      target: [invoicePdfReads.companyId, invoicePdfReads.month],
+      set: { reads: sql`${invoicePdfReads.reads} + 1` },
+      where: limit == null ? undefined : sql`${invoicePdfReads.reads} < ${limit}`,
+    })
+    .returning({ reads: invoicePdfReads.reads });
+  return reserved.length > 0;
 }
 
 /** Problems that only the database can see, on top of the invoice's own checks. */
@@ -149,26 +167,6 @@ export async function uploadInvoicePdf(
         return { ok: false, error: "This import is no longer open" };
       }
 
-      const limit = pdfImportMonthlyLimit(await getEntitlements(companyId));
-      if (limit != null) {
-        const [used] = await db
-          .select({ total: count() })
-          .from(invoiceImportDrafts)
-          .where(
-            and(
-              eq(invoiceImportDrafts.companyId, companyId),
-              isNotNull(invoiceImportDrafts.documentPath),
-              gte(invoiceImportDrafts.createdAt, monthStart()),
-            ),
-          );
-        if ((used?.total ?? 0) >= limit) {
-          return {
-            ok: false,
-            error: `You've reached this month's limit of ${limit} PDFs. Import the rest by CSV, or try again next month.`,
-          };
-        }
-      }
-
       // Before any AI spend: the same file can't be read twice.
       const sha256 = createHash("sha256").update(bytes).digest("hex");
       const [seenDraft] = await db
@@ -198,6 +196,14 @@ export async function uploadInvoicePdf(
           error: seenInvoice
             ? `${file.name} is already attached to invoice ${seenInvoice.number}`
             : `${file.name} has already been uploaded`,
+        };
+      }
+
+      const limit = pdfImportMonthlyLimit(await getEntitlements(companyId));
+      if (!(await reservePdfRead(companyId, limit))) {
+        return {
+          ok: false,
+          error: `You've reached this month's limit of ${limit} PDFs. Import the rest by CSV, or try again next month.`,
         };
       }
 
@@ -302,6 +308,40 @@ async function loadOpenDraft(companyId: string, batchId: string, draftId: string
   return row?.status === "draft" && row.draft.status !== "committed" ? row.draft : null;
 }
 
+const MAX_PENCE = 2_000_000_000;
+const pence = z.number().int().min(-MAX_PENCE).max(MAX_PENCE);
+const optionalText = z.string().trim().max(500).nullable();
+
+const editedInvoiceSchema = z.object({
+  number: optionalText,
+  client: z.object({
+    name: optionalText,
+    companyName: optionalText,
+    email: optionalText,
+    address: z.string().trim().max(2000).nullable(),
+  }),
+  issueDate: z.string().max(10),
+  dueDate: z.string().max(10).nullable(),
+  netPence: pence,
+  vatPence: pence,
+  grossPence: pence,
+  amountPaidPence: pence,
+  paidDate: z.string().max(10).nullable(),
+  paymentReference: optionalText,
+  lines: z
+    .array(
+      z.object({
+        description: z.string().trim().min(1).max(2000),
+        quantity: z.number().positive().max(1_000_000),
+        unitPricePence: pence,
+        vatRate: z.number().int().min(0).max(100),
+        discountPercent: z.number().min(0).max(100),
+      }),
+    )
+    .min(1)
+    .max(500),
+});
+
 /** Save the user's corrections to a draft and re-check it. It still needs approving. */
 export async function updateImportDraft(
   batchId: string,
@@ -314,15 +354,23 @@ export async function updateImportDraft(
       const draft = await loadOpenDraft(companyId, batchId, draftId);
       if (!draft) return { ok: false, error: "Draft not found" };
 
-      const client = {
-        ...invoice.client,
-        email: invoice.client.email?.trim().toLowerCase() || null,
-      };
+      const parsed = editedInvoiceSchema.safeParse(invoice);
+      if (!parsed.success) {
+        return { ok: false, error: "Check the invoice details: something isn't valid" };
+      }
+      const edited = parsed.data;
+      const email = edited.client.email?.toLowerCase() || null;
+      // Worked out here, not taken from the browser, so status and amounts agree.
       const next: ParsedInvoice = {
-        ...invoice,
+        ...edited,
+        status:
+          edited.grossPence > 0 && edited.amountPaidPence >= edited.grossPence
+            ? "paid"
+            : "sent",
         client: {
-          ...client,
-          key: normalizeClientKey(client.email, client.name, client.companyName),
+          ...edited.client,
+          email,
+          key: normalizeClientKey(email, edited.client.name, edited.client.companyName),
         },
         sourceRows: [],
       };

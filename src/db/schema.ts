@@ -466,6 +466,19 @@ export const invoiceImportBatches = pgTable(
   (t) => [index("idx_invoice_import_batches_company").on(t.companyId, t.createdAt)],
 );
 
+/** PDFs read per calendar month (YYYY-MM), which deleting a draft doesn't reduce. */
+export const invoicePdfReads = pgTable(
+  "invoice_pdf_reads",
+  {
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    month: text("month").notNull(),
+    reads: integer("reads").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.companyId, t.month] })],
+);
+
 /** One invoice staged from a batch, reviewed before it becomes a real invoice. */
 export const invoiceImportDrafts = pgTable(
   "invoice_import_drafts",

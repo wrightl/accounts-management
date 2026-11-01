@@ -397,6 +397,18 @@ export function validateParsedInvoice(invoice: ParsedInvoice): string[] {
     errors.push(`Client email isn't valid: ${invoice.client.email}`);
   }
   if (!parseImportDate(invoice.issueDate, "dmy")) errors.push("Needs an issue date");
+  for (const [value, label] of [
+    [invoice.dueDate, "Due date"],
+    [invoice.paidDate, "Paid date"],
+  ] as const) {
+    if (value && !parseImportDate(value, "dmy")) errors.push(`${label} isn't a real date`);
+  }
+  if (invoice.paidDate && invoice.amountPaidPence === 0) {
+    errors.push("There's a paid date but no amount paid");
+  }
+  if (invoice.status === "paid" && invoice.amountPaidPence < invoice.grossPence) {
+    errors.push("Marked paid, but the amount paid is less than the total");
+  }
   if (invoice.netPence + invoice.vatPence !== invoice.grossPence) {
     errors.push("Gross total doesn't equal net plus VAT");
   }

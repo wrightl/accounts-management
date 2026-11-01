@@ -8,6 +8,7 @@ import {
   companies,
   invoiceImportBatches,
   invoiceImportDrafts,
+  invoicePdfReads,
   invoices,
   users,
 } from "@/db/schema";
@@ -24,6 +25,7 @@ import {
 } from "@/actions/invoice-import";
 import { GET as draftDocument } from "@/app/api/invoice-imports/drafts/[id]/document/route";
 import { deleteCompanyById } from "@/lib/companies/delete";
+import { todayIsoDate } from "@/lib/dates";
 import { getImportBatchReview } from "@/lib/invoices/import/queries";
 import { purgeAbandonedImports } from "@/lib/invoices/import/purge";
 import { getStorage } from "@/lib/storage";
@@ -175,20 +177,53 @@ describe("uploading a PDF", () => {
 
   it("stops at the monthly limit, with no AI call", async () => {
     const batchId = await newBatch();
-    await db.insert(invoiceImportDrafts).values(
-      Array.from({ length: 25 }, (_, position) => ({
-        batchId,
-        companyId,
-        position,
-        status: "skipped" as const,
-        parsed: {} as never,
-        documentPath: `p/${position}.pdf`,
-      })),
-    );
+    await db.insert(invoicePdfReads).values({
+      companyId,
+      month: todayIsoDate().slice(0, 7),
+      reads: 25,
+    });
     const result = await uploadInvoicePdf(batchId, pdf());
     expect(result.ok).toBe(false);
     expect(!result.ok && result.error).toContain("limit");
     expect(generateText).not.toHaveBeenCalled();
+  });
+
+  it("doesn't win back allowance by discarding", async () => {
+    await db.insert(invoicePdfReads).values({
+      companyId,
+      month: todayIsoDate().slice(0, 7),
+      reads: 24,
+    });
+    const first = await newBatch();
+    await upload(first);
+    await discardInvoiceImport(first);
+    generateText.mockClear();
+    const result = await uploadInvoicePdf(await newBatch(), pdf());
+    expect(result.ok).toBe(false);
+    expect(generateText).not.toHaveBeenCalled();
+  });
+
+  it("can't exceed the limit with parallel uploads", async () => {
+    await db.insert(invoicePdfReads).values({
+      companyId,
+      month: todayIsoDate().slice(0, 7),
+      reads: 24,
+    });
+    const batchId = await newBatch();
+    const results = await Promise.all([
+      uploadInvoicePdf(batchId, pdf()),
+      uploadInvoicePdf(batchId, pdf()),
+    ]);
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect(generateText).toHaveBeenCalledTimes(1);
+  });
+
+  it("doesn't count a duplicate against the limit", async () => {
+    const batchId = await newBatch();
+    await upload(batchId, pdf("%PDF-1.4 once"));
+    await uploadInvoicePdf(batchId, pdf("%PDF-1.4 once"));
+    const [row] = await db.select().from(invoicePdfReads).where(eq(invoicePdfReads.companyId, companyId));
+    expect(row.reads).toBe(1);
   });
 
   it("warns when another business issued it", async () => {
@@ -240,6 +275,42 @@ describe("reviewing", () => {
     [row] = await db.select().from(invoiceImportDrafts).where(eq(invoiceImportDrafts.id, draft.id));
     expect(row.errors).toEqual([]);
     expect(row.status).toBe("needs_review");
+  });
+
+  it("rejects a malformed edit from the browser", async () => {
+    const batchId = await newBatch();
+    const draft = await upload(batchId);
+    const bad = [
+      { ...draft.parsed, netPence: 1.5 },
+      { ...draft.parsed, grossPence: "120" },
+      { ...draft.parsed, lines: [] },
+      { ...draft.parsed, lines: [{ ...draft.parsed.lines[0], vatRate: 500 }] },
+    ];
+    for (const edit of bad) {
+      expect((await updateImportDraft(batchId, draft.id, edit as never)).ok).toBe(false);
+    }
+  });
+
+  it("works out the status itself, ignoring what the browser sends", async () => {
+    const batchId = await newBatch();
+    const draft = await upload(batchId);
+    await updateImportDraft(batchId, draft.id, { ...draft.parsed, status: "paid" });
+    const [row] = await db.select().from(invoiceImportDrafts).where(eq(invoiceImportDrafts.id, draft.id));
+    expect(row.parsed.status).toBe("sent");
+    expect(row.errors).toEqual([]);
+  });
+
+  it("flags a paid date with nothing paid, and dates that don't exist", async () => {
+    const batchId = await newBatch();
+    const draft = await upload(batchId);
+    await updateImportDraft(batchId, draft.id, {
+      ...draft.parsed,
+      paidDate: "2026-02-31",
+    });
+    const [row] = await db.select().from(invoiceImportDrafts).where(eq(invoiceImportDrafts.id, draft.id));
+    expect(row.errors.join()).toContain("Paid date isn't a real date");
+    expect(row.errors.join()).toContain("no amount paid");
+    expect((await approveImportDrafts(batchId, { draftId: draft.id })).ok).toBe(false);
   });
 
   it("approves all without problems, leaving the rest", async () => {
