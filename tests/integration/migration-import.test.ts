@@ -5,9 +5,6 @@ import { setTestDb, type Database } from "@/db";
 import {
   clients,
   companies,
-  invoiceLineItems,
-  invoices,
-  payments,
   users,
 } from "@/db/schema";
 import { seedCompany } from "@/lib/test/seed-company";
