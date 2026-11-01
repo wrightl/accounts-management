@@ -45,6 +45,8 @@ export interface PdfInvoice {
   vatPence?: number;
   grossPence: number;
   currency: string;
+  /** "import" marks the PDF as a record of an invoice issued elsewhere. */
+  source?: "alfa" | "import";
 }
 
 export interface PdfLine {

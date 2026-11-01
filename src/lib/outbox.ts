@@ -8,6 +8,7 @@ import { escapeHtml } from "@/lib/html";
 import { formatGBP } from "@/lib/money";
 import { getStorage } from "@/lib/storage";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
+import { loadOriginalInvoiceDocument } from "@/lib/invoices/original-document";
 import { getCompanySettings } from "@/lib/settings/queries";
 import { renderInvoicePdfV2 } from "@/lib/invoices/pdf-v2";
 import { storedStatus, todayIsoDate } from "@/lib/invoices/status";
@@ -413,7 +414,11 @@ async function loadOrRenderPdf(
   detail: NonNullable<Awaited<ReturnType<typeof getInvoiceDetail>>>,
   company: Awaited<ReturnType<typeof getCompanySettings>>,
 ): Promise<Uint8Array> {
-  if (detail.invoice.pdfBlobPath?.includes(".v2.")) {
+  const original = await loadOriginalInvoiceDocument(detail.invoice);
+  if (original) return original;
+
+  // An import's cached PDF could predate the record marking.
+  if (detail.invoice.source !== "import" && detail.invoice.pdfBlobPath?.includes(".v2.")) {
     try {
       const stored = await getStorage().get(detail.invoice.pdfBlobPath);
       return new Uint8Array(stored.body);

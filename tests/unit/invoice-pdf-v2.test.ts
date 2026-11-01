@@ -86,6 +86,31 @@ describe("renderInvoicePdfV2", () => {
     expect(text).toContain("31/03/2026");
   });
 
+  it("marks an imported invoice as a record and leaves out today's VAT number", async () => {
+    const withVat = { ...company, logoUrl: null, vatNumber: "GB123456789" };
+    const record = await extractPdfText(
+      Buffer.from(
+        await renderInvoicePdfV2({
+          invoice: { ...invoice, source: "import" },
+          client,
+          lines,
+          company: withVat,
+        }),
+      ),
+    );
+    expect(record.replace(/\s/g, "").toLowerCase()).toContain("invoicerecord");
+    expect(record).toContain("Record of an invoice issued elsewhere");
+    expect(record).not.toContain("GB123456789");
+
+    const own = await extractPdfText(
+      Buffer.from(
+        await renderInvoicePdfV2({ invoice, client, lines, company: withVat }),
+      ),
+    );
+    expect(own).not.toContain("issued elsewhere");
+    expect(own).toContain("GB123456789");
+  });
+
   it("renders without a logo when logoUrl is missing", async () => {
     const bytes = await renderInvoicePdfV2({
       invoice,

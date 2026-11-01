@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { invoices } from "@/db/schema";
 import { requirePermission, ForbiddenError } from "@/lib/auth";
+import { loadOriginalInvoiceDocument } from "@/lib/invoices/original-document";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { renderInvoicePdfV2 } from "@/lib/invoices/pdf-v2";
@@ -43,7 +44,13 @@ export async function GET(
 
   let bytes: Uint8Array;
 
-  if (isV2PdfCache(detail.invoice.pdfBlobPath)) {
+  const original = await loadOriginalInvoiceDocument(detail.invoice);
+  if (original) {
+    bytes = original;
+  } else if (
+    detail.invoice.source !== "import" &&
+    isV2PdfCache(detail.invoice.pdfBlobPath)
+  ) {
     try {
       const storage = getStorage();
       const obj = await storage.get(detail.invoice.pdfBlobPath!);
