@@ -71,7 +71,13 @@ const nextConfig: NextConfig = {
     outputFileTracingIncludes: {
         '/**': [
             './node_modules/tesseract.js/src/**/*',
-            './node_modules/tesseract.js-core/**/*',
+            // Node never loads the -lstm cores: index.js passes getCore.js a
+            // boolean where it expects an OEM number, so that check never
+            // matches. Recheck this when upgrading tesseract.js.
+            './node_modules/tesseract.js-core/package.json',
+            './node_modules/tesseract.js-core/tesseract-core.*',
+            './node_modules/tesseract.js-core/tesseract-core-simd.*',
+            './node_modules/tesseract.js-core/tesseract-core-relaxedsimd.*',
             './node_modules/wasm-feature-detect/**/*',
             './node_modules/regenerator-runtime/**/*',
             './node_modules/bmp-js/**/*',
@@ -82,6 +88,16 @@ const nextConfig: NextConfig = {
             './node_modules/whatwg-url/**/*',
             './node_modules/tr46/**/*',
             './node_modules/webidl-conversions/**/*',
+        ],
+    },
+    // Every deployment stores these per function. Tracing would otherwise follow
+    // getCore.js's requires to the -lstm cores; Vercel optimises images without
+    // sharp.
+    outputFileTracingExcludes: {
+        '/**': [
+            './node_modules/tesseract.js-core/*-lstm*',
+            './node_modules/sharp/**/*',
+            './node_modules/@img/**/*',
         ],
     },
     ...(devOrigin ? { allowedDevOrigins: [devOrigin] } : {}),
