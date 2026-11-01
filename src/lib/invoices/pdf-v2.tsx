@@ -236,10 +236,12 @@ function InvoiceDocumentV2({
   const contactEmail = resolvePdfCompanyEmail(company.email);
   const issueDate = formatIsoDateUk(invoice.issueDate);
   const dueDate = formatIsoDateUk(invoice.dueDate);
+  const isRecord = invoice.source === "import" && !creditNote;
   const footerParts = [
     company.legalName,
     company.companyNumber ? `Company no. ${company.companyNumber}` : null,
-    company.vatNumber ? `VAT ${company.vatNumber}` : null,
+    // Today's VAT number may not have applied when an imported invoice was issued.
+    company.vatNumber && !isRecord ? `VAT ${company.vatNumber}` : null,
     company.addressLines?.replace(/\n/g, ", ") ?? null,
     contactEmail,
   ].filter(Boolean);
@@ -261,10 +263,18 @@ function InvoiceDocumentV2({
             <Text style={styles.companyName}>{company.name}</Text>
           </View>
           <View style={styles.titleBlock}>
-            <Text style={styles.invoiceLabel}>{creditNote ? "Credit note" : "Invoice"}</Text>
+            <Text style={styles.invoiceLabel}>
+              {creditNote ? "Credit note" : isRecord ? "Invoice record" : "Invoice"}
+            </Text>
             <Text style={styles.invoiceNumber}>{invoice.number}</Text>
           </View>
         </View>
+
+        {isRecord ? (
+          <Text style={styles.footerText}>
+            Record of an invoice issued elsewhere. This is not the original document.
+          </Text>
+        ) : null}
 
         <View style={styles.parties}>
           <View style={styles.partyCol}>

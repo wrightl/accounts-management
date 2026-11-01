@@ -16,6 +16,7 @@ import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { buttonClasses } from "@/components/ui/button";
 import { InvoiceChaseToggle } from "@/components/invoices/imported-invoice-chase";
 import { InvoiceActions } from "@/components/invoices/invoice-actions";
+import { InvoiceOriginalDocument } from "@/components/invoices/invoice-original-document";
 import { InvoiceDueDate } from "@/components/invoices/invoice-due-date";
 import { InvoiceStatusSelect } from "@/components/invoices/invoice-status-select";
 import { CreditNoteStatusBadge } from "@/components/credit-notes/credit-note-status-badge";
@@ -246,6 +247,13 @@ export default async function InvoiceDetailPage({
           </Link>
           .
         </p>
+      ) : null}
+
+      {canWrite && invoice.source === "import" ? (
+        <InvoiceOriginalDocument
+          invoiceId={invoice.id}
+          filename={invoice.originalDocumentFilename}
+        />
       ) : null}
 
       {canWrite && invoice.source === "import" && stored === "sent" ? (

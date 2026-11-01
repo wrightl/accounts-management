@@ -512,6 +512,13 @@
             "when": 1791000000000,
             "tag": "0072_invoice_chase",
             "breakpoints": true
+        },
+        {
+            "idx": 73,
+            "version": "7",
+            "when": 1791100000000,
+            "tag": "0073_invoice_original_documents",
+            "breakpoints": true
         }
     ]
 }

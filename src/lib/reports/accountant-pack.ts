@@ -30,6 +30,7 @@ import {
   paymentCountsInAccounts,
 } from "@/lib/invoices/accounts-scope";
 import { invoiceBalancePence } from "@/lib/invoices/balance";
+import { loadOriginalInvoiceDocument } from "@/lib/invoices/original-document";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
 import { renderCreditNotePdf, renderInvoicePdfV2 } from "@/lib/invoices/pdf-v2";
 import { getCreditNoteDetail } from "@/lib/credit-notes/queries";
@@ -99,6 +100,7 @@ export async function streamAccountantPack({
       sentAt: invoices.sentAt,
       paidAt: invoices.paidAt,
       pdfBlobPath: invoices.pdfBlobPath,
+      originalDocumentPath: invoices.originalDocumentPath,
       clientName: clientDisplayNameSql.as("client_name"),
       orderNumber: orders.number,
       recurringSchedule: recurringInvoices.name,
@@ -324,6 +326,7 @@ export async function streamAccountantPack({
       netPence: invoices.netPence,
       vatPence: invoices.vatPence,
       grossPence: invoices.grossPence,
+      originalDocumentPath: invoices.originalDocumentPath,
       clientName: clientDisplayNameSql.as("client_name"),
       paidPence: sql<number>`coalesce((select sum(p.amount_pence) from payments p where p.invoice_id = ${invoices.id}), 0)`.mapWith(Number),
       creditedPence: sql<number>`coalesce((select sum(c.gross_pence) from credit_notes c where c.invoice_id = ${invoices.id} and c.status = 'issued'), 0)`.mapWith(Number),
@@ -383,6 +386,17 @@ export async function streamAccountantPack({
           .where(inArray(creditNoteLineItems.creditNoteId, creditNoteIds))
           .orderBy(creditNoteLineItems.position);
   const creditNoteNumberById = new Map(creditNoteRows.map((r) => [r.id, r.number]));
+
+  const usedDocumentPaths = new Set<string>();
+  const broughtForwardDocuments = broughtForwardRows
+    .filter((row) => row.originalDocumentPath)
+    .map((row) => ({
+      row,
+      zipPath: uniqueZipPath(
+        `reference/brought-forward-documents/${safeFilename(`${row.number}.pdf`)}`,
+        usedDocumentPaths,
+      ),
+    }));
 
   const receiptIndexRows: string[][] = [];
   const usedReceiptPaths = new Set<string>();
@@ -846,13 +860,24 @@ export async function streamAccountantPack({
     yield* fetchInBatches(invRows, async (inv) => {
       const pdfPath = `invoices/${safeFilename(`${inv.number}.pdf`)}`;
       try {
-        return [pdfPath, await resolveInvoicePdf(companyId, inv.id, inv.pdfBlobPath)];
+        const original = await loadOriginalInvoiceDocument(inv);
+        return [
+          pdfPath,
+          original ?? (await resolveInvoicePdf(companyId, inv.id, inv.pdfBlobPath)),
+        ];
       } catch (err) {
         warnings.push(
           `Invoice PDF missing: ${inv.number} (${inv.id}) — ${formatError(err)}`,
         );
         return null;
       }
+    });
+
+    yield* fetchInBatches(broughtForwardDocuments, async ({ row, zipPath }) => {
+      const bytes = await loadOriginalInvoiceDocument(row);
+      if (bytes) return [zipPath, bytes];
+      warnings.push(`Original invoice missing: ${row.number} (${row.id})`);
+      return null;
     });
 
     yield* fetchInBatches(receiptFiles, async ({ receipt, zipPath }) => {
@@ -1011,7 +1036,7 @@ function buildReadme({
     "  recurring-invoices.csv — current schedules (not period-filtered)",
     "  bank-transactions.csv + reconciliation-matches.csv",
     "  other-income.csv   — explained bank credits (cash, by bank date)",
-    "  reference/        — imported invoices brought forward from before cutover (all dates)",
+    "  reference/        — imported invoices brought forward from before cutover (all dates), with any originals",
     "",
     "Basis notes:",
     "  Invoiced income is accrual (by issue date), less credit notes by their issue date.",

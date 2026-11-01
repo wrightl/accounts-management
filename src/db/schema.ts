@@ -397,6 +397,11 @@ export const invoices = pgTable(
     broughtForward: boolean("brought_forward").notNull().default(false),
     /** Whether reminders and overdue alerts apply. Imports start off until the user opts in. */
     chaseEnabled: boolean("chase_enabled").notNull().default(true),
+    /** The PDF the client actually received, served instead of a generated one. */
+    originalDocumentPath: text("original_document_path"),
+    originalDocumentFilename: text("original_document_filename"),
+    originalDocumentSize: integer("original_document_size"),
+    originalDocumentSha256: text("original_document_sha256"),
   },
   (t) => [
     check(

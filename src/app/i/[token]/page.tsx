@@ -15,6 +15,7 @@ import {
   formatGBP,
   formatQuantity,
   hasLineDiscount,
+  invoiceTotals,
   lineNetPence,
 } from "@/lib/money";
 
@@ -64,6 +65,9 @@ export default async function PublicInvoicePage({
   const stored = storedStatus(invoice.status);
   const settings = await getOrCreateCompanySettings(invoice.companyId);
   const amountDuePence = detail.balancePence;
+  // An imported invoice keeps its source totals, which whole-number rates may not reproduce.
+  const showLineVat =
+    invoice.vatPence > 0 && invoiceTotals(lines).vatPence === invoice.vatPence;
   const payable = canPayInvoiceOnline({
     status: invoice.status,
     amountDuePence,
@@ -91,6 +95,16 @@ export default async function PublicInvoicePage({
           </CardValue>
         </Card>
       </header>
+
+      {invoice.source === "import" ? (
+        <div className="mb-3">
+          <Notice tone="muted">
+            {invoice.originalDocumentPath
+              ? "This invoice was issued before the company used this system. The PDF is the original."
+              : "This is a record of an invoice issued elsewhere, and the PDF is not the original."}
+          </Notice>
+        </div>
+      ) : null}
 
       <div className="mb-6">
         {stored === "void" ? (
@@ -120,7 +134,7 @@ export default async function PublicInvoicePage({
             <TH className="text-right">Qty</TH>
             <TH className="text-right">Unit</TH>
             {hasLineDiscount(lines) ? <TH className="text-right">Discount</TH> : null}
-            {invoice.vatPence > 0 ? <TH className="text-right">VAT</TH> : null}
+            {showLineVat ? <TH className="text-right">VAT</TH> : null}
             <TH className="text-right">Amount</TH>
           </TR>
         </THead>
@@ -133,7 +147,7 @@ export default async function PublicInvoicePage({
               {hasLineDiscount(lines) ? (
                 <TD className="text-right">{formatDiscountPercent(l.discountPercent)}</TD>
               ) : null}
-              {invoice.vatPence > 0 ? <TD className="text-right">{l.vatRate}%</TD> : null}
+              {showLineVat ? <TD className="text-right">{l.vatRate}%</TD> : null}
               <TD className="text-right">{formatGBP(lineNetPence(l))}</TD>
             </TR>
           ))}

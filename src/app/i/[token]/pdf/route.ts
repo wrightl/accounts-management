@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { loadOriginalInvoiceDocument } from "@/lib/invoices/original-document";
 import { getPublicInvoiceByToken } from "@/lib/invoices/public-queries";
 import { renderInvoicePdfV2 } from "@/lib/invoices/pdf-v2";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
@@ -19,12 +20,14 @@ export async function GET(
 
   const { detail } = data;
   const company = await getOrCreateCompanySettings(detail.invoice.companyId);
-  const bytes = await renderInvoicePdfV2({
-    invoice: detail.invoice,
-    client: detail.client,
-    lines: detail.lines,
-    company,
-  });
+  const bytes =
+    (await loadOriginalInvoiceDocument(detail.invoice)) ??
+    (await renderInvoicePdfV2({
+      invoice: detail.invoice,
+      client: detail.client,
+      lines: detail.lines,
+      company,
+    }));
   return new NextResponse(Buffer.from(bytes), {
     status: 200,
     headers: {

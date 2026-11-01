@@ -134,11 +134,15 @@ async function collectBlobPaths(companyId: string): Promise<string[]> {
   if (company?.logoUrl) paths.add(company.logoUrl);
 
   const invoicePdfs = await db
-    .select({ path: invoices.pdfBlobPath })
+    .select({
+      path: invoices.pdfBlobPath,
+      originalPath: invoices.originalDocumentPath,
+    })
     .from(invoices)
     .where(eq(invoices.companyId, companyId));
   for (const row of invoicePdfs) {
     if (row.path) paths.add(row.path);
+    if (row.originalPath) paths.add(row.originalPath);
   }
 
   const quotePdfs = await db
