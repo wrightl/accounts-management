@@ -56,26 +56,39 @@ export async function attachInvoiceDocument(
         "application/pdf",
       );
       const sha256 = createHash("sha256").update(bytes).digest("hex");
-      await getDb().transaction(async (tx) => {
-        await tx
-          .update(invoices)
-          .set({
-            originalDocumentPath: stored.path,
-            originalDocumentFilename: file.name,
-            originalDocumentSize: bytes.byteLength,
-            originalDocumentSha256: sha256,
-          })
-          .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)));
-        await tx.insert(auditLog).values({
-          companyId,
-          actorUserId: localUserId,
-          action: "invoice.document_attach",
-          entityType: "invoice",
-          entityId: id,
-          meta: { filename: file.name, sha256 },
+      let replacedPath: string | null;
+      try {
+        replacedPath = await getDb().transaction(async (tx) => {
+          // Read under a row lock, so concurrent replaces each remove the file they replaced.
+          const [current] = await tx
+            .select({ path: invoices.originalDocumentPath })
+            .from(invoices)
+            .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)))
+            .for("update");
+          await tx
+            .update(invoices)
+            .set({
+              originalDocumentPath: stored.path,
+              originalDocumentFilename: file.name,
+              originalDocumentSize: bytes.byteLength,
+              originalDocumentSha256: sha256,
+            })
+            .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)));
+          await tx.insert(auditLog).values({
+            companyId,
+            actorUserId: localUserId,
+            action: "invoice.document_attach",
+            entityType: "invoice",
+            entityId: id,
+            meta: { filename: file.name, sha256 },
+          });
+          return current?.path ?? null;
         });
-      });
-      await deleteQuietly(invoice.originalDocumentPath);
+      } catch (err) {
+        await deleteQuietly(stored.path);
+        throw err;
+      }
+      await deleteQuietly(replacedPath);
       return { ok: true, id };
     },
     { paths: [`/invoices/${id}`] },

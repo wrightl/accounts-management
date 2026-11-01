@@ -6,6 +6,7 @@ import { buttonClasses } from "@/components/ui/button";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { clientDisplayName } from "@/lib/clients/display";
+import { loadOriginalInvoiceDocument } from "@/lib/invoices/original-document";
 import { getPublicInvoiceByToken } from "@/lib/invoices/public-queries";
 import { storedStatus } from "@/lib/invoices/status";
 import { canPayInvoiceOnline } from "@/lib/payments/online-status";
@@ -74,6 +75,8 @@ export default async function PublicInvoicePage({
     onlinePayments: company.onlinePayments,
   });
   const hasBankDetails = Boolean(settings.sortCode && settings.accountNumber);
+  // The file, not the column: if it has gone, the download is the generated record.
+  const hasOriginal = (await loadOriginalInvoiceDocument(invoice)) !== null;
 
   return (
     <main className="mx-auto flex min-h-full max-w-3xl flex-col px-4 py-10">
@@ -99,7 +102,7 @@ export default async function PublicInvoicePage({
       {invoice.source === "import" ? (
         <div className="mb-3">
           <Notice tone="muted">
-            {invoice.originalDocumentPath
+            {hasOriginal
               ? "This invoice was issued before the company used this system. The PDF is the original."
               : "This is a record of an invoice issued elsewhere, and the PDF is not the original."}
           </Notice>
