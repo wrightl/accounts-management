@@ -12,7 +12,8 @@ CREATE TABLE "document_sequences" (
 );
 --> statement-breakpoint
 -- Each series starts after the highest of the old counter and the numbers already issued under the
--- current prefix. Taking the highest also repairs companies whose counter was already reset.
+-- current prefix, using the same default as allocation when the prefix is empty. Taking the highest
+-- also repairs companies whose counter was already reset.
 INSERT INTO "document_sequences" ("company_id", "kind", "year", "next_seq")
 SELECT "company_id", "kind"::"document_sequence_kind", "year", max("next_seq")
 FROM (
@@ -31,29 +32,29 @@ FROM (
 	SELECT d."company_id", 'invoice', m.parts[1]::integer, m.parts[2]::integer + 1
 	FROM "invoices" d
 	JOIN "companies" c ON c."id" = d."company_id"
-	CROSS JOIN LATERAL regexp_match(substr(d."number", length(c."invoice_number_prefix") + 2), '^([0-9]{4})-([0-9]{1,9})$') AS m(parts)
-	WHERE lower(left(d."number", length(c."invoice_number_prefix") + 1)) = lower(c."invoice_number_prefix" || '-')
+	CROSS JOIN LATERAL regexp_match(substr(d."number", length(COALESCE(NULLIF(c."invoice_number_prefix", ''), 'DD')) + 2), '^([0-9]{4})-([0-9]{1,9})$') AS m(parts)
+	WHERE lower(left(d."number", length(COALESCE(NULLIF(c."invoice_number_prefix", ''), 'DD')) + 1)) = lower(COALESCE(NULLIF(c."invoice_number_prefix", ''), 'DD') || '-')
 		AND m.parts IS NOT NULL
 	UNION ALL
 	SELECT d."company_id", 'quote', m.parts[1]::integer, m.parts[2]::integer + 1
 	FROM "quotes" d
 	JOIN "companies" c ON c."id" = d."company_id"
-	CROSS JOIN LATERAL regexp_match(substr(d."number", length(c."quote_number_prefix") + 2), '^([0-9]{4})-([0-9]{1,9})$') AS m(parts)
-	WHERE lower(left(d."number", length(c."quote_number_prefix") + 1)) = lower(c."quote_number_prefix" || '-')
+	CROSS JOIN LATERAL regexp_match(substr(d."number", length(COALESCE(NULLIF(c."quote_number_prefix", ''), 'Q')) + 2), '^([0-9]{4})-([0-9]{1,9})$') AS m(parts)
+	WHERE lower(left(d."number", length(COALESCE(NULLIF(c."quote_number_prefix", ''), 'Q')) + 1)) = lower(COALESCE(NULLIF(c."quote_number_prefix", ''), 'Q') || '-')
 		AND m.parts IS NOT NULL
 	UNION ALL
 	SELECT d."company_id", 'order', m.parts[1]::integer, m.parts[2]::integer + 1
 	FROM "orders" d
 	JOIN "companies" c ON c."id" = d."company_id"
-	CROSS JOIN LATERAL regexp_match(substr(d."number", length(c."order_number_prefix") + 2), '^([0-9]{4})-([0-9]{1,9})$') AS m(parts)
-	WHERE lower(left(d."number", length(c."order_number_prefix") + 1)) = lower(c."order_number_prefix" || '-')
+	CROSS JOIN LATERAL regexp_match(substr(d."number", length(COALESCE(NULLIF(c."order_number_prefix", ''), 'O')) + 2), '^([0-9]{4})-([0-9]{1,9})$') AS m(parts)
+	WHERE lower(left(d."number", length(COALESCE(NULLIF(c."order_number_prefix", ''), 'O')) + 1)) = lower(COALESCE(NULLIF(c."order_number_prefix", ''), 'O') || '-')
 		AND m.parts IS NOT NULL
 	UNION ALL
 	SELECT d."company_id", 'credit_note', m.parts[1]::integer, m.parts[2]::integer + 1
 	FROM "credit_notes" d
 	JOIN "companies" c ON c."id" = d."company_id"
-	CROSS JOIN LATERAL regexp_match(substr(d."number", length(c."credit_note_number_prefix") + 2), '^([0-9]{4})-([0-9]{1,9})$') AS m(parts)
-	WHERE lower(left(d."number", length(c."credit_note_number_prefix") + 1)) = lower(c."credit_note_number_prefix" || '-')
+	CROSS JOIN LATERAL regexp_match(substr(d."number", length(COALESCE(NULLIF(c."credit_note_number_prefix", ''), 'CN')) + 2), '^([0-9]{4})-([0-9]{1,9})$') AS m(parts)
+	WHERE lower(left(d."number", length(COALESCE(NULLIF(c."credit_note_number_prefix", ''), 'CN')) + 1)) = lower(COALESCE(NULLIF(c."credit_note_number_prefix", ''), 'CN') || '-')
 		AND m.parts IS NOT NULL
 ) AS seeds
 GROUP BY "company_id", "kind", "year";

@@ -20,6 +20,7 @@ import {
   previewInvoiceImport,
 } from "@/actions/invoices";
 import { updateCompany } from "@/actions/settings";
+import { allocateInvoiceNumber } from "@/lib/invoices/allocate";
 import { parseInvoiceImportCsv } from "@/lib/invoices/import-csv";
 import { financialYearStartDate, todayIsoDate } from "@/lib/dates";
 
@@ -166,6 +167,34 @@ describe("migration CSV import (PGlite)", () => {
     expect(auto?.number).toMatch(/^DD-2026-\d{4}$/);
     const seq = Number(auto!.number.split("-")[2]);
     expect(seq).toBeGreaterThanOrEqual(11);
+  });
+
+  it("advances a past year's series when importing its numbers", async () => {
+    const row = {
+      rowNumber: 2,
+      clientEmail: null,
+      clientName: "Past Client",
+      clientCompany: null,
+      issueDate: "2025-06-01",
+      dueDate: "2025-06-15",
+      number: "DD-2025-0005",
+      description: "Past work",
+      netPence: 10000,
+      vatPence: 0,
+      grossPence: 10000,
+      status: "sent",
+      amountPaidPence: 0,
+      paidAt: null,
+      paymentReference: null,
+      errors: [],
+    };
+    const result = await commitInvoiceImport(JSON.stringify([row]));
+    expect(result.ok).toBe(true);
+
+    const number = await db.transaction((tx) =>
+      allocateInvoiceNumber(tx as never, companyId, "2025-07-01"),
+    );
+    expect(number).toBe("DD-2025-0006");
   });
 
   it("saves and reads opening cash cutover fields", async () => {

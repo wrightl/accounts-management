@@ -8,6 +8,8 @@ import {
   creditNotes,
   documentSequences,
   invoices,
+  orders,
+  quotes,
 } from "@/db/schema";
 import {
   advanceInvoiceSequences,
@@ -52,7 +54,10 @@ async function insertInvoice(number: string) {
   await db.insert(invoices).values({ companyId, clientId, number });
 }
 
-async function nextSeq(kind: "invoice" | "credit_note", year: number) {
+async function nextSeq(
+  kind: "invoice" | "quote" | "order" | "credit_note",
+  year: number,
+) {
   const [row] = await db
     .select()
     .from(documentSequences)
@@ -218,5 +223,32 @@ describe("0070 seed", () => {
     await runSeed();
 
     expect(await nextSeq("credit_note", 2026)).toBe(5);
+  });
+
+  it("seeds quotes and orders from their own numbers", async () => {
+    await db
+      .insert(quotes)
+      .values({ companyId, clientId, number: "Q-2026-0003", issueDate: "2026-03-01" });
+    await db
+      .insert(orders)
+      .values({ companyId, clientId, number: "O-2026-0006", issueDate: "2026-03-01" });
+
+    await runSeed();
+
+    expect(await nextSeq("quote", 2026)).toBe(4);
+    expect(await nextSeq("order", 2026)).toBe(7);
+  });
+
+  it("uses the default prefix when a company's prefix is empty", async () => {
+    await db
+      .update(companies)
+      .set({ invoiceNumberPrefix: "" })
+      .where(eq(companies.id, companyId));
+    await insertInvoice("DD-2026-0007");
+
+    await runSeed();
+
+    expect(await nextSeq("invoice", 2026)).toBe(8);
+    expect(await invoiceNumber("2026-06-01")).toBe("DD-2026-0008");
   });
 });
