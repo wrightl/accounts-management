@@ -94,7 +94,7 @@ export default async function TransactionsPage({
     bankAccountCount,
     accountCards,
   ] = await Promise.all([
-    listBankTransactions(companyId, listFilters),
+    listBankTransactions(companyId, { ...listFilters, scope: inPack ? "pack" : "all" }),
     getBankTransactionSummary(companyId, summaryFilters, await getDateFormat()),
     listBankSpendingCategoriesWithUsage(companyId),
     listIncomeCategoryNames(companyId),

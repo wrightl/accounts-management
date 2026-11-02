@@ -12,6 +12,8 @@ import {
   expenses,
   invoices,
   notifications,
+  payments,
+  reconciliationMatches,
   recurringInvoices,
   reimbursements,
   shareholders,
@@ -336,6 +338,120 @@ describe("query state on record lists", () => {
     const loaded = await loadBankTransactionsPage({ page: 1 });
     if (!loaded.ok) throw new Error(loaded.error);
     expect(loaded.result.rows[0].queries?.map((q) => q.status)).toEqual(["open"]);
+  });
+});
+
+describe("bank rows in pack scope", () => {
+  let accountId: string;
+
+  beforeEach(async () => {
+    const [account] = await db
+      .insert(bankAccounts)
+      .values({ companyId, name: "Current", provider: "generic" })
+      .returning();
+    accountId = account.id;
+  });
+
+  /** A bank row matched to something, as the accountant's feed returns it. */
+  async function matchedRow(
+    match: Partial<typeof reconciliationMatches.$inferInsert> & { matchType: string },
+  ) {
+    const [tx] = await db
+      .insert(bankTransactions)
+      .values({
+        bankAccountId: accountId,
+        externalId: crypto.randomUUID(),
+        bookedAt: "2026-03-02",
+        amountPence: -500,
+      })
+      .returning();
+    await db
+      .insert(reconciliationMatches)
+      .values({ confirmed: true, ...match, bankTransactionId: tx.id });
+    const loaded = await loadBankTransactionsPage({ page: 1 });
+    if (!loaded.ok) throw new Error(loaded.error);
+    return loaded.result.rows.find((r) => r.id === tx.id)!;
+  }
+
+  it("doesn't name a pending expense, but still shows the row as matched", async () => {
+    const pending = await seedExpense("pending", "Secret purchase");
+    const row = await matchedRow({ matchType: "expense", expenseId: pending.id });
+
+    expect(row).toMatchObject({
+      reconciled: true,
+      matchLabel: "Expense",
+      matchHref: null,
+    });
+    expect(JSON.stringify(row)).not.toContain("Secret purchase");
+  });
+
+  it("doesn't name a draft invoice, matched directly or through a payment", async () => {
+    const draft = await seedInvoice("draft", "D-1");
+    const direct = await matchedRow({ matchType: "invoice_payment", invoiceId: draft.id });
+    expect(direct).toMatchObject({ matchLabel: "Invoice payment", matchHref: null });
+
+    const [payment] = await db
+      .insert(payments)
+      .values({ invoiceId: draft.id, amountPence: 500 })
+      .returning();
+    const viaPayment = await matchedRow({ matchType: "invoice_payment", paymentId: payment.id });
+    expect(viaPayment).toMatchObject({ matchLabel: "Invoice payment", matchHref: null });
+  });
+
+  it("doesn't name an unpaid reimbursement run", async () => {
+    const [run] = await db
+      .insert(reimbursements)
+      .values({ companyId, payeeUserId: adminId, status: "pending" })
+      .returning();
+    const row = await matchedRow({ matchType: "reimbursement", reimbursementId: run.id });
+
+    expect(row).toMatchObject({ matchLabel: "Reimbursement", matchHref: null });
+    expect(JSON.stringify(row)).not.toContain("admin");
+  });
+
+  it("names records the pack contains", async () => {
+    const sent = await seedInvoice("sent", "S-1");
+    const recorded = await seedExpense("recorded", "Logged");
+
+    expect(await matchedRow({ matchType: "invoice_payment", invoiceId: sent.id })).toMatchObject({
+      matchHref: `/invoices/${sent.id}`,
+      matchLabel: expect.stringContaining("S-1"),
+    });
+    expect(await matchedRow({ matchType: "expense", expenseId: recorded.id })).toMatchObject({
+      matchHref: `/expenses/${recorded.id}`,
+      matchLabel: "Logged",
+    });
+  });
+
+  it("hides suggested matches from accountants but not the team", async () => {
+    const recorded = await seedExpense("recorded", "Logged");
+    const row = await matchedRow({
+      matchType: "expense",
+      expenseId: recorded.id,
+      confirmed: false,
+    });
+    expect(row).toMatchObject({ suggested: false, reconciled: false, matchLabel: null });
+
+    signInAs("admin");
+    const loaded = await loadBankTransactionsPage({ page: 1 });
+    if (!loaded.ok) throw new Error(loaded.error);
+    expect(loaded.result.rows.find((r) => r.id === row.id)).toMatchObject({
+      suggested: true,
+      matchLabel: "Logged",
+    });
+  });
+
+  it("still names a pending expense for the team", async () => {
+    const pending = await seedExpense("pending", "Secret purchase");
+    const asAccountant = await matchedRow({ matchType: "expense", expenseId: pending.id });
+
+    signInAs("admin");
+    const loaded = await loadBankTransactionsPage({ page: 1 });
+    if (!loaded.ok) throw new Error(loaded.error);
+    expect(loaded.result.rows.find((r) => r.id === asAccountant.id)).toMatchObject({
+      matchLabel: "Secret purchase",
+      matchHref: `/expenses/${pending.id}`,
+    });
   });
 });
 

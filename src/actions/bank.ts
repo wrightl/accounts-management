@@ -140,7 +140,9 @@ export async function loadBankTransactionsPage(input: {
   const page = Math.max(1, Math.trunc(input.page));
   const pageSize = input.pageSize ?? BANK_PAGE_SIZE;
 
+  const scope = recordScopeFor(authz.user.role);
   const result = await listBankTransactions(companyId, {
+    scope,
     q: input.q,
     type: input.type,
     category: input.category,
@@ -158,7 +160,7 @@ export async function loadBankTransactionsPage(input: {
     "bank_transaction",
     result.rows.map((r) => r.id),
   );
-  const rows = recordScopeFor(authz.user.role) === "pack"
+  const rows = scope === "pack"
     ? result.rows.map(withoutTeamAnnotations)
     : result.rows;
   return {
