@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
+import { can } from "@/lib/roles";
+import { QueryCell, QueryHeaderCell } from "@/components/queries/query-cells";
+import { recordQueriesFor } from "@/lib/queries/queries";
 import { listShareholders } from "@/lib/shareholders/queries";
 import { TotalSharesForm } from "@/components/shareholders/total-shares-form";
 import { buttonClasses } from "@/components/ui/button";
@@ -8,7 +11,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 
 export default async function ShareholdersPage() {
-  const { companyId, entityType } = await guardTenantPage("accounts:read");
+  const { companyId, entityType, role } = await guardTenantPage("records:read");
+  const canRaiseQuery = can(role, "queries:raise");
   if (entityType !== "limited_company") {
     redirect("/dashboard");
   }
@@ -18,6 +22,8 @@ export default async function ShareholdersPage() {
     await listShareholders(companyId, { includeArchived: true });
   const active = shareholders.filter((s) => !s.archivedAt);
   const archived = shareholders.filter((s) => s.archivedAt);
+  const queries = await recordQueriesFor(role, companyId, "shareholder", shareholders.map((s) => s.id));
+  const showQueries = canRaiseQuery || queries.size > 0;
 
   return (
     <div>
@@ -64,6 +70,7 @@ export default async function ShareholdersPage() {
             <Table>
               <THead>
                 <TR>
+                  {showQueries ? <QueryHeaderCell /> : null}
                   <TH>Name</TH>
                   <TH className="text-right">Shares</TH>
                   <TH className="text-right">%</TH>
@@ -73,6 +80,9 @@ export default async function ShareholdersPage() {
               <TBody>
                 {active.map((s) => (
                   <TR key={s.id}>
+                    {showQueries ? (
+                      <QueryCell kind="shareholder" id={s.id} queries={queries.get(s.id)} canRaise={canRaiseQuery} />
+                    ) : null}
                     <TD>
                       <Link
                         href={`/shareholders/${s.id}`}
@@ -101,6 +111,7 @@ export default async function ShareholdersPage() {
             <Table>
               <THead>
                 <TR>
+                  {showQueries ? <QueryHeaderCell /> : null}
                   <TH>Name</TH>
                   <TH className="text-right">Shares</TH>
                   <TH>Linked user</TH>
@@ -109,6 +120,9 @@ export default async function ShareholdersPage() {
               <TBody>
                 {archived.map((s) => (
                   <TR key={s.id}>
+                    {showQueries ? (
+                      <QueryCell kind="shareholder" id={s.id} queries={queries.get(s.id)} canRaise={canRaiseQuery} />
+                    ) : null}
                     <TD>
                       <Link
                         href={`/shareholders/${s.id}`}

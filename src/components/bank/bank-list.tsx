@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { RecordQueryIcon } from '@/components/queries/record-query-icon';
 import { CategoryCell, ReconciliationCell } from '@/components/bank/bank-ui';
 import { SortableTH } from '@/components/ui/sortable-th';
 import { BankPageSizeSelect } from '@/components/bank/bank-page-size-select';
@@ -176,6 +177,7 @@ export function BankTransactionTable({
     incomeCategories,
     allLabels,
     canWrite,
+    canRaiseQuery = false,
     showAccount = false,
 }: {
     params: BankListParams;
@@ -184,6 +186,7 @@ export function BankTransactionTable({
     incomeCategories: readonly string[];
     allLabels: readonly RowLabel[];
     canWrite: boolean;
+    canRaiseQuery?: boolean;
     showAccount?: boolean;
 }) {
     const sortHeader = (
@@ -207,7 +210,7 @@ export function BankTransactionTable({
             <THead>
                 <TR>
                     <TH className="w-8 pr-0">
-                        <span className="sr-only">Notes</span>
+                        <span className="sr-only">Notes and queries</span>
                     </TH>
                     {sortHeader('Date', 'date')}
                     {sortHeader('Counterparty', 'counterparty')}
@@ -227,6 +230,12 @@ export function BankTransactionTable({
                                 rowId={r.id}
                                 note={r.notes}
                                 canWrite={canWrite}
+                            />
+                            <RecordQueryIcon
+                                recordKind="bank_transaction"
+                                recordId={r.id}
+                                queries={r.queries}
+                                canRaise={canRaiseQuery}
                             />
                         </TD>
                         <TD className="text-muted"><DisplayDate value={r.bookedAt} /></TD>
@@ -275,6 +284,7 @@ function BankTransactionCard({
     incomeCategories,
     allLabels,
     canWrite,
+    canRaiseQuery = false,
     showAccount = false,
 }: {
     row: BankTransactionListItem;
@@ -282,6 +292,7 @@ function BankTransactionCard({
     incomeCategories: readonly string[];
     allLabels: readonly RowLabel[];
     canWrite: boolean;
+    canRaiseQuery?: boolean;
     showAccount?: boolean;
 }) {
     return (
@@ -294,6 +305,12 @@ function BankTransactionCard({
                             rowId={row.id}
                             note={row.notes}
                             canWrite={canWrite}
+                        />
+                        <RecordQueryIcon
+                            recordKind="bank_transaction"
+                            recordId={row.id}
+                            queries={row.queries}
+                            canRaise={canRaiseQuery}
                         />
                         <p className="font-medium">
                             {row.counterparty ?? row.description ?? '—'}
@@ -348,6 +365,7 @@ export function BankTransactionCardList({
     incomeCategories,
     allLabels,
     canWrite,
+    canRaiseQuery = false,
     showAccount = false,
 }: {
     rows: BankTransactionListItem[];
@@ -355,6 +373,7 @@ export function BankTransactionCardList({
     incomeCategories: readonly string[];
     allLabels: readonly RowLabel[];
     canWrite: boolean;
+    canRaiseQuery?: boolean;
     showAccount?: boolean;
 }) {
     const groups = groupByBookedAt(rows, (iso) => iso);
@@ -374,6 +393,7 @@ export function BankTransactionCardList({
                                 incomeCategories={incomeCategories}
                                 allLabels={allLabels}
                                 canWrite={canWrite}
+                                canRaiseQuery={canRaiseQuery}
                                 showAccount={showAccount}
                             />
                         ))}
@@ -390,6 +410,7 @@ export function BankTransactionCards({
     incomeCategories,
     allLabels,
     canWrite,
+    canRaiseQuery = false,
     showAccount = false,
 }: {
     rows: BankTransactionListItem[];
@@ -397,6 +418,7 @@ export function BankTransactionCards({
     incomeCategories: readonly string[];
     allLabels: readonly RowLabel[];
     canWrite: boolean;
+    canRaiseQuery?: boolean;
     showAccount?: boolean;
 }) {
     return (
@@ -406,6 +428,7 @@ export function BankTransactionCards({
             incomeCategories={incomeCategories}
             allLabels={allLabels}
             canWrite={canWrite}
+            canRaiseQuery={canRaiseQuery}
             showAccount={showAccount}
         />
     );

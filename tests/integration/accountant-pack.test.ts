@@ -18,6 +18,8 @@ import {
   users,
 } from "@/db/schema";
 import { seedCompany } from "@/lib/test/seed-company";
+import { listExpenses } from "@/lib/expenses/queries";
+import { listInvoices } from "@/lib/invoices/queries";
 import {
   listStoreZipEntries,
   streamAccountantPack,
@@ -111,6 +113,50 @@ async function insertReceipt(
 }
 
 describe("accountant pack integration", () => {
+  it("contains the same invoices and expenses an accountant sees on screen", async () => {
+    const [client] = await db.insert(clients).values({ companyId, name: "Acme" }).returning();
+    for (const status of ["draft", "sent", "paid", "void"] as const) {
+      await db.insert(invoices).values({
+        companyId,
+        number: `SCOPE-${status}`,
+        clientId: client.id,
+        status,
+        issueDate: "2026-04-10",
+      });
+    }
+    for (const status of ["pending", "recorded", "company_paid"] as const) {
+      await db.insert(expenses).values({
+        companyId,
+        description: `scope-${status}`,
+        status,
+        spentAt: "2026-04-11",
+      });
+    }
+
+    const { zip } = await buildPack({ companyId, ...PERIOD });
+    const invoicesCsv = extractZipText(zip, "invoices.csv");
+    const expensesCsv = extractZipText(zip, "expenses.csv");
+
+    const onScreenInvoices = await listInvoices(companyId, "pack");
+    expect(onScreenInvoices.map((r) => r.number).sort()).toEqual(["SCOPE-paid", "SCOPE-sent"]);
+    for (const status of ["draft", "sent", "paid", "void"]) {
+      expect(invoicesCsv.includes(`SCOPE-${status}`)).toBe(
+        onScreenInvoices.some((r) => r.number === `SCOPE-${status}`),
+      );
+    }
+
+    const onScreenExpenses = await listExpenses(companyId, { scope: "pack" });
+    expect(onScreenExpenses.map((r) => r.description).sort()).toEqual([
+      "scope-company_paid",
+      "scope-recorded",
+    ]);
+    for (const status of ["pending", "recorded", "company_paid"]) {
+      expect(expensesCsv.includes(`scope-${status}`)).toBe(
+        onScreenExpenses.some((r) => r.description === `scope-${status}`),
+      );
+    }
+  });
+
   it("includes CSVs, summary reports, invoice PDFs, and receipt files", async () => {
     const [client] = await db
       .insert(clients)

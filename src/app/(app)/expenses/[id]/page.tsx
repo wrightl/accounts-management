@@ -3,6 +3,9 @@ import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { listClients } from "@/lib/clients/queries";
+import { recordScopeFor } from "@/lib/accountant/record-scope";
+import { ExpenseReadOnly } from "@/components/expenses/expense-read-only";
+import { RecordQueries } from "@/components/queries/record-queries";
 import { getExpenseDetail, listFounders } from "@/lib/expenses/queries";
 import { expenseStatusLabel, type ExpenseStatus } from "@/lib/expenses/categories";
 import { getReimbursementForExpense } from "@/lib/reimbursements/queries";
@@ -41,13 +44,19 @@ export default async function ExpenseDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ receiptUploadFailed?: string; bankLinkFailed?: string }>;
 }) {
-  const { companyId } = await guardTenantPage("accounts:read");
+  const { companyId, role } = await guardTenantPage("records:read");
+  const scope = recordScopeFor(role);
   const canWrite = await hasPermission("accounts:write");
   const { id } = await params;
   const { receiptUploadFailed, bankLinkFailed } = await searchParams;
 
-  const detail = await getExpenseDetail(companyId, id);
+  const detail = await getExpenseDetail(companyId, id, scope);
   if (!detail) notFound();
+
+  // Not the edit form: that is sent every client and order, which the pack doesn't include.
+  if (scope === "pack") {
+    return <ExpenseReadOnly companyId={companyId} role={role} detail={detail} />;
+  }
 
   const [founders, clients, orders, rebill, linkedRun, settings, settlements] = await Promise.all([
     listFounders(companyId),
@@ -263,6 +272,8 @@ export default async function ExpenseDetailPage({
           </div>
         </div>
       </ExpenseSummaryProvider>
+
+      <RecordQueries companyId={companyId} role={role} kind="expense" recordId={detail.expense.id} />
     </div>
   );
 }

@@ -1,5 +1,12 @@
 import 'server-only';
 import {
+    expenseInPack,
+    invoiceInPack,
+    reimbursementInPack,
+    type RecordScope,
+} from '@/lib/accountant/record-scope';
+import type { RecordQuery } from '@/lib/queries/status';
+import {
     and,
     asc,
     count,
@@ -209,6 +216,8 @@ export async function importBankRows(
 
 export type BankTransactionListItem = {
     id: string;
+    /** Set by callers that show query state; see recordQueriesFor. */
+    queries?: RecordQuery[];
     bookedAt: string;
     amountPence: number;
     counterparty: string | null;
@@ -519,6 +528,103 @@ async function buildMatchLabels(
 }
 
 /**
+ * Matches pointing at a record the accountant pack leaves out, such as a draft
+ * invoice. The bank row is in the pack, but what it settles mustn't be named.
+ */
+async function matchesOutsidePack(
+    db: ReturnType<typeof getDb>,
+    companyId: string,
+    matches: (typeof reconciliationMatches.$inferSelect)[],
+): Promise<Set<string>> {
+    const ids = (pick: (m: (typeof matches)[number]) => string | null) =>
+        matches.map(pick).filter((id): id is string => Boolean(id));
+    const paymentIds = ids((m) => m.paymentId);
+    const invoiceIds = ids((m) => m.invoiceId);
+    const expenseIds = ids((m) => m.expenseId);
+    const reimbursementIds = ids((m) => m.reimbursementId);
+
+    const [visiblePayments, visibleInvoices, visibleExpenses, visibleReimbursements] =
+        await Promise.all([
+            paymentIds.length === 0
+                ? []
+                : db
+                      .select({ id: payments.id })
+                      .from(payments)
+                      .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
+                      .where(
+                          and(
+                              eq(invoices.companyId, companyId),
+                              inArray(payments.id, paymentIds),
+                              invoiceInPack,
+                          ),
+                      ),
+            invoiceIds.length === 0
+                ? []
+                : db
+                      .select({ id: invoices.id })
+                      .from(invoices)
+                      .where(
+                          and(
+                              eq(invoices.companyId, companyId),
+                              inArray(invoices.id, invoiceIds),
+                              invoiceInPack,
+                          ),
+                      ),
+            expenseIds.length === 0
+                ? []
+                : db
+                      .select({ id: expenses.id })
+                      .from(expenses)
+                      .where(
+                          and(
+                              eq(expenses.companyId, companyId),
+                              inArray(expenses.id, expenseIds),
+                              expenseInPack,
+                          ),
+                      ),
+            reimbursementIds.length === 0
+                ? []
+                : db
+                      .select({ id: reimbursements.id })
+                      .from(reimbursements)
+                      .where(
+                          and(
+                              eq(reimbursements.companyId, companyId),
+                              inArray(reimbursements.id, reimbursementIds),
+                              reimbursementInPack,
+                          ),
+                      ),
+        ]);
+
+    const visible = new Set(
+        [
+            ...visiblePayments,
+            ...visibleInvoices,
+            ...visibleExpenses,
+            ...visibleReimbursements,
+        ].map((row) => row.id),
+    );
+    const hidden = new Set<string>();
+    for (const match of matches) {
+        const targets = [
+            match.paymentId,
+            match.invoiceId,
+            match.expenseId,
+            match.reimbursementId,
+        ].filter((id): id is string => Boolean(id));
+        if (targets.some((id) => !visible.has(id))) hidden.add(match.id);
+    }
+    return hidden;
+}
+
+/** What to call a match when its record can't be named. */
+function genericMatchLabel(matchType: string): string {
+    if (matchType === 'invoice_payment') return 'Invoice payment';
+    if (matchType === 'reimbursement') return 'Reimbursement';
+    return 'Expense';
+}
+
+/**
  * ORDER BY for the transactions table. Newest-first breaks ties, then id,
  * so rows never swap between pages.
  */
@@ -574,6 +680,7 @@ export async function listBankTransactions(
         >
     > & {
         pageSize?: number;
+        scope?: RecordScope;
     } = {},
 ): Promise<BankTransactionListResult> {
     const db = getDb();
@@ -601,7 +708,7 @@ export async function listBankTransactions(
         return { rows: [], total, page, pageSize, pageCount };
     }
 
-    const matches = await db
+    const allMatches = await db
         .select()
         .from(reconciliationMatches)
         .where(
@@ -610,6 +717,9 @@ export async function listBankTransactions(
                 pageTx.map((tx) => tx.id),
             ),
         );
+    // Unconfirmed suggestions are the team's unfinished work.
+    const inPack = filters.scope === 'pack';
+    const matches = inPack ? allMatches.filter((m) => m.confirmed) : allMatches;
 
     const matchByTx = new Map<
         (typeof matches)[number]['bankTransactionId'],
@@ -622,10 +732,11 @@ export async function listBankTransactions(
         }
     }
 
-    const [labelByMatchId, hrefByMatchId, labelsByTx] = await Promise.all([
+    const [labelByMatchId, hrefByMatchId, labelsByTx, hiddenMatches] = await Promise.all([
         buildMatchLabels(db, matches),
         buildMatchHrefs(db, matches),
         labelsForBankTransactions(pageTx.map((tx) => tx.id)),
+        inPack ? matchesOutsidePack(db, companyId, matches) : new Set<string>(),
     ]);
 
     const accountIds = [...new Set(pageTx.map((tx) => tx.bankAccountId))];
@@ -640,6 +751,7 @@ export async function listBankTransactions(
 
     const rows: BankTransactionListItem[] = pageTx.map((tx) => {
         const match = matchByTx.get(tx.id);
+        const hidden = match ? hiddenMatches.has(match.id) : false;
         return {
             id: tx.id,
             bookedAt: tx.bookedAt,
@@ -655,8 +767,12 @@ export async function listBankTransactions(
             amountFormatted: formatGBP(tx.amountPence),
             matchId: match?.id ?? null,
             matchType: match?.matchType ?? null,
-            matchLabel: match ? (labelByMatchId.get(match.id) ?? null) : null,
-            matchHref: match ? (hrefByMatchId.get(match.id) ?? null) : null,
+            matchLabel: match
+                ? hidden
+                    ? genericMatchLabel(match.matchType)
+                    : (labelByMatchId.get(match.id) ?? null)
+                : null,
+            matchHref: match && !hidden ? (hrefByMatchId.get(match.id) ?? null) : null,
             matchNote: match?.note ?? null,
             confirmed: match?.confirmed ?? false,
             reconciled: Boolean(match?.id && match.confirmed),

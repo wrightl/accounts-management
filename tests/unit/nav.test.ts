@@ -22,13 +22,14 @@ const CORE_LABELS = [
   "Invoices",
   "Reports",
   "Deadlines",
+  "Queries",
   "Settings",
 ];
 
 describe("flattenNavItems", () => {
   it("returns all items across groups in order", () => {
     const flat = flattenNavItems(NAV_GROUPS);
-    expect(flat).toHaveLength(22);
+    expect(flat).toHaveLength(23);
     expect(flat[0]?.label).toBe("Overview");
     expect(flat[flat.length - 1]?.label).toBe("Settings");
     expect(flat.map((item) => item.href)).toContain("/deadlines");
@@ -62,11 +63,11 @@ describe("filterNavGroups", () => {
   it("shows every item when no menu choice has been made", () => {
     for (const role of ["admin", "user"] as const) {
       const groups = filterNavGroups(NAV_GROUPS, { permissionCheck: forRole(role) });
-      expect(flattenNavItems(groups)).toHaveLength(22);
+      expect(flattenNavItems(groups)).toHaveLength(23);
     }
   });
 
-  it("shows accountants only the pages needed to file the accounts", () => {
+  it("shows accountants the filing pages and what the pack contains", () => {
     const groups = filterNavGroups(NAV_GROUPS, {
       permissionCheck: forRole("accountant"),
       entityType: "limited_company",
@@ -74,10 +75,29 @@ describe("filterNavGroups", () => {
     expect(flattenNavItems(groups).map((i) => i.href).sort()).toEqual([
       "/deadlines",
       "/directors-loans",
+      "/dividends",
+      "/expenses",
+      "/invoices",
+      "/queries",
+      "/recurring-invoices",
+      "/reimbursements",
       "/reports",
       "/reserves",
       "/settings",
+      "/shareholders",
+      "/transactions",
     ]);
+  });
+
+  it("only tells people who run the company they are paying themselves", () => {
+    const labelFor = (role: "admin" | "user" | "accountant") =>
+      filterNavGroups(NAV_GROUPS, {
+        permissionCheck: forRole(role),
+        entityType: "limited_company",
+      }).find((g) => g.id === "payingYourself")?.label;
+    expect(labelFor("admin")).toBe("Paying yourself");
+    expect(labelFor("user")).toBe("Paying yourself");
+    expect(labelFor("accountant")).toBe("Directors & shareholders");
   });
 
   it("drops limited-company items for sole traders", () => {
@@ -86,7 +106,7 @@ describe("filterNavGroups", () => {
       entityType: "sole_trader",
     });
     const labels = flattenNavItems(groups).map((i) => i.label);
-    expect(labels).toHaveLength(17);
+    expect(labels).toHaveLength(18);
     expect(labels).not.toContain("Dividends");
     expect(groups.map((g) => g.id)).not.toContain("payingYourself");
   });

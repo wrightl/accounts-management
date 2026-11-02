@@ -3,7 +3,9 @@
 import { eq } from "drizzle-orm";
 import { requireActionPermission } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
+import { recordScopeFor, withoutTeamAnnotations } from "@/lib/accountant/record-scope";
 import { parseLabelIds } from "@/lib/labels/params";
+import { recordQueriesFor } from "@/lib/queries/queries";
 import { mutate, mutateWide } from "@/lib/mutate";
 import { getDb } from "@/db";
 import { companies } from "@/db/schema";
@@ -128,7 +130,7 @@ export async function loadBankTransactionsPage(input: {
   | { ok: true; result: BankTransactionListResult }
   | { ok: false; error: string }
 > {
-  const authz = await requireActionPermission("accounts:read");
+  const authz = await requireActionPermission("records:read");
   if (!authz.ok) return authz;
   if (!authz.user.companyId) {
     return { ok: false, error: "Complete onboarding before using the dashboard." };
@@ -138,7 +140,9 @@ export async function loadBankTransactionsPage(input: {
   const page = Math.max(1, Math.trunc(input.page));
   const pageSize = input.pageSize ?? BANK_PAGE_SIZE;
 
+  const scope = recordScopeFor(authz.user.role);
   const result = await listBankTransactions(companyId, {
+    scope,
     q: input.q,
     type: input.type,
     category: input.category,
@@ -150,7 +154,19 @@ export async function loadBankTransactionsPage(input: {
     pageSize: parseBankPageSize(String(pageSize)),
   });
 
-  return { ok: true, result };
+  const queries = await recordQueriesFor(
+    authz.user.role,
+    companyId,
+    "bank_transaction",
+    result.rows.map((r) => r.id),
+  );
+  const rows = scope === "pack"
+    ? result.rows.map(withoutTeamAnnotations)
+    : result.rows;
+  return {
+    ok: true,
+    result: { ...result, rows: rows.map((r) => ({ ...r, queries: queries.get(r.id) })) },
+  };
 }
 
 export async function getBankImportContext(): Promise<

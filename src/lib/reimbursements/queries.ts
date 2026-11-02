@@ -1,6 +1,7 @@
 import "server-only";
 import { and, count, desc, eq, ne, sum } from "drizzle-orm";
 import { getDb } from "@/db";
+import { reimbursementInPack, type RecordScope } from "@/lib/accountant/record-scope";
 import {
   expenses,
   reimbursementItems,
@@ -33,7 +34,7 @@ export async function countPendingReimbursementsByPayee(
   return new Map(rows.map((r) => [r.payeeUserId, r.count]));
 }
 
-export async function listReimbursements(companyId: string) {
+export async function listReimbursements(companyId: string, scope: RecordScope = "all") {
   const db = getDb();
   const rows = await db
     .select({
@@ -50,7 +51,12 @@ export async function listReimbursements(companyId: string) {
     })
     .from(reimbursements)
     .innerJoin(users, eq(reimbursements.payeeUserId, users.id))
-    .where(eq(reimbursements.companyId, companyId))
+    .where(
+      and(
+        eq(reimbursements.companyId, companyId),
+        scope === "pack" ? reimbursementInPack : undefined,
+      ),
+    )
     .orderBy(desc(reimbursements.createdAt));
 
   return rows.map((r) => ({
@@ -59,7 +65,11 @@ export async function listReimbursements(companyId: string) {
   }));
 }
 
-export async function getReimbursementDetail(companyId: string, id: string) {
+export async function getReimbursementDetail(
+  companyId: string,
+  id: string,
+  scope: RecordScope = "all",
+) {
   const db = getDb();
   const [run] = await db
     .select({
@@ -68,7 +78,13 @@ export async function getReimbursementDetail(companyId: string, id: string) {
     })
     .from(reimbursements)
     .innerJoin(users, eq(reimbursements.payeeUserId, users.id))
-    .where(and(eq(reimbursements.id, id), eq(reimbursements.companyId, companyId)))
+    .where(
+      and(
+        eq(reimbursements.id, id),
+        eq(reimbursements.companyId, companyId),
+        scope === "pack" ? reimbursementInPack : undefined,
+      ),
+    )
     .limit(1);
 
   if (!run) return null;

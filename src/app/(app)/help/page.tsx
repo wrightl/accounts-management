@@ -1,8 +1,26 @@
 import { requireUser } from "@/lib/auth";
+import { AccountantHelpGuide } from "@/components/help/accountant-help-guide";
 import { HelpGuide } from "@/components/help/help-guide";
 
 export default async function HelpPage() {
   const user = await requireUser();
+
+  if (user.role === "accountant") {
+    return (
+      <div>
+        <h1 className="font-display text-2xl font-semibold">
+          Help for accountants
+        </h1>
+        <p className="mt-1 max-w-2xl text-muted">
+          How to review your client&apos;s records, ask the team questions and
+          get what you need to file.
+        </p>
+        <div className="mt-8">
+          <AccountantHelpGuide entityType={user.entityType} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
+import { can } from "@/lib/roles";
+import { QueryCell, QueryHeaderCell } from "@/components/queries/query-cells";
+import { recordQueriesFor } from "@/lib/queries/queries";
 import { UnchasedImportsBanner } from "@/components/invoices/imported-invoice-chase";
+import { recordScopeFor } from "@/lib/accountant/record-scope";
 import { getUnchasedImports, listInvoices } from "@/lib/invoices/queries";
 import { buttonClasses } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
@@ -25,14 +29,16 @@ export default async function InvoicesPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const { companyId } = await guardTenantPage("accounts:read");
+  const { companyId, role } = await guardTenantPage("records:read");
+  const scope = recordScopeFor(role);
   const canWrite = await hasPermission("accounts:write");
+  const canRaiseQuery = can(role, "queries:raise");
   const sp = await searchParams;
-  const unchased = await getUnchasedImports(companyId);
+  const unchased = scope === "all" ? await getUnchasedImports(companyId) : null;
   const sort = parseTableSort(sp, SORT);
   const th = sortHeaders("/invoices", sp, SORT, sort);
 
-  const rows = sortRows(await listInvoices(companyId), sort, {
+  const rows = sortRows(await listInvoices(companyId, scope), sort, {
     number: (r) => r.number,
     client: (r) => r.clientName,
     order: (r) => r.orderNumber,
@@ -41,6 +47,8 @@ export default async function InvoicesPage({
     due: (r) => r.dueDate,
     total: (r) => r.grossPence,
   });
+  const queries = await recordQueriesFor(role, companyId, "invoice", rows.map((r) => r.id));
+  const showQueries = canRaiseQuery || queries.size > 0;
 
   return (
     <div>
@@ -66,7 +74,7 @@ export default async function InvoicesPage({
         </div>
       </div>
 
-      {unchased.count > 0 ? (
+      {unchased && unchased.count > 0 ? (
         <UnchasedImportsBanner
           count={unchased.count}
           totalFormatted={unchased.totalFormatted}
@@ -87,6 +95,7 @@ export default async function InvoicesPage({
           <Table>
             <THead>
               <TR>
+                {showQueries ? <QueryHeaderCell /> : null}
                 {th("Number", "number")}
                 {th("Client", "client")}
                 {th("Order", "order")}
@@ -99,6 +108,9 @@ export default async function InvoicesPage({
             <TBody>
               {rows.map((inv) => (
                 <TR key={inv.id}>
+                  {showQueries ? (
+                    <QueryCell kind="invoice" id={inv.id} queries={queries.get(inv.id)} canRaise={canRaiseQuery} />
+                  ) : null}
                   <TD>
                     <Link
                       href={`/invoices/${inv.id}`}
@@ -109,7 +121,7 @@ export default async function InvoicesPage({
                   </TD>
                   <TD>{inv.clientName}</TD>
                   <TD>
-                    {inv.orderId && inv.orderNumber ? (
+                    {inv.orderId && inv.orderNumber && scope === "all" ? (
                       <Link
                         href={`/orders/${inv.orderId}`}
                         className="text-foreground hover:underline"
@@ -117,7 +129,7 @@ export default async function InvoicesPage({
                         {inv.orderNumber}
                       </Link>
                     ) : (
-                      <span className="text-muted">—</span>
+                      <span className="text-muted">{inv.orderNumber ?? "—"}</span>
                     )}
                   </TD>
                   <TD>

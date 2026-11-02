@@ -1643,6 +1643,62 @@ export const companySupportNotes = pgTable(
   (t) => [index("idx_company_support_notes_company").on(t.companyId)],
 );
 
+/** A question from the accountant to the team, about one record or in general. */
+export const accountantQueries = pgTable(
+  "accountant_queries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    subject: text("subject").notNull(),
+    status: text("status").notNull().default("open"),
+    /** Null for a general question. Not a foreign key: it can point at several tables. */
+    recordKind: text("record_kind"),
+    recordId: uuid("record_id"),
+    /** Snapshot such as "INV-0042", so the thread still reads if the record is deleted. */
+    recordLabel: text("record_label"),
+    raisedByUserId: uuid("raised_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("idx_accountant_queries_status").on(t.companyId, t.status, t.updatedAt),
+    index("idx_accountant_queries_record").on(t.companyId, t.recordKind, t.recordId),
+    check("accountant_queries_status_known", sql`${t.status} in ('open', 'answered', 'closed')`),
+    check(
+      "accountant_queries_record_kind_known",
+      sql`${t.recordKind} is null or ${t.recordKind} in (
+        'invoice', 'credit_note', 'expense', 'reimbursement', 'bank_transaction',
+        'dividend_declaration', 'shareholder', 'recurring_invoice'
+      )`,
+    ),
+  ],
+);
+
+/** Append-only messages in an accountant query thread. */
+export const accountantQueryMessages = pgTable(
+  "accountant_query_messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    queryId: uuid("query_id")
+      .notNull()
+      .references(() => accountantQueries.id, { onDelete: "cascade" }),
+    authorUserId: uuid("author_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("idx_accountant_query_messages_query").on(t.companyId, t.queryId, t.createdAt)],
+);
+
 /** Ledger for install-time data migrations (see src/db/data-migrate.ts). */
 export const dataMigrationStatusEnum = pgEnum("data_migration_status", [
   "pending_effects",

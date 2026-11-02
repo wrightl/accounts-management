@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Pencil } from "lucide-react";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
+import { recordScopeFor } from "@/lib/accountant/record-scope";
+import { RecordQueries } from "@/components/queries/record-queries";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
 import { getRecurringTemplateForInvoice } from "@/lib/invoices/recurring-queries";
 import {
@@ -42,12 +44,13 @@ export default async function InvoiceDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { companyId } = await guardTenantPage("accounts:read");
+  const { companyId, role } = await guardTenantPage("records:read");
+  const scope = recordScopeFor(role);
   const canWrite = await hasPermission("accounts:write");
   const canManageSettings = await hasPermission("settings:manage");
   const { id } = await params;
 
-  const detail = await getInvoiceDetail(companyId, id);
+  const detail = await getInvoiceDetail(companyId, id, scope);
   if (!detail) notFound();
 
   const {
@@ -76,14 +79,16 @@ export default async function InvoiceDetailPage({
     getLatePaymentClaims(companyId, invoice.id, invoice.latePaymentForInvoiceId),
   ]);
   const lateCharge =
-    stored === "sent" && invoice.dueDate && !invoice.latePaymentForInvoiceId
+    scope === "all" && stored === "sent" && invoice.dueDate && !invoice.latePaymentForInvoiceId
       ? latePaymentCharge({
           amountDuePence: detail.balancePence,
           dueDate: invoice.dueDate,
           asOf: todayIsoDate(),
         })
       : null;
-  const clientLink = stored === "draft" ? null : publicInvoiceUrl(invoice.publicToken);
+  // The link carries the client's payment token, which the pack doesn't include.
+  const clientLink =
+    stored === "draft" || scope === "pack" ? null : publicInvoiceUrl(invoice.publicToken);
   const takesCardPayments = onlinePaymentsStatus(company) === "enabled";
 
   return (
@@ -109,12 +114,16 @@ export default async function InvoiceDetailPage({
             ) : null}
           </div>
           <p className="mt-1 text-muted">
-            <Link
-              href={`/clients/${client.id}`}
-              className="text-foreground hover:underline"
-            >
-              {clientDisplayName(client)}
-            </Link>
+            {scope === "all" ? (
+              <Link
+                href={`/clients/${client.id}`}
+                className="text-foreground hover:underline"
+              >
+                {clientDisplayName(client)}
+              </Link>
+            ) : (
+              <span className="text-foreground">{clientDisplayName(client)}</span>
+            )}
             {invoice.issueDate ? <> · Issued <DisplayDate value={invoice.issueDate} /></> : null}
             {invoice.dueDate ? (
               <>
@@ -192,12 +201,15 @@ export default async function InvoiceDetailPage({
               ) : null}
             </div>
           ) : (
-            <div className="mt-3">
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               <InvoiceStatusSelect
                 invoiceId={invoice.id}
                 status={status}
                 canWrite={false}
               />
+              <a href={`/api/invoices/${invoice.id}/pdf`} className={buttonClasses("secondary")}>
+                Download PDF
+              </a>
             </div>
           )}
         </div>
@@ -388,6 +400,8 @@ export default async function InvoiceDetailPage({
           </>
         )}
       </div>
+
+      <RecordQueries companyId={companyId} role={role} kind="invoice" recordId={invoice.id} />
     </div>
   );
 }

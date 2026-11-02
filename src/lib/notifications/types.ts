@@ -21,6 +21,8 @@ export const NOTIFICATION_EVENT_TYPES = [
   "expense.inbound.processed",
   "expense.inbound.failed",
   "user.invite.accepted",
+  "accountant_query.raised",
+  "accountant_query.replied",
   // Suggested extras (catalog; defaults mostly off for email/push)
   "invoice.paid",
   "invoice.send.failed",
@@ -136,6 +138,20 @@ export const NOTIFICATION_CATALOG: readonly NotificationEventDefinition[] = [
     defaultChannels: { inApp: true, email: false, push: true },
   },
   {
+    type: "accountant_query.raised",
+    label: "Accountant query",
+    description: "Your accountant raises, closes or reopens a query",
+    defaultRoles: ["admin", "user"],
+    defaultChannels: { inApp: true, email: true, push: false },
+  },
+  {
+    type: "accountant_query.replied",
+    label: "Accountant query reply",
+    description: "Someone replies on an accountant query",
+    defaultRoles: ["admin", "user"],
+    defaultChannels: { inApp: true, email: true, push: false },
+  },
+  {
     type: "invoice.paid",
     label: "Invoice paid",
     description: "A payment is recorded against an invoice",
@@ -222,4 +238,8 @@ export type NotifyPayload = {
   extraUserIds?: string[];
   /** Override catalog roles (e.g. admin-only for a specific emit). */
   roles?: TenantRole[];
+  /** Email text when it should say more than the in-app and push body. */
+  emailBody?: string;
+  /** Wait for emails to send, so a serverless function can't stop before they go. */
+  awaitEmail?: boolean;
 };

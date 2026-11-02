@@ -1,5 +1,9 @@
 import Link from "next/link";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
+import { can } from "@/lib/roles";
+import { QueryCell, QueryHeaderCell } from "@/components/queries/query-cells";
+import { recordQueriesFor } from "@/lib/queries/queries";
+import { recordScopeFor } from "@/lib/accountant/record-scope";
 import {
   getReimbursementBalances,
   listReimbursements,
@@ -38,8 +42,11 @@ export default async function ReimbursementsPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const { companyId } = await guardTenantPage("accounts:read");
+  const { companyId, role } = await guardTenantPage("records:read");
+  const scope = recordScopeFor(role);
+  const inPack = scope === "pack";
   const canWrite = await hasPermission("accounts:write");
+  const canRaiseQuery = can(role, "queries:raise");
   const sp = await searchParams;
   const runFilter = sp.filter === "paid" ? "paid" : sp.filter === "pending" ? "pending" : "all";
   const sort = parseTableSort(sp, SORT);
@@ -52,11 +59,12 @@ export default async function ReimbursementsPage({
     return query ? `/reimbursements?${query}` : "/reimbursements";
   };
 
+  // Money still owed and runs not yet paid aren't in the pack, so don't load them.
   const [allRuns, balances, founders, reimbursable] = await Promise.all([
-    listReimbursements(companyId),
-    getReimbursementBalances(companyId),
-    listFounders(companyId),
-    listReimbursableExpenses(companyId),
+    listReimbursements(companyId, scope),
+    inPack ? [] : getReimbursementBalances(companyId),
+    inPack ? [] : listFounders(companyId),
+    inPack ? [] : listReimbursableExpenses(companyId),
   ]);
 
   const runs = sortRows(
@@ -71,6 +79,8 @@ export default async function ReimbursementsPage({
       total: (r) => r.totalPence,
     },
   );
+  const queries = await recordQueriesFor(role, companyId, "reimbursement", runs.map((r) => r.id));
+  const showQueries = canRaiseQuery || queries.size > 0;
 
   const initialPayee =
     sp.payee && founders.some((f) => f.id === sp.payee) ? sp.payee : undefined;
@@ -84,7 +94,7 @@ export default async function ReimbursementsPage({
         <div>
           <h1 className="font-display text-2xl font-semibold">Reimbursements</h1>
           <p className="mt-1 text-muted">
-            Batch founder expenses into runs and settle them.
+            {inPack ? "Reimbursement runs that have been paid." : "Batch founder expenses into runs and settle them."}
           </p>
         </div>
         <CreateReimbursementButton
@@ -97,11 +107,13 @@ export default async function ReimbursementsPage({
         />
       </div>
 
-      <ol className="mt-4 list-inside list-decimal space-y-1 text-sm text-muted">
-        {WORKFLOW_STEPS.map((step) => (
-          <li key={step}>{step}</li>
-        ))}
-      </ol>
+      {inPack ? null : (
+        <ol className="mt-4 list-inside list-decimal space-y-1 text-sm text-muted">
+          {WORKFLOW_STEPS.map((step) => (
+            <li key={step}>{step}</li>
+          ))}
+        </ol>
+      )}
 
       {balances.length > 0 && (
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -117,6 +129,7 @@ export default async function ReimbursementsPage({
       <div className="mt-8">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-display text-lg font-semibold">Runs</h2>
+          {inPack ? null : (
           <div className="flex gap-2">
             <Link
               href={filterHref("all")}
@@ -137,6 +150,7 @@ export default async function ReimbursementsPage({
               Paid
             </Link>
           </div>
+          )}
         </div>
         {runs.length === 0 ? (
           <p className="text-sm text-muted">No reimbursement runs match.</p>
@@ -144,6 +158,7 @@ export default async function ReimbursementsPage({
           <Table>
             <THead>
               <TR>
+                {showQueries ? <QueryHeaderCell /> : null}
                 {th("Payee", "payee")}
                 {th("Status", "status")}
                 {th("Reference", "reference")}
@@ -156,6 +171,9 @@ export default async function ReimbursementsPage({
             <TBody>
               {runs.map((r) => (
                 <TR key={r.id}>
+                  {showQueries ? (
+                    <QueryCell kind="reimbursement" id={r.id} queries={queries.get(r.id)} canRaise={canRaiseQuery} />
+                  ) : null}
                   <TD>
                     <Link
                       href={`/reimbursements/${r.id}`}

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requirePermission, ForbiddenError } from "@/lib/auth";
+import { recordScopeFor } from "@/lib/accountant/record-scope";
 import { getCreditNoteDetail } from "@/lib/credit-notes/queries";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { renderCreditNotePdf } from "@/lib/invoices/pdf-v2";
@@ -14,7 +15,7 @@ export async function GET(
 ) {
   let user;
   try {
-    user = await requirePermission("accounts:read");
+    user = await requirePermission("records:read");
   } catch (e) {
     if (e instanceof ForbiddenError) {
       return NextResponse.json({ error: e.message }, { status: 403 });
@@ -26,8 +27,10 @@ export async function GET(
   }
 
   const { id } = await context.params;
-  const detail = await getCreditNoteDetail(user.companyId, id);
-  if (!detail) {
+  const scope = recordScopeFor(user.role);
+  const detail = await getCreditNoteDetail(user.companyId, id, scope);
+  // The pack lists void credit notes but only carries PDFs of issued ones.
+  if (!detail || (scope === "pack" && detail.creditNote.status !== "issued")) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 

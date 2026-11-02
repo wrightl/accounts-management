@@ -1,4 +1,6 @@
 import { guardTenantPage, hasPermission } from "@/lib/auth";
+import { recordScopeFor, withoutTeamAnnotations } from "@/lib/accountant/record-scope";
+import { can } from "@/lib/roles";
 import { countBankAccounts, listBankTransactions } from "@/lib/bank/queries";
 import { listBankAccountCards } from "@/lib/bank/company-cards";
 import { getBankTransactionSummary } from "@/lib/bank/summary";
@@ -23,24 +25,27 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { getDateFormat } from "@/lib/date-format.server";
 import { ManageLabelsButton } from "@/components/labels/manage-labels";
 import { listLabels } from "@/lib/labels/queries";
+import { recordQueriesFor } from "@/lib/queries/queries";
 
 export default async function TransactionsPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const { companyId } = await guardTenantPage("accounts:read");
+  const { companyId, role } = await guardTenantPage("records:read");
+  const inPack = recordScopeFor(role) === "pack";
+  const canRaiseQuery = can(role, "queries:raise");
   const canWrite = await hasPermission("accounts:write");
   const parsed = parseBankListParams(await searchParams);
 
   const [settings, labels] = await Promise.all([
     getOrCreateCompanySettings(companyId),
-    listLabels(companyId),
+    inPack ? [] : listLabels(companyId),
   ]);
   // A link can outlive a label; a deleted one shouldn't empty the list.
   const params = {
     ...parsed,
-    labels: parsed.labels.filter((id) => labels.some((l) => l.id === id)),
+    labels: inPack ? [] : parsed.labels.filter((id) => labels.some((l) => l.id === id)),
   };
   const dateRange = resolveBankListDateRange(params, settings.financialYearEndMonth);
 
@@ -82,20 +87,25 @@ export default async function TransactionsPage({
   };
 
   const [
-    { rows, total, page, pageSize, pageCount },
+    { rows: listedRows, total, page, pageSize, pageCount },
     summary,
     customCategories,
     incomeCategories,
     bankAccountCount,
     accountCards,
   ] = await Promise.all([
-    listBankTransactions(companyId, listFilters),
+    listBankTransactions(companyId, { ...listFilters, scope: inPack ? "pack" : "all" }),
     getBankTransactionSummary(companyId, summaryFilters, await getDateFormat()),
     listBankSpendingCategoriesWithUsage(companyId),
     listIncomeCategoryNames(companyId),
     countBankAccounts(companyId),
-    listBankAccountCards(companyId),
+    inPack ? [] : listBankAccountCards(companyId),
   ]);
+  const queries = await recordQueriesFor(role, companyId, "bank_transaction", listedRows.map((r) => r.id));
+  const rows = (inPack ? listedRows.map(withoutTeamAnnotations) : listedRows).map((r) => ({
+    ...r,
+    queries: queries.get(r.id),
+  }));
 
   const customCategoryNames = customCategories.map((c) => c.name);
   const showAccount = bankAccountCount > 1;
@@ -106,7 +116,9 @@ export default async function TransactionsPage({
         <div>
           <h1 className="font-display text-2xl font-semibold">Transactions</h1>
           <p className="mt-1 text-muted">
-            Import bank CSV and reconcile against payments and expenses.
+            {inPack
+              ? "Bank transactions and how they were reconciled."
+              : "Import bank CSV and reconcile against payments and expenses."}
           </p>
           {canWrite ? (
             <p className="mt-1 text-sm text-muted">
@@ -130,7 +142,7 @@ export default async function TransactionsPage({
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_280px] xl:grid-cols-[1fr_320px]">
         <div>
-          <BankFilters params={params} customCategories={customCategoryNames} labels={labels} />
+          <BankFilters params={params} customCategories={customCategoryNames} labels={inPack ? [] : labels} />
 
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
             <BankViewToggle params={params} />
@@ -168,6 +180,7 @@ export default async function TransactionsPage({
                 incomeCategories={incomeCategories}
                 allLabels={labels}
                 canWrite={canWrite}
+                canRaiseQuery={canRaiseQuery}
                 showAccount={showAccount}
               />
             ) : (
@@ -178,6 +191,7 @@ export default async function TransactionsPage({
                 incomeCategories={incomeCategories}
                 allLabels={labels}
                 canWrite={canWrite}
+                canRaiseQuery={canRaiseQuery}
                 showAccount={showAccount}
               />
             )}
