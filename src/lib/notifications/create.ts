@@ -69,6 +69,7 @@ export async function notify(payload: NotifyPayload): Promise<NotifyResult> {
   let created = 0;
   let skipped = 0;
   const db = getDb();
+  const emails: Promise<void>[] = [];
 
   for (const userId of recipientIds) {
     const matrix = await getEffectiveChannels(userId, payload.companyId);
@@ -130,22 +131,24 @@ export async function notify(payload: NotifyPayload): Promise<NotifyResult> {
     }
 
     if (channels.email) {
-      void sendNotificationEmail({
-        userId,
-        companyId: payload.companyId,
-        title: payload.title,
-        body: payload.body,
-        href: payload.href ?? null,
-      }).catch((error) => {
-        console.warn(
-          JSON.stringify({
-            level: "warn",
-            msg: "notification.email_failed",
-            userId,
-            error: error instanceof Error ? error.message : String(error),
-          }),
-        );
-      });
+      emails.push(
+        sendNotificationEmail({
+          userId,
+          companyId: payload.companyId,
+          title: payload.title,
+          body: payload.emailBody ?? payload.body,
+          href: payload.href ?? null,
+        }).catch((error) => {
+          console.warn(
+            JSON.stringify({
+              level: "warn",
+              msg: "notification.email_failed",
+              userId,
+              error: error instanceof Error ? error.message : String(error),
+            }),
+          );
+        }),
+      );
     }
 
     if (channels.push) {
@@ -172,6 +175,8 @@ export async function notify(payload: NotifyPayload): Promise<NotifyResult> {
       created += 1;
     }
   }
+
+  if (payload.awaitEmail) await Promise.all(emails);
 
   return { created, skipped };
 }

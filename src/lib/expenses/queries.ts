@@ -1,4 +1,5 @@
 import "server-only";
+import { expenseInPack, type RecordScope } from "@/lib/accountant/record-scope";
 import { alias } from "drizzle-orm/pg-core";
 import { and, asc, count, desc, eq, gte, ilike, inArray, lte, or, sql, sum, type AnyColumn, type SQL } from "drizzle-orm";
 import { getDb } from "@/db";
@@ -30,6 +31,7 @@ export interface ExpenseFilters {
   /** Matches expenses carrying any of these labels. */
   labels?: string[];
   sort?: TableSort<ExpenseSortColumn>;
+  scope?: RecordScope;
 }
 
 export async function listFounders(companyId: string) {
@@ -90,6 +92,7 @@ export async function listExpenses(companyId: string, filters: ExpenseFilters = 
   const createdBy = alias(users, "created_by");
   const submittedBy = alias(users, "submitted_by");
   const conditions = [eq(expenses.companyId, companyId)];
+  if (filters.scope === "pack") conditions.push(expenseInPack);
   const pattern = filters.q ? bankSearchPattern(filters.q) : null;
   if (pattern) {
     const search = or(ilike(expenses.description, pattern), ilike(clientDisplayNameSql, pattern));
@@ -188,7 +191,11 @@ export async function listExpenses(companyId: string, filters: ExpenseFilters = 
   });
 }
 
-export async function getExpenseDetail(companyId: string, id: string) {
+export async function getExpenseDetail(
+  companyId: string,
+  id: string,
+  scope: RecordScope = "all",
+) {
   const db = getDb();
   const submitter = alias(users, "submitter");
   const rows = await db
@@ -202,7 +209,13 @@ export async function getExpenseDetail(companyId: string, id: string) {
     .leftJoin(users, eq(expenses.paidByUserId, users.id))
     .leftJoin(clients, eq(expenses.clientId, clients.id))
     .leftJoin(submitter, eq(expenses.submittedByUserId, submitter.id))
-    .where(and(eq(expenses.id, id), eq(expenses.companyId, companyId)))
+    .where(
+      and(
+        eq(expenses.id, id),
+        eq(expenses.companyId, companyId),
+        scope === "pack" ? expenseInPack : undefined,
+      ),
+    )
     .limit(1);
 
   if (!rows[0]) return null;

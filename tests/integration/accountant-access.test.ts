@@ -5,6 +5,7 @@ import { setTestDb, type Database } from "@/db";
 import { users } from "@/db/schema";
 import { seedCompany } from "@/lib/test/seed-company";
 import { GET as invoicePdf } from "@/app/api/invoices/[id]/pdf/route";
+import { GET as dividendPaperwork } from "@/app/api/dividends/[id]/paperwork/route";
 import { GET as accountantPack } from "@/app/api/reports/accountant-pack/route";
 import ClientsPage from "@/app/(app)/clients/page";
 import DashboardPage from "@/app/(app)/dashboard/page";
@@ -13,6 +14,7 @@ import DirectorsLoansPage from "@/app/(app)/directors-loans/page";
 import DividendsPage from "@/app/(app)/dividends/page";
 import ExpensesPage from "@/app/(app)/expenses/page";
 import InvoicesPage from "@/app/(app)/invoices/page";
+import QueriesPage from "@/app/(app)/queries/page";
 import QuotesPage from "@/app/(app)/quotes/page";
 import RecurringPage from "@/app/(app)/recurring-invoices/page";
 import ReportsPage from "@/app/(app)/reports/page";
@@ -76,13 +78,7 @@ describe("accountant page access", () => {
   it.each<[string, Page]>([
     ["clients", ClientsPage],
     ["quotes", QuotesPage],
-    ["invoices", InvoicesPage],
-    ["recurring invoices", RecurringPage],
-    ["dividends", DividendsPage],
-    ["shareholders", ShareholdersPage],
     ["safe to pay", SafeToPayPage],
-    ["transactions", TransactionsPage],
-    ["expenses", ExpensesPage],
   ])("sends them away from %s", async (_name, page) => {
     await expect(page(props)).rejects.toThrow("REDIRECT:/dashboard");
   });
@@ -96,14 +92,28 @@ describe("accountant page access", () => {
     ["tax and reserves", ReservesPage],
     ["director's loans", DirectorsLoansPage],
     ["deadlines", DeadlinesPage],
+    ["invoices", InvoicesPage],
+    ["recurring invoices", RecurringPage],
+    ["dividends", DividendsPage],
+    ["shareholders", ShareholdersPage],
+    ["transactions", TransactionsPage],
+    ["expenses", ExpensesPage],
+    ["queries", QueriesPage],
   ])("lets them open %s", async (_name, page) => {
     await expect(page(props)).resolves.toBeTruthy();
   });
 });
 
 describe("accountant file access", () => {
-  it("refuses a single invoice PDF", async () => {
+  it("treats an unknown invoice PDF as not found rather than forbidden", async () => {
     const res = await invoicePdf(new Request("http://localhost/x") as never, {
+      params: Promise.resolve({ id: randomUUID() }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("refuses files the pack doesn't contain", async () => {
+    const res = await dividendPaperwork(new Request("http://localhost/x") as never, {
       params: Promise.resolve({ id: randomUUID() }),
     });
     expect(res.status).toBe(403);

@@ -3,9 +3,9 @@
  *
  *  - admin:          full access, incl. user & settings management.
  *  - user:           co-founder access to all day-to-day accounting.
- *  - accountant:     external accountant — only what filing the accounts needs:
- *                    filing pages and the export, and can lock the books and
- *                    set opening balances. No day-to-day records.
+ *  - accountant:     external accountant — filing pages and the export, a read-only
+ *                    view of what the export contains, and can raise queries, lock
+ *                    the books and set opening balances. Cannot change records.
  *  - pending:        signed in, no permissions until an admin assigns a role.
  *  - platform_admin: platform operator — `/platform` only, no tenant.
  */
@@ -37,6 +37,8 @@ export type Permission =
   /** Day-to-day records: clients, invoices, expenses, bank rows and so on. */
   | "accounts:read"
   | "accounts:write"
+  /** Open the records the accountant pack contains; see lib/accountant/record-scope. */
+  | "records:read"
   /** Management figures: safe to pay, profitability, forecast, AI bookkeeper. */
   | "reports:read"
   /** What filing the accounts needs: reports, reserves, director's loans, deadlines, company profile. */
@@ -47,12 +49,17 @@ export type Permission =
   | "settings:manage"
   | "users:manage"
   /** Set the "books locked up to" date and the opening balances. */
-  | "books:lock";
+  | "books:lock"
+  /** See accountant query threads and reply to them. */
+  | "queries:read"
+  /** Raise, close and reopen accountant queries. */
+  | "queries:raise";
 
 const PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
   admin: new Set<Permission>([
     "accounts:read",
     "accounts:write",
+    "records:read",
     "reports:read",
     "filing:read",
     "workspace:read",
@@ -60,20 +67,26 @@ const PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     "settings:manage",
     "users:manage",
     "books:lock",
+    "queries:read",
   ]),
   user: new Set<Permission>([
     "accounts:read",
     "accounts:write",
+    "records:read",
     "reports:read",
     "filing:read",
     "workspace:read",
     "reports:export",
+    "queries:read",
   ]),
   accountant: new Set<Permission>([
+    "records:read",
     "filing:read",
     "workspace:read",
     "reports:export",
     "books:lock",
+    "queries:read",
+    "queries:raise",
   ]),
   pending: new Set<Permission>(),
   platform_admin: new Set<Permission>(),

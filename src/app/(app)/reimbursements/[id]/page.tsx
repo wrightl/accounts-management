@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Pencil } from "lucide-react";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
+import { recordScopeFor } from "@/lib/accountant/record-scope";
+import { RecordQueries } from "@/components/queries/record-queries";
 import { getReimbursementDetail } from "@/lib/reimbursements/queries";
 import { canEditReimbursement } from "@/lib/reimbursements/status";
 import { listBankSettlements } from "@/lib/bank/settlements";
@@ -17,12 +19,12 @@ export default async function ReimbursementDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { companyId } = await guardTenantPage("accounts:read");
+  const { companyId, role } = await guardTenantPage("records:read");
   const canWrite = await hasPermission("accounts:write");
   const { id } = await params;
 
   const [detail, settlements] = await Promise.all([
-    getReimbursementDetail(companyId, id),
+    getReimbursementDetail(companyId, id, recordScopeFor(role)),
     listBankSettlements(companyId, { reimbursementId: id }),
   ]);
   if (!detail) notFound();
@@ -119,6 +121,13 @@ export default async function ReimbursementDetailPage({
           </TBody>
         </Table>
       </div>
+
+      <RecordQueries
+        companyId={companyId}
+        role={role}
+        kind="reimbursement"
+        recordId={detail.reimbursement.id}
+      />
     </div>
   );
 }

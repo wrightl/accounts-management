@@ -1,5 +1,9 @@
 import Link from "next/link";
 import { guardTenantPage } from "@/lib/auth";
+import { can } from "@/lib/roles";
+import { QueryCell, QueryHeaderCell } from "@/components/queries/query-cells";
+import { recordQueriesFor } from "@/lib/queries/queries";
+import { recordScopeFor } from "@/lib/accountant/record-scope";
 import { listCreditNotes } from "@/lib/credit-notes/queries";
 import { CreditNoteStatusBadge } from "@/components/credit-notes/credit-note-status-badge";
 import { buttonClasses } from "@/components/ui/button";
@@ -21,11 +25,12 @@ export default async function CreditNotesPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const { companyId } = await guardTenantPage("accounts:read");
+  const { companyId, role } = await guardTenantPage("records:read");
+  const canRaiseQuery = can(role, "queries:raise");
   const sp = await searchParams;
   const sort = parseTableSort(sp, SORT);
   const th = sortHeaders("/credit-notes", sp, SORT, sort);
-  const rows = sortRows(await listCreditNotes(companyId), sort, {
+  const rows = sortRows(await listCreditNotes(companyId, recordScopeFor(role)), sort, {
     number: (r) => r.number,
     client: (r) => r.clientName,
     invoice: (r) => r.invoiceNumber,
@@ -33,6 +38,8 @@ export default async function CreditNotesPage({
     issued: (r) => r.issueDate,
     total: (r) => r.grossPence,
   });
+  const queries = await recordQueriesFor(role, companyId, "credit_note", rows.map((r) => r.id));
+  const showQueries = canRaiseQuery || queries.size > 0;
 
   return (
     <div>
@@ -56,6 +63,7 @@ export default async function CreditNotesPage({
           <Table>
             <THead>
               <TR>
+                {showQueries ? <QueryHeaderCell /> : null}
                 {th("Number", "number")}
                 {th("Client", "client")}
                 {th("Invoice", "invoice")}
@@ -67,6 +75,9 @@ export default async function CreditNotesPage({
             <TBody>
               {rows.map((cn) => (
                 <TR key={cn.id}>
+                  {showQueries ? (
+                    <QueryCell kind="credit_note" id={cn.id} queries={queries.get(cn.id)} canRaise={canRaiseQuery} />
+                  ) : null}
                   <TD>
                     <Link href={`/credit-notes/${cn.id}`} className="font-medium hover:underline">
                       {cn.number}

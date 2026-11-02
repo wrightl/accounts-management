@@ -533,6 +533,13 @@
             "when": 1791300000000,
             "tag": "0075_invoice_import_documents",
             "breakpoints": true
+        },
+        {
+            "idx": 76,
+            "version": "7",
+            "when": 1791400000000,
+            "tag": "0076_accountant_queries",
+            "breakpoints": true
         }
     ]
 }

@@ -17,13 +17,14 @@ import {
   invoiceAmountDuePence,
   invoiceRefundDuePence,
 } from "@/lib/invoices/balance";
+import { invoiceInPack, type RecordScope } from "@/lib/accountant/record-scope";
 import {
   effectiveStatus,
   todayIsoDate,
   type InvoiceStatus,
 } from "@/lib/invoices/status";
 
-export async function listInvoices(companyId: string) {
+export async function listInvoices(companyId: string, scope: RecordScope = "all") {
   const db = getDb();
   const rows = await db
     .select({
@@ -43,7 +44,7 @@ export async function listInvoices(companyId: string) {
     .from(invoices)
     .innerJoin(clients, eq(invoices.clientId, clients.id))
     .leftJoin(orders, eq(invoices.orderId, orders.id))
-    .where(eq(invoices.companyId, companyId))
+    .where(and(eq(invoices.companyId, companyId), scope === "pack" ? invoiceInPack : undefined))
     .orderBy(desc(invoices.createdAt));
 
   const today = todayIsoDate();
@@ -54,7 +55,11 @@ export async function listInvoices(companyId: string) {
   }));
 }
 
-export async function getInvoiceDetail(companyId: string, id: string) {
+export async function getInvoiceDetail(
+  companyId: string,
+  id: string,
+  scope: RecordScope = "all",
+) {
   const db = getDb();
   const rows = await db
     .select({
@@ -63,7 +68,13 @@ export async function getInvoiceDetail(companyId: string, id: string) {
     })
     .from(invoices)
     .innerJoin(clients, eq(invoices.clientId, clients.id))
-    .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)))
+    .where(
+      and(
+        eq(invoices.id, id),
+        eq(invoices.companyId, companyId),
+        scope === "pack" ? invoiceInPack : undefined,
+      ),
+    )
     .limit(1);
 
   if (!rows[0]) return null;

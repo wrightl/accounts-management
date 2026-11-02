@@ -1,5 +1,8 @@
 import Link from 'next/link';
 import { guardTenantPage, hasPermission } from '@/lib/auth';
+import { can } from '@/lib/roles';
+import { QueryCell, QueryHeaderCell } from '@/components/queries/query-cells';
+import { recordQueriesFor } from '@/lib/queries/queries';
 import { listRecurringInvoices } from '@/lib/invoices/recurring-queries';
 import { buttonClasses } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -7,10 +10,18 @@ import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
 import { DisplayDate } from '@/components/date-format-provider';
 
 export default async function RecurringInvoicesPage() {
-    const { companyId } = await guardTenantPage('accounts:read');
+    const { companyId, role } = await guardTenantPage('records:read');
     const canWrite = await hasPermission('accounts:write');
+    const canRaiseQuery = can(role, 'queries:raise');
 
     const rows = await listRecurringInvoices(companyId);
+    const queries = await recordQueriesFor(
+        role,
+        companyId,
+        'recurring_invoice',
+        rows.map((r) => r.id),
+    );
+    const showQueries = canRaiseQuery || queries.size > 0;
 
     return (
         <div>
@@ -46,6 +57,7 @@ export default async function RecurringInvoicesPage() {
                     <Table>
                         <THead>
                             <TR>
+                                {showQueries ? <QueryHeaderCell /> : null}
                                 <TH>Name</TH>
                                 <TH>Client</TH>
                                 <TH>Day</TH>
@@ -58,6 +70,14 @@ export default async function RecurringInvoicesPage() {
                         <TBody>
                             {rows.map((row) => (
                                 <TR key={row.id}>
+                                    {showQueries ? (
+                                        <QueryCell
+                                            kind="recurring_invoice"
+                                            id={row.id}
+                                            queries={queries.get(row.id)}
+                                            canRaise={canRaiseQuery}
+                                        />
+                                    ) : null}
                                     <TD>
                                         <Link
                                             href={`/recurring-invoices/${row.id}`}

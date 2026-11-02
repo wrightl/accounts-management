@@ -9,11 +9,11 @@ export default async function SignUpPage({
   searchParams: Promise<{ plan?: string; __clerk_ticket?: string }>;
 }) {
   const params = await searchParams;
-  // Invitees join an existing company, so skip the plan picker.
+  // Invitees join an existing company, so skip the plan picker and onboarding.
   if (params.__clerk_ticket) {
     return (
       <AuthFrame>
-        <ClerkSignUp />
+        <ClerkSignUp forceRedirectUrl="/dashboard" />
       </AuthFrame>
     );
   }

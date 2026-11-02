@@ -1,3 +1,4 @@
+import type { RecordQuery } from "@/lib/queries/status";
 import 'server-only';
 import {
     and,
@@ -209,6 +210,8 @@ export async function importBankRows(
 
 export type BankTransactionListItem = {
     id: string;
+    /** Set by callers that show query state; see recordQueriesFor. */
+    queries?: RecordQuery[];
     bookedAt: string;
     amountPence: number;
     counterparty: string | null;

@@ -33,6 +33,7 @@ export function BankCardsFeed({
   incomeCategories,
   allLabels,
   canWrite,
+  canRaiseQuery = false,
   showAccount = false,
 }: {
   initialRows: BankTransactionListItem[];
@@ -44,6 +45,7 @@ export function BankCardsFeed({
   incomeCategories: readonly string[];
   allLabels: readonly RowLabel[];
   canWrite: boolean;
+  canRaiseQuery?: boolean;
   showAccount?: boolean;
 }) {
   const [rows, setRows] = useState(initialRows);
@@ -211,6 +213,7 @@ export function BankCardsFeed({
           incomeCategories={incomeCategories}
           allLabels={allLabels}
           canWrite={canWrite}
+          canRaiseQuery={canRaiseQuery}
           showAccount={showAccount}
         />
       </BankFeedDepthContext.Provider>

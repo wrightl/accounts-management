@@ -27,6 +27,7 @@ export type NavIcon =
     | 'profitability'
     | 'directorLoans'
     | 'deadlines'
+    | 'queries'
     | 'quotes'
     | 'orders'
     | 'recurring'
@@ -59,6 +60,8 @@ export interface NavGroup {
     id: string;
     /** When omitted, items render without a group header (e.g. Overview). */
     label?: string;
+    /** Label for people who can't change records, such as an external accountant. */
+    readOnlyLabel?: string;
     items: NavItem[];
 }
 
@@ -228,7 +231,7 @@ export const NAV_GROUPS: NavGroup[] = [
                 href: '/transactions',
                 label: 'Transactions',
                 icon: 'bank',
-                permission: 'accounts:read',
+                permission: 'records:read',
             },
             {
                 href: '/spending',
@@ -247,13 +250,13 @@ export const NAV_GROUPS: NavGroup[] = [
                 href: '/expenses',
                 label: 'Expenses',
                 icon: 'expenses',
-                permission: 'accounts:read',
+                permission: 'records:read',
             },
             {
                 href: '/reimbursements',
                 label: 'Reimbursements',
                 icon: 'reimbursements',
-                permission: 'accounts:read',
+                permission: 'records:read',
                 feature: 'reimbursements',
             },
         ],
@@ -286,13 +289,13 @@ export const NAV_GROUPS: NavGroup[] = [
                 href: '/invoices',
                 label: 'Invoices',
                 icon: 'invoices',
-                permission: 'accounts:read',
+                permission: 'records:read',
             },
             {
                 href: '/recurring-invoices',
                 label: 'Recurring',
                 icon: 'recurring',
-                permission: 'accounts:read',
+                permission: 'records:read',
                 feature: 'recurring',
             },
         ],
@@ -300,19 +303,20 @@ export const NAV_GROUPS: NavGroup[] = [
     {
         id: 'payingYourself',
         label: 'Paying yourself',
+        readOnlyLabel: 'Directors & shareholders',
         items: [
             {
                 href: '/dividends',
                 label: 'Dividends',
                 icon: 'dividends',
-                permission: 'accounts:read',
+                permission: 'records:read',
                 feature: 'dividends',
             },
             {
                 href: '/shareholders',
                 label: 'Shareholders',
                 icon: 'shareholders',
-                permission: 'accounts:read',
+                permission: 'records:read',
                 feature: 'shareholders',
             },
             {
@@ -368,6 +372,12 @@ export const NAV_GROUPS: NavGroup[] = [
                 icon: 'deadlines',
                 permission: 'filing:read',
             },
+            {
+                href: '/queries',
+                label: 'Queries',
+                icon: 'queries',
+                permission: 'queries:read',
+            },
         ],
     },
     {
@@ -407,10 +417,16 @@ function isAvailable(item: NavItem, filter: NavFilter): boolean {
 
 function mapGroups(
     groups: NavGroup[],
+    filter: NavFilter,
     keep: (item: NavItem) => boolean,
 ): NavGroup[] {
+    const canWrite = filter.permissionCheck('accounts:write');
     return groups
-        .map((group) => ({ ...group, items: group.items.filter(keep) }))
+        .map((group) => ({
+            ...group,
+            label: canWrite ? group.label : (group.readOnlyLabel ?? group.label),
+            items: group.items.filter(keep),
+        }))
         .filter((group) => group.items.length > 0);
 }
 
@@ -421,6 +437,7 @@ function mapGroups(
 export function filterNavGroups(groups: NavGroup[], filter: NavFilter): NavGroup[] {
     return mapGroups(
         groups,
+        filter,
         (item) =>
             isAvailable(item, filter) &&
             (!item.feature || isFeatureEnabled(item.feature, filter.enabledFeatures)),
@@ -431,6 +448,7 @@ export function filterNavGroups(groups: NavGroup[], filter: NavFilter): NavGroup
 export function hiddenNavGroups(groups: NavGroup[], filter: NavFilter): NavGroup[] {
     return mapGroups(
         groups,
+        filter,
         (item) =>
             isAvailable(item, filter) &&
             item.feature !== undefined &&

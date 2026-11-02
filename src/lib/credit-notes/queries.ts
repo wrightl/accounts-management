@@ -3,10 +3,11 @@ import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { clients, creditNoteLineItems, creditNotes, invoices } from "@/db/schema";
 import { clientDisplayNameSql } from "@/lib/clients/sql";
+import { creditNoteInPack, type RecordScope } from "@/lib/accountant/record-scope";
 import { formatGBP } from "@/lib/money";
 import type { CreditNoteStatus } from "@/lib/credit-notes/status";
 
-export async function listCreditNotes(companyId: string) {
+export async function listCreditNotes(companyId: string, scope: RecordScope = "all") {
   const db = getDb();
   const rows = await db
     .select({
@@ -25,7 +26,7 @@ export async function listCreditNotes(companyId: string) {
     .from(creditNotes)
     .innerJoin(invoices, eq(creditNotes.invoiceId, invoices.id))
     .innerJoin(clients, eq(creditNotes.clientId, clients.id))
-    .where(eq(creditNotes.companyId, companyId))
+    .where(and(eq(creditNotes.companyId, companyId), scope === "pack" ? creditNoteInPack : undefined))
     .orderBy(desc(creditNotes.createdAt));
 
   return rows.map((r) => ({
@@ -35,14 +36,24 @@ export async function listCreditNotes(companyId: string) {
   }));
 }
 
-export async function getCreditNoteDetail(companyId: string, id: string) {
+export async function getCreditNoteDetail(
+  companyId: string,
+  id: string,
+  scope: RecordScope = "all",
+) {
   const db = getDb();
   const rows = await db
     .select({ creditNote: creditNotes, invoice: invoices, client: clients })
     .from(creditNotes)
     .innerJoin(invoices, eq(creditNotes.invoiceId, invoices.id))
     .innerJoin(clients, eq(creditNotes.clientId, clients.id))
-    .where(and(eq(creditNotes.id, id), eq(creditNotes.companyId, companyId)))
+    .where(
+      and(
+        eq(creditNotes.id, id),
+        eq(creditNotes.companyId, companyId),
+        scope === "pack" ? creditNoteInPack : undefined,
+      ),
+    )
     .limit(1);
   if (!rows[0]) return null;
 

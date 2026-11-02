@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { expenseReceipts, expenses } from "@/db/schema";
 import { requirePermission, ForbiddenError } from "@/lib/auth";
+import { expenseInPack, recordScopeFor } from "@/lib/accountant/record-scope";
 import { getStorage } from "@/lib/storage";
 import { isPreviewableReceipt } from "@/lib/expenses/receipt-file";
 import { contentDispositionAttachment, contentDispositionInline } from "@/lib/files";
@@ -22,7 +23,7 @@ export async function GET(
 ) {
   let user;
   try {
-    user = await requirePermission("accounts:read");
+    user = await requirePermission("records:read");
   } catch (e) {
     if (e instanceof ForbiddenError) {
       return unframeableJsonError(e.message, 403);
@@ -40,7 +41,13 @@ export async function GET(
     .select({ receipt: expenseReceipts })
     .from(expenseReceipts)
     .innerJoin(expenses, eq(expenseReceipts.expenseId, expenses.id))
-    .where(and(eq(expenseReceipts.id, id), eq(expenses.companyId, companyId)))
+    .where(
+      and(
+        eq(expenseReceipts.id, id),
+        eq(expenses.companyId, companyId),
+        recordScopeFor(user.role) === "pack" ? expenseInPack : undefined,
+      ),
+    )
     .limit(1);
 
   if (!row) {

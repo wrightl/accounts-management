@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Pencil } from 'lucide-react';
 import { guardTenantPage, hasPermission } from '@/lib/auth';
+import { recordScopeFor } from '@/lib/accountant/record-scope';
+import { RecordQueries } from '@/components/queries/record-queries';
 import { getRecurringInvoiceDetail } from '@/lib/invoices/recurring-queries';
 import { RecurringInvoiceActions } from '@/components/recurring-invoices/recurring-actions';
 import { Card, CardTitle, CardValue } from '@/components/ui/card';
@@ -24,14 +26,21 @@ export default async function RecurringInvoiceDetailPage({
 }: {
     params: Promise<{ id: string }>;
 }) {
-    const { companyId } = await guardTenantPage('accounts:read');
+    const { companyId, role } = await guardTenantPage('records:read');
+    const inPack = recordScopeFor(role) === 'pack';
     const canWrite = await hasPermission('accounts:write');
     const { id } = await params;
 
     const detail = await getRecurringInvoiceDetail(companyId, id);
     if (!detail) notFound();
 
-    const { template, client, generatedInvoices } = detail;
+    const { template, client } = detail;
+    // Drafts and voided invoices aren't in the pack and wouldn't open.
+    const generatedInvoices = inPack
+        ? detail.generatedInvoices.filter(
+              (inv) => inv.status !== 'draft' && inv.status !== 'void',
+          )
+        : detail.generatedInvoices;
 
     return (
         <div>
@@ -64,12 +73,18 @@ export default async function RecurringInvoiceDetailPage({
                         ) : null}
                     </div>
                     <p className="mt-1 text-muted">
-                        <Link
-                            href={`/clients/${client.id}`}
-                            className="text-foreground hover:underline"
-                        >
-                            {clientDisplayName(client)}
-                        </Link>
+                        {inPack ? (
+                            <span className="text-foreground">
+                                {clientDisplayName(client)}
+                            </span>
+                        ) : (
+                            <Link
+                                href={`/clients/${client.id}`}
+                                className="text-foreground hover:underline"
+                            >
+                                {clientDisplayName(client)}
+                            </Link>
+                        )}
                         {' · '}
                         Day {template.dayOfMonth} each month
                         {' · '}
@@ -186,6 +201,13 @@ export default async function RecurringInvoiceDetailPage({
                     </Table>
                 )}
             </div>
+
+            <RecordQueries
+                companyId={companyId}
+                role={role}
+                kind="recurring_invoice"
+                recordId={template.id}
+            />
         </div>
     );
 }

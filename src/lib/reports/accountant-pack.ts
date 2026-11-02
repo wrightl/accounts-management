@@ -1,5 +1,10 @@
 import "server-only";
-import { and, eq, gte, inArray, lte, ne, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import {
+  creditNoteInPack,
+  expenseInPack,
+  invoiceInPack,
+} from "@/lib/accountant/record-scope";
 import { getDb } from "@/db";
 import {
   bankAccounts,
@@ -25,7 +30,6 @@ import { clientDisplayNameSql } from "@/lib/clients/sql";
 import { monthName } from "@/lib/dates";
 import { safeFilename } from "@/lib/files";
 import {
-  creditNoteCountsInAccounts,
   invoiceCountsInAccounts,
   paymentCountsInAccounts,
 } from "@/lib/invoices/accounts-scope";
@@ -116,8 +120,7 @@ export async function streamAccountantPack({
     .where(
       and(
         eq(invoices.companyId, companyId),
-        ne(invoices.status, "draft"),
-        ne(invoices.status, "void"),
+        invoiceInPack,
         invoiceCountsInAccounts,
         gte(invoices.issueDate, from),
         lte(invoices.issueDate, to),
@@ -178,7 +181,7 @@ export async function streamAccountantPack({
     .where(
       and(
         eq(expenses.companyId, companyId),
-        ne(expenses.status, "pending"),
+        expenseInPack,
         gte(expenses.spentAt, from),
         lte(expenses.spentAt, to),
       ),
@@ -309,7 +312,7 @@ export async function streamAccountantPack({
     .where(
       and(
         eq(creditNotes.companyId, companyId),
-        creditNoteCountsInAccounts(creditNotes.issueDate),
+        creditNoteInPack,
         gte(creditNotes.issueDate, from),
         lte(creditNotes.issueDate, to),
       ),
@@ -339,8 +342,7 @@ export async function streamAccountantPack({
       and(
         eq(invoices.companyId, companyId),
         eq(invoices.broughtForward, true),
-        ne(invoices.status, "draft"),
-        ne(invoices.status, "void"),
+        invoiceInPack,
       ),
     )
     .orderBy(invoices.issueDate, invoices.number);

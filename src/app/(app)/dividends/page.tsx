@@ -5,6 +5,10 @@ import {
   defaultReportPeriod,
   listDividendDeclarations,
 } from "@/lib/reports/queries";
+import { recordScopeFor } from "@/lib/accountant/record-scope";
+import { can } from "@/lib/roles";
+import { RecordQueryIcon } from "@/components/queries/record-query-icon";
+import { recordQueriesFor } from "@/lib/queries/queries";
 import { DeleteDividendDeclarationButton } from "@/components/dividends/dividends-form";
 import { buttonClasses } from "@/components/ui/button";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
@@ -19,7 +23,9 @@ export default async function DividendsPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const { companyId, entityType } = await guardTenantPage("accounts:read");
+  const { companyId, entityType, role } = await guardTenantPage("records:read");
+  const inPack = recordScopeFor(role) === "pack";
+  const canRaiseQuery = can(role, "queries:raise");
   if (entityType !== "limited_company") {
     redirect("/dashboard");
   }
@@ -37,6 +43,7 @@ export default async function DividendsPage({
     listDividendDeclarations(companyId, { from, to }),
     getOrCreateCompanySettings(companyId),
   ]);
+  const queries = await recordQueriesFor(role, companyId, "dividend_declaration", declarations.map((d) => d.id));
   const hasDirectors = Boolean(company.directorNames?.trim());
   const totalPence = declarations.reduce((sum, d) => sum + d.totalPence, 0);
 
@@ -93,7 +100,7 @@ export default async function DividendsPage({
         <p className="mt-1 text-sm text-muted">
           Each dividend comes with board minutes and a voucher for every
           shareholder, ready to sign and keep with the company records.
-          {!hasDirectors ? (
+          {!hasDirectors && !inPack ? (
             <>
               {" "}
               {canManage ? (
@@ -119,20 +126,30 @@ export default async function DividendsPage({
               <div key={d.id}>
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <p className="font-medium">
-                      <DisplayDate value={d.declaredAt} /> · {d.totalFormatted}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <RecordQueryIcon
+                        recordKind="dividend_declaration"
+                        recordId={d.id}
+                        queries={queries.get(d.id)}
+                        canRaise={canRaiseQuery}
+                      />
+                      <p className="font-medium">
+                        <DisplayDate value={d.declaredAt} /> · {d.totalFormatted}
+                      </p>
+                    </div>
                     {d.notes && (
                       <p className="text-sm text-muted">{d.notes}</p>
                     )}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <a
-                      href={`/api/dividends/${d.id}/paperwork`}
-                      className={buttonClasses("secondary")}
-                    >
-                      Minutes and vouchers (PDF)
-                    </a>
+                    {inPack ? null : (
+                      <a
+                        href={`/api/dividends/${d.id}/paperwork`}
+                        className={buttonClasses("secondary")}
+                      >
+                        Minutes and vouchers (PDF)
+                      </a>
+                    )}
                     <DeleteDividendDeclarationButton
                       id={d.id}
                       canWrite={canWrite}

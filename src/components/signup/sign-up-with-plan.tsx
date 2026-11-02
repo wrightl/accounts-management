@@ -8,13 +8,18 @@ import { SignupPlanPicker } from "@/components/signup/plan-picker";
 import type { StripeCatalog } from "@/lib/billing/catalog-types";
 import type { PricingPlan } from "@/lib/marketing-analytics";
 
-export function ClerkSignUp() {
+export function ClerkSignUp({
+  forceRedirectUrl,
+}: {
+  /** Overrides the provider's default of sending new sign-ups to onboarding. */
+  forceRedirectUrl?: string;
+}) {
   return (
     <div className="w-full max-w-md">
       <p className="mb-4 text-center text-sm text-white/70">
         Create your account to continue setup.
       </p>
-      <SignUp />
+      <SignUp forceRedirectUrl={forceRedirectUrl} />
       <p className="mt-4 text-center text-xs text-white/70">
         By creating an account you agree to our{" "}
         <Link href="/terms" className="underline hover:text-white">

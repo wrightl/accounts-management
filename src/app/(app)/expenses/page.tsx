@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Link2 } from "lucide-react";
 import { guardTenantPage, hasPermission, requireUser } from "@/lib/auth";
+import { can } from "@/lib/roles";
+import { recordScopeFor, withoutTeamAnnotations } from "@/lib/accountant/record-scope";
 import {
   getEmailExpensesFingerprint,
   getReimbursableSummary,
@@ -42,6 +44,8 @@ import { DisplayDate } from "@/components/date-format-provider";
 import { ManageLabelsButton } from "@/components/labels/manage-labels";
 import { RowLabels } from "@/components/labels/row-labels";
 import { RowNote } from "@/components/labels/row-note";
+import { RecordQueryIcon } from "@/components/queries/record-query-icon";
+import { recordQueriesFor } from "@/lib/queries/queries";
 import { listLabels } from "@/lib/labels/queries";
 
 export default async function ExpensesPage({
@@ -49,28 +53,30 @@ export default async function ExpensesPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const { companyId } = await guardTenantPage("accounts:read");
+  const { companyId, role } = await guardTenantPage("records:read");
+  const scope = recordScopeFor(role);
   const canWrite = await hasPermission("accounts:write");
+  const canRaiseQuery = can(role, "queries:raise");
   const user = await requireUser();
   const parsed = parseExpenseListParams(await searchParams);
 
   const [localUser, settings, labels] = await Promise.all([
     findLocalUser(user.userId),
     getOrCreateCompanySettings(companyId),
-    listLabels(companyId),
+    scope === "all" ? listLabels(companyId) : [],
   ]);
   const localUserId = localUser?.id ?? null;
   const params = {
     ...parsed,
-    mine: parsed.mine && Boolean(localUserId),
+    mine: parsed.mine && Boolean(localUserId) && scope === "all",
     // A link can outlive a label; a deleted one shouldn't empty the list.
-    labels: parsed.labels.filter((id) => labels.some((l) => l.id === id)),
+    labels: scope === "all" ? parsed.labels.filter((id) => labels.some((l) => l.id === id)) : [],
   };
   const myReimbursable = params.mine;
   const dateRange = resolveExpenseListDateRange(params, settings.financialYearEndMonth);
   const filtered = hasActiveExpenseFilters(params);
 
-  const [rows, founders, reimbSummary, company, emailFingerprint] = await Promise.all([
+  const [listed, founders, reimbSummary, company, emailFingerprint] = await Promise.all([
     listExpenses(companyId, {
       q: params.q,
       from: dateRange.from,
@@ -81,12 +87,20 @@ export default async function ExpensesPage({
       status: myReimbursable ? "reimbursable" : params.status,
       labels: params.labels,
       sort: { sort: params.sort, dir: params.dir },
+      scope,
     }),
     listFounders(companyId),
     getReimbursableSummary(companyId),
     getCompany(companyId),
     getEmailExpensesFingerprint(companyId),
   ]);
+
+  const rows =
+    scope === "pack"
+      ? listed.map((r) => ({ ...withoutTeamAnnotations(r), createdByName: null }))
+      : listed;
+
+  const queries = await recordQueriesFor(role, companyId, "expense", rows.map((r) => r.id));
 
   const paymentSources = await getPaymentSourceSuggestions(
     companyId,
@@ -111,7 +125,7 @@ export default async function ExpensesPage({
 
   return (
     <div>
-      <ExpenseLiveRefresh initialFingerprint={emailFingerprint} />
+      {scope === "all" ? <ExpenseLiveRefresh initialFingerprint={emailFingerprint} /> : null}
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl font-semibold">Expenses</h1>
@@ -136,7 +150,7 @@ export default async function ExpensesPage({
         />
       ) : null}
 
-      {reimbSummary.count > 0 && (
+      {scope === "all" && reimbSummary.count > 0 && (
         <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-wash/50 px-4 py-3 text-sm">
           <span>
             <span className="font-medium text-foreground">{reimbSummary.count}</span>{" "}
@@ -152,6 +166,7 @@ export default async function ExpensesPage({
         </div>
       )}
 
+      {scope === "all" ? (
       <nav aria-label="Whose expenses" className="mt-4 flex flex-wrap gap-2">
         <Link
           href={expenseListHref(params, { mine: false })}
@@ -173,13 +188,14 @@ export default async function ExpensesPage({
           </Link>
         )}
       </nav>
+      ) : null}
 
       <div className="mt-4">
         <ExpenseFilters
           params={params}
           categories={EXPENSE_CATEGORIES}
           founders={founders.map((f) => ({ id: f.id, label: f.name || f.email }))}
-          labels={labels}
+          labels={scope === "all" ? labels : []}
         />
       </div>
 
@@ -206,7 +222,7 @@ export default async function ExpensesPage({
             <THead>
               <TR>
                 <TH className="w-8 pr-0">
-                  <span className="sr-only">Notes</span>
+                  <span className="sr-only">Notes and queries</span>
                 </TH>
                 {sortHeader("Date", "date")}
                 {sortHeader("Description", "description")}
@@ -223,6 +239,12 @@ export default async function ExpensesPage({
                 <TR key={e.id} className={e.status === "pending" ? "bg-amber-50/50 dark:bg-amber-950/20" : undefined}>
                   <TD className="w-8 pr-0">
                     <RowNote kind="expense" rowId={e.id} note={e.notes} canWrite={canWrite} />
+                    <RecordQueryIcon
+                      recordKind="expense"
+                      recordId={e.id}
+                      queries={queries.get(e.id)}
+                      canRaise={canRaiseQuery}
+                    />
                   </TD>
                   <TD className="text-muted"><DisplayDate value={e.spentAt} /></TD>
                   <TD>

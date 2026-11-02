@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { invoices } from "@/db/schema";
 import { requirePermission, ForbiddenError } from "@/lib/auth";
+import { recordScopeFor } from "@/lib/accountant/record-scope";
 import { loadOriginalInvoiceDocument } from "@/lib/invoices/original-document";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
@@ -24,7 +25,7 @@ export async function GET(
 ) {
   let user;
   try {
-    user = await requirePermission("accounts:read");
+    user = await requirePermission("records:read");
   } catch (e) {
     if (e instanceof ForbiddenError) {
       return NextResponse.json({ error: e.message }, { status: 403 });
@@ -37,7 +38,7 @@ export async function GET(
   const companyId = user.companyId;
 
   const { id } = await context.params;
-  const detail = await getInvoiceDetail(companyId, id);
+  const detail = await getInvoiceDetail(companyId, id, recordScopeFor(user.role));
   if (!detail) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }

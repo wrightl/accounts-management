@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
+import { recordScopeFor } from "@/lib/accountant/record-scope";
+import { RecordQueries } from "@/components/queries/record-queries";
 import { getCreditNoteDetail } from "@/lib/credit-notes/queries";
 import { canVoidCreditNote } from "@/lib/credit-notes/status";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
@@ -25,11 +27,12 @@ export default async function CreditNoteDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { companyId } = await guardTenantPage("accounts:read");
+  const { companyId, role } = await guardTenantPage("records:read");
+  const scope = recordScopeFor(role);
   const canWrite = await hasPermission("accounts:write");
   const { id } = await params;
 
-  const detail = await getCreditNoteDetail(companyId, id);
+  const detail = await getCreditNoteDetail(companyId, id, scope);
   if (!detail) notFound();
   const { creditNote, invoice, client, lines } = detail;
 
@@ -54,9 +57,13 @@ export default async function CreditNoteDetailPage({
             <CreditNoteStatusBadge status={creditNote.status} />
           </div>
           <p className="mt-1 text-muted">
-            <Link href={`/clients/${client.id}`} className="text-foreground hover:underline">
-              {clientDisplayName(client)}
-            </Link>
+            {scope === "all" ? (
+              <Link href={`/clients/${client.id}`} className="text-foreground hover:underline">
+                {clientDisplayName(client)}
+              </Link>
+            ) : (
+              <span className="text-foreground">{clientDisplayName(client)}</span>
+            )}
             <> · Issued <DisplayDate value={creditNote.issueDate} /> · Credits </>
             <Link href={`/invoices/${invoice.id}`} className="text-foreground hover:underline">
               {invoice.number}
@@ -143,6 +150,8 @@ export default async function CreditNoteDetailPage({
           paid it.
         </p>
       ) : null}
+
+      <RecordQueries companyId={companyId} role={role} kind="credit_note" recordId={creditNote.id} />
     </div>
   );
 }

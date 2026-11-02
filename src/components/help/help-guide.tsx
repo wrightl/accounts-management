@@ -32,7 +32,7 @@ const SECTIONS: HelpSection[] = [
   { id: "limits", title: "What this app does not do" },
 ];
 
-function HelpLink({
+export function HelpLink({
   href,
   children,
 }: {
@@ -49,7 +49,7 @@ function HelpLink({
   );
 }
 
-function SectionHeading({
+export function SectionHeading({
   id,
   children,
 }: {
@@ -66,7 +66,7 @@ function SectionHeading({
   );
 }
 
-function StepList({ items }: { items: React.ReactNode[] }) {
+export function StepList({ items }: { items: React.ReactNode[] }) {
   return (
     <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-foreground/90">
       {items.map((item, i) => (
@@ -76,7 +76,7 @@ function StepList({ items }: { items: React.ReactNode[] }) {
   );
 }
 
-function BulletList({ items }: { items: React.ReactNode[] }) {
+export function BulletList({ items }: { items: React.ReactNode[] }) {
   return (
     <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-foreground/90">
       {items.map((item, i) => (
@@ -749,7 +749,13 @@ export function HelpGuide({
             <Term name="Accountant">
               reports, tax and reserves, director&apos;s loans, deadlines, the
               company profile and the accountant pack, and lock the books once
-              they have filed. No day-to-day pages such as clients or invoices.
+              they have filed. They can also read what the pack contains, such
+              as invoices, expenses and bank transactions, but can&apos;t change
+              any of it. If something needs clarifying they raise it under{" "}
+              <HelpLink href="/queries">Queries</HelpLink>, and administrators
+              and co-founders reply there. Record lists show an icon on any row
+              with a query: amber is waiting for you, navy is answered, and a
+              tick is closed.
             </Term>
             <Term name="Pending access">
               signed in, waiting for an admin to assign a role.

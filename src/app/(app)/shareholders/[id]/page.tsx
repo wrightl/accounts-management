@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
+import { recordScopeFor } from "@/lib/accountant/record-scope";
+import { RecordQueries } from "@/components/queries/record-queries";
 import { getShareholder } from "@/lib/shareholders/queries";
 import { listFounders } from "@/lib/expenses/queries";
 import { ShareholderForm } from "@/components/shareholders/shareholder-form";
@@ -11,13 +13,14 @@ export default async function ShareholderDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { companyId } = await guardTenantPage("accounts:read");
+  const { companyId, role } = await guardTenantPage("records:read");
+  const inPack = recordScopeFor(role) === "pack";
   const canWrite = await hasPermission("accounts:write");
   const { id } = await params;
 
   const [shareholder, founders] = await Promise.all([
     getShareholder(companyId, id),
-    listFounders(companyId),
+    inPack ? [] : listFounders(companyId),
   ]);
   if (!shareholder) notFound();
 
@@ -34,7 +37,10 @@ export default async function ShareholderDetailPage({
       {shareholder.archivedAt && (
         <p className="mb-6 text-sm text-muted">Archived — read only.</p>
       )}
-      {!shareholder.archivedAt && (
+      {inPack ? (
+        <p className="text-sm text-muted">{shareholder.shareCount} shares</p>
+      ) : null}
+      {!shareholder.archivedAt && !inPack && (
         <div className="mt-6">
           <ShareholderForm
             mode="edit"
@@ -49,6 +55,7 @@ export default async function ShareholderDetailPage({
           />
         </div>
       )}
+      <RecordQueries companyId={companyId} role={role} kind="shareholder" recordId={shareholder.id} />
     </div>
   );
 }
