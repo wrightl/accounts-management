@@ -722,9 +722,9 @@ export function HelpGuide({
               </>,
               <>
                 Invite them as an <strong>Accountant</strong> so they can see
-                what they need to file and export the accountant pack, and lock
-                the books, but not change them or open day-to-day pages such as
-                clients, invoices and quotes.
+                what they need to file, read the records in the accountant pack,
+                export the pack and lock the books, but not change records or
+                open day-to-day pages such as clients and quotes.
               </>,
               <>
                 Admins can review sensitive changes in the{" "}
