@@ -231,15 +231,14 @@ async function runDraftTool(
     return text("This is already being created. Check Alfa in a moment rather than trying again.", true);
   }
 
-  let result: Awaited<ReturnType<typeof tool.execute>> | null = null;
-  try {
-    if (!(await claimToolCall({ ...owner, tool: tool.name, oauthClientId }))) {
-      return limitReached(company.name);
-    }
-    result = await tool.execute(owner, input);
-  } finally {
-    await finishDraftRequest(company.id, claim.claimId, result?.ok ? result.id : null);
+  if (!(await claimToolCall({ ...owner, tool: tool.name, oauthClientId }))) {
+    await finishDraftRequest(company.id, claim.claimId, null);
+    return limitReached(company.name);
   }
+  // If this throws, the record may already exist, so the claim is kept and
+  // simply expires after the retry window rather than inviting a duplicate.
+  const result = await tool.execute(owner, input);
+  await finishDraftRequest(company.id, claim.claimId, result.ok ? result.id : null);
   if (!result.ok) return text(`Nothing was created. ${result.error}`, true);
   await writeAudit({
     companyId: company.id,
