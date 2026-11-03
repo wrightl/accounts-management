@@ -60,8 +60,10 @@ vi.mock("@clerk/nextjs/server", () => ({
 }));
 
 const { POST } = await import("@/app/api/mcp/route");
-const { setAssistantAccess, setAssistantConnected } = await import("@/actions/assistant");
-const { assistantDisplayName } = await import("@/lib/assistant/mcp/access");
+const { setAssistantAccess, setAssistantConnected, setAssistantDrafts } = await import(
+  "@/actions/assistant"
+);
+const { assistantDisplayName, DAILY_TOOL_CALL_LIMIT } = await import("@/lib/assistant/mcp/access");
 const { GET: getResourceMetadata } = await import(
   "@/app/.well-known/oauth-protected-resource/[[...path]]/route"
 );
@@ -264,9 +266,8 @@ describe("MCP tools for an accountant", () => {
   it("offers only the starter questions their tools can answer", async () => {
     const names = async (token: string) =>
       ((await rpc(token, "prompts/list")).body.result.prompts as { name: string }[]).map((p) => p.name).sort();
+    // Drafts are off for a new connection, so no drafting questions either.
     expect(await names("admin-token")).toEqual([
-      "draft_a_quote",
-      "draft_an_invoice",
       "explain_my_numbers",
       "ready_for_accountant",
       "safe_to_pay_myself",
@@ -402,11 +403,82 @@ describe("connected assistants in Settings", () => {
   });
 });
 
-describe("draft tools", () => {
-  it("are offered to founders, never to accountants", async () => {
-    expect(await toolNames("admin-token")).toEqual(
-      expect.arrayContaining(["create_draft_invoice", "create_draft_quote", "create_draft_expense"]),
+async function connectionOf(userId: string) {
+  const [connection] = await db
+    .select()
+    .from(assistantConnections)
+    .where(eq(assistantConnections.userId, userId));
+  return connection!;
+}
+
+const DRAFT_TOOL_NAMES = ["create_draft_invoice", "create_draft_quote", "create_draft_expense"];
+
+describe("allowing drafts", () => {
+  it("is off for a new connection: no draft tools, and a stray draft call is refused", async () => {
+    const names = await toolNames("admin-token");
+    for (const name of DRAFT_TOOL_NAMES) expect(names).not.toContain(name);
+
+    const { body } = await rpc("admin-token", "tools/call", {
+      name: "create_draft_expense",
+      arguments: { description: "Lunch", amount: 12 },
+    });
+    expect(body.error ?? body.result?.isError).toBeTruthy();
+    expect(await db.select().from(expenses)).toHaveLength(0);
+  });
+
+  it("is the person's own choice, per assistant, and audited", async () => {
+    await toolNames("admin-token");
+    const connection = await connectionOf(adminId);
+
+    signedIn.userId = "user_accountant";
+    expect(await setAssistantDrafts(connection.id, true)).toMatchObject({ ok: false });
+    expect((await connectionOf(adminId)).allowDrafts).toBe(false);
+
+    signedIn.userId = "user_admin";
+    expect(await setAssistantDrafts(connection.id, true)).toMatchObject({ ok: true });
+    expect(await toolNames("admin-token")).toEqual(expect.arrayContaining(DRAFT_TOOL_NAMES));
+    const [audit] = await db.select().from(auditLog).where(eq(auditLog.action, "assistant.drafts"));
+    expect(audit).toMatchObject({ entityId: connection.id, meta: { allowed: true } });
+
+    expect(await setAssistantDrafts(connection.id, false)).toMatchObject({ ok: true });
+    expect(await toolNames("admin-token")).not.toContain("create_draft_invoice");
+  });
+});
+
+describe("daily limit", () => {
+  it("can't be overshot by calls arriving together", async () => {
+    await db.insert(auditLog).values(
+      Array.from({ length: DAILY_TOOL_CALL_LIMIT - 1 }, () => ({
+        companyId: companyA,
+        actorUserId: adminId,
+        action: "assistant.tool",
+        entityType: "assistant_tool",
+      })),
     );
+    const results = await Promise.all(
+      Array.from({ length: 3 }, () => callTool("admin-token", "list_clients")),
+    );
+    expect(results.filter((r) => !r.isError)).toHaveLength(1);
+    expect(results.filter((r) => r.isError)[0]!.text).toContain("today's limit");
+    const used = await db
+      .select()
+      .from(auditLog)
+      .where(and(eq(auditLog.companyId, companyA), eq(auditLog.action, "assistant.tool")));
+    expect(used).toHaveLength(DAILY_TOOL_CALL_LIMIT);
+  });
+});
+
+describe("draft tools", () => {
+  beforeEach(async () => {
+    await toolNames("admin-token");
+    await toolNames("accountant-token");
+    await db.update(assistantConnections).set({ allowDrafts: true });
+  });
+
+  it("are offered to founders who allow them, never to accountants", async () => {
+    expect(await toolNames("admin-token")).toEqual(expect.arrayContaining(DRAFT_TOOL_NAMES));
+    const prompts = (await rpc("admin-token", "prompts/list")).body.result.prompts as { name: string }[];
+    expect(prompts.map((p) => p.name)).toEqual(expect.arrayContaining(["draft_an_invoice", "draft_a_quote"]));
     const accountant = await toolNames("accountant-token");
     expect(accountant).not.toContain("create_draft_invoice");
     expect(accountant).not.toContain("create_draft_quote");
@@ -463,6 +535,26 @@ describe("draft tools", () => {
       .from(auditLog)
       .where(and(eq(auditLog.companyId, companyA), eq(auditLog.action, "quote.create")));
     expect(audit).toMatchObject({ entityId: quote!.id, meta: { via: "assistant" } });
+  });
+
+  it("returns the draft already made when an assistant retries the same call", async () => {
+    const args = { client: "Client of A-1", lines: [{ description: "Design work", unitPrice: 500 }] };
+    const first = await callTool("admin-token", "create_draft_invoice", args);
+    const retry = await callTool("admin-token", "create_draft_invoice", args);
+    expect(retry.isError).toBe(false);
+    expect(retry.json.alreadyCreated).toBeTruthy();
+    expect(retry.json.openInAlfa).toBe(first.json.openInAlfa);
+    const drafts = await db
+      .select()
+      .from(invoices)
+      .where(and(eq(invoices.companyId, companyA), eq(invoices.status, "draft")));
+    expect(drafts).toHaveLength(2); // A-DRAFT from the seed, plus one.
+
+    const changed = await callTool("admin-token", "create_draft_invoice", {
+      ...args,
+      lines: [{ description: "Design work", unitPrice: 550 }],
+    });
+    expect(changed.json.created).toBeTruthy();
   });
 
   it("won't quote another company's client, or with a valid-until date before the quote", async () => {

@@ -12,12 +12,14 @@ import { createAssistantServer } from "@/lib/assistant/mcp/server";
 
 export const dynamic = "force-dynamic";
 
-type RequestAuth = AuthInfo & { extra: { person: AssistantPerson; origin: string } };
+type RequestAuth = AuthInfo & {
+  extra: { person: AssistantPerson; origin: string; allowDrafts: boolean };
+};
 
 /** A fresh server per request, built for the person the token belongs to. */
 const handler = createMcpHandler(({ authInfo }) => {
-  const { person, origin } = (authInfo as RequestAuth).extra;
-  return createAssistantServer({ person, oauthClientId: authInfo!.clientId, origin });
+  const { person, origin, allowDrafts } = (authInfo as RequestAuth).extra;
+  return createAssistantServer({ person, oauthClientId: authInfo!.clientId, origin, allowDrafts });
 });
 
 /** Assistants send a bearer token, never cookies, so any origin may call. */
@@ -63,10 +65,10 @@ async function serve(request: NextRequest): Promise<Response> {
     );
   }
   const clientName = await startingClientName(request);
-  if (clientName) await nameConnection(connection.id, clientName);
+  if (clientName) await nameConnection(person.localUserId, connection.id, clientName);
 
   const response = await handler.fetch(request, {
-    authInfo: { ...auth, extra: { ...auth.extra, person, origin } },
+    authInfo: { ...auth, extra: { ...auth.extra, person, origin, allowDrafts: connection.allowDrafts } },
   });
   return withCors(response);
 }

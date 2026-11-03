@@ -1839,6 +1839,8 @@ export const assistantConnections = pgTable(
     firstUsedAt: timestamp("first_used_at", { withTimezone: true }).defaultNow().notNull(),
     lastUsedAt: timestamp("last_used_at", { withTimezone: true }).defaultNow().notNull(),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    /** The person has let this assistant create drafts. Off until they choose. */
+    allowDrafts: boolean("allow_drafts").notNull().default(false),
   },
   (t) => [uniqueIndex("uniq_assistant_connections_user_client").on(t.userId, t.oauthClientId)],
 );

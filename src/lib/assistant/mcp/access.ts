@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { assistantConnections, auditLog, companies, companyMemberships } from "@/db/schema";
 import { todayIsoDate } from "@/lib/dates";
@@ -125,7 +125,7 @@ export function noCompanyMessage(person: AssistantPerson): string {
 export async function touchConnection(
   localUserId: string,
   oauthClientId: string,
-): Promise<{ id: string; allowed: boolean }> {
+): Promise<{ id: string; allowed: boolean; allowDrafts: boolean }> {
   const [row] = await getDb()
     .insert(assistantConnections)
     .values({ userId: localUserId, oauthClientId })
@@ -133,8 +133,12 @@ export async function touchConnection(
       target: [assistantConnections.userId, assistantConnections.oauthClientId],
       set: { lastUsedAt: sql`now()` },
     })
-    .returning({ id: assistantConnections.id, revokedAt: assistantConnections.revokedAt });
-  return { id: row!.id, allowed: row!.revokedAt == null };
+    .returning({
+      id: assistantConnections.id,
+      revokedAt: assistantConnections.revokedAt,
+      allowDrafts: assistantConnections.allowDrafts,
+    });
+  return { id: row!.id, allowed: row!.revokedAt == null, allowDrafts: row!.allowDrafts };
 }
 
 /** Names assistants send in `clientInfo`, shown as people know them. */
@@ -156,24 +160,82 @@ export function assistantDisplayName(clientInfo: unknown): string | null {
 }
 
 /** Remember what the assistant calls itself, for the list in Settings. */
-export async function nameConnection(connectionId: string, clientName: string): Promise<void> {
+export async function nameConnection(
+  localUserId: string,
+  connectionId: string,
+  clientName: string,
+): Promise<void> {
   await getDb()
     .update(assistantConnections)
     .set({ clientName })
-    .where(eq(assistantConnections.id, connectionId));
+    .where(and(eq(assistantConnections.id, connectionId), eq(assistantConnections.userId, localUserId)));
 }
 
 /** Assistant tool calls made for a company today (London calendar day). */
-export async function toolCallsToday(companyId: string): Promise<number> {
+function callsToday(companyId: string) {
+  return and(
+    eq(auditLog.companyId, companyId),
+    eq(auditLog.action, ASSISTANT_TOOL_ACTION),
+    sql`(${auditLog.createdAt} at time zone 'Europe/London')::date = ${todayIsoDate()}`,
+  );
+}
+
+/**
+ * Claim one of the company's tool calls for today and audit it, or return
+ * false when the day's limit is used up. The count and the audit row happen
+ * under a per-company lock, so calls arriving together can't overshoot.
+ */
+export async function claimToolCall(call: {
+  companyId: string;
+  localUserId: string;
+  tool: string;
+  oauthClientId: string;
+}): Promise<boolean> {
+  return getDb().transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`assistant:${call.companyId}`}))`);
+    const [row] = await tx
+      .select({ n: sql<number>`count(*)`.mapWith(Number) })
+      .from(auditLog)
+      .where(callsToday(call.companyId));
+    if ((row?.n ?? 0) >= DAILY_TOOL_CALL_LIMIT) return false;
+    await tx.insert(auditLog).values({
+      companyId: call.companyId,
+      actorUserId: call.localUserId,
+      action: ASSISTANT_TOOL_ACTION,
+      entityType: "assistant_tool",
+      meta: { tool: call.tool, oauthClientId: call.oauthClientId },
+    });
+    return true;
+  });
+}
+
+/** How long a retried draft call returns the draft it already made. */
+export const DRAFT_RETRY_WINDOW_MINUTES = 10;
+
+/**
+ * The record a draft call with this request key already created, if it was
+ * in the last few minutes: assistants retry calls, and a retry shouldn't make
+ * a second invoice.
+ */
+export async function recentDraftFor(draft: {
+  companyId: string;
+  localUserId: string;
+  action: string;
+  requestKey: string;
+}): Promise<string | null> {
   const [row] = await getDb()
-    .select({ n: sql<number>`count(*)`.mapWith(Number) })
+    .select({ entityId: auditLog.entityId })
     .from(auditLog)
     .where(
       and(
-        eq(auditLog.companyId, companyId),
-        eq(auditLog.action, ASSISTANT_TOOL_ACTION),
-        sql`(${auditLog.createdAt} at time zone 'Europe/London')::date = ${todayIsoDate()}`,
+        eq(auditLog.companyId, draft.companyId),
+        eq(auditLog.actorUserId, draft.localUserId),
+        eq(auditLog.action, draft.action),
+        sql`${auditLog.meta}->>'requestKey' = ${draft.requestKey}`,
+        sql`${auditLog.createdAt} > now() - make_interval(mins => ${DRAFT_RETRY_WINDOW_MINUTES})`,
       ),
-    );
-  return row?.n ?? 0;
+    )
+    .orderBy(desc(auditLog.createdAt))
+    .limit(1);
+  return row?.entityId ?? null;
 }

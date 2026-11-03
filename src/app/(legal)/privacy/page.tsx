@@ -220,7 +220,7 @@ export default function PrivacyPage() {
               items={[
                 "When your assistant looks something up, Alfa sends it the figures and records needed to answer, such as totals, invoices, client names, expenses and bank payments. It sees only what you can see in Alfa: an accountant sees only what the accountant pack contains.",
                 "The assistant's provider (for example Anthropic or OpenAI) receives that data under your own account with them, not under a contract with us. They are not our sub-processor. Their terms and privacy settings decide how they use and keep it, including whether your chats are used to train their models, so check your settings with them.",
-                "Founders' assistants can also create a draft invoice or quote, or an expense waiting for review. Nothing is sent, paid, approved or deleted, and every look-up and draft is recorded in your company's audit log.",
+                "If a founder allows it for their assistant, it can also create a draft invoice or quote, or an expense waiting for review. Nothing is sent, paid, approved or deleted, and every look-up and draft is recorded in your company's audit log.",
                 "You sign in to Alfa to connect, through our sign-in provider. Your assistant never sees your Alfa password, and we never see your password for the assistant.",
                 "You can disconnect an assistant at any time in Settings, AI assistant, and it stops reading straight away. An admin can turn access off for the whole company.",
               ]}

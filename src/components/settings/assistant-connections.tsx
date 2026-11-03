@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { setAssistantConnected } from "@/actions/assistant";
+import { setAssistantConnected, setAssistantDrafts } from "@/actions/assistant";
 import { Button } from "@/components/ui/button";
 import { FieldError } from "@/components/ui/form";
 
@@ -12,10 +12,18 @@ export type ConnectionRow = {
   /** "Used 5 minutes ago", worked out on the server. */
   used: string;
   disconnected: boolean;
+  allowDrafts: boolean;
 };
 
 /** Assistants this person has connected, with a way to cut each one off. */
-export function AssistantConnections({ connections }: { connections: ConnectionRow[] }) {
+export function AssistantConnections({
+  connections,
+  canDraft,
+}: {
+  connections: ConnectionRow[];
+  /** The person's role lets them create records, so drafts can be offered. */
+  canDraft: boolean;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -29,14 +37,14 @@ export function AssistantConnections({ connections }: { connections: ConnectionR
     );
   }
 
-  function change(id: string, connected: boolean) {
+  function run(id: string, action: () => Promise<{ ok: boolean; error?: string }>) {
     setError(null);
     setBusyId(id);
     startTransition(async () => {
-      const result = await setAssistantConnected(id, connected);
+      const result = await action();
       setBusyId(null);
       if (result.ok) router.refresh();
-      else setError(result.error);
+      else setError(result.error ?? "Something went wrong. Try again.");
     });
   }
 
@@ -50,12 +58,33 @@ export function AssistantConnections({ connections }: { connections: ConnectionR
               <span className="block text-sm text-muted">
                 {c.disconnected ? "Disconnected. It can't read anything in Alfa." : c.used}
               </span>
+              {canDraft && !c.disconnected ? (
+                <label className="mt-2 flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={c.allowDrafts}
+                    disabled={pending}
+                    onChange={(e) => {
+                      const allowed = e.target.checked;
+                      run(c.id, () => setAssistantDrafts(c.id, allowed));
+                    }}
+                    className="mt-1"
+                  />
+                  <span>
+                    Let it make drafts
+                    <span className="block text-xs text-muted">
+                      Draft invoices and quotes, and expenses waiting for review. You check and
+                      send them in Alfa.
+                    </span>
+                  </span>
+                </label>
+              ) : null}
             </span>
             <Button
               type="button"
               variant={c.disconnected ? "secondary" : "destructive"}
               disabled={pending}
-              onClick={() => change(c.id, c.disconnected)}
+              onClick={() => run(c.id, () => setAssistantConnected(c.id, c.disconnected))}
             >
               {busyId === c.id ? "Saving…" : c.disconnected ? "Allow again" : "Disconnect"}
             </Button>

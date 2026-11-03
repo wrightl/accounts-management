@@ -8,7 +8,7 @@ import { companies } from "@/db/schema";
 import { requireActionPermission } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { ensureLocalUser } from "@/lib/users";
-import { setAssistantDisconnected } from "@/lib/assistant/connections";
+import { setAssistantDisconnected, setAssistantDraftsAllowed } from "@/lib/assistant/connections";
 import type { ActionResult } from "@/actions/result";
 
 const PAGE = "/settings/ai-assistant";
@@ -60,6 +60,35 @@ export async function setAssistantConnected(
     entityType: "assistant_connection",
     entityId: id.data,
     meta: { oauthClientId },
+  });
+  revalidatePath(PAGE);
+  return { ok: true, id: id.data };
+}
+
+/**
+ * Let one of your assistants create drafts for you to check, or stop it. Each
+ * draft also needs a role that can create records in that company.
+ */
+export async function setAssistantDrafts(
+  connectionId: string,
+  allowed: boolean,
+): Promise<ActionResult> {
+  const authz = await requireActionPermission("workspace:read");
+  if (!authz.ok) return authz;
+  const id = z.uuid().safeParse(connectionId);
+  if (!id.success) return { ok: false, error: "That assistant wasn't found." };
+
+  const localUserId = await ensureLocalUser(authz.user);
+  const oauthClientId = await setAssistantDraftsAllowed(localUserId, id.data, allowed === true);
+  if (!oauthClientId) return { ok: false, error: "That assistant wasn't found." };
+
+  await writeAudit({
+    companyId: authz.user.companyId,
+    actorUserId: localUserId,
+    action: "assistant.drafts",
+    entityType: "assistant_connection",
+    entityId: id.data,
+    meta: { oauthClientId, allowed: allowed === true },
   });
   revalidatePath(PAGE);
   return { ok: true, id: id.data };

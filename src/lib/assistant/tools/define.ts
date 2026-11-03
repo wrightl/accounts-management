@@ -59,13 +59,17 @@ export type AssistantDraftTool<Input = unknown> = {
   name: string;
   description: string;
   permission: Permission;
+  /** The audit entry for what it creates, as the app writes for the same thing. */
+  audit: { action: string; entityType: string };
+  /** The Alfa screen to review what it created. */
+  href: (id: string) => string;
   inputSchema: z.ZodType<Input>;
   execute: (ctx: DraftToolContext, input: Input) => Promise<DraftResult>;
 };
 
-/** A created draft, with the screen to review it on; or why it wasn't created. */
+/** A created draft and what to tell the person about it; or why it wasn't created. */
 export type DraftResult =
-  | { ok: true; draft: Record<string, unknown>; openInAlfa: string }
+  | { ok: true; id: string; draft: Record<string, unknown> }
   | { ok: false; error: string };
 
 export function defineDraftTool<Input>(definition: AssistantDraftTool<Input>): AssistantDraftTool {

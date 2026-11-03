@@ -547,6 +547,13 @@
             "when": 1791500000000,
             "tag": "0077_assistant_connections",
             "breakpoints": true
+        },
+        {
+            "idx": 78,
+            "version": "7",
+            "when": 1791600000000,
+            "tag": "0078_assistant_connection_drafts",
+            "breakpoints": true
         }
     ]
 }

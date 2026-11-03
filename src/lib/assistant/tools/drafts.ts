@@ -4,7 +4,6 @@ import { z } from "zod";
 import { and, eq, ilike } from "drizzle-orm";
 import { getDb } from "@/db";
 import { clients, invoices, quotes } from "@/db/schema";
-import { writeAudit } from "@/lib/audit";
 import { formatIsoDateUk, todayIsoDate } from "@/lib/dates";
 import { EXPENSE_CATEGORIES } from "@/lib/expenses/categories";
 import { createExpenseRecord } from "@/lib/expenses/create";
@@ -19,9 +18,6 @@ import { formatGBP } from "@/lib/money";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import type { ActionResult } from "@/actions/result";
 import { defineDraftTool, isoDate, type AssistantDraftTool, type DraftResult } from "./define";
-
-/** Tag on the audit entries for anything an assistant created. */
-const VIA = { via: "assistant" } as const;
 
 function failed(result: Extract<ActionResult, { ok: false }>): DraftResult {
   const details = Object.values(result.fieldErrors ?? {});
@@ -87,6 +83,8 @@ function documentLines(lines: LineInput[], defaultVatRate: number) {
 export const DRAFT_TOOLS: readonly AssistantDraftTool[] = [
   defineDraftTool({
     name: "create_draft_invoice",
+    audit: { action: "invoice.create", entityType: "invoice" },
+    href: (id) => `/invoices/${id}`,
     description:
       "Create a DRAFT invoice for an existing client. It is not sent: the person reviews and sends it in Alfa. Confirm the client, lines and prices with the person before calling, and call once per invoice.",
     permission: "accounts:write",
@@ -113,14 +111,6 @@ export const DRAFT_TOOLS: readonly AssistantDraftTool[] = [
 
       const created = await createDraftInvoiceRecord({ companyId, localUserId }, parsed.data);
       if (!created.ok) return failed(created);
-      await writeAudit({
-        companyId,
-        actorUserId: localUserId,
-        action: "invoice.create",
-        entityType: "invoice",
-        entityId: created.id,
-        meta: VIA,
-      });
       revalidatePath("/invoices");
       revalidatePath("/dashboard");
 
@@ -138,6 +128,7 @@ export const DRAFT_TOOLS: readonly AssistantDraftTool[] = [
         .limit(1);
       return {
         ok: true,
+        id: created.id!,
         draft: {
           status: "Draft invoice. Not sent: review and send it in Alfa.",
           number: invoice!.number,
@@ -148,12 +139,13 @@ export const DRAFT_TOOLS: readonly AssistantDraftTool[] = [
           vat: formatGBP(invoice!.vatPence),
           total: formatGBP(invoice!.grossPence),
         },
-        openInAlfa: `/invoices/${created.id}`,
       };
     },
   }),
   defineDraftTool({
     name: "create_draft_quote",
+    audit: { action: "quote.create", entityType: "quote" },
+    href: (id) => `/quotes/${id}`,
     description:
       "Create a DRAFT quote for an existing client. It is not sent: the person reviews and sends it in Alfa. Confirm the client, lines and prices with the person before calling, and call once per quote.",
     permission: "accounts:write",
@@ -183,14 +175,6 @@ export const DRAFT_TOOLS: readonly AssistantDraftTool[] = [
 
       const created = await createDraftQuoteRecord({ companyId, localUserId }, parsed.data);
       if (!created.ok) return failed(created);
-      await writeAudit({
-        companyId,
-        actorUserId: localUserId,
-        action: "quote.create",
-        entityType: "quote",
-        entityId: created.id,
-        meta: VIA,
-      });
       revalidatePath("/quotes");
 
       const [quote] = await getDb()
@@ -208,6 +192,7 @@ export const DRAFT_TOOLS: readonly AssistantDraftTool[] = [
         .limit(1);
       return {
         ok: true,
+        id: created.id!,
         draft: {
           status: "Draft quote. Not sent: review and send it in Alfa.",
           reference: formatQuoteReference(quote!.number, quote!.version),
@@ -218,12 +203,13 @@ export const DRAFT_TOOLS: readonly AssistantDraftTool[] = [
           vat: formatGBP(quote!.vatPence),
           total: formatGBP(quote!.grossPence),
         },
-        openInAlfa: `/quotes/${created.id}`,
       };
     },
   }),
   defineDraftTool({
     name: "create_draft_expense",
+    audit: { action: "expense.create", entityType: "expense" },
+    href: (id) => `/expenses/${id}`,
     description:
       "Add an expense to Alfa's review queue, like an emailed receipt. It isn't recorded until someone approves it in Alfa, where they add the receipt and say who paid. Confirm the details with the person before calling, and call once per expense.",
     permission: "accounts:write",
@@ -251,18 +237,11 @@ export const DRAFT_TOOLS: readonly AssistantDraftTool[] = [
         pending: true,
       });
       if (!created.ok) return failed(created);
-      await writeAudit({
-        companyId,
-        actorUserId: localUserId,
-        action: "expense.create",
-        entityType: "expense",
-        entityId: created.id,
-        meta: VIA,
-      });
       revalidatePath("/expenses");
 
       return {
         ok: true,
+        id: created.id!,
         draft: {
           status: "Waiting for review in Alfa. Add the receipt and say who paid when you approve it.",
           description: parsed.data.description,
@@ -270,7 +249,6 @@ export const DRAFT_TOOLS: readonly AssistantDraftTool[] = [
           spentOn: formatIsoDateUk(parsed.data.spentAt),
           category: parsed.data.category || null,
         },
-        openInAlfa: `/expenses/${created.id}`,
       };
     },
   }),

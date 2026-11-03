@@ -69,9 +69,10 @@ export default async function AiAssistantSettingsPage() {
         .filter((label): label is string => Boolean(label)),
     ),
   ];
+  const draftsAllowed = connections.some((c) => c.allowDrafts && c.disconnectedAt == null);
   const toolNames = new Set([
     ...tools.map((t) => t.name),
-    ...DRAFT_TOOLS.filter((t) => can(session.role, t.permission)).map((t) => t.name),
+    ...(draftsAllowed ? DRAFT_TOOLS.filter((t) => can(session.role, t.permission)) : []).map((t) => t.name),
   ]);
   const prompts = STARTER_PROMPTS.filter((p) => toolNames.has(p.needs));
   const now = new Date();
@@ -90,8 +91,9 @@ export default async function AiAssistantSettingsPage() {
           {canDraft ? (
             <p className="text-sm text-foreground/90">
               Your assistant can <strong>read</strong> your books, and make{" "}
-              <strong>drafts</strong> for you to check: a draft invoice or quote, or an expense
-              waiting for review. It can&apos;t send, pay, approve or delete anything. It sees what you can see
+              <strong>drafts</strong> for you to check, if you allow it below: a draft invoice or
+              quote, or an expense waiting for review. It can&apos;t send, pay, approve or delete
+              anything. It sees what you can see
               here, and nothing more:
             </p>
           ) : (
@@ -180,7 +182,9 @@ export default async function AiAssistantSettingsPage() {
               name: c.name ?? "AI assistant",
               used: usedAgo(c.lastUsedAt, now),
               disconnected: c.disconnectedAt != null,
+              allowDrafts: c.allowDrafts,
             }))}
+            canDraft={canDraft}
           />
         </section>
       </div>
