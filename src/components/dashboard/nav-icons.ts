@@ -32,6 +32,7 @@ import {
   Percent,
   Sparkles,
   HandCoins,
+  MessagesSquare,
   type LucideIcon,
 } from "lucide-react";
 import type { NavIcon } from "./nav";
@@ -71,4 +72,5 @@ export const NAV_ICONS: Record<NavIcon, LucideIcon> = {
   company: Building2,
   payments: CreditCard,
   reminders: BellRing,
+  assistant: MessagesSquare,
 };

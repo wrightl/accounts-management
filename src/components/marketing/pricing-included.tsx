@@ -30,6 +30,10 @@ const INCLUDED = [
     body: "Category and receipt-match suggestions, and plain-English answers about your figures. Nothing changes until you accept it.",
   },
   {
+    title: "Ask your own AI",
+    body: "Connect Claude, ChatGPT or another assistant and ask about your books in your own words. It can draft an invoice or quote, or log an expense, for you to check, but never sends or pays anything. You choose who has access.",
+  },
+  {
     title: "Expenses and receipts",
     body: "Email a receipt, review pending expenses, and batch reimbursement runs. The weekly spend trail stays in one place.",
   },

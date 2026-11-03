@@ -33,6 +33,7 @@ const sections = [
   { id: "what-we-collect", title: "What we collect" },
   { id: "how-we-use", title: "How we use it and why" },
   { id: "ai", title: "AI and receipt reading" },
+  { id: "own-ai", title: "Your own AI assistant" },
   { id: "sharing", title: "Who we share it with" },
   { id: "transfers", title: "International transfers" },
   { id: "retention", title: "How long we keep it" },
@@ -119,6 +120,7 @@ export default function PrivacyPage() {
                   "Financial records you enter, import or forward: quotes, orders, invoices, credit notes, expenses, mileage, reimbursements, receipts, bank statement CSVs, dividends, director's loans and shareholder details.",
                   "Contact details of your clients, team members and accountants you invite.",
                   "Questions you ask the AI bookkeeper.",
+                  "If you connect your own AI assistant: which assistant it is, when it was connected and last used, and a record of each look-up or draft it makes. We don't receive your conversation with it.",
                   "Messages you send us for support.",
                 ]}
               />
@@ -204,6 +206,30 @@ export default function PrivacyPage() {
               in your company accepts a suggestion. Under their commercial
               terms, our AI providers do not use this data to train their
               models. They may keep it for a short time to detect misuse.
+            </GuideParagraph>
+          </GuideSection>
+
+          <GuideSection id="own-ai" title="Your own AI assistant">
+            <GuideParagraph>
+              You can connect an AI assistant you already use, such as Claude
+              or ChatGPT, and ask it about your books. It&rsquo;s off until an
+              admin of your company turns it on in Settings, and each person
+              chooses whether to connect their own assistant.
+            </GuideParagraph>
+            <GuideBulletList
+              items={[
+                "When your assistant looks something up, Alfa sends it the figures and records needed to answer, such as totals, invoices, client names, expenses and bank payments. It sees only what you can see in Alfa: an accountant sees only what the accountant pack contains.",
+                "The assistant's provider (for example Anthropic or OpenAI) receives that data under your own account with them, not under a contract with us. They are not our sub-processor. Their terms and privacy settings decide how they use and keep it, including whether your chats are used to train their models, so check your settings with them.",
+                "Founders' assistants can also create a draft invoice or quote, or an expense waiting for review. Nothing is sent, paid, approved or deleted, and every look-up and draft is recorded in your company's audit log.",
+                "You sign in to Alfa to connect, through our sign-in provider. Your assistant never sees your Alfa password, and we never see your password for the assistant.",
+                "You can disconnect an assistant at any time in Settings, AI assistant, and it stops reading straight away. An admin can turn access off for the whole company.",
+              ]}
+            />
+            <GuideParagraph>
+              If your books include your customers&rsquo; or staff&rsquo;s
+              personal data, connecting an assistant shares some of it with that
+              provider. As the controller of that data, your business decides
+              whether that&rsquo;s appropriate.
             </GuideParagraph>
           </GuideSection>
 

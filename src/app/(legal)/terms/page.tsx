@@ -88,6 +88,7 @@ export default function TermsPage() {
                 "Alfa is a tool, not an accountant or tax adviser. Figures such as tax estimates, safe-to-pay amounts, reserves checks, deadlines and forecasts are guides only. You remain responsible for your records, tax returns and filings.",
                 "Alfa does not file anything with HMRC or Companies House on your behalf.",
                 "AI suggestions (categories, receipt matches and answers from the AI bookkeeper) can be wrong. Check them before you accept or rely on them.",
+                "If you connect your own AI assistant, its answers and drafts can be wrong too. Check a draft invoice, quote or expense in Alfa before you send or approve it. The assistant is a service you get from its provider, not from us.",
                 "Books are kept in pounds sterling (GBP) only.",
               ]}
             />
@@ -222,6 +223,17 @@ export default function TermsPage() {
                 a refund for the unused period. We put data protection terms in
                 place with each sub-processor that are no less protective than
                 these, and remain responsible for their performance.
+              </GuideParagraph>
+            </GuideSubsection>
+            <GuideSubsection title="Your own AI assistant">
+              <GuideParagraph>
+                When an admin turns on AI assistant access and someone in your
+                company connects their own assistant, that is your instruction
+                to us to give the assistant the Customer Personal Data it asks
+                for, within that person&rsquo;s access in Alfa. The
+                assistant&rsquo;s provider is not our sub-processor: it acts
+                under its own terms with whoever connected it, and you are
+                responsible for deciding that this sharing is appropriate.
               </GuideParagraph>
             </GuideSubsection>
             <GuideSubsection title="International transfers">

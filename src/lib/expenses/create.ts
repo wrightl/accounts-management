@@ -22,13 +22,17 @@ import { parseVatRate, resolveLineVatRate, vatFromInclusiveGross } from "@/lib/v
 import type { ActionResult } from "@/actions/result";
 
 /**
- * Create an expense from validated input. Shared by the web action and the
- * mobile API so both apply the same period lock, payer, project and VAT
- * rules. Callers handle authz and the audit entry.
+ * Create an expense from validated input. Shared by the web action, the
+ * mobile API and the AI assistant so all apply the same period lock, payer,
+ * project and VAT rules. Callers handle authz and the audit entry.
+ *
+ * `pending` files it for review instead, like an emailed receipt: who paid
+ * and how it's recorded are chosen when someone approves it.
  */
 export async function createExpenseRecord(
   ctx: ReviewContext,
   input: ExpenseParsed,
+  opts: { pending?: boolean } = {},
 ): Promise<ActionResult> {
   const { companyId, localUserId } = ctx;
   if (input.foreignCurrency && !isAllowedExpenseCurrency(input.foreignCurrency)) {
@@ -59,10 +63,12 @@ export async function createExpenseRecord(
     data.status === "reimbursable"
       ? (data.paidByUserId ?? localUserId)
       : data.paidByUserId;
-  const normalized = normalizeExpensePaymentFields({
-    status: data.status,
-    paidByUserId: paidByDefault,
-  });
+  const normalized = opts.pending
+    ? { ok: true as const, status: "pending" as const, paidByUserId: null }
+    : normalizeExpensePaymentFields({
+        status: data.status,
+        paidByUserId: paidByDefault,
+      });
   if (!normalized.ok) {
     return {
       ok: false,
@@ -103,6 +109,7 @@ export async function createExpenseRecord(
       detectedCurrency: data.foreignCurrency,
       originalAmountMinor: data.originalAmountMinor,
       createdByUserId: localUserId,
+      submittedByUserId: opts.pending ? localUserId : null,
     })
     .returning({ id: expenses.id });
 

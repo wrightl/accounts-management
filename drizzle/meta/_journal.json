@@ -540,6 +540,13 @@
             "when": 1791400000000,
             "tag": "0076_accountant_queries",
             "breakpoints": true
+        },
+        {
+            "idx": 77,
+            "version": "7",
+            "when": 1791500000000,
+            "tag": "0077_assistant_connections",
+            "breakpoints": true
         }
     ]
 }

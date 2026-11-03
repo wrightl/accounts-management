@@ -162,6 +162,11 @@ export const companies = pgTable("companies", {
   openingReservesPence: integer("opening_reserves_pence"),
   /** Associated companies for corporation tax limits (Ltd only). */
   associatedCompanies: integer("associated_companies").notNull().default(0),
+  /**
+   * Let people connect their own AI assistant (Claude, ChatGPT…) to read this
+   * company's books over MCP. Off until an admin turns it on.
+   */
+  aiAssistantEnabled: boolean("ai_assistant_enabled").notNull().default(false),
   /** Automatic payment reminders for sent invoices. */
   remindersEnabled: boolean("reminders_enabled").notNull().default(true),
   /**
@@ -1814,6 +1819,28 @@ export const pushSubscriptions = pgTable(
     uniqueIndex("uniq_push_subscriptions_user_endpoint").on(t.userId, t.endpoint),
     index("idx_push_subscriptions_user").on(t.userId),
   ],
+);
+
+/**
+ * An AI assistant someone has connected to Alfa over MCP, one row per person
+ * and OAuth client. Disconnecting sets `revokedAt`, and Alfa refuses that
+ * client's tokens from then on, whatever the identity provider still allows.
+ */
+export const assistantConnections = pgTable(
+  "assistant_connections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    oauthClientId: text("oauth_client_id").notNull(),
+    /** What the assistant calls itself, e.g. "claude-ai". Null until it says. */
+    clientName: text("client_name"),
+    firstUsedAt: timestamp("first_used_at", { withTimezone: true }).defaultNow().notNull(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }).defaultNow().notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (t) => [uniqueIndex("uniq_assistant_connections_user_client").on(t.userId, t.oauthClientId)],
 );
 
 export type EntityType = (typeof entityTypeEnum.enumValues)[number];

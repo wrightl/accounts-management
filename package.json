@@ -28,6 +28,7 @@
     },
     "dependencies": {
         "@clerk/nextjs": "^7.7.8",
+        "@modelcontextprotocol/server": "^2.4.0",
         "@napi-rs/canvas": "^1.0.7",
         "@neondatabase/serverless": "^1.1.0",
         "@react-pdf/renderer": "^4.6.1",
@@ -72,7 +73,6 @@
         "eslint": "^9",
         "eslint-config-next": "16.4.2",
         "jsdom": "^26.1.0",
-        "ngrok": "^5.0.0-beta.2",
         "tailwindcss": "^4",
         "tsx": "^4.23.12",
         "typescript": "^5",

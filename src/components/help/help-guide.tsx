@@ -562,6 +562,13 @@ export function HelpGuide({
               </>,
             ]}
           />
+          <p className="mt-3 text-sm text-foreground/90">
+            Prefer your own AI? Connect Claude, ChatGPT or another assistant in{" "}
+            <HelpLink href="/settings/ai-assistant">Settings, AI assistant</HelpLink>{" "}
+            and ask it about your books in your own words. It can read, and
+            make draft invoices, quotes and expenses for you to check, but never sends,
+            pays or approves anything. An admin chooses whether it&apos;s on.
+          </p>
         </section>
 
         {!isSoleTrader ? (
