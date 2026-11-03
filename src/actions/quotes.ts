@@ -6,8 +6,8 @@ import { quoteLineItems, quotes } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
 import { mutate } from "@/lib/mutate";
 import { invoiceTotals, poundsToPence } from "@/lib/money";
-import { allocateQuoteNumber } from "@/lib/invoices/allocate";
 import { getQuoteDetail, getQuoteVersionSnapshot } from "@/lib/quotes/queries";
+import { createDraftQuoteRecord } from "@/lib/quotes/create";
 import { loadOrRenderQuotePdf } from "@/lib/quotes/pdf-cache";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { parseVatRate, resolveLineVatRate } from "@/lib/vat";
@@ -63,75 +63,11 @@ export async function createQuote(formData: FormData): Promise<ActionResult> {
       fieldErrors: parsed.fieldErrors,
     };
   }
+  const milestones = parseMilestonesJson(String(formData.get("milestonesJson") ?? "[]"));
 
   return mutate(
     "accounts:write",
-    async ({ companyId, localUserId }) => {
-      const company = await getOrCreateCompanySettings(companyId);
-      let lineValues;
-      try {
-        lineValues = parsed.data.lines.map((l, i) => ({
-          description: l.description,
-          quantity: l.quantity,
-          unitPricePence: poundsToPence(l.unitPricePounds),
-          vatRate: resolveLineVatRate(company, parseVatRate(l.vatRate)),
-          discountPercent: l.discountPercent ?? 0,
-          position: i,
-        }));
-      } catch {
-        return { ok: false, error: "Enter a valid unit price on each line item" };
-      }
-      const totals = invoiceTotals(lineValues);
-      const milestoneResult = parseAndValidateMilestones(formData, totals.grossPence);
-      if (!milestoneResult.ok) return { ok: false, error: milestoneResult.error };
-
-      const db = getDb();
-      const quoteId = await db.transaction(async (tx) => {
-        const number = await allocateQuoteNumber(tx, companyId, parsed.data.issueDate);
-        const [row] = await tx
-          .insert(quotes)
-          .values({
-            companyId,
-            number,
-            clientId: parsed.data.clientId,
-            status: "draft",
-            version: 1,
-            issueDate: parsed.data.issueDate,
-            validUntil: parsed.data.validUntil,
-            notes: parsed.data.notes,
-            depositOnAccept:
-              parsed.data.depositOnAccept && milestoneResult.milestones.length > 0,
-            ...totals,
-            createdByUserId: localUserId,
-          })
-          .returning({ id: quotes.id });
-
-        await tx.insert(quoteLineItems).values(
-          lineValues.map((l) => ({ ...l, quoteId: row.id })),
-        );
-
-        await replaceQuotePaymentMilestones(tx, row.id, milestoneResult.milestones);
-
-        await insertQuoteVersion(tx, {
-          quoteId: row.id,
-          version: 1,
-          snapshot: {
-            clientId: parsed.data.clientId,
-            issueDate: parsed.data.issueDate,
-            validUntil: parsed.data.validUntil,
-            notes: parsed.data.notes,
-            ...totals,
-            lines: linesToSnapshot(lineValues),
-          },
-          source: "create",
-          createdByUserId: localUserId,
-        });
-
-        return row.id;
-      });
-
-      return { ok: true, id: quoteId };
-    },
+    (ctx) => createDraftQuoteRecord(ctx, parsed.data, milestones),
     {
       audit: { action: "quote.create", entityType: "quote" },
       paths: ["/quotes"],

@@ -95,7 +95,7 @@ export async function askBookkeeper(question: string): Promise<AnswerResult> {
   // doesn't use up one of the company's questions.
   let action = "ai.ask";
   try {
-    result = await answerQuestion(companyId, trimmed);
+    result = await answerQuestion(companyId, trimmed, authz.user.role);
   } catch (e) {
     console.error("[bookkeeper] answer failed", e);
     action = "ai.ask_failed";

@@ -5,7 +5,7 @@ export const LEGAL_JURISDICTION = "England and Wales";
 export const LEGAL_REGISTERED_OFFICE =
   "Apartment 8, Whiteley Wood House, 50 Woofindin Avenue, Sheffield, England, S11 7FG";
 export const LEGAL_CONTACT_EMAIL = "support@dotanddashconsulting.com";
-export const LEGAL_LAST_UPDATED = "12 October 2026";
+export const LEGAL_LAST_UPDATED = "3 November 2026";
 
 export type SubProcessor = {
   name: string;

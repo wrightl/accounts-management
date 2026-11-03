@@ -31,13 +31,14 @@ type MutatePrep =
   | { ok: true; ctx: MutateContext }
   | { ok: false; error: string };
 
-async function prepareMutate(permission: Permission): Promise<MutatePrep> {
-  const authz = await requireActionPermission(permission);
-  if (!authz.ok) return authz;
-  if (!authz.user.companyId || !authz.user.entityType) {
-    return { ok: false, error: "Complete onboarding before using the dashboard." };
-  }
-
+/**
+ * Whether the company can take changes right now: not suspended, and not on a
+ * read-only plan. Shared with callers that resolve the company themselves,
+ * such as the AI assistant's draft tools.
+ */
+export async function checkCompanyWritable(
+  companyId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
   const db = getDb();
   const [company] = await db
     .select({
@@ -45,7 +46,7 @@ async function prepareMutate(permission: Permission): Promise<MutatePrep> {
       suspendedReason: companies.suspendedReason,
     })
     .from(companies)
-    .where(eq(companies.id, authz.user.companyId))
+    .where(eq(companies.id, companyId))
     .limit(1);
   if (company?.suspendedAt) {
     return {
@@ -57,7 +58,7 @@ async function prepareMutate(permission: Permission): Promise<MutatePrep> {
   }
 
   try {
-    const entitlements = await getEntitlements(authz.user.companyId);
+    const entitlements = await getEntitlements(companyId);
     if (entitlements.readOnly) {
       return { ok: false, error: readOnlyMessage(entitlements.reason) };
     }
@@ -70,6 +71,18 @@ async function prepareMutate(permission: Permission): Promise<MutatePrep> {
       }),
     );
   }
+  return { ok: true };
+}
+
+async function prepareMutate(permission: Permission): Promise<MutatePrep> {
+  const authz = await requireActionPermission(permission);
+  if (!authz.ok) return authz;
+  if (!authz.user.companyId || !authz.user.entityType) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+
+  const writable = await checkCompanyWritable(authz.user.companyId);
+  if (!writable.ok) return writable;
 
   const localUserId = await ensureLocalUser(authz.user);
   return {

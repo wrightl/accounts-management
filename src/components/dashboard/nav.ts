@@ -41,7 +41,8 @@ export type NavIcon =
     | 'notifications'
     | 'company'
     | 'payments'
-    | 'reminders';
+    | 'reminders'
+    | 'assistant';
 
 export interface NavItem {
     href: string;
@@ -115,6 +116,14 @@ export const SETTINGS_PAGES: SettingsPage[] = [
         label: 'Notifications',
         description: 'Which events reach you in the app, by email, or as alerts.',
         icon: 'notifications',
+        permission: 'workspace:read',
+        section: 'you',
+    },
+    {
+        href: '/settings/ai-assistant',
+        label: 'AI assistant',
+        description: 'Ask Claude, ChatGPT or another assistant about your books.',
+        icon: 'assistant',
         permission: 'workspace:read',
         section: 'you',
     },

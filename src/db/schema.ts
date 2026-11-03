@@ -162,6 +162,11 @@ export const companies = pgTable("companies", {
   openingReservesPence: integer("opening_reserves_pence"),
   /** Associated companies for corporation tax limits (Ltd only). */
   associatedCompanies: integer("associated_companies").notNull().default(0),
+  /**
+   * Let people connect their own AI assistant (Claude, ChatGPT…) to read this
+   * company's books over MCP. Off until an admin turns it on.
+   */
+  aiAssistantEnabled: boolean("ai_assistant_enabled").notNull().default(false),
   /** Automatic payment reminders for sent invoices. */
   remindersEnabled: boolean("reminders_enabled").notNull().default(true),
   /**
@@ -1814,6 +1819,52 @@ export const pushSubscriptions = pgTable(
     uniqueIndex("uniq_push_subscriptions_user_endpoint").on(t.userId, t.endpoint),
     index("idx_push_subscriptions_user").on(t.userId),
   ],
+);
+
+/**
+ * An AI assistant someone has connected to Alfa over MCP, one row per person
+ * and OAuth client. Disconnecting sets `revokedAt`, and Alfa refuses that
+ * client's tokens from then on, whatever the identity provider still allows.
+ */
+export const assistantConnections = pgTable(
+  "assistant_connections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    oauthClientId: text("oauth_client_id").notNull(),
+    /** What the assistant calls itself, e.g. "claude-ai". Null until it says. */
+    clientName: text("client_name"),
+    firstUsedAt: timestamp("first_used_at", { withTimezone: true }).defaultNow().notNull(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }).defaultNow().notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    /** The person has let this assistant create drafts. Off until they choose. */
+    allowDrafts: boolean("allow_drafts").notNull().default(false),
+  },
+  (t) => [uniqueIndex("uniq_assistant_connections_user_client").on(t.userId, t.oauthClientId)],
+);
+
+/**
+ * A draft an assistant asked for, keyed by its details. The unique index lets
+ * exactly one of several identical calls create it; the others get its id.
+ */
+export const assistantDraftRequests = pgTable(
+  "assistant_draft_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    requestKey: text("request_key").notNull(),
+    /** What it created; null while it's being created. */
+    entityId: uuid("entity_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("uniq_assistant_draft_requests_key").on(t.companyId, t.userId, t.requestKey)],
 );
 
 export type EntityType = (typeof entityTypeEnum.enumValues)[number];

@@ -8,9 +8,8 @@ import {
   invoices,
 } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
-import { allocateInvoiceNumber } from "@/lib/invoices/allocate";
 import { mutate } from "@/lib/mutate";
-import { invoiceTotals, poundsToPence } from "@/lib/money";
+import { invoiceTotals } from "@/lib/money";
 import {
   canEditInvoice,
   canTransition,
@@ -20,40 +19,21 @@ import {
 } from "@/lib/invoices/status";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
 import {
+  buildLineValues,
+  createDraftInvoiceRecord,
+  rebilledExpenseIds,
+} from "@/lib/invoices/create";
+import {
   invoiceRawFromFormData,
   parseInvoiceInput,
-  type InvoiceParsed,
 } from "@/lib/invoices/schema";
 import { enqueueSendJob, processSendJob } from "@/lib/outbox";
 import { creditAdjustmentForInvoice } from "@/lib/credit-notes/adjustments";
 import { periodLockError } from "@/lib/period-lock";
 import { checkPeriodOpen } from "@/lib/period-lock-queries";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
-import { parseVatRate, resolveLineVatRate } from "@/lib/vat";
 import { checkRebillExpenses } from "@/lib/profitability/queries";
 import type { ActionResult } from "@/actions/result";
-
-function buildLineValues(
-  lines: InvoiceParsed["lines"],
-  company: { vatRegistered: boolean },
-) {
-  return lines.map((l, i) => {
-    const unitPricePence = poundsToPence(l.unitPricePounds);
-    return {
-      description: l.description,
-      quantity: l.quantity,
-      unitPricePence,
-      vatRate: resolveLineVatRate(company, parseVatRate(l.vatRate)),
-      discountPercent: l.discountPercent ?? 0,
-      position: i,
-      expenseId: l.expenseId ?? null,
-    };
-  });
-}
-
-function rebilledExpenseIds(lines: Array<{ expenseId: string | null }>): string[] {
-  return lines.flatMap((l) => (l.expenseId ? [l.expenseId] : []));
-}
 
 export async function createInvoice(formData: FormData): Promise<ActionResult> {
   const parsed = parseInvoiceInput(invoiceRawFromFormData(formData));
@@ -65,61 +45,9 @@ export async function createInvoice(formData: FormData): Promise<ActionResult> {
     };
   }
 
-  const issueDate = parsed.data.issueDate;
-  const dueDate =
-    parsed.data.dueDate && parsed.data.dueDate.length > 0
-      ? parsed.data.dueDate
-      : defaultDueDate(issueDate);
-
   return mutate(
     "accounts:write",
-    async ({ companyId, localUserId }) => {
-      const company = await getOrCreateCompanySettings(companyId);
-      const locked = periodLockError(company.booksLockedThrough, issueDate);
-      if (locked) return { ok: false, error: locked };
-      let lineValues;
-      try {
-        lineValues = buildLineValues(parsed.data.lines, company);
-      } catch (e) {
-        return { ok: false, error: e instanceof Error ? e.message : "Invalid amount" };
-      }
-      const totals = invoiceTotals(lineValues);
-      const rebillError = await checkRebillExpenses(
-        companyId,
-        parsed.data.clientId,
-        rebilledExpenseIds(lineValues),
-        null,
-      );
-      if (rebillError) return { ok: false, error: rebillError };
-
-      const db = getDb();
-      const invoiceId = await db.transaction(async (tx) => {
-        const number = await allocateInvoiceNumber(tx, companyId, issueDate);
-        const [inv] = await tx
-          .insert(invoices)
-          .values({
-            companyId,
-            number,
-            clientId: parsed.data.clientId,
-            status: "draft",
-            issueDate,
-            dueDate,
-            notes: parsed.data.notes,
-            netPence: totals.netPence,
-            vatPence: totals.vatPence,
-            grossPence: totals.grossPence,
-            createdByUserId: localUserId,
-          })
-          .returning({ id: invoices.id });
-
-        await tx.insert(invoiceLineItems).values(
-          lineValues.map((l) => ({ ...l, invoiceId: inv.id })),
-        );
-        return inv.id;
-      });
-
-      return { ok: true, id: invoiceId };
-    },
+    (ctx) => createDraftInvoiceRecord(ctx, parsed.data),
     {
       audit: { action: "invoice.create", entityType: "invoice" },
       paths: ["/invoices", "/dashboard"],
