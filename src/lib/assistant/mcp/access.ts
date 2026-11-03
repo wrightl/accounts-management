@@ -1,7 +1,13 @@
 import "server-only";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { assistantConnections, auditLog, companies, companyMemberships } from "@/db/schema";
+import {
+  assistantConnections,
+  assistantDraftRequests,
+  auditLog,
+  companies,
+  companyMemberships,
+} from "@/db/schema";
 import { todayIsoDate } from "@/lib/dates";
 import { findLocalUser } from "@/lib/users";
 import { isTenantRole, type TenantRole } from "@/lib/roles";
@@ -209,33 +215,66 @@ export async function claimToolCall(call: {
   });
 }
 
-/** How long a retried draft call returns the draft it already made. */
+/** How long a repeated draft call returns the draft it already made. */
 export const DRAFT_RETRY_WINDOW_MINUTES = 10;
 
+export type DraftClaim =
+  | { kind: "claimed"; claimId: string }
+  | { kind: "done"; entityId: string }
+  | { kind: "in_progress" };
+
 /**
- * The record a draft call with this request key already created, if it was
- * in the last few minutes: assistants retry calls, and a retry shouldn't make
- * a second invoice.
+ * Claim the right to create one draft. Identical calls share a request key,
+ * and the unique index lets exactly one of them claim it, even when they
+ * arrive together; the rest get the draft it made. A claim older than the
+ * retry window can be taken again, so the same draft can be made on purpose
+ * later.
  */
-export async function recentDraftFor(draft: {
+export async function claimDraftRequest(request: {
   companyId: string;
   localUserId: string;
-  action: string;
   requestKey: string;
-}): Promise<string | null> {
-  const [row] = await getDb()
-    .select({ entityId: auditLog.entityId })
-    .from(auditLog)
+}): Promise<DraftClaim> {
+  const db = getDb();
+  const [claimed] = await db
+    .insert(assistantDraftRequests)
+    .values({ companyId: request.companyId, userId: request.localUserId, requestKey: request.requestKey })
+    .onConflictDoUpdate({
+      target: [
+        assistantDraftRequests.companyId,
+        assistantDraftRequests.userId,
+        assistantDraftRequests.requestKey,
+      ],
+      set: { createdAt: sql`now()`, entityId: null },
+      setWhere: sql`${assistantDraftRequests.createdAt} < now() - make_interval(mins => ${DRAFT_RETRY_WINDOW_MINUTES})`,
+    })
+    .returning({ id: assistantDraftRequests.id });
+  if (claimed) return { kind: "claimed", claimId: claimed.id };
+
+  const [existing] = await db
+    .select({ entityId: assistantDraftRequests.entityId })
+    .from(assistantDraftRequests)
     .where(
       and(
-        eq(auditLog.companyId, draft.companyId),
-        eq(auditLog.actorUserId, draft.localUserId),
-        eq(auditLog.action, draft.action),
-        sql`${auditLog.meta}->>'requestKey' = ${draft.requestKey}`,
-        sql`${auditLog.createdAt} > now() - make_interval(mins => ${DRAFT_RETRY_WINDOW_MINUTES})`,
+        eq(assistantDraftRequests.companyId, request.companyId),
+        eq(assistantDraftRequests.userId, request.localUserId),
+        eq(assistantDraftRequests.requestKey, request.requestKey),
       ),
     )
-    .orderBy(desc(auditLog.createdAt))
     .limit(1);
-  return row?.entityId ?? null;
+  return existing?.entityId ? { kind: "done", entityId: existing.entityId } : { kind: "in_progress" };
+}
+
+/** Record what a claimed draft request created, or release it if nothing was. */
+export async function finishDraftRequest(
+  companyId: string,
+  claimId: string,
+  entityId: string | null,
+): Promise<void> {
+  const where = and(eq(assistantDraftRequests.id, claimId), eq(assistantDraftRequests.companyId, companyId));
+  if (entityId) {
+    await getDb().update(assistantDraftRequests).set({ entityId }).where(where);
+  } else {
+    await getDb().delete(assistantDraftRequests).where(where);
+  }
 }

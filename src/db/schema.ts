@@ -1845,6 +1845,28 @@ export const assistantConnections = pgTable(
   (t) => [uniqueIndex("uniq_assistant_connections_user_client").on(t.userId, t.oauthClientId)],
 );
 
+/**
+ * A draft an assistant asked for, keyed by its details. The unique index lets
+ * exactly one of several identical calls create it; the others get its id.
+ */
+export const assistantDraftRequests = pgTable(
+  "assistant_draft_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    requestKey: text("request_key").notNull(),
+    /** What it created; null while it's being created. */
+    entityId: uuid("entity_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("uniq_assistant_draft_requests_key").on(t.companyId, t.userId, t.requestKey)],
+);
+
 export type EntityType = (typeof entityTypeEnum.enumValues)[number];
 export type Company = typeof companies.$inferSelect;
 export type PlatformSettings = typeof platformSettings.$inferSelect;

@@ -51,10 +51,22 @@ async function findClient(
   };
 }
 
+/**
+ * An amount in pounds, refused unless it's whole pence, so what's created is
+ * exactly what the person confirmed rather than a rounded float.
+ */
+function pounds(max: number) {
+  return z
+    .number()
+    .min(0)
+    .max(max)
+    .refine((v) => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6, "Use pounds and pence: at most 2 decimal places");
+}
+
 const invoiceLine = z.object({
   description: z.string().trim().min(1).max(500),
   quantity: z.number().positive().max(1_000_000).default(1),
-  unitPrice: z.number().min(0).max(10_000_000).describe("Price per unit in pounds, before VAT"),
+  unitPrice: pounds(10_000_000).describe("Price per unit in pounds, before VAT"),
   vatRate: z
     .number()
     .int()
@@ -215,7 +227,9 @@ export const DRAFT_TOOLS: readonly AssistantDraftTool[] = [
     permission: "accounts:write",
     inputSchema: z.object({
       description: z.string().trim().min(1).max(500).describe("What it was for, and who from"),
-      amount: z.number().positive().max(10_000_000).describe("Total paid in pounds, including any VAT"),
+      amount: pounds(10_000_000)
+        .refine((v) => v > 0, "Enter an amount above zero")
+        .describe("Total paid in pounds, including any VAT"),
       spentOn: isoDate.optional().describe("Defaults to today"),
       category: z.enum(EXPENSE_CATEGORIES).optional(),
       vatRate: z.number().int().min(0).max(100).optional().describe("VAT % on the receipt, if known"),

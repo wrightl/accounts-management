@@ -17,7 +17,8 @@ import {
   claimToolCall,
   noCompanyMessage,
   readableCompanies,
-  recentDraftFor,
+  claimDraftRequest,
+  finishDraftRequest,
   type AssistantCompany,
   type AssistantPerson,
 } from "./access";
@@ -193,9 +194,9 @@ function limitReached(companyName: string): CallToolResult {
 }
 
 /**
- * Create a draft, once. A call repeating one from the last few minutes (same
- * tool, company, person and details) gets the draft already made, so an
- * assistant retrying doesn't leave duplicates behind.
+ * Create a draft, once. Calls with the same tool, company, person and details
+ * within a few minutes share one draft, whether they're retries or arrive
+ * together, so an assistant can't leave duplicates behind.
  */
 async function runDraftTool(
   tool: AssistantDraftTool,
@@ -216,21 +217,29 @@ async function runDraftTool(
     .update(JSON.stringify({ tool: tool.name, companyId: company.id, input }))
     .digest("hex");
   const owner = { companyId: company.id, localUserId: person.localUserId };
-  const existing = await recentDraftFor({ ...owner, action: tool.audit.action, requestKey });
-  if (existing) {
+  const claim = await claimDraftRequest({ ...owner, requestKey });
+  if (claim.kind === "done") {
     return text(
       JSON.stringify({
         company: company.name,
         alreadyCreated: "This was created a moment ago, so nothing new was made.",
-        openInAlfa: new URL(tool.href(existing), origin).toString(),
+        openInAlfa: new URL(tool.href(claim.entityId), origin).toString(),
       }),
     );
   }
-
-  if (!(await claimToolCall({ ...owner, tool: tool.name, oauthClientId }))) {
-    return limitReached(company.name);
+  if (claim.kind === "in_progress") {
+    return text("This is already being created. Check Alfa in a moment rather than trying again.", true);
   }
-  const result = await tool.execute(owner, input);
+
+  let result: Awaited<ReturnType<typeof tool.execute>> | null = null;
+  try {
+    if (!(await claimToolCall({ ...owner, tool: tool.name, oauthClientId }))) {
+      return limitReached(company.name);
+    }
+    result = await tool.execute(owner, input);
+  } finally {
+    await finishDraftRequest(company.id, claim.claimId, result?.ok ? result.id : null);
+  }
   if (!result.ok) return text(`Nothing was created. ${result.error}`, true);
   await writeAudit({
     companyId: company.id,

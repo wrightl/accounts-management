@@ -557,6 +557,41 @@ describe("draft tools", () => {
     expect(changed.json.created).toBeTruthy();
   });
 
+  it("creates one draft when identical calls arrive together", async () => {
+    const args = { client: "Client of A-1", lines: [{ description: "Design work", unitPrice: 500 }] };
+    const results = await Promise.all(
+      Array.from({ length: 4 }, () => callTool("admin-token", "create_draft_invoice", args)),
+    );
+    expect(results.filter((r) => r.json?.created)).toHaveLength(1);
+    const drafts = await db
+      .select()
+      .from(invoices)
+      .where(and(eq(invoices.companyId, companyA), eq(invoices.status, "draft")));
+    expect(drafts).toHaveLength(2); // A-DRAFT from the seed, plus one.
+  });
+
+  it("lets a failed draft be tried again once the problem is fixed", async () => {
+    const args = { client: "New Client Ltd", lines: [{ description: "Work", unitPrice: 100 }] };
+    expect((await callTool("admin-token", "create_draft_invoice", args)).isError).toBe(true);
+    await db.insert(clients).values({ companyId: companyA, name: "New Client Ltd" });
+    const retry = await callTool("admin-token", "create_draft_invoice", args);
+    expect(retry.json.created).toMatchObject({ client: "New Client Ltd" });
+  });
+
+  it("refuses amounts that aren't whole pence, rather than rounding them", async () => {
+    for (const [name, args] of [
+      ["create_draft_invoice", { client: "Client of A-1", lines: [{ description: "Work", unitPrice: 10.005 }] }],
+      ["create_draft_expense", { description: "Coffee", amount: 3.499 }],
+    ] as const) {
+      const { body } = await rpc("admin-token", "tools/call", { name, arguments: args });
+      expect(body.error ?? body.result?.isError).toBeTruthy();
+    }
+    expect(await db.select().from(expenses)).toHaveLength(0);
+    expect(
+      await db.select().from(invoices).where(and(eq(invoices.companyId, companyA), eq(invoices.status, "draft"))),
+    ).toHaveLength(1);
+  });
+
   it("won't quote another company's client, or with a valid-until date before the quote", async () => {
     for (const args of [
       { client: "Client of B-1", lines: [{ description: "Work", unitPrice: 100 }] },
