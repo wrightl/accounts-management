@@ -90,12 +90,20 @@ export type CompanyChoice = { ok: true; company: AssistantCompany } | { ok: fals
  */
 export function chooseCompany(person: AssistantPerson, named?: string): CompanyChoice {
   if (named?.trim()) {
-    const wanted = named.trim().toLowerCase();
-    const match = person.companies.find((c) => c.id === named.trim() || c.name.toLowerCase() === wanted);
-    if (!match) {
+    const wanted = named.trim();
+    const byId = person.companies.find((c) => c.id === wanted);
+    if (byId) return usable(byId);
+    const byName = person.companies.filter((c) => c.name.toLowerCase() === wanted.toLowerCase());
+    if (byName.length > 1) {
+      return {
+        ok: false,
+        message: `More than one of your companies is called "${wanted}". Use the company's id from list_my_companies instead.`,
+      };
+    }
+    if (byName.length === 0) {
       return { ok: false, message: `You don't have access to a company called "${named}". Use list_my_companies to see yours.` };
     }
-    return usable(match);
+    return usable(byName[0]!);
   }
   const readable = readableCompanies(person);
   const current = person.companies.find((c) => c.id === person.currentCompanyId);

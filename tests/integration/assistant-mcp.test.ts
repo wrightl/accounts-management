@@ -287,6 +287,16 @@ describe("MCP tools for an accountant", () => {
     expect(b.json.result.invoices.map((i: { number: string }) => i.number)).toEqual(["B-1"]);
   });
 
+  it("asks which company when two of theirs share a name, and accepts the id", async () => {
+    await db.update(companies).set({ name: "Alpha Ltd" }).where(eq(companies.id, companyB));
+    const byName = await callTool("accountant-token", "search_invoices", { company: "Alpha Ltd" });
+    expect(byName.isError).toBe(true);
+    expect(byName.text).toContain("More than one of your companies");
+
+    const byId = await callTool("accountant-token", "search_invoices", { company: companyB });
+    expect(byId.json.result.invoices.map((i: { number: string }) => i.number)).toEqual(["B-1"]);
+  });
+
   it("refuses a company they don't belong to", async () => {
     const gamma = await seedCompany(db, { name: "Gamma Ltd", slug: "gamma", aiAssistantEnabled: true });
     await seedInvoice(gamma.id, "G-1", "sent");
