@@ -10,6 +10,7 @@ import {
   pendingPaymentSources,
   receiptsByExpense,
 } from "@/lib/mobile/expenses";
+import { pageProbe, pageResult, parseMobilePage } from "@/lib/mobile/paging";
 import { ensureLocalUser } from "@/lib/users";
 
 export async function GET(request: NextRequest) {
@@ -20,9 +21,12 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status") || undefined;
-    const limit = searchParams.get("limit") ? parseInt(searchParams.get("limit")!) : 50;
+    const page = parseMobilePage(searchParams);
 
-    const rows = (await listExpenses(user.companyId, { status })).slice(0, limit);
+    const { items: rows, hasMore } = pageResult(
+      await listExpenses(user.companyId, { status }, pageProbe(page)),
+      page,
+    );
     const [receipts, paymentSources] = await Promise.all([
       receiptsByExpense(rows.map((row) => row.id)),
       pendingPaymentSources(user.companyId, rows),
@@ -43,6 +47,7 @@ export async function GET(request: NextRequest) {
           })),
         }),
       ),
+      hasMore,
     });
   } catch (error) {
     console.error("Expenses list error:", error);

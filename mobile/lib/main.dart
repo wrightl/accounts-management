@@ -3,12 +3,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
-import 'core/config/app_env.dart';
 import 'core/config/clerk_oauth.dart';
 import 'core/constants/app_constants.dart';
 import 'core/theme/app_theme.dart';
 import 'data/api/api_client.dart';
 import 'features/auth/auth_provider.dart';
+import 'features/auth/sign_out.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'features/books/books_provider.dart';
 import 'features/dashboard/dashboard_provider.dart';
@@ -21,7 +21,6 @@ import 'shared/widgets/product_lockup.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await AppEnv.load();
   runApp(const MyApp());
 }
 
@@ -31,12 +30,12 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final publishableKey = AppConstants.clerkPublishableKey;
-    if (publishableKey.isEmpty) {
+    if (publishableKey.isEmpty || !AppConstants.apiBaseUrlConfigured) {
       return MaterialApp(
         title: AppConstants.appName,
         theme: AppTheme.lightTheme,
         debugShowCheckedModeBanner: false,
-        home: const MissingClerkKeyScreen(),
+        home: const MissingConfigScreen(),
       );
     }
 
@@ -131,7 +130,7 @@ class _SignedInShellState extends State<SignedInShell> {
     if (!mounted) return;
     await context.read<AuthProvider>().syncWithBackend();
     if (!mounted) return;
-    await PushNotificationService().start();
+    await PushNotificationService.instance.start();
   }
 
   @override
@@ -216,12 +215,7 @@ class _AuthErrorScaffold extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               OutlinedButton(
-                onPressed: () async {
-                  await ClerkAuth.of(context, listen: false).signOut();
-                  if (context.mounted) {
-                    await context.read<AuthProvider>().logout();
-                  }
-                },
+                onPressed: () => signOut(context),
                 child: const Text('Sign out'),
               ),
             ],
@@ -232,8 +226,10 @@ class _AuthErrorScaffold extends StatelessWidget {
   }
 }
 
-class MissingClerkKeyScreen extends StatelessWidget {
-  const MissingClerkKeyScreen({super.key});
+/// The build is missing its settings. Release builds stop here rather than
+/// talk to a default server.
+class MissingConfigScreen extends StatelessWidget {
+  const MissingConfigScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -243,8 +239,9 @@ class MissingClerkKeyScreen extends StatelessWidget {
           padding: const EdgeInsets.all(24),
           child: Center(
             child: Text(
-              'Set CLERK_PUBLISHABLE_KEY in mobile/.env.development '
-              '(same value as NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY).',
+              'This build is missing its settings. Build it with '
+              '--dart-define-from-file, setting API_BASE_URL and '
+              'CLERK_PUBLISHABLE_KEY (see mobile/README.md).',
               style: Theme.of(context).textTheme.titleMedium,
               textAlign: TextAlign.center,
             ),

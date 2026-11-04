@@ -86,7 +86,12 @@ function expenseListOrderBy(
   }
 }
 
-export async function listExpenses(companyId: string, filters: ExpenseFilters = {}) {
+/** Pass `page` to fetch one page (the mobile app); the web page lists them all. */
+export async function listExpenses(
+  companyId: string,
+  filters: ExpenseFilters = {},
+  page?: { limit: number; offset: number },
+) {
   const db = getDb();
   const paidBy = alias(users, "paid_by");
   const createdBy = alias(users, "created_by");
@@ -117,7 +122,7 @@ export async function listExpenses(companyId: string, filters: ExpenseFilters = 
     )`);
   }
 
-  const rows = await db
+  const query = db
     .select({
       id: expenses.id,
       description: expenses.description,
@@ -156,6 +161,7 @@ export async function listExpenses(companyId: string, filters: ExpenseFilters = 
         createdBy: sql`coalesce(${createdBy.name}, ${createdBy.email}, ${submittedBy.name}, ${submittedBy.email})`,
       }),
     );
+  const rows = page ? await query.limit(page.limit).offset(page.offset) : await query;
 
   const labelsByExpense = await labelsForExpenses(rows.map((r) => r.id));
 

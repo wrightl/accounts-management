@@ -1,9 +1,9 @@
-import 'package:clerk_flutter/clerk_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/web_links.dart';
 import '../../../features/auth/auth_provider.dart';
+import '../../../features/auth/sign_out.dart';
 import '../../../features/notifications/screens/notification_prefs_screen.dart';
 import '../../work/bookkeeper_screen.dart';
 import '../../work/deadlines_screen.dart';
@@ -116,12 +116,7 @@ class MoreScreen extends StatelessWidget {
                 ListTile(
                   leading: const Icon(Icons.logout),
                   title: const Text('Sign out'),
-                  onTap: () async {
-                    await ClerkAuth.of(context, listen: false).signOut();
-                    if (context.mounted) {
-                      await context.read<AuthProvider>().logout();
-                    }
-                  },
+                  onTap: () => signOut(context),
                 ),
               ],
             ),

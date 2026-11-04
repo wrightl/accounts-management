@@ -1,33 +1,34 @@
-import '../config/app_env.dart';
+import 'package:flutter/foundation.dart';
 
 class AppConstants {
   static const String appName = 'Alfa by Dot+Dash';
   static const String appVersion = '1.0.0';
 
+  // Set with `--dart-define-from-file` (see mobile/README.md). Nothing is
+  // bundled into the app, so a build carries only what it was built with.
   static const String _definedApiBaseUrl = String.fromEnvironment('API_BASE_URL');
   static const String _definedClerkPublishableKey =
       String.fromEnvironment('CLERK_PUBLISHABLE_KEY');
   static const String _definedClerkPublishableKeyAlias =
       String.fromEnvironment('NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY');
-  static const String _defaultApiBaseUrl = 'http://localhost:3001';
+  static const String _debugApiBaseUrl = 'http://localhost:3001';
 
-  /// Compile-time `--dart-define` wins, then dotenv files, then localhost:3001.
+  /// Debug builds fall back to the local Next.js server. Release builds never
+  /// do: see [apiBaseUrlConfigured].
   static String get apiBaseUrl {
     if (_definedApiBaseUrl.isNotEmpty) return _definedApiBaseUrl;
-    return AppEnv.get('API_BASE_URL') ?? _defaultApiBaseUrl;
+    return kReleaseMode ? '' : _debugApiBaseUrl;
   }
+
+  /// False for a release build made without `API_BASE_URL`.
+  static bool get apiBaseUrlConfigured => apiBaseUrl.isNotEmpty;
 
   /// Same value as the web app's `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`.
   static String get clerkPublishableKey {
     if (_definedClerkPublishableKey.isNotEmpty) {
       return _definedClerkPublishableKey;
     }
-    if (_definedClerkPublishableKeyAlias.isNotEmpty) {
-      return _definedClerkPublishableKeyAlias;
-    }
-    return AppEnv.get('CLERK_PUBLISHABLE_KEY') ??
-        AppEnv.get('NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY') ??
-        '';
+    return _definedClerkPublishableKeyAlias;
   }
   
   // Storage Keys

@@ -35,16 +35,11 @@ flutter pub get
 dart run build_runner build
 ```
 
-3. API URL and Clerk: debug builds load `.env.development`.
-   Set `CLERK_PUBLISHABLE_KEY` to the same value as the web app's
-   `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`. Never add `CLERK_SECRET_KEY` to the
-   mobile app.
-
-   For a device-specific API URL, copy `.env.example` to `.env.local` and run:
-
-```bash
-flutter run --dart-define-from-file=.env.local
-```
+3. API URL and Clerk come from a defines file passed at build time; nothing is
+   bundled into the app. Set `API_BASE_URL` and `CLERK_PUBLISHABLE_KEY` (the
+   same value as the web app's `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`) in
+   `.env.development`, or copy `.env.example` to `.env.local` for a
+   device-specific API URL. Never add `CLERK_SECRET_KEY` to the mobile app.
 
 ## Running the App
 
@@ -53,21 +48,25 @@ flutter run --dart-define-from-file=.env.local
 Start the Next.js API (`npm run dev` in the repo root), then:
 
 ```bash
-flutter run
+flutter run --dart-define-from-file=.env.development
 ```
 
-Debug/profile builds load `mobile/.env.development` (`API_BASE_URL=http://localhost:3001`). `--dart-define` / `--dart-define-from-file` override the file.
+Without `API_BASE_URL`, debug and profile builds use `http://localhost:3001`.
+The app stops at a settings screen if `CLERK_PUBLISHABLE_KEY` is missing.
 
 ### Build for Release
 
+Release builds need both `API_BASE_URL` and `CLERK_PUBLISHABLE_KEY`. Without
+them the app shows a settings screen rather than using a default server.
+
 iOS:
 ```bash
-flutter build ios --release
+flutter build ios --release --dart-define-from-file=.env.production
 ```
 
 Android:
 ```bash
-flutter build apk --release
+flutter build apk --release --dart-define-from-file=.env.production
 ```
 
 ## Testing

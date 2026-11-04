@@ -39,6 +39,10 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
   int? _vatRate;
   XFile? _capturedReceipt;
 
+  /// Set once the expense is saved but its receipt didn't upload, so the
+  /// person can retry rather than lose the receipt without noticing.
+  String? _savedWithoutReceiptId;
+
   @override
   void initState() {
     super.initState();
@@ -219,27 +223,29 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
 
     final expenseId = provider.selectedExpense?.id;
     if (expenseId != null && _capturedReceipt != null) {
-      await _uploadReceipt(expenseId);
+      await _retryReceipt(expenseId);
+      return;
     }
-
-    if (mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Expense saved')));
-      Navigator.of(context).pop(true);
-    }
+    _finish('Expense saved');
   }
 
-  Future<void> _uploadReceipt(String expenseId) async {
-    if (_capturedReceipt == null) return;
-
+  /// Upload the receipt for a saved expense. On failure, stay here so the
+  /// person can try again or carry on without it.
+  Future<void> _retryReceipt(String expenseId) async {
     final provider = context.read<ExpenseProvider>();
     final success = await provider.uploadReceipt(expenseId, _capturedReceipt!);
-
-    if (mounted && !success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(provider.error ?? 'Failed to upload receipt')),
-      );
+    if (!mounted) return;
+    if (success) {
+      _finish('Expense saved');
+      return;
     }
+    setState(() => _savedWithoutReceiptId = expenseId);
+  }
+
+  void _finish(String message) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+    Navigator.of(context).pop(true);
   }
 
   @override
@@ -253,6 +259,16 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
           final orders = (options?.orders ?? const <ExpenseOrderChoice>[])
               .where((o) => _clientId == null || o.clientId == _clientId)
               .toList();
+          final savedId = _savedWithoutReceiptId;
+          if (savedId != null) {
+            return ReceiptUploadFailedView(
+              reason: provider.error,
+              uploading: provider.isUploading,
+              uploadProgress: provider.uploadProgress,
+              onRetry: () => _retryReceipt(savedId),
+              onSkip: () => _finish('Expense saved without its receipt'),
+            );
+          }
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
             child: Form(
@@ -603,6 +619,72 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
           );
         },
       ),
+    );
+  }
+}
+
+/// Shown when the expense saved but its receipt didn't upload, so the
+/// receipt isn't lost without the person noticing.
+class ReceiptUploadFailedView extends StatelessWidget {
+  const ReceiptUploadFailedView({
+    super.key,
+    required this.reason,
+    required this.uploading,
+    required this.uploadProgress,
+    required this.onRetry,
+    required this.onSkip,
+  });
+
+  final String? reason;
+  final bool uploading;
+  final double uploadProgress;
+  final VoidCallback onRetry;
+  final VoidCallback onSkip;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: scheme.errorContainer,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Expense saved, but the receipt didn't upload.",
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: scheme.onErrorContainer,
+                ),
+              ),
+              if (reason != null) ...[
+                const SizedBox(height: 4),
+                Text(reason!, style: TextStyle(color: scheme.onErrorContainer)),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (uploading) ...[
+          LinearProgressIndicator(value: uploadProgress),
+          const SizedBox(height: 16),
+        ],
+        ElevatedButton(
+          onPressed: uploading ? null : onRetry,
+          child: const Text('Try again'),
+        ),
+        const SizedBox(height: 8),
+        TextButton(
+          onPressed: uploading ? null : onSkip,
+          child: const Text('Done without the receipt'),
+        ),
+      ],
     );
   }
 }

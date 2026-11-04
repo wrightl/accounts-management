@@ -116,6 +116,10 @@ class User {
   bool get canReadReports => can('reports:read');
   bool get canManageSettings => can('settings:manage');
   bool get canManageUsers => can('users:manage');
+  bool get canReadQueries => can('queries:read');
+
+  /// Signed in but not given a role yet: the server grants nothing.
+  bool get isPending => permissions.isEmpty;
 
   /// Whether an optional page is in this person's menu, as on the web.
   bool showsFeature(String feature) =>

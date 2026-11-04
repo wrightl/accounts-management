@@ -170,4 +170,21 @@ class NotificationRepository {
       return ApiResponse.error('Unexpected error: $e');
     }
   }
+
+  Future<ApiResponse<bool>> unregisterPushToken(String token) async {
+    try {
+      final response = await _apiClient.delete(
+        AppConstants.notificationsPushTokenEndpoint,
+        data: {'token': token},
+      );
+      if (response.statusCode == 200) {
+        return ApiResponse.success(true);
+      }
+      return ApiResponse.error('Failed to remove push token');
+    } on DioException catch (e) {
+      return _dioError(e);
+    } catch (e) {
+      return ApiResponse.error('Unexpected error: $e');
+    }
+  }
 }
