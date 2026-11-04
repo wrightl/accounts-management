@@ -67,4 +67,49 @@ void main() {
     expect(json['expenseDate'], '2026-03-02');
     expect(json.containsKey('notes'), false);
   });
+
+  test('a foreign expense sends its currency and leaves sterling to the server', () {
+    final json = CreateExpenseRequest(
+      description: 'Paris train',
+      currency: 'eur',
+      originalAmount: '12.50',
+      category: 'Travel',
+      expenseDate: DateTime(2026, 3, 2),
+      status: 'recorded',
+    ).toJson();
+
+    expect(json['currency'], 'EUR');
+    expect(json['originalAmount'], '12.50');
+    expect(json.containsKey('amountPence'), false);
+  });
+
+  test('a sterling expense sends no currency', () {
+    final json = CreateExpenseRequest(
+      description: 'Taxi',
+      amountPence: 1500,
+      currency: 'GBP',
+      category: 'Travel',
+      expenseDate: DateTime(2026, 3, 2),
+      status: 'recorded',
+    ).toJson();
+
+    expect(json['amountPence'], 1500);
+    expect(json.containsKey('currency'), false);
+  });
+
+  test('reads the foreign amount and the web display amount', () {
+    final expense = Expense.fromJson({
+      'id': 'e1',
+      'companyId': 'c1',
+      'description': 'Paris train',
+      'amountPence': 1000,
+      'currency': 'EUR',
+      'originalAmountMinor': 1250,
+      'amountFormatted': '£10.00 (€12.50)',
+      'status': 'recorded',
+    });
+
+    expect(expense.isForeign, true);
+    expect(expense.displayAmount, '£10.00 (€12.50)');
+  });
 }

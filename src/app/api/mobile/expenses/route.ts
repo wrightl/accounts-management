@@ -62,7 +62,16 @@ function optionalString(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
-/** Map the mobile JSON body onto the web form's fields. */
+function optionalNumberString(value: unknown): string {
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return optionalString(value);
+}
+
+/**
+ * Map the mobile JSON body onto the web form's fields. For a foreign expense
+ * the app sends `currency` and `originalAmount` (e.g. "12.50") and leaves
+ * `amountPence` out, so the server converts at the Bank of England rate.
+ */
 function expenseRawFromJson(body: Record<string, unknown>): Record<string, unknown> {
   const pence = body.amountPence;
   return {
@@ -73,6 +82,8 @@ function expenseRawFromJson(body: Record<string, unknown>): Record<string, unkno
       typeof pence === "number" && Number.isFinite(pence)
         ? (pence / 100).toFixed(2)
         : "",
+    currency: optionalString(body.currency),
+    originalAmount: optionalNumberString(body.originalAmount),
     status: optionalString(body.status),
     billable: body.billable === true ? "true" : "",
     clientId: optionalString(body.clientId),

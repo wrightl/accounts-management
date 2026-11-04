@@ -3,12 +3,24 @@ import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
 import { expenses, users } from "@/db/schema";
 import { seedCompany } from "@/lib/test/seed-company";
-import { GET as listExpenses } from "@/app/api/mobile/expenses/route";
+import {
+  GET as listExpenses,
+  POST as createExpense,
+} from "@/app/api/mobile/expenses/route";
+import { GET as expenseOptions } from "@/app/api/mobile/expenses/options/route";
 import { parseMobilePage } from "@/lib/mobile/paging";
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
+
+// 1.25 euros to the pound, whatever the day.
+vi.mock("@/lib/bank/fx", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/bank/fx")>()),
+  resolveFxRate: vi.fn(async (currency: string, onDate: string) =>
+    currency === "EUR" ? { currency, observationDate: onDate, foreignPerGbp: 1.25 } : null,
+  ),
+}));
 
 const clerkMocks = vi.hoisted(() => ({
   auth: vi.fn(async () => ({ userId: "user_clerk_mobile", sessionClaims: {} })),
@@ -94,5 +106,72 @@ describe("mobile paging", () => {
     ).json();
     expect(last.data).toHaveLength(1);
     expect(last.hasMore).toBe(false);
+  });
+});
+
+function postJson(url: string, body: unknown, method = "POST") {
+  return new Request(`http://localhost${url}`, {
+    method,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  }) as never;
+}
+
+describe("mobile foreign-currency expenses", () => {
+  const base = {
+    description: "Paris train",
+    category: "Travel",
+    expenseDate: "2026-03-02",
+    status: "recorded",
+  };
+
+  it("converts a foreign amount to sterling at the Bank of England rate", async () => {
+    const company = await seedCompany(db, { name: "Euro Co" });
+    await seedUser(company.id);
+
+    const res = await createExpense(
+      postJson("/api/mobile/expenses", { ...base, currency: "EUR", originalAmount: "12.50" }),
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.data.amountPence).toBe(1000);
+    expect(body.data.currency).toBe("EUR");
+    expect(body.data.originalAmountMinor).toBe(1250);
+    expect(body.data.amountFormatted).toBe("£10.00 (€12.50)");
+  });
+
+  it("keeps a sterling figure the person typed", async () => {
+    const company = await seedCompany(db, { name: "Override Co" });
+    await seedUser(company.id);
+
+    const res = await createExpense(
+      postJson("/api/mobile/expenses", {
+        ...base,
+        currency: "EUR",
+        originalAmount: "12.50",
+        amountPence: 1111,
+      }),
+    );
+    expect((await res.json()).data.amountPence).toBe(1111);
+  });
+
+  it("asks for pounds when there is no rate", async () => {
+    const company = await seedCompany(db, { name: "No Rate Co" });
+    await seedUser(company.id);
+
+    const res = await createExpense(
+      postJson("/api/mobile/expenses", { ...base, currency: "USD", originalAmount: "12.50" }),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).fieldErrors.amountPounds).toMatch(/Enter the amount in GBP/);
+  });
+
+  it("gives the capture form the currencies it can convert", async () => {
+    const company = await seedCompany(db, { name: "Currencies Co" });
+    await seedUser(company.id);
+
+    const body = await (await expenseOptions()).json();
+    expect(body.data.currencies[0]).toBe("GBP");
+    expect(body.data.currencies).toContain("EUR");
   });
 });

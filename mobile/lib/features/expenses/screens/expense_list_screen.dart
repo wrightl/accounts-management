@@ -139,7 +139,7 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
-                          CurrencyUtils.formatPence(expense.amountPence),
+                          expense.displayAmount,
                           style: Theme.of(context).textTheme.titleMedium?.copyWith(
                                 fontWeight: FontWeight.bold,
                               ),
@@ -232,7 +232,7 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
                 ),
                 const SizedBox(height: 24),
                 _buildDetailRow('Description', expense.description),
-                _buildDetailRow('Amount', CurrencyUtils.formatPence(expense.amountPence)),
+                _buildDetailRow('Amount', expense.displayAmount),
                 _buildDetailRow('Category', expense.category),
                 _buildDetailRow('Date', DateUtils.formatDate(expense.expenseDate)),
                 _buildDetailRow('Status', expense.statusLabel),
@@ -415,7 +415,7 @@ class _ApproveSheetState extends State<_ApproveSheet> {
             const SizedBox(height: 4),
             Text(
               '${widget.expense.description} · '
-              '${CurrencyUtils.formatPence(widget.expense.amountPence)}',
+              '${widget.expense.displayAmount}',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             if (widget.expense.receipts.isEmpty) ...[

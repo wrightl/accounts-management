@@ -25,6 +25,10 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
   final _milesController = TextEditingController();
   final _rateController = TextEditingController();
 
+  /// Sterling figure for a foreign expense; blank converts on the server.
+  final _gbpController = TextEditingController();
+  String _currency = 'GBP';
+
   String _selectedCategory = 'Other';
   bool _categoryChosen = false;
   bool _useMileage = false;
@@ -64,6 +68,7 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
     _amountController.dispose();
     _milesController.dispose();
     _rateController.dispose();
+    _gbpController.dispose();
     super.dispose();
   }
 
@@ -125,10 +130,19 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
           categories.contains(extraction.category)) {
         _selectedCategory = extraction.category!;
       }
-      _receiptNote = extraction.isForeignCurrency
-          ? '${extraction.summary}. This receipt looks like it is in '
-                '${extraction.currency}: enter the amount in pounds.'
-          : extraction.summary;
+      final currencies = provider.options?.currencies ?? const ['GBP'];
+      final detected = extraction.currency?.toUpperCase();
+      if (extraction.isForeignCurrency && currencies.contains(detected)) {
+        // The amount read is in the receipt's currency; the server converts.
+        _currency = detected!;
+        _receiptNote = '${extraction.summary}. The receipt is in $detected, '
+            'so Alfa converts it to pounds when you save.';
+      } else if (extraction.isForeignCurrency) {
+        _receiptNote = '${extraction.summary}. The receipt looks like it is '
+            "in $detected, which Alfa can't convert: enter the amount in pounds.";
+      } else {
+        _receiptNote = extraction.summary;
+      }
     });
   }
 
@@ -184,10 +198,14 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
       return;
     }
 
+    final foreign = !_useMileage && _currency != 'GBP';
+    final gbpOverride = double.tryParse(_gbpController.text.trim());
     final amount = _useMileage
         ? (_mileagePence ?? 0) / 100
-        : double.tryParse(_amountController.text);
-    if (amount == null) {
+        : foreign
+            ? gbpOverride
+            : double.tryParse(_amountController.text);
+    if (amount == null && !foreign) {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Invalid amount')));
       return;
@@ -196,7 +214,9 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
     final provider = context.read<ExpenseProvider>();
     final request = CreateExpenseRequest(
       description: _descriptionController.text,
-      amountPence: CurrencyUtils.poundsToPence(amount),
+      amountPence: amount == null ? null : CurrencyUtils.poundsToPence(amount),
+      currency: foreign ? _currency : null,
+      originalAmount: foreign ? _amountController.text.trim() : null,
       category: _selectedCategory,
       expenseDate: _selectedDate,
       status: _status!,
@@ -437,24 +457,13 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
                       ),
                     ],
                   ] else
-                    TextFormField(
-                      controller: _amountController,
-                      decoration: const InputDecoration(
-                        labelText: 'Amount (£)',
-                        prefixIcon: Icon(Icons.currency_pound),
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Enter an amount';
-                        }
-                        if (!ValidationUtils.isValidAmount(value)) {
-                          return 'Invalid amount';
-                        }
-                        return null;
-                      },
+                    ExpenseAmountFields(
+                      currency: _currency,
+                      currencies: options?.currencies ?? const ['GBP'],
+                      amountController: _amountController,
+                      gbpController: _gbpController,
+                      onCurrencyChanged: (value) =>
+                          setState(() => _currency = value ?? 'GBP'),
                     ),
                   if (options?.vatRegistered == true && !_useMileage) ...[
                     const SizedBox(height: 16),
@@ -619,6 +628,95 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
           );
         },
       ),
+    );
+  }
+}
+
+/// The amount, in pounds or another currency. A foreign amount is converted
+/// to pounds on the server at the Bank of England rate, as on the web, unless
+/// a sterling figure is typed in.
+class ExpenseAmountFields extends StatelessWidget {
+  const ExpenseAmountFields({
+    super.key,
+    required this.currency,
+    required this.currencies,
+    required this.amountController,
+    required this.gbpController,
+    required this.onCurrencyChanged,
+  });
+
+  final String currency;
+  final List<String> currencies;
+  final TextEditingController amountController;
+  final TextEditingController gbpController;
+  final ValueChanged<String?> onCurrencyChanged;
+
+  static String? _required(String? value) {
+    if (value == null || value.isEmpty) return 'Enter an amount';
+    if (!ValidationUtils.isValidAmount(value)) return 'Invalid amount';
+    return null;
+  }
+
+  static String? _optional(String? value) {
+    if (value == null || value.trim().isEmpty) return null;
+    return ValidationUtils.isValidAmount(value) ? null : 'Invalid amount';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final foreign = currency != 'GBP';
+    const decimal = TextInputType.numberWithOptions(decimal: true);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (currencies.length > 1) ...[
+              SizedBox(
+                width: 104,
+                child: DropdownButtonFormField<String>(
+                  key: ValueKey('currency-$currency'),
+                  initialValue: currencies.contains(currency) ? currency : 'GBP',
+                  decoration: const InputDecoration(labelText: 'Currency'),
+                  items: [
+                    for (final code in currencies)
+                      DropdownMenuItem(value: code, child: Text(code)),
+                  ],
+                  onChanged: onCurrencyChanged,
+                ),
+              ),
+              const SizedBox(width: 12),
+            ],
+            Expanded(
+              child: TextFormField(
+                controller: amountController,
+                decoration: InputDecoration(
+                  labelText: foreign ? 'Amount ($currency)' : 'Amount (£)',
+                  prefixIcon: foreign ? null : const Icon(Icons.currency_pound),
+                ),
+                keyboardType: decimal,
+                validator: _required,
+              ),
+            ),
+          ],
+        ),
+        if (foreign) ...[
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: gbpController,
+            decoration: const InputDecoration(
+              labelText: 'Amount in £ (optional)',
+              prefixIcon: Icon(Icons.currency_pound),
+              helperText: 'Leave blank to convert at the Bank of England rate '
+                  'for the expense date.',
+              helperMaxLines: 2,
+            ),
+            keyboardType: decimal,
+            validator: _optional,
+          ),
+        ],
+      ],
     );
   }
 }

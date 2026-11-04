@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { listClients } from "@/lib/clients/queries";
 import { clientDisplayName } from "@/lib/clients/display";
 import { EXPENSE_CATEGORIES } from "@/lib/expenses/categories";
+import { EXPENSE_CURRENCIES } from "@/lib/expenses/currency";
 import { listFounders } from "@/lib/expenses/queries";
 import { requireMobileAuth } from "@/lib/mobile-auth";
 import { listOrderOptions } from "@/lib/profitability/queries";
@@ -27,6 +28,7 @@ export async function GET() {
       success: true,
       data: {
         categories: EXPENSE_CATEGORIES,
+        currencies: EXPENSE_CURRENCIES,
         payers: founders.map((f) => ({ id: f.id, name: f.name || f.email })),
         defaultPayerId: founders.some((f) => f.id === localUserId)
           ? localUserId
