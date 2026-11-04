@@ -43,7 +43,9 @@ async function loadPublicQuote(rawToken: string) {
     .where(eq(quotes.publicToken, rawToken))
     .limit(1);
 
-  if (!row) return null;
+  // A quote reopened as a draft keeps its link, but it's being changed and
+  // isn't the client's to answer until it's sent again.
+  if (!row || row.status === "draft") return null;
   if (row.suspendedAt) return { suspended: true as const };
   return { suspended: false as const, ...row };
 }

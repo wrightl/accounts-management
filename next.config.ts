@@ -57,6 +57,15 @@ const FRAMEABLE_PATHS = [
     'api/invoice-imports/drafts/[^/]+/document',
 ];
 
+/** Routes that serve an uploaded file under a stricter Content-Security-Policy of their own. */
+const OWN_CSP_PATHS = ['api/company/logo'];
+
+/**
+ * Next only adds a route's own header when the config hasn't already set it,
+ * so these routes must be left out of the global policy for theirs to apply.
+ */
+const ROUTE_POLICY_PATHS = [...FRAMEABLE_PATHS, ...OWN_CSP_PATHS];
+
 const nextConfig: NextConfig = {
     reactStrictMode: true,
     poweredByHeader: false,
@@ -113,7 +122,7 @@ const nextConfig: NextConfig = {
     async headers() {
         return [
             {
-                source: `/((?!(?:${FRAMEABLE_PATHS.join('|')})$).*)`,
+                source: `/((?!(?:${ROUTE_POLICY_PATHS.join('|')})$).*)`,
                 headers: securityHeaders,
             },
             // Framed by the expense page. These routes set their own
@@ -124,6 +133,13 @@ const nextConfig: NextConfig = {
                     (h) =>
                         h.key !== 'Content-Security-Policy' &&
                         h.key !== 'X-Frame-Options',
+                ),
+            },
+            // Never framed: these keep X-Frame-Options and set their own policy.
+            {
+                source: `/(${OWN_CSP_PATHS.join('|')})`,
+                headers: securityHeaders.filter(
+                    (h) => h.key !== 'Content-Security-Policy',
                 ),
             },
         ];

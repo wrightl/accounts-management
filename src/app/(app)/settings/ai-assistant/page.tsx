@@ -180,6 +180,8 @@ export default async function AiAssistantSettingsPage() {
             connections={connections.map((c) => ({
               id: c.id,
               name: c.name ?? "AI assistant",
+              named: c.name != null,
+              clientId: c.oauthClientId,
               used: usedAgo(c.lastUsedAt, now),
               disconnected: c.disconnectedAt != null,
               allowDrafts: c.allowDrafts,

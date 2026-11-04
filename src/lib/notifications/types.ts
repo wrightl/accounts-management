@@ -29,6 +29,7 @@ export const NOTIFICATION_EVENT_TYPES = [
   "expense.approved",
   "expense.rejected",
   "user.invited",
+  "assistant.connected",
   "billing.trial_ending",
   "billing.payment_failed",
 ] as const;
@@ -185,6 +186,14 @@ export const NOTIFICATION_CATALOG: readonly NotificationEventDefinition[] = [
     description: "Another admin invited someone to the company",
     defaultRoles: ["admin"],
     defaultChannels: { inApp: true, email: false, push: false },
+  },
+  {
+    type: "assistant.connected",
+    label: "AI assistant connected",
+    description: "A new AI assistant starts reading Alfa as you, so you'd spot one you didn't connect",
+    // Sent only to the person whose login it is.
+    defaultRoles: [],
+    defaultChannels: { inApp: true, email: true, push: true },
   },
   {
     type: "billing.trial_ending",

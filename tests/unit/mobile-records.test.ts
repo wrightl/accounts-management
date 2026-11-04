@@ -7,6 +7,7 @@ function user(overrides: Partial<SessionUser> = {}): SessionUser {
   return {
     userId: "user_1",
     email: "lee@test.com",
+    emailVerified: true,
     name: "Lee",
     role: "admin",
     localUserId: "local_1",

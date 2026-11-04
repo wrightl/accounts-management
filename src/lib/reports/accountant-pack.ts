@@ -49,6 +49,7 @@ import {
 import { renderVatSummaryPdf } from "@/lib/reports/vat-pdf";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { listShareholders } from "@/lib/shareholders/queries";
+import { csvCell } from "@/lib/csv/write";
 import { getStorage } from "@/lib/storage";
 
 export type ZipEntry = string | Uint8Array;
@@ -1103,10 +1104,9 @@ function gbp(pence: number) {
   return (pence / 100).toFixed(2);
 }
 
+/** Every cell goes through csvCell, so outside text can't run as a spreadsheet formula. */
 export function toCsv(headers: string[], rows: string[][]) {
-  const esc = (v: string) =>
-    /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
-  return [headers.join(","), ...rows.map((r) => r.map(esc).join(","))].join("\n");
+  return [headers.join(","), ...rows.map((r) => r.map(csvCell).join(","))].join("\n");
 }
 
 /**

@@ -4,6 +4,7 @@ import { getDb, hasDatabaseClient } from "@/db";
 import { companyBilling } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 import { isPlatformAdmin } from "@/lib/platform";
+import { can } from "@/lib/roles";
 import { ensureLocalUser, findLocalUser } from "@/lib/users";
 import { Logo } from "@/components/brand/logo";
 import { SubscribeGateActions } from "@/components/signup/subscribe-gate-actions";
@@ -70,10 +71,17 @@ export default async function SubscribePage({
           Complete your subscription
         </h1>
         <div className="mt-6">
-          <SubscribeGateActions
-            planLabel={planLabel}
-            canceled={params.checkout === "cancel"}
-          />
+          {can(user.role, "settings:manage") ? (
+            <SubscribeGateActions
+              planLabel={planLabel}
+              canceled={params.checkout === "cancel"}
+            />
+          ) : (
+            <p className="text-sm text-muted">
+              This company&apos;s {planLabel} subscription isn&apos;t set up yet. Ask
+              an admin of the company to add a card or choose the Trial plan.
+            </p>
+          )}
         </div>
       </div>
     </main>

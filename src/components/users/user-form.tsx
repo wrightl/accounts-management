@@ -36,11 +36,14 @@ export function UserForm({
   mode,
   user,
   isSelf,
+  sharedWithOtherCompanies = false,
   pendingReimbursementCount = 0,
 }: {
   mode: "invite" | "edit";
   user?: EditUser;
   isSelf?: boolean;
+  /** They also belong to another company, so only their role is this company's to change. */
+  sharedWithOtherCompanies?: boolean;
   pendingReimbursementCount?: number;
 }) {
   const router = useRouter();
@@ -56,6 +59,8 @@ export function UserForm({
   const [pending, startTransition] = useTransition();
 
   const emailReadOnly = mode === "edit" && Boolean(user?.clerkUserId);
+  // Read-only rather than disabled, so the unchanged values are still submitted.
+  const shared = mode === "edit" && sharedWithOtherCompanies;
   const roleOptions = user ? assignableRoles(user.role) : INVITABLE_ROLES;
 
   function onSubmit(formData: FormData) {
@@ -100,17 +105,21 @@ export function UserForm({
           type="email"
           required={mode === "invite"}
           defaultValue={user?.email ?? ""}
-          readOnly={emailReadOnly}
+          readOnly={emailReadOnly || shared}
           disabled={pending || emailReadOnly}
           aria-invalid={Boolean(fieldErrors.email)}
           aria-describedby={fieldErrors.email ? "email-error" : undefined}
           onChange={() => clearField("email")}
         />
-        {emailReadOnly && (
+        {emailReadOnly ? (
           <p className="mt-1 text-xs text-muted">
             Email is managed by Clerk for signed-in users.
           </p>
-        )}
+        ) : shared ? (
+          <p className="mt-1 text-xs text-muted">
+            They also belong to another company, so only their role can be changed here.
+          </p>
+        ) : null}
         <FieldError id="email-error">{fieldErrors.email}</FieldError>
       </div>
       <div>
@@ -119,6 +128,7 @@ export function UserForm({
           id="name"
           name="name"
           defaultValue={user?.name ?? ""}
+          readOnly={shared}
           disabled={pending}
           aria-invalid={Boolean(fieldErrors.name)}
           aria-describedby={fieldErrors.name ? "name-error" : undefined}

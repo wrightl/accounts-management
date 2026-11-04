@@ -342,6 +342,18 @@ export async function updateUser(userId: string, formData: FormData): Promise<Ac
         }
       }
 
+      // One row serves every company the person belongs to, so its email and
+      // name aren't this company's to change. A new email on a shared invite
+      // would let whoever owns that address claim the other company's access.
+      const nameChanged = name !== (target.name?.trim() || null);
+      if (membershipCount > 1 && (email !== target.email || nameChanged)) {
+        return {
+          ok: false,
+          error:
+            "This person also belongs to another company, so you can only change their role here. To use a different email, revoke the invite and invite the new address.",
+        };
+      }
+
       if (
         target.clerkUserId &&
         name !== target.name

@@ -4,6 +4,7 @@ import {
   assistantDisplayName,
   loadAssistantPerson,
   nameConnection,
+  notifyAssistantConnected,
   touchConnection,
   type AssistantPerson,
 } from "@/lib/assistant/mcp/access";
@@ -66,6 +67,14 @@ async function serve(request: NextRequest): Promise<Response> {
   }
   const clientName = await startingClientName(request);
   if (clientName) await nameConnection(person.localUserId, connection.id, clientName);
+  if (connection.isNew) {
+    await notifyAssistantConnected({
+      person,
+      connectionId: connection.id,
+      oauthClientId: auth.clientId,
+      clientName,
+    });
+  }
 
   const response = await handler.fetch(request, {
     authInfo: { ...auth, extra: { ...auth.extra, person, origin, allowDrafts: connection.allowDrafts } },

@@ -49,6 +49,7 @@ function sessionUser(): SessionUser {
   return {
     userId: "user_clerk_dash",
     email: "admin@test.com",
+    emailVerified: true,
     name: "Test Admin",
     role: "admin",
     localUserId: null,

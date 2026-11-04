@@ -20,6 +20,7 @@ import {
   parseChannelMatrix,
   type EventChannelMatrix,
 } from "@/lib/notifications";
+import { isWebPushEndpoint, isWebPushKey } from "@/lib/notifications/push-endpoint";
 import { ensureLocalUser } from "@/lib/users";
 
 async function requireNotificationUser() {
@@ -176,7 +177,11 @@ export async function subscribeWebPushAction(input: {
 }): Promise<ActionResult> {
   const ctx = await requireNotificationUser();
   if (!ctx.ok) return ctx;
-  if (!input.endpoint || !input.keys?.p256dh || !input.keys?.auth) {
+  if (
+    !isWebPushEndpoint(input?.endpoint) ||
+    !isWebPushKey(input.keys?.p256dh) ||
+    !isWebPushKey(input.keys?.auth)
+  ) {
     return { ok: false, error: "Invalid subscription" };
   }
   const id = await upsertPushSubscription({

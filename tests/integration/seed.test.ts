@@ -100,6 +100,7 @@ describe("ensureLocalUser with a seeded platform admin", () => {
     ]);
 
     const id = await ensureLocalUser({
+      emailVerified: true,
       userId: "user_clerk_admin",
       email: "Admin@dotanddashconsulting.com",
       name: "Platform Admin",
@@ -122,6 +123,7 @@ describe("assignUserCompany", () => {
       "admin@dotanddashconsulting.com",
     ]);
     const id = await ensureLocalUser({
+      emailVerified: true,
       userId: "user_clerk_ops",
       email: "admin@dotanddashconsulting.com",
       name: "Ops",

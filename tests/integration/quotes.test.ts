@@ -323,9 +323,30 @@ describe("quote status workflow", () => {
     expect(milestones[0].label).toBe("Net 30");
   }, 15000);
 
+  it("won't let a public link answer, or show, a quote while it's a draft", async () => {
+    const { getPublicQuoteByToken } = await import("@/lib/quotes/public-queries");
+    const { quoteId } = await seedQuote();
+    // Sent, declined, then reopened to change: the old link still exists.
+    await db.update(quotes).set({ publicToken: "tok-reopened" }).where(eq(quotes.id, quoteId));
+
+    expect(await acceptPublicQuote("tok-reopened")).toMatchObject({ ok: false });
+    expect(await declinePublicQuote("tok-reopened", new FormData())).toMatchObject({ ok: false });
+    expect(await getPublicQuoteByToken("tok-reopened")).toBeNull();
+    const [draft] = await db.select().from(quotes).where(eq(quotes.id, quoteId));
+    expect(draft.status).toBe("draft");
+    expect(await db.select().from(orders)).toHaveLength(0);
+
+    await db.update(quotes).set({ status: "sent" }).where(eq(quotes.id, quoteId));
+    expect(await getPublicQuoteByToken("tok-reopened")).not.toBeNull();
+    expect(await acceptPublicQuote("tok-reopened")).toMatchObject({ ok: true });
+  }, 15000);
+
   it("concurrent public accept and decline: exactly one wins", async () => {
     const { quoteId } = await seedQuote();
-    await db.update(quotes).set({ publicToken: "tok-race" }).where(eq(quotes.id, quoteId));
+    await db
+      .update(quotes)
+      .set({ publicToken: "tok-race", status: "sent" })
+      .where(eq(quotes.id, quoteId));
 
     const results = await Promise.all([
       acceptPublicQuote("tok-race"),

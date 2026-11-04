@@ -29,6 +29,8 @@ describe("next.config security headers", () => {
     "/api/expenses/abc",
     "/api/expenses/abc/email-body/y",
     "/api/mobile/expenses/abc/receipts",
+    "/api/company",
+    "/api/company/logo/x",
   ])("forbids framing %s", async (path) => {
     const headers = await headersFor(path);
     expect(headers["x-frame-options"]).toBe("DENY");
@@ -45,4 +47,13 @@ describe("next.config security headers", () => {
       expect(headers["strict-transport-security"]).toContain("max-age=");
     },
   );
+
+  it("leaves the logo's policy to its route, but still forbids framing it", async () => {
+    // Next keeps a config header over the route's own, so the global policy,
+    // which allows inline scripts, must not be set here.
+    const headers = await headersFor("/api/company/logo");
+    expect(headers["content-security-policy"]).toBeUndefined();
+    expect(headers["x-frame-options"]).toBe("DENY");
+    expect(headers["x-content-type-options"]).toBe("nosniff");
+  });
 });

@@ -208,6 +208,7 @@ describe("inviteUser", () => {
     expect((await inviteUser(form)).ok).toBe(true);
 
     await ensureLocalUser({
+      emailVerified: true,
       userId: "user_clerk_accountant",
       email: "accountant@example.com",
       name: "Alex Accountant",
@@ -844,6 +845,75 @@ describe("updateUser", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toMatch(/remain accountants/i);
   });
+
+  it("won't let one company re-address an invite another company also sent", async () => {
+    // Company B invited an accountant who hasn't signed up yet.
+    await seedAdmin();
+    const companyB = await seedCompany(db, { name: "Company B" });
+    const invitee = await insertMember({
+      companyId: companyB.id,
+      email: "jane@firm.example",
+      name: "Jane Accountant",
+      role: "accountant",
+    });
+
+    // This company's admin invites the same accountant, sharing B's row...
+    const invite = new FormData();
+    invite.set("email", "jane@firm.example");
+    invite.set("role", "accountant");
+    expect((await inviteUser(invite)).ok).toBe(true);
+    expect((await listUserMemberships(invitee.id)).map((m) => m.companyId).sort()).toEqual(
+      [companyId, companyB.id].sort(),
+    );
+
+    // ...then tries to point it at an address they own.
+    const form = new FormData();
+    form.set("email", "attacker@evil.example");
+    form.set("name", "Jane Accountant");
+    form.set("role", "accountant");
+    const result = await updateUser(invitee.id, form);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/only change their role/i);
+
+    const [row] = await db.select().from(users).where(eq(users.id, invitee.id));
+    expect(row).toMatchObject({ email: "jane@firm.example", name: "Jane Accountant", clerkUserId: null });
+
+    // Signing up with their own address gets them nothing of B's.
+    await ensureLocalUser({
+      emailVerified: true,
+      userId: "user_clerk_attacker",
+      email: "attacker@evil.example",
+      name: null,
+    });
+    const attacker = await findLocalUser("user_clerk_attacker");
+    expect(attacker?.companyId).toBeNull();
+    expect(await listUserMemberships(attacker!.id)).toEqual([]);
+  });
+
+  it("refuses a new name for someone another company shares, but saves unchanged details", async () => {
+    await seedAdmin();
+    const companyB = await seedCompany(db, { name: "Company B" });
+    const accountant = await insertMember({
+      companyId,
+      clerkUserId: "user_clerk_accountant",
+      email: "accountant@example.com",
+      name: "Alex",
+      role: "accountant",
+    });
+    await upsertMembership(accountant.id, companyB.id, "accountant");
+
+    const rename = new FormData();
+    rename.set("name", "Someone Else");
+    rename.set("role", "accountant");
+    expect((await updateUser(accountant.id, rename)).ok).toBe(false);
+    expect(updateClerkUser).not.toHaveBeenCalled();
+
+    const unchanged = new FormData();
+    unchanged.set("email", "accountant@example.com");
+    unchanged.set("name", "Alex");
+    unchanged.set("role", "accountant");
+    expect((await updateUser(accountant.id, unchanged)).ok).toBe(true);
+  });
 });
 
 describe("switchCompany", () => {
@@ -908,6 +978,44 @@ describe("switchCompany", () => {
 });
 
 describe("ensureLocalUser with an invited row", () => {
+  it("doesn't claim the invited row until Clerk has verified the email", async () => {
+    await seedAdmin();
+    const invited = await insertMember({
+      companyId,
+      email: "invite@example.com",
+      name: "Invited User",
+      role: "accountant",
+    });
+
+    const id = await ensureLocalUser({
+      emailVerified: false,
+      userId: "user_clerk_unverified",
+      email: "invite@example.com",
+      name: null,
+    });
+
+    expect(id).not.toBe(invited.id);
+    const [row] = await db.select().from(users).where(eq(users.id, invited.id));
+    expect(row?.clerkUserId).toBeNull();
+    const local = await findLocalUser("user_clerk_unverified");
+    expect(local).toMatchObject({ role: "pending", companyId: null });
+  });
+
+  it("makes an allowlisted email a platform admin only once it's verified", async () => {
+    const prev = process.env.PLATFORM_ADMIN_EMAILS;
+    process.env.PLATFORM_ADMIN_EMAILS = "ops@example.com";
+    try {
+      await ensureLocalUser({ emailVerified: false, userId: "user_clerk_a", email: "ops@example.com", name: null });
+      expect((await findLocalUser("user_clerk_a"))?.role).toBe("pending");
+
+      await ensureLocalUser({ emailVerified: true, userId: "user_clerk_b", email: "ops@example.com", name: null });
+      expect((await findLocalUser("user_clerk_b"))?.role).toBe("platform_admin");
+    } finally {
+      if (prev === undefined) delete process.env.PLATFORM_ADMIN_EMAILS;
+      else process.env.PLATFORM_ADMIN_EMAILS = prev;
+    }
+  });
+
   it("claims the invited row on first sign-in", async () => {
     await seedAdmin();
     await insertMember({
@@ -918,6 +1026,7 @@ describe("ensureLocalUser with an invited row", () => {
     });
 
     const id = await ensureLocalUser({
+      emailVerified: true,
       userId: "user_clerk_invited",
       email: "invite@example.com",
       name: "Invited User",
@@ -942,6 +1051,7 @@ describe("ensureLocalUser with an invited row", () => {
     });
 
     await ensureLocalUser({
+      emailVerified: true,
       userId: "user_clerk_invited",
       email: "invite@example.com",
       name: null,
@@ -961,12 +1071,14 @@ describe("ensureLocalUser with an invited row", () => {
     });
 
     await ensureLocalUser({
+      emailVerified: true,
       userId: "user_clerk_invited",
       email: "invite@example.com",
       name: null,
     });
 
     await ensureLocalUser({
+      emailVerified: true,
       userId: "user_clerk_invited",
       email: "invite@example.com",
       name: null,
@@ -986,6 +1098,7 @@ describe("ensureLocalUser with an invited row", () => {
     });
 
     await ensureLocalUser({
+      emailVerified: true,
       userId: "user_clerk_invited",
       email: "invite@example.com",
       name: "Google Name",

@@ -5,7 +5,10 @@ import { assistantConnections } from "@/db/schema";
 
 export type AssistantConnection = {
   id: string;
+  /** What the assistant called itself when it connected; anyone can claim any name. */
   name: string | null;
+  /** The OAuth client it signed in as, which Clerk vouches for. */
+  oauthClientId: string;
   firstUsedAt: Date;
   lastUsedAt: Date;
   disconnectedAt: Date | null;
@@ -18,6 +21,7 @@ export async function listAssistantConnections(localUserId: string): Promise<Ass
     .select({
       id: assistantConnections.id,
       name: assistantConnections.clientName,
+      oauthClientId: assistantConnections.oauthClientId,
       firstUsedAt: assistantConnections.firstUsedAt,
       lastUsedAt: assistantConnections.lastUsedAt,
       disconnectedAt: assistantConnections.revokedAt,
