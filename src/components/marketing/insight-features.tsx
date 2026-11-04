@@ -31,7 +31,7 @@ const INSIGHTS = [
   {
     icon: Sparkles,
     title: "AI bookkeeper",
-    body: "Suggests categories for bank payments, learning from your corrections, and pairs receipts with card payments. Ask questions like “what did we spend on software last quarter?” Nothing changes until you accept it.",
+    body: "Suggests categories for bank payments, learning from your corrections, and pairs receipts with card payments. Ask questions like “what did we spend on software last quarter?”, or connect Claude or ChatGPT and ask in your own words. Nothing changes until you accept it.",
   },
   {
     icon: Percent,

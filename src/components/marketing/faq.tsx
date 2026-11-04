@@ -21,11 +21,11 @@ const FAQS = [
   },
   {
     q: "How does Alfa use AI?",
-    a: "The AI bookkeeper suggests categories for bank payments, pairs receipts with card payments, and answers questions about your figures. It can only read your books, and nothing changes until someone accepts a suggestion. Questions are limited to 40 a day per company.",
+    a: "The AI bookkeeper suggests categories for bank payments, pairs receipts with card payments, and answers questions about your figures, up to 40 a day per company. AI also reads receipts and old invoice PDFs so you don't have to type them in. Nothing changes in your books until someone checks and accepts it. You can also connect your own assistant, such as Claude or ChatGPT, to ask about your books. It can make drafts for you to check, but never sends, pays or approves anything, and an admin decides whether it's on.",
   },
   {
     q: "What currency do you support?",
-    a: "GBP only. Foreign receipts can be logged for information, but the books stay in pounds.",
+    a: "Your books are kept in pounds. Expenses paid in US dollars, euros and other major currencies are converted to sterling at the Bank of England rate for that day.",
   },
   {
     q: "Is this built for neurodiverse users?",

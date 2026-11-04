@@ -7,7 +7,7 @@ const DIFFERENT = [
   "An AI bookkeeper that only suggests — you accept every category and match",
   "Accountant as a first-class role — multi-company read-only and a one-click pack",
   "Display and focus controls — motion, text size, contrast, readable font, quieter notifications",
-  "Honest scope: GBP, bank CSV matching, VAT export (not HMRC filing), no live bank feeds",
+  "Honest scope: GBP books (foreign expenses converted), bank CSV matching, VAT export (not HMRC filing), no live bank feeds",
 ] as const;
 
 export function DifferentiatorSection() {

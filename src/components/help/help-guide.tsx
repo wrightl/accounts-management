@@ -147,7 +147,8 @@ export function HelpGuide({
           <BulletList
             items={[
               <>
-                Books are <strong>GBP only</strong>.
+                Books are kept in <strong>GBP</strong>. Expenses paid in another
+                currency are converted to pounds for you.
               </>,
               <>
                 If you are VAT registered, turn it on in Settings — invoices,
@@ -241,8 +242,10 @@ export function HelpGuide({
               <>
                 Set your <strong>cutover date</strong> on{" "}
                 <HelpLink href="/reports">Reports</HelpLink>, then import invoices
-                from CSV on <HelpLink href="/invoices/import">Import invoices</HelpLink>.
-                You can bring in all your history. Invoices dated before cutover
+                on <HelpLink href="/invoices/import">Import invoices</HelpLink>,
+                from a CSV or by uploading the invoice PDFs for AI to read. Each
+                PDF is kept with its invoice. You can bring in all your history.
+                Invoices dated before cutover
                 stay in what clients owe you but out of P&amp;L and VAT, and you
                 review everything before it&apos;s saved. Clients aren&apos;t
                 contacted, and unpaid imports aren&apos;t chased until you turn it on.
@@ -435,7 +438,16 @@ export function HelpGuide({
                 Email a photo or PDF to the personal expenses address shown on
                 that page. It lands as <strong>pending</strong> until you
                 approve it. Attach several receipts to one email and each
-                becomes its own expense.
+                becomes its own expense. You can change the address to something
+                shorter on that page.
+                {isAdmin ? (
+                  <>
+                    {" "}
+                    Admins can see every emailed receipt, and retry any that
+                    could not be read, under{" "}
+                    <HelpLink href="/inbound-email">Inbound email</HelpLink>.
+                  </>
+                ) : null}
               </>,
               <>Import a CSV of past spend if you are catching up.</>,
             ]}
@@ -455,8 +467,10 @@ export function HelpGuide({
             </Term>
           </div>
           <p className="mt-4 text-sm text-foreground/90">
-            Foreign-currency receipts: confirm the sterling amount before you
-            approve. The app does not convert currencies.
+            Foreign-currency receipts: enter the amount in the currency you paid
+            (such as US dollars or euros). Alfa converts it to pounds at the
+            Bank of England rate for the expense date. If no rate is available,
+            enter the sterling amount yourself.
           </p>
           <p className="mt-2 text-sm text-foreground/90">
             Mileage: choose the Travel category, then log miles × the rate in
@@ -531,6 +545,12 @@ export function HelpGuide({
             ]}
           />
           <p className="mt-4 text-sm text-foreground/90">
+            Add <strong>labels</strong> and <strong>notes</strong> to bank rows
+            and expenses so you can find them later, then filter either list by
+            label. They are for your team only and are not included in the
+            accountant pack.
+          </p>
+          <p className="mt-2 text-sm text-foreground/90">
             <HelpLink href="/spending">Spending</HelpLink> is a picture of cash
             out from those imported rows. It stays empty until you import a
             statement.
@@ -750,9 +770,12 @@ export function HelpGuide({
           <SectionHeading id="roles">Who can do what</SectionHeading>
           <div className="mt-3 space-y-2">
             <Term name="Administrator">
-              everything, including settings and users.
+              everything, including settings, users, billing and the audit log.
             </Term>
-            <Term name="Co-founder">day-to-day books and reports.</Term>
+            <Term name="Co-founder">
+              day-to-day books and reports. Co-founders can&apos;t change
+              settings, manage users or lock the books.
+            </Term>
             <Term name="Accountant">
               reports, tax and reserves, director&apos;s loans, deadlines, the
               company profile and the accountant pack, and lock the books once
@@ -830,8 +853,17 @@ export function HelpGuide({
                 <strong>Success messages</strong> — keep them on screen until you
                 dismiss them.
               </>,
+              <>
+                <strong>Date format</strong> — how dates are shown across the
+                app.
+              </>,
             ]}
           />
+          <p className="mt-4 text-sm text-foreground/90">
+            Choose which alerts you get, by email or in the app, such as
+            filing deadlines and the weekly close reminder, in{" "}
+            <HelpLink href="/settings/notifications">Notifications</HelpLink>.
+          </p>
           <p className="mt-4 text-sm text-foreground/90">
             <strong>A shorter menu.</strong> Choose which pages show in your
             sidebar in <HelpLink href="/settings/menu">Your menu</HelpLink>, or
