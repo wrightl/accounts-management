@@ -126,12 +126,13 @@ export function noCompanyMessage(person: AssistantPerson): string {
 
 /**
  * Record that this person's assistant was used, and whether they've since
- * disconnected it. Returns false for a disconnected assistant.
+ * disconnected it. Returns false for a disconnected assistant, and whether
+ * this is the first time it has been seen.
  */
 export async function touchConnection(
   localUserId: string,
   oauthClientId: string,
-): Promise<{ id: string; allowed: boolean; allowDrafts: boolean }> {
+): Promise<{ id: string; allowed: boolean; allowDrafts: boolean; isNew: boolean }> {
   const [row] = await getDb()
     .insert(assistantConnections)
     .values({ userId: localUserId, oauthClientId })
@@ -143,8 +144,56 @@ export async function touchConnection(
       id: assistantConnections.id,
       revokedAt: assistantConnections.revokedAt,
       allowDrafts: assistantConnections.allowDrafts,
+      // An insert sets both to the same now(); a later call moves only last_used_at.
+      // Compared in SQL, at full precision, so calls a millisecond apart can't both look new.
+      isNew: sql<boolean>`${assistantConnections.firstUsedAt} = ${assistantConnections.lastUsedAt}`,
     });
-  return { id: row!.id, allowed: row!.revokedAt == null, allowDrafts: row!.allowDrafts };
+  return {
+    id: row!.id,
+    allowed: row!.revokedAt == null,
+    allowDrafts: row!.allowDrafts,
+    isNew: row!.isNew === true,
+  };
+}
+
+/**
+ * Tell the person a new assistant has started reading Alfa as them. Any app
+ * they approve at Clerk's sign-in gets in, and it names itself, so this is
+ * how one they didn't mean to connect gets noticed. Best effort: the call
+ * it arrived with goes ahead either way.
+ */
+export async function notifyAssistantConnected(params: {
+  person: AssistantPerson;
+  connectionId: string;
+  oauthClientId: string;
+  clientName: string | null;
+}): Promise<void> {
+  const { person } = params;
+  // Notices belong to a company; a login with none yet can't read anything anyway.
+  const companyId = person.currentCompanyId ?? person.companies[0]?.id;
+  if (!companyId) return;
+  const calls = params.clientName ? `It calls itself "${params.clientName}"` : "It didn't give a name";
+  try {
+    const { notifyUsers } = await import("@/lib/notifications");
+    await notifyUsers([person.localUserId], {
+      companyId,
+      type: "assistant.connected",
+      title: "A new AI assistant connected to Alfa",
+      body: `${calls} (OAuth client ${params.oauthClientId}). It can read what you can see in companies where assistant access is on. If you didn't connect it, disconnect it in Settings, AI assistant.`,
+      href: "/settings/ai-assistant",
+      entityType: "assistant_connection",
+      entityId: params.connectionId,
+      awaitEmail: true,
+    });
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        level: "warn",
+        msg: "assistant.connected_notify_failed",
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+  }
 }
 
 /** Names assistants send in `clientInfo`, shown as people know them. */

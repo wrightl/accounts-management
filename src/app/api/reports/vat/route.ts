@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requirePermission, ForbiddenError } from "@/lib/auth";
 import { defaultReportPeriod, getVatSummary } from "@/lib/reports/queries";
 import { formatGBP } from "@/lib/money";
+import { neutraliseFormula } from "@/lib/csv/write";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -54,7 +55,7 @@ export async function GET(request: Request) {
     ["period_to", to, ""],
     ["vat_number", vat.vatNumber ?? "", ""],
   ];
-  const csv = lines.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const csv = lines.map((r) => r.map((c) => `"${neutraliseFormula(String(c)).replace(/"/g, '""')}"`).join(",")).join("\n");
 
   return new NextResponse(csv, {
     status: 200,

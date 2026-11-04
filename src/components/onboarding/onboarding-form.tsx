@@ -18,6 +18,7 @@ import {
   parseOnboardingInput,
 } from "@/lib/onboarding/schema";
 import type { StripeCatalog } from "@/lib/billing/catalog-types";
+import { LOGO_ACCEPT } from "@/lib/company-logo-file";
 import {
   suggestTradingName,
   type CompaniesHouseCompany,
@@ -474,7 +475,7 @@ export function OnboardingForm({
           id="logo"
           name="logo"
           type="file"
-          accept="image/*"
+          accept={LOGO_ACCEPT}
           disabled={pending}
           aria-invalid={Boolean(fieldErrors.logo)}
           aria-describedby={fieldErrors.logo ? "logo-error" : undefined}
@@ -488,7 +489,7 @@ export function OnboardingForm({
           }}
         />
         <p className="text-xs text-muted">
-          Shown in the app and on invoices. PNG or JPG, under 2 MB.
+          Shown in the app and on invoices. PNG, JPEG, WebP or GIF, under 2 MB.
         </p>
         <FieldError id="logo-error">{fieldErrors.logo}</FieldError>
       </div>

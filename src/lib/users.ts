@@ -26,6 +26,8 @@ export interface LocalUser {
 export interface Identity {
   userId: string;
   email: string | null;
+  /** Clerk says the person owns `email`. Unless true, the email grants nothing. */
+  emailVerified?: boolean;
   name: string | null;
 }
 
@@ -304,6 +306,11 @@ export async function countAdminUsers(companyId: string): Promise<number> {
  * inserting a duplicate. Updates email/name only — never overwrites role from Clerk.
  * New self-serve users get companyId = null until onboarding.
  * Platform allowlist emails get role `platform_admin` on insert.
+ *
+ * Claiming a row and the platform role both need a verified email: an invite
+ * is only as safe as the proof that the person signing in owns the address.
+ * Unverified, they get a plain pending row; a later verified sign-in can't
+ * claim then, so Clerk should require verification at sign-up.
  */
 export async function ensureLocalUser(identity: Identity): Promise<string> {
   const db = getDb();
@@ -328,8 +335,9 @@ export async function ensureLocalUser(identity: Identity): Promise<string> {
     return existing[0].id;
   }
 
+  const verified = identity.emailVerified === true;
   const normalisedEmail = identity.email?.trim().toLowerCase();
-  if (normalisedEmail) {
+  if (normalisedEmail && verified) {
     const [seeded] = await db
       .select({ id: users.id, name: users.name })
       .from(users)
@@ -395,7 +403,7 @@ export async function ensureLocalUser(identity: Identity): Promise<string> {
       clerkUserId: identity.userId,
       email: identity.email ?? `${identity.userId}@clerk.local`,
       name: identity.name?.trim() || null,
-      role: isPlatformAdminEmail(identity.email) ? PLATFORM_ADMIN_ROLE : DEFAULT_ROLE,
+      role: verified && isPlatformAdminEmail(identity.email) ? PLATFORM_ADMIN_ROLE : DEFAULT_ROLE,
       companyId: null,
     })
     .returning({ id: users.id });

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { guardTenantPage } from "@/lib/auth";
-import { getMembership, getUser } from "@/lib/users";
+import { countUserMemberships, getMembership, getUser } from "@/lib/users";
 import { countPendingReimbursementsByPayee } from "@/lib/reimbursements/queries";
 import { UserForm } from "@/components/users/user-form";
 import { SettingsPageHeader } from "@/components/settings/settings-page-header";
@@ -19,9 +19,10 @@ export default async function EditUserPage({
   const user = await getUser(id);
   if (!user) notFound();
 
-  const pendingByPayee = await countPendingReimbursementsByPayee(
-    session.companyId,
-  );
+  const [pendingByPayee, membershipCount] = await Promise.all([
+    countPendingReimbursementsByPayee(session.companyId),
+    countUserMemberships(id),
+  ]);
 
   return (
     <div>
@@ -30,6 +31,7 @@ export default async function EditUserPage({
         mode="edit"
         user={{ ...user, role: membership.role }}
         isSelf={user.clerkUserId === session.userId}
+        sharedWithOtherCompanies={membershipCount > 1}
         pendingReimbursementCount={pendingByPayee.get(id) ?? 0}
       />
     </div>

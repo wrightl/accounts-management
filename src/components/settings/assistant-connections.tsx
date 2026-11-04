@@ -9,6 +9,10 @@ import { FieldError } from "@/components/ui/form";
 export type ConnectionRow = {
   id: string;
   name: string;
+  /** The assistant gave `name` itself, which any app can do. */
+  named: boolean;
+  /** The OAuth client it signed in as. */
+  clientId: string;
   /** "Used 5 minutes ago", worked out on the server. */
   used: string;
   disconnected: boolean;
@@ -55,6 +59,10 @@ export function AssistantConnections({
           <li key={c.id} className="flex flex-wrap items-center gap-4 px-5 py-4">
             <span className="min-w-0 flex-1">
               <span className="block font-medium text-foreground">{c.name}</span>
+              <span className="block break-all text-xs text-muted">
+                {c.named ? "The name it gave itself." : "It didn't give a name."} OAuth client{" "}
+                {c.clientId}
+              </span>
               <span className="block text-sm text-muted">
                 {c.disconnected ? "Disconnected. It can't read anything in Alfa." : c.used}
               </span>

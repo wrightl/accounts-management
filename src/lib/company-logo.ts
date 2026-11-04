@@ -2,6 +2,8 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { companies } from "@/db/schema";
+import { isLogoContentType } from "@/lib/company-logo-file";
+import { sniffReceiptContentType } from "@/lib/expenses/receipt-file";
 import { getStorage } from "@/lib/storage";
 
 const MAX_LOGO_BYTES = 2 * 1024 * 1024;
@@ -10,7 +12,11 @@ export type LogoUploadResult =
   | { ok: true; path: string }
   | { ok: false; error: string };
 
-/** Validate and store a company logo; updates `companies.logoUrl`. */
+/**
+ * Validate and store a company logo; updates `companies.logoUrl`. The type
+ * stored is read from the file's bytes, never the name or what the browser
+ * says it is.
+ */
 export async function storeCompanyLogo(
   companyId: string,
   file: File,
@@ -21,17 +27,18 @@ export async function storeCompanyLogo(
   if (file.size > MAX_LOGO_BYTES) {
     return { ok: false, error: "Logo must be under 2 MB" };
   }
-  const contentType = file.type || "application/octet-stream";
-  if (!contentType.startsWith("image/")) {
-    return { ok: false, error: "Logo must be an image" };
-  }
 
   const bytes = Buffer.from(await file.arrayBuffer());
+  const contentType = sniffReceiptContentType(bytes);
+  if (!isLogoContentType(contentType)) {
+    return { ok: false, error: "Logo must be a PNG, JPEG, WebP or GIF image" };
+  }
+
   const storage = getStorage();
   const stored = await storage.put(
     `company/${companyId}/logo-${Date.now()}`,
     bytes,
-    contentType,
+    contentType!,
   );
 
   const db = getDb();

@@ -204,7 +204,7 @@ export async function completeOnboarding(
 
   await clearSignupPlanCookie();
 
-  const { startSignupCheckout } = await import("@/actions/billing");
+  const { startSignupCheckout } = await import("@/lib/billing/subscription-checkout");
   return startSignupCheckout({
     companyId: company.id,
     plan: planChoice.plan,

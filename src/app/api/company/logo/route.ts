@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
+import { isLogoContentType } from "@/lib/company-logo-file";
+import { sniffReceiptContentType } from "@/lib/expenses/receipt-file";
+import { contentDispositionInline } from "@/lib/files";
 import { getCompanySettings } from "@/lib/settings/queries";
 import { getStorage } from "@/lib/storage";
 
@@ -7,8 +10,17 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
+ * A picture needs none of what a page can do, so nothing may run or load if
+ * someone opens the logo's address directly. next.config leaves this
+ * route's Content-Security-Policy to it.
+ */
+const LOGO_CSP = "default-src 'none'; style-src 'unsafe-inline'; sandbox; frame-ancestors 'none'";
+
+/**
  * Stream the signed-in user's company logo from private storage.
  * Available to any authenticated member of the company (navbar + settings).
+ * Only picture formats are served: anything else, such as an SVG uploaded
+ * before uploads were checked, is treated as missing.
  */
 export async function GET() {
   const user = await requireUser();
@@ -23,10 +35,18 @@ export async function GET() {
 
   try {
     const obj = await getStorage().get(settings.logoUrl);
-    return new NextResponse(Buffer.from(obj.body), {
+    const bytes = Buffer.from(obj.body);
+    // Judged by the bytes, not the stored label, which came from the browser before uploads were checked.
+    const contentType = sniffReceiptContentType(bytes);
+    if (!isLogoContentType(contentType)) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    return new NextResponse(bytes, {
       status: 200,
       headers: {
-        "Content-Type": obj.contentType ?? "image/png",
+        "Content-Type": contentType!,
+        "Content-Disposition": contentDispositionInline("logo"),
+        "Content-Security-Policy": LOGO_CSP,
         "Cache-Control": "private, max-age=300",
       },
     });

@@ -13,6 +13,7 @@ import {
   expenses,
   invoiceLineItems,
   invoices,
+  notifications,
   quoteLineItems,
   quotes,
   quoteVersions,
@@ -366,6 +367,31 @@ describe("connected assistants in Settings", () => {
     expect(assistantDisplayName({ name: "my-agent", title: "My Agent" })).toBe("My Agent");
     expect(assistantDisplayName({ name: "  " })).toBeNull();
     expect(assistantDisplayName("claude-ai")).toBeNull();
+  });
+
+  it("tells the person once when a new assistant connects, naming its OAuth client", async () => {
+    const connected = () =>
+      db.select().from(notifications).where(eq(notifications.type, "assistant.connected"));
+
+    await rpc("admin-token", "initialize", {
+      protocolVersion: "2025-06-18",
+      capabilities: {},
+      clientInfo: { name: "claude-ai", version: "1.0" },
+    });
+    await toolNames("admin-token");
+    await toolNames("admin-token");
+
+    const [notice, ...others] = await connected();
+    expect(others).toHaveLength(0);
+    expect(notice).toMatchObject({ userId: adminId, companyId: companyA, href: "/settings/ai-assistant" });
+    expect(notice!.body).toContain('"Claude"');
+    expect(notice!.body).toContain("client_claude");
+
+    // A different assistant is new again, and only its own person hears about it.
+    await toolNames("accountant-token");
+    const notices = await connected();
+    expect(notices).toHaveLength(2);
+    expect(notices.filter((n) => n.userId === adminId)).toHaveLength(1);
   });
 
   it("disconnects an assistant at once, and allows it again", async () => {

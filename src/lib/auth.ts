@@ -19,6 +19,11 @@ type ClerkUser = Awaited<ReturnType<typeof currentUser>>;
 export interface SessionUser {
   userId: string;
   email: string | null;
+  /**
+   * Clerk says the person proved they own `email`. False when Clerk couldn't
+   * be reached and `email` fell back to the local row.
+   */
+  emailVerified: boolean;
   name: string | null;
   role: Role;
   /** Local users.id when known. */
@@ -68,6 +73,8 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
 
   const clerkUser = await safeCurrentUser();
   const clerkEmail = clerkUser?.primaryEmailAddress?.emailAddress ?? null;
+  const emailVerified =
+    clerkUser?.primaryEmailAddress?.verification?.status === "verified";
   const clerkName = clerkDisplayName(clerkUser);
 
   let role: Role = DEFAULT_ROLE;
@@ -113,6 +120,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
   return {
     userId,
     email: clerkEmail ?? localEmail,
+    emailVerified,
     name: clerkName ?? localName,
     role,
     localUserId,

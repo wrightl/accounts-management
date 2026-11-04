@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requirePermission, ForbiddenError } from "@/lib/auth";
 import { getReimbursementDetail } from "@/lib/reimbursements/queries";
+import { csvCell } from "@/lib/csv/write";
 
 export const dynamic = "force-dynamic";
 
@@ -32,9 +33,9 @@ export async function GET(
     ["reimbursement_id", "payee", "status", "reference", "total_gbp", "reimbursement_date"].join(","),
     [
       detail.reimbursement.id,
-      csv(detail.payee.name || detail.payee.email),
+      csvCell(detail.payee.name || detail.payee.email),
       detail.reimbursement.status,
-      csv(detail.reimbursement.reference ?? ""),
+      csvCell(detail.reimbursement.reference ?? ""),
       (detail.reimbursement.totalPence / 100).toFixed(2),
       detail.reimbursement.reimbursementDate ?? "",
     ].join(","),
@@ -44,8 +45,8 @@ export async function GET(
       [
         i.expense.id,
         i.expense.spentAt ?? "",
-        csv(i.expense.description),
-        csv(i.expense.category ?? ""),
+        csvCell(i.expense.description),
+        csvCell(i.expense.category ?? ""),
         (i.expense.amountPence / 100).toFixed(2),
       ].join(","),
     ),
@@ -62,9 +63,4 @@ export async function GET(
       "Cache-Control": "private, no-store",
     },
   });
-}
-
-function csv(value: string): string {
-  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
-  return value;
 }

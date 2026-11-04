@@ -11,6 +11,7 @@ export async function getPublicQuoteByToken(rawToken: string) {
     .select({
       quoteId: quotes.id,
       companyId: quotes.companyId,
+      status: quotes.status,
       suspendedAt: companies.suspendedAt,
       companyName: companies.name,
       logoUrl: companies.logoUrl,
@@ -24,7 +25,9 @@ export async function getPublicQuoteByToken(rawToken: string) {
     .where(eq(quotes.publicToken, rawToken))
     .limit(1);
 
-  if (!row) return null;
+  // Drafts are never public: one reopened after a decline keeps its old link
+  // while it's being changed.
+  if (!row || row.status === "draft") return null;
   if (row.suspendedAt) return { suspended: true as const };
 
   const detail = await getQuoteDetail(row.companyId, row.quoteId);

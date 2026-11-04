@@ -11,6 +11,7 @@ import {
 import { sendEmail } from "@/lib/email";
 import { appBaseUrl } from "@/lib/billing/stripe";
 import { getEntitlements } from "@/lib/billing/entitlements";
+import { escapeHtml } from "@/lib/html";
 
 export type BillingEmailTemplate =
   | "trial_welcome"
@@ -192,7 +193,8 @@ export async function sendBillingEmail(
     to,
     subject: content.subject,
     html: content.html({
-      companyName: company?.name ?? "Your company",
+      // The company sets its own name; it must not become markup in an Alfa email.
+      companyName: escapeHtml(company?.name ?? "Your company"),
       days: extra?.days,
     }),
   });

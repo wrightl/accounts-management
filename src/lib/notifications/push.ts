@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { pushSubscriptions, type PushPlatform } from "@/db/schema";
 import { serverEnv } from "@/env";
+import { isWebPushEndpoint } from "./push-endpoint";
 
 export type PushPayload = {
   userId: string;
@@ -96,6 +97,11 @@ async function sendWebPush(
     return;
   }
   if (!sub.keys?.p256dh || !sub.keys?.auth) return;
+  // Saved before endpoints were checked: never POST to an address that isn't a push service.
+  if (!isWebPushEndpoint(sub.endpoint)) {
+    await deletePushSubscription(sub.userId, sub.endpoint);
+    return;
+  }
 
   const webpush = await import("web-push");
   webpush.setVapidDetails(subject, publicKey, privateKey);
