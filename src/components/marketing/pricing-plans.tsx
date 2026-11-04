@@ -139,6 +139,12 @@ const COMPARE_ROWS: CompareRow[] = [
     premium: "yes",
   },
   {
+    label: "Ask your own AI assistant",
+    trial: "yes",
+    essentials: "yes",
+    premium: "yes",
+  },
+  {
     label: "Users",
     trial: "Up to 5",
     essentials: "Up to 5",

@@ -77,6 +77,12 @@ export function AccountantHelpGuide({
               </>,
             ]}
           />
+          <p className="mt-3 text-sm text-foreground/90">
+            If an administrator has turned it on, you can also connect your own
+            AI assistant, such as Claude or ChatGPT, in{" "}
+            <HelpLink href="/settings/ai-assistant">AI assistant</HelpLink>. It
+            sees only what you can see here, and can&apos;t change anything.
+          </p>
         </section>
 
         <section aria-labelledby="start">
@@ -148,8 +154,9 @@ export function AccountantHelpGuide({
                 Replies happen in Alfa.
               </>,
               <>
-                You are notified when they reply, and the query shows as{" "}
-                <strong>Answered</strong>. If you reply, it goes back to{" "}
+                You are notified when they reply (choose how in{" "}
+                <HelpLink href="/settings/notifications">Notifications</HelpLink>
+                ), and the query shows as <strong>Answered</strong>. If you reply, it goes back to{" "}
                 <strong>Waiting for the team</strong>.
               </>,
               <>
@@ -229,7 +236,8 @@ export function AccountantHelpGuide({
             <HelpLink href="/reports">Reports</HelpLink>. Nothing dated on or
             before the lock date can then be added or changed. You or an
             administrator can move or remove the lock, and each change is
-            recorded in the audit log.
+            recorded in the company&apos;s audit log, which administrators can
+            see.
           </p>
         </section>
 
