@@ -54,6 +54,27 @@ flutter run --dart-define-from-file=.env.development
 Without `API_BASE_URL`, debug and profile builds use `http://localhost:3001`.
 The app stops at a settings screen if `CLERK_PUBLISHABLE_KEY` is missing.
 
+### Sharing receipts into Alfa
+
+On Android, a photo or PDF shared from another app (Photos, Files, Gmail)
+opens the capture form; the intent filters are in `AndroidManifest.xml`.
+
+iOS needs a Share Extension target, which has to be added in Xcode because it
+needs its own bundle id, an App Group and signing:
+
+1. In Xcode, File → New → Target → Share Extension, named `Share Extension`,
+   with the same deployment target as Runner.
+2. Add an App Group (e.g. `group.com.dotanddash.ddappMobile`) to both Runner
+   and the extension under Signing & Capabilities.
+3. Follow the iOS steps in the `receive_sharing_intent` README: replace the
+   extension's `Info.plist` (allow images and one file), set its
+   `ShareViewController` to subclass `RSIShareViewController`, and add
+   `AppGroupId` and the `ShareMedia-$(PRODUCT_BUNDLE_IDENTIFIER)` URL scheme to
+   `ios/Runner/Info.plist`.
+
+Until then, choosing a PDF with **Choose a PDF or file** on the capture form
+works on both platforms.
+
 ### Build for Release
 
 Release builds need both `API_BASE_URL` and `CLERK_PUBLISHABLE_KEY`. Without

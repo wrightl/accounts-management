@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../data/repositories/expense_repository.dart';
@@ -152,6 +153,22 @@ class ExpenseProvider with ChangeNotifier {
     }
   }
   
+  /// A PDF or image receipt from Files, e.g. one saved from an email.
+  Future<XFile?> pickReceiptFile() async {
+    try {
+      final file = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: receiptFileExtensions,
+      );
+      final path = file?.path;
+      return path == null ? null : XFile(path, name: file!.name);
+    } catch (e) {
+      _error = 'Failed to pick file: $e';
+      notifyListeners();
+      return null;
+    }
+  }
+
   Future<bool> approveExpense(
     String id, {
     required String approvalType,

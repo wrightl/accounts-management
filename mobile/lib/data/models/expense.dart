@@ -163,6 +163,11 @@ class ExpenseReceipt {
   }
 }
 
+/// Receipt files the server accepts, as on the web upload.
+const receiptFileExtensions = ['pdf', 'jpg', 'jpeg', 'png', 'heic', 'webp'];
+
+bool isPdfPath(String path) => path.toLowerCase().endsWith('.pdf');
+
 /// A downloaded receipt file.
 class ReceiptFile {
   ReceiptFile({

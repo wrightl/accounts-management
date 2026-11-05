@@ -2,6 +2,7 @@ import 'package:clerk_flutter/clerk_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'core/config/clerk_oauth.dart';
 import 'core/constants/app_constants.dart';
@@ -16,6 +17,7 @@ import 'features/expenses/expense_provider.dart';
 import 'features/expenses/screens/expense_capture_screen.dart';
 import 'features/notifications/notification_provider.dart';
 import 'core/push/push_notification_service.dart';
+import 'core/share/share_intake.dart';
 import 'shared/widgets/home_screen.dart';
 import 'shared/widgets/product_lockup.dart';
 
@@ -119,6 +121,31 @@ class _SignedInShellState extends State<SignedInShell> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _bindSession());
   }
 
+  final _shareIntake = ShareIntake();
+
+  @override
+  void dispose() {
+    _shareIntake.stop();
+    super.dispose();
+  }
+
+  /// A receipt shared in from another app opens the capture form.
+  void _openSharedReceipt(String path) {
+    if (!mounted) return;
+    final user = context.read<AuthProvider>().user;
+    if (user == null || !user.canWriteAccounts || user.isBillingReadOnly) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text("You can't add expenses in this company.")),
+      );
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ExpenseCaptureScreen(initialReceipt: XFile(path)),
+      ),
+    );
+  }
+
   Future<void> _bindSession() async {
     final clerkAuth = ClerkAuth.of(context, listen: false);
     ApiClient.sessionTokenProvider = () async {
@@ -131,6 +158,8 @@ class _SignedInShellState extends State<SignedInShell> {
     await context.read<AuthProvider>().syncWithBackend();
     if (!mounted) return;
     await PushNotificationService.instance.start();
+    if (!mounted) return;
+    await _shareIntake.start(_openSharedReceipt);
   }
 
   @override

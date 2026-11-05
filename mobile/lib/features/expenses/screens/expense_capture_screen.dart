@@ -12,7 +12,10 @@ import '../../../core/utils/formatters.dart';
 const _vatRates = [20, 5, 0];
 
 class ExpenseCaptureScreen extends StatefulWidget {
-  const ExpenseCaptureScreen({super.key});
+  const ExpenseCaptureScreen({super.key, this.initialReceipt});
+
+  /// A receipt shared into Alfa from another app.
+  final XFile? initialReceipt;
 
   @override
   State<ExpenseCaptureScreen> createState() => _ExpenseCaptureScreenState();
@@ -50,7 +53,10 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
   @override
   void initState() {
     super.initState();
+    _capturedReceipt = widget.initialReceipt;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final shared = widget.initialReceipt;
+      if (shared != null) _readReceipt(shared);
       final options = await context.read<ExpenseProvider>().loadOptions();
       if (!mounted || options == null) return;
       setState(() {
@@ -75,6 +81,16 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
   Future<void> _captureReceipt() async {
     final provider = context.read<ExpenseProvider>();
     final file = await provider.captureReceipt();
+
+    if (file != null) {
+      setState(() => _capturedReceipt = file);
+      await _readReceipt(file);
+    }
+  }
+
+  Future<void> _pickFile() async {
+    final provider = context.read<ExpenseProvider>();
+    final file = await provider.pickReceiptFile();
 
     if (file != null) {
       setState(() => _capturedReceipt = file);
@@ -299,16 +315,40 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
                   if (_capturedReceipt != null) ...[
                     Stack(
                       children: [
-                        Container(
-                          height: 200,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            image: DecorationImage(
-                              image: FileImage(File(_capturedReceipt!.path)),
-                              fit: BoxFit.cover,
+                        if (isPdfPath(_capturedReceipt!.path))
+                          Container(
+                            height: 120,
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[100],
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.picture_as_pdf_outlined, size: 40),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    _capturedReceipt!.name,
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 2,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          Container(
+                            height: 200,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              image: DecorationImage(
+                                image: FileImage(File(_capturedReceipt!.path)),
+                                fit: BoxFit.cover,
+                              ),
                             ),
                           ),
-                        ),
                         Positioned(
                           top: 8,
                           right: 8,
@@ -367,6 +407,12 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: _pickFile,
+                      icon: const Icon(Icons.folder_open),
+                      label: const Text('Choose a PDF or file'),
                     ),
                     const SizedBox(height: 24),
                   ],
