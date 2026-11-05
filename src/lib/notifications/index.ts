@@ -17,6 +17,8 @@ export {
   loadUserChannelOverrides,
   saveCompanyChannelDefaults,
   saveUserChannelOverrides,
+  loadHidePushDetails,
+  saveHidePushDetails,
   type EventChannelMatrix,
 } from "./prefs";
 

@@ -13,6 +13,11 @@ import { GET as listLabels, POST as createLabel } from "@/app/api/mobile/labels/
 import { POST as annotateExpense } from "@/app/api/mobile/expenses/[id]/annotations/route";
 import { parseMobilePage } from "@/lib/mobile/paging";
 import { GET as listRecords } from "@/app/api/mobile/records/route";
+import {
+  GET as getNotificationPrefs,
+  PUT as putNotificationPrefs,
+} from "@/app/api/mobile/notifications/prefs/route";
+import { HIDDEN_PUSH_TITLE, withLockScreenPrivacy } from "@/lib/notifications/push";
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -300,5 +305,51 @@ describe("mobile labels and notes", () => {
       params({ id: expense.id }),
     );
     expect(res.status).toBe(403);
+  });
+});
+
+describe("lock-screen privacy", () => {
+  it("hides push text for this person once they turn it on", async () => {
+    const company = await seedCompany(db, { name: "Private Co" });
+    const user = await seedUser(company.id);
+    const payload = {
+      userId: user.id,
+      companyId: company.id,
+      title: "Invoice paid",
+      body: "£1,200.00 paid by card.",
+      notificationId: "n1",
+    };
+
+    expect(await withLockScreenPrivacy(payload)).toEqual(payload);
+
+    const put = await putNotificationPrefs(
+      postJson("/api/mobile/notifications/prefs", { scope: "user", hidePushDetails: true }, "PUT"),
+    );
+    expect(put.status).toBe(200);
+    expect((await (await getNotificationPrefs()).json()).data.hidePushDetails).toBe(true);
+
+    expect(await withLockScreenPrivacy(payload)).toEqual({
+      ...payload,
+      title: HIDDEN_PUSH_TITLE,
+      body: "",
+    });
+  });
+
+  it("keeps the person's alert choices when the setting changes", async () => {
+    const company = await seedCompany(db, { name: "Prefs Co" });
+    await seedUser(company.id);
+    await putNotificationPrefs(
+      postJson(
+        "/api/mobile/notifications/prefs",
+        { scope: "user", matrix: { "invoice.paid": { inApp: true, email: false, push: true } } },
+        "PUT",
+      ),
+    );
+    await putNotificationPrefs(
+      postJson("/api/mobile/notifications/prefs", { scope: "user", hidePushDetails: true }, "PUT"),
+    );
+
+    const data = (await (await getNotificationPrefs()).json()).data;
+    expect(data.userOverrides["invoice.paid"]?.push).toBe(true);
   });
 });

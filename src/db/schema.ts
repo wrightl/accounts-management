@@ -1789,6 +1789,8 @@ export const userNotificationPreferences = pgTable(
       .$type<Record<string, unknown>>()
       .notNull()
       .default(sql`'{}'::jsonb`),
+    /** Push alerts say only "New notification in Alfa", so nothing shows on a locked phone. */
+    hidePushDetails: boolean("hide_push_details").notNull().default(false),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [

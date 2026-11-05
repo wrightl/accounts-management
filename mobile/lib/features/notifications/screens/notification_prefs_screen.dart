@@ -53,9 +53,27 @@ class _NotificationPrefsScreenState extends State<NotificationPrefsScreen> {
       body: provider.catalog.isEmpty
           ? const Center(child: CircularProgressIndicator())
           : ListView.builder(
-              itemCount: provider.catalog.length,
+              itemCount: provider.catalog.length + 1,
               itemBuilder: (context, index) {
-                final event = provider.catalog[index];
+                if (index == 0) {
+                  return SwitchListTile(
+                    title: const Text('Hide details on the lock screen'),
+                    subtitle: const Text(
+                      'Alerts just say "New notification in Alfa", without '
+                      'amounts or client names. Open the app to read them.',
+                    ),
+                    value: provider.hidePushDetails,
+                    onChanged: (hide) async {
+                      final ok = await provider.setHidePushDetails(hide);
+                      if (!ok && context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Could not save')),
+                        );
+                      }
+                    },
+                  );
+                }
+                final event = provider.catalog[index - 1];
                 final channels = provider.prefs[event.type] ??
                     const NotificationChannels(
                       inApp: true,

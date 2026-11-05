@@ -99,3 +99,34 @@ export async function saveUserChannelOverrides(
       set: { overrides, updatedAt: new Date() },
     });
 }
+
+/** Whether this person's push alerts for the company hide their text. */
+export async function loadHidePushDetails(userId: string, companyId: string): Promise<boolean> {
+  const db = getDb();
+  const [row] = await db
+    .select({ hide: userNotificationPreferences.hidePushDetails })
+    .from(userNotificationPreferences)
+    .where(
+      and(
+        eq(userNotificationPreferences.userId, userId),
+        eq(userNotificationPreferences.companyId, companyId),
+      ),
+    )
+    .limit(1);
+  return row?.hide ?? false;
+}
+
+export async function saveHidePushDetails(
+  userId: string,
+  companyId: string,
+  hide: boolean,
+): Promise<void> {
+  const db = getDb();
+  await db
+    .insert(userNotificationPreferences)
+    .values({ userId, companyId, hidePushDetails: hide, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: [userNotificationPreferences.userId, userNotificationPreferences.companyId],
+      set: { hidePushDetails: hide, updatedAt: new Date() },
+    });
+}

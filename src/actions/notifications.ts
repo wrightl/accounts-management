@@ -17,6 +17,7 @@ import {
   mergeChannelPrefs,
   saveCompanyChannelDefaults,
   saveUserChannelOverrides,
+  saveHidePushDetails,
   parseChannelMatrix,
   type EventChannelMatrix,
 } from "@/lib/notifications";
@@ -167,6 +168,15 @@ export async function saveUserNotificationPrefsAction(
   const overrides = parseChannelMatrix(raw);
   await saveUserChannelOverrides(ctx.userId, ctx.companyId, overrides);
   revalidatePath("/profile");
+  revalidatePath("/settings/notifications");
+  return { ok: true };
+}
+
+/** Push alerts say only "New notification in Alfa", for a phone that others can see. */
+export async function saveHidePushDetailsAction(hide: boolean): Promise<ActionResult> {
+  const ctx = await requireNotificationUser();
+  if (!ctx.ok) return ctx;
+  await saveHidePushDetails(ctx.userId, ctx.companyId, hide === true);
   revalidatePath("/settings/notifications");
   return { ok: true };
 }

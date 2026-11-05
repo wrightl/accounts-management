@@ -95,6 +95,7 @@ class NotificationRepository {
             List<NotificationEventDef> catalog,
             Map<String, NotificationChannels> effective,
             bool canManageCompany,
+            bool hidePushDetails,
           })>> prefs() async {
     try {
       final response =
@@ -117,7 +118,24 @@ class NotificationRepository {
         catalog: catalog,
         effective: effective,
         canManageCompany: data['canManageCompany'] as bool? ?? false,
+        hidePushDetails: data['hidePushDetails'] == true,
       ));
+    } on DioException catch (e) {
+      return _dioError(e);
+    } catch (e) {
+      return ApiResponse.error('Unexpected error: $e');
+    }
+  }
+
+  /// Push alerts say only "New notification in Alfa" when [hide] is on.
+  Future<ApiResponse<bool>> saveHidePushDetails(bool hide) async {
+    try {
+      final response = await _apiClient.put(
+        AppConstants.notificationsPrefsEndpoint,
+        data: {'scope': 'user', 'hidePushDetails': hide},
+      );
+      if (response.statusCode == 200) return ApiResponse.success(true);
+      return ApiResponse.error('Could not save');
     } on DioException catch (e) {
       return _dioError(e);
     } catch (e) {
