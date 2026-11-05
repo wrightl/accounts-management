@@ -4,6 +4,9 @@ import '../../features/expenses/screens/expense_list_screen.dart';
 import '../../features/books/screens/sales_hub_screen.dart';
 import '../../features/books/screens/more_screen.dart';
 import '../../features/auth/auth_provider.dart';
+import '../../core/security/app_lock.dart';
+import '../../core/widget/home_widget_sync.dart';
+import '../../features/dashboard/dashboard_provider.dart';
 import '../../features/expenses/expense_provider.dart';
 import '../../features/notifications/notification_provider.dart';
 import '../../features/notifications/screens/inbox_screen.dart';
@@ -28,11 +31,31 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<NotificationProvider>().refreshUnread();
       context.read<ExpenseProvider>().sendQueued();
+      _dashboard = context.read<DashboardProvider>()..addListener(_syncWidget);
+      _lock = context.read<AppLock?>()?..addListener(_syncWidget);
+      _syncWidget();
     });
+  }
+
+  DashboardProvider? _dashboard;
+  AppLock? _lock;
+
+  /// The home-screen widget follows the Overview, and shows nothing while
+  /// the app lock is on.
+  void _syncWidget() {
+    final data = _dashboard?.dashboardData;
+    final hidden = _lock?.enabled ?? false;
+    if (hidden) {
+      HomeWidgetSync.instance.clear();
+    } else if (data != null && !data.isPending) {
+      HomeWidgetSync.instance.publish(data, hidden: false);
+    }
   }
 
   @override
   void dispose() {
+    _dashboard?.removeListener(_syncWidget);
+    _lock?.removeListener(_syncWidget);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

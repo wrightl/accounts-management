@@ -75,6 +75,27 @@ needs its own bundle id, an App Group and signing:
 Until then, choosing a PDF with **Choose a PDF or file** on the capture form
 works on both platforms.
 
+### Home-screen widget
+
+The widget shows what clients owe and, for limited companies, Safe to pay. The
+app writes the figures each time the Overview loads (`HomeWidgetSync`), and
+writes none while the app lock is on or after signing out.
+
+Android is ready: `AlfaWidgetProvider` with `res/layout/alfa_widget.xml`.
+
+iOS needs a WidgetKit extension, added in Xcode:
+
+1. File → New → Target → Widget Extension, named `AlfaWidget` (the `iOSName`
+   in `lib/core/widget/home_widget_sync.dart`), without a configuration intent.
+2. Give Runner and the extension the same App Group, and call
+   `HomeWidget.setAppGroupId` with it before the first `saveWidgetData`.
+3. In the widget's timeline provider, read `owed`, `safe_to_pay` and `updated`
+   from `UserDefaults(suiteName:)` for that group. Show "Open Alfa to see your
+   figures" when `owed` is missing.
+
+The figures refresh when the app opens; there is no background refresh,
+because that would need a session outside the app.
+
 ### Build for Release
 
 Release builds need both `API_BASE_URL` and `CLERK_PUBLISHABLE_KEY`. Without
