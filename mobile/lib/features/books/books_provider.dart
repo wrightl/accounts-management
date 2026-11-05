@@ -40,11 +40,13 @@ class BooksProvider with ChangeNotifier {
     String invoiceId, {
     required int amountPence,
     required DateTime receivedAt,
+    required String clientRequestId,
   }) async {
     final result = await _repository.recordPayment(
       invoiceId,
       amountPence: amountPence,
       receivedAt: receivedAt,
+      clientRequestId: clientRequestId,
     );
     if (result.success) await refresh('invoices');
     return result;

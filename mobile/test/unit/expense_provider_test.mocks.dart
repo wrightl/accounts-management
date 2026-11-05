@@ -165,6 +165,19 @@ class MockExpenseRepository extends _i1.Mock implements _i3.ExpenseRepository {
   ) as _i4.Future<_i2.ApiResponse<_i5.Expense>>);
 
   @override
+  _i4.Future<_i2.ApiResponse<_i5.Expense>> createExpenseFromJson(
+    Map<String, dynamic>? body,
+  ) => (super.noSuchMethod(
+    Invocation.method(#createExpenseFromJson, [body]),
+    returnValue: _i4.Future<_i2.ApiResponse<_i5.Expense>>.value(
+      _FakeApiResponse_0<_i5.Expense>(
+        this,
+        Invocation.method(#createExpenseFromJson, [body]),
+      ),
+    ),
+  ) as _i4.Future<_i2.ApiResponse<_i5.Expense>>);
+
+  @override
   _i4.Future<_i2.ApiResponse<String>> uploadReceipt(
     String? expenseId,
     String? filePath, {

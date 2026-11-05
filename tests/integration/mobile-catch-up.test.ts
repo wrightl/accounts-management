@@ -573,6 +573,48 @@ describe("mobile payments and reimbursement runs", () => {
     expect(res.status).toBe(404);
   });
 
+  it("records a retried payment once", async () => {
+    const company = await seedCompany(db, { name: "Retry Pay Co" });
+    const user = await seedUser(company.id);
+    const invoice = await seedInvoice(company.id, user.id);
+    const body = { amountPence: 4000, receivedAt: "2026-03-10", clientRequestId: "pay-retry-0001" };
+
+    const first = await recordPaymentRoute(
+      postJson(`/api/mobile/invoices/${invoice.id}/payments`, body),
+      params({ id: invoice.id }),
+    );
+    expect(first.status).toBe(201);
+    const again = await recordPaymentRoute(
+      postJson(`/api/mobile/invoices/${invoice.id}/payments`, body),
+      params({ id: invoice.id }),
+    );
+    expect(again.status).toBe(200);
+    const json = await again.json();
+    expect(json.duplicate).toBe(true);
+    expect(json.data.paymentId).toBe((await first.json()).data.paymentId);
+    expect(await db.select().from(payments).where(eq(payments.invoiceId, invoice.id))).toHaveLength(1);
+    expect(await db.select().from(auditLog).where(eq(auditLog.action, "payment.record"))).toHaveLength(1);
+  });
+
+  it("refuses another company's reimbursement run", async () => {
+    const company = await seedCompany(db, { name: "Mine Runs" });
+    const other = await seedCompany(db, { name: "Their Runs" });
+    await seedUser(company.id);
+    const [payee] = await db
+      .insert(users)
+      .values({ companyId: other.id, clerkUserId: "their_payee", email: "p@x.com", role: "admin" })
+      .returning();
+    const [run] = await db
+      .insert(reimbursements)
+      .values({ companyId: other.id, payeeUserId: payee.id, status: "pending", totalPence: 100 })
+      .returning();
+
+    const res = await markPaidRoute(postJson(`/api/mobile/reimbursements/${run.id}/paid`, {}), params({ id: run.id }));
+    expect(res.status).toBe(404);
+    const [after] = await db.select().from(reimbursements).where(eq(reimbursements.id, run.id));
+    expect(after.status).toBe("pending");
+  });
+
   it("marks a reimbursement run paid", async () => {
     const company = await seedCompany(db, { name: "Run Co" });
     const user = await seedUser(company.id);

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/utils/formatters.dart';
 import '../../../data/models/books.dart';
+import '../../expenses/offline_expense_queue.dart' show newClientRequestId;
 import '../books_provider.dart';
 
 /// Record money received against an invoice. The amount owed is filled in;
@@ -24,6 +25,9 @@ class _RecordPaymentSheetState extends State<RecordPaymentSheet> {
   );
   DateTime _receivedAt = DateTime.now();
   bool _saving = false;
+  // One per sheet, so tapping Save again after a dropped connection can't
+  // record the payment twice.
+  final _requestId = newClientRequestId();
 
   @override
   void dispose() {
@@ -49,6 +53,7 @@ class _RecordPaymentSheetState extends State<RecordPaymentSheet> {
           widget.invoice.id,
           amountPence: CurrencyUtils.poundsToPence(amount),
           receivedAt: _receivedAt,
+          clientRequestId: _requestId,
         );
     if (!mounted) return;
     setState(() => _saving = false);

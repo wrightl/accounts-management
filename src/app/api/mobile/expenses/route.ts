@@ -9,6 +9,7 @@ import { listExpenses } from "@/lib/expenses/queries";
 import { parseLabelIds } from "@/lib/labels/params";
 import { parseExpenseInput } from "@/lib/expenses/schema";
 import { requireMobileAuth } from "@/lib/mobile-auth";
+import { parseClientRequestId } from "@/lib/mobile/client-request";
 import { toMobileExpense } from "@/lib/mobile/expense-payload";
 import {
   loadMobileExpense,
@@ -101,10 +102,6 @@ function expenseRawFromJson(body: Record<string, unknown>): Record<string, unkno
     mileageRatePence:
       typeof body.mileageRatePence === "number" ? String(body.mileageRatePence) : "",
   };
-}
-
-function parseClientRequestId(value: unknown): string | null {
-  return typeof value === "string" && /^[A-Za-z0-9-]{8,64}$/.test(value) ? value : null;
 }
 
 async function findByClientRequestId(

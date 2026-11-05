@@ -32,12 +32,17 @@ class PaymentError extends Error {
  * Record a payment against a sent invoice, optionally matched to a bank
  * credit, and mark the invoice paid once it's settled. The web action and the
  * mobile route both call this inside their auth checks.
+ *
+ * With `clientRequestId`, a repeat of the same request returns the payment
+ * already recorded (`duplicate: true`) instead of recording a second one.
  */
 export async function recordInvoicePayment(
   ctx: { companyId: string; localUserId: string },
   invoiceId: string,
   raw: Record<string, unknown>,
-): Promise<ActionResult> {
+  opts: { clientRequestId?: string | null } = {},
+): Promise<ActionResult & { duplicate?: boolean }> {
+  const clientRequestId = opts.clientRequestId ?? null;
   const { companyId, localUserId } = ctx;
   const parsed = parsePaymentInput(raw);
   if (!parsed.ok) {
@@ -95,11 +100,31 @@ export async function recordInvoicePayment(
 
   const db = getDb();
   let paymentId: string;
+  let duplicate = false;
   try {
     paymentId = await db.transaction(async (tx) => {
       await tx.execute(
         sql`select id from invoices where id = ${invoiceId} and company_id = ${companyId} for update`,
       );
+
+      if (clientRequestId) {
+        const [existing] = await tx
+          .select({ id: payments.id })
+          .from(payments)
+          .innerJoin(invoices, eq(invoices.id, payments.invoiceId))
+          .where(
+            and(
+              eq(payments.invoiceId, invoiceId),
+              eq(payments.clientRequestId, clientRequestId),
+              eq(invoices.companyId, companyId),
+            ),
+          )
+          .limit(1);
+        if (existing) {
+          duplicate = true;
+          return existing.id;
+        }
+      }
 
       const [inv] = await tx
         .select()
@@ -153,6 +178,7 @@ export async function recordInvoicePayment(
           method: parsed.data.method ?? "bank_transfer",
           reference: parsed.data.reference,
           receivedAt,
+          clientRequestId,
         })
         .returning({ id: payments.id });
 
@@ -181,6 +207,8 @@ export async function recordInvoicePayment(
     if (e instanceof ReconciliationError) return { ok: false, error: e.message };
     throw e;
   }
+
+  if (duplicate) return { ok: true, id: paymentId, duplicate: true };
 
   await writeAudit({
     companyId,

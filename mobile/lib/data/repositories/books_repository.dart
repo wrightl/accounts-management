@@ -25,16 +25,19 @@ class BooksRepository {
     }
   }
 
-  /// Money received against an invoice, as Record payment on the web.
+  /// Money received against an invoice, as Record payment on the web. The
+  /// server records a repeat of the same [clientRequestId] only once.
   Future<ApiResponse<bool>> recordPayment(
     String invoiceId, {
     required int amountPence,
     required DateTime receivedAt,
+    required String clientRequestId,
     String? reference,
   }) =>
       _post('${AppConstants.invoicesEndpoint}/$invoiceId/payments', {
         'amountPence': amountPence,
         'receivedAt': receivedAt.toIso8601String().split('T').first,
+        'clientRequestId': clientRequestId,
         if (reference != null && reference.isNotEmpty) 'reference': reference,
       });
 

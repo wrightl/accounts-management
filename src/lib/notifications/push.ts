@@ -8,8 +8,11 @@ import { loadHidePushDetails } from "./prefs";
 
 export type PushPayload = {
   userId: string;
-  /** The notification's company, whose lock-screen setting applies. */
-  companyId?: string | null;
+  /**
+   * The notification's company, whose lock-screen setting applies. Required
+   * so no caller can skip the setting; null only for notices with no company.
+   */
+  companyId: string | null;
   title: string;
   body: string;
   href?: string | null;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isUuid } from "@/lib/labels/params";
 import { requireMobileAuth } from "@/lib/mobile-auth";
+import { parseClientRequestId } from "@/lib/mobile/client-request";
 import { mobileError, mobileFailure, mobileServerError } from "@/lib/mobile/respond";
 import { recordInvoicePayment } from "@/lib/payments/record";
 import { ensureLocalUser } from "@/lib/users";
@@ -9,7 +10,8 @@ type Params = Promise<{ id: string }>;
 
 /**
  * Record money received against an invoice, as Record payment does on the
- * web. Matching it to a bank row is left to the web's bank screen.
+ * web. Matching it to a bank row is left to the web's bank screen. A retry
+ * with the same `clientRequestId` returns the payment already recorded.
  */
 export async function POST(request: NextRequest, segmentData: { params: Params }) {
   const { id } = await segmentData.params;
@@ -32,11 +34,15 @@ export async function POST(request: NextRequest, segmentData: { params: Params }
         method: "",
         bankTransactionId: "",
       },
+      { clientRequestId: parseClientRequestId(body?.clientRequestId) },
     );
     if (!result.ok) {
       return result.error === "Invoice not found"
         ? mobileError(result.error, 404)
         : mobileFailure(result);
+    }
+    if (result.duplicate) {
+      return NextResponse.json({ success: true, duplicate: true, data: { paymentId: result.id } });
     }
     return NextResponse.json({ success: true, data: { paymentId: result.id } }, { status: 201 });
   } catch (error) {
