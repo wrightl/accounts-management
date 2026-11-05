@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import '../api/api_client.dart';
 import '../api/api_errors.dart';
@@ -37,6 +39,34 @@ class ExpenseRepository {
       }
     } on DioException catch (e) {
       return apiErrorFrom(e);
+    } catch (e) {
+      return ApiResponse.error('Unexpected error: $e');
+    }
+  }
+
+  /// A receipt file, for the viewer. The same authorised route the web uses.
+  Future<ApiResponse<ReceiptFile>> downloadReceipt(ExpenseReceipt receipt) async {
+    try {
+      final response = await _apiClient.getBytes(
+        receipt.url ?? '/api/receipts/${receipt.id}',
+      );
+      final bytes = response.data;
+      if (response.statusCode == 200 && bytes != null) {
+        return ApiResponse.success(
+          ReceiptFile(
+            filename: receipt.filename,
+            contentType: response.headers.value('content-type') ?? '',
+            bytes: Uint8List.fromList(bytes),
+          ),
+        );
+      }
+      return ApiResponse.error('Could not load the receipt');
+    } on DioException catch (e) {
+      return ApiResponse.error(
+        e.response?.statusCode == 404
+            ? 'This receipt file is no longer available'
+            : (e.message ?? 'Could not load the receipt'),
+      );
     } catch (e) {
       return ApiResponse.error('Unexpected error: $e');
     }

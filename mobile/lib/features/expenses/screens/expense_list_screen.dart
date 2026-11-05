@@ -6,6 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../data/models/expense.dart';
 import 'expense_capture_screen.dart' show ExpensePaymentFields;
+import 'receipt_viewer_screen.dart';
 
 class ExpenseListScreen extends StatefulWidget {
   const ExpenseListScreen({super.key});
@@ -249,6 +250,7 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
                   _buildDetailRow('VAT rate', '${expense.vatRate}%'),
                 if (expense.createdByName != null)
                   _buildDetailRow('Created by', expense.createdByName!),
+                ExpenseReceiptsList(receipts: expense.receipts),
                 const SizedBox(height: 24),
                 if (expense.isPending && canWrite) ...[
                   Row(
@@ -418,6 +420,10 @@ class _ApproveSheetState extends State<_ApproveSheet> {
               '${widget.expense.displayAmount}',
               style: Theme.of(context).textTheme.bodySmall,
             ),
+            if (widget.expense.receipts.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              ExpenseReceiptsList(receipts: widget.expense.receipts),
+            ],
             if (widget.expense.receipts.isEmpty) ...[
               const SizedBox(height: 12),
               const Row(

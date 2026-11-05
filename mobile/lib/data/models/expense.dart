@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import '../../core/utils/formatters.dart';
 import '../../core/utils/json.dart';
 
@@ -159,6 +161,24 @@ class ExpenseReceipt {
       uploadedAt: asDateTime(json['uploadedAt']),
     );
   }
+}
+
+/// A downloaded receipt file.
+class ReceiptFile {
+  ReceiptFile({
+    required this.filename,
+    required this.contentType,
+    required this.bytes,
+  });
+
+  final String filename;
+  final String contentType;
+  final Uint8List bytes;
+
+  bool get isImage => contentType.startsWith('image/');
+  bool get isPdf =>
+      contentType == 'application/pdf' ||
+      filename.toLowerCase().endsWith('.pdf');
 }
 
 class CreateExpenseRequest {
