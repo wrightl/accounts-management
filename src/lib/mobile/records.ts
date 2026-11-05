@@ -1,7 +1,8 @@
 import type { SessionUser } from "@/lib/auth";
 import { listClients } from "@/lib/clients/queries";
-import { resolvePeriod } from "@/lib/dates";
-import { listInvoices } from "@/lib/invoices/queries";
+import { resolvePeriod, todayIsoDate } from "@/lib/dates";
+import { invoiceAmountsDue, listInvoices } from "@/lib/invoices/queries";
+import { can } from "@/lib/roles";
 import { listQuotes } from "@/lib/quotes/queries";
 import { listReimbursements } from "@/lib/reimbursements/queries";
 import { listDividendDeclarations } from "@/lib/reports/queries";
@@ -25,6 +26,13 @@ export type BookRecord = {
   status: string | null;
   date: string | null;
   details: Record<string, string>;
+  /** What the phone can do with this record; absent when nothing. */
+  actions?: {
+    /** Record a payment; the amount still owed prefills the form. */
+    recordPayment?: { amountDuePence: number };
+    /** Mark the reimbursement run paid. */
+    markPaid?: boolean;
+  };
 };
 
 export type BookStat = {
@@ -64,14 +72,42 @@ export async function loadBooksPage(
 ): Promise<BooksPage> {
   const all = await loadAllRecords(companyId, user, resource);
   const { items, hasMore } = pageResult(all.items.slice(page.offset), page);
-  return { ...all, items, hasMore };
+  const withActions = await addActions(items, all.payable, can(user.role, "accounts:write"));
+  return { title: all.title, emptyMessage: all.emptyMessage, stats: all.stats, items: withActions, hasMore };
+}
+
+/** Sent invoices still owed money, and unpaid runs due today or earlier. */
+type Payable = {
+  invoices?: Map<string, number>;
+  runs?: Set<string>;
+};
+
+async function addActions(
+  items: BookRecord[],
+  payable: Payable | undefined,
+  canWrite: boolean,
+): Promise<BookRecord[]> {
+  if (!canWrite || !payable) return items;
+  const owed = payable.invoices
+    ? await invoiceAmountsDue(
+        items
+          .filter((i) => payable.invoices!.has(i.id))
+          .map((i) => ({ id: i.id, grossPence: payable.invoices!.get(i.id)! })),
+      )
+    : new Map<string, number>();
+  return items.map((item) => {
+    const amountDuePence = owed.get(item.id) ?? 0;
+    if (amountDuePence > 0) return { ...item, actions: { recordPayment: { amountDuePence } } };
+    if (payable.runs?.has(item.id)) return { ...item, actions: { markPaid: true } };
+    return item;
+  });
 }
 
 async function loadAllRecords(
   companyId: string,
   _user: SessionUser,
   resource: MobileResource,
-): Promise<Omit<BooksPage, "hasMore">> {
+): Promise<Omit<BooksPage, "hasMore"> & { payable?: Payable }> {
   switch (resource) {
     case "clients": {
       const rows = await listClients(companyId);
@@ -100,6 +136,13 @@ async function loadAllRecords(
     case "invoices": {
       const rows = await listInvoices(companyId);
       return {
+        payable: {
+          invoices: new Map(
+            rows
+              .filter((row) => row.status === "sent" || row.status === "overdue")
+              .map((row) => [row.id, row.grossPence]),
+          ),
+        },
         title: "Invoices",
         emptyMessage: "No invoices yet.",
         stats: [{ label: "Invoices", value: String(rows.length) }],
@@ -152,7 +195,19 @@ async function loadAllRecords(
     }
     case "reimbursements": {
       const rows = await listReimbursements(companyId);
+      const today = todayIsoDate();
       return {
+        payable: {
+          runs: new Set(
+            rows
+              .filter(
+                (row) =>
+                  row.status !== "paid" &&
+                  (!row.reimbursementDate || row.reimbursementDate <= today),
+              )
+              .map((row) => row.id),
+          ),
+        },
         title: "Reimbursements",
         emptyMessage: "No reimbursement runs yet.",
         stats: [{ label: "Runs", value: String(rows.length) }],

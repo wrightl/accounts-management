@@ -55,6 +55,40 @@ export async function listInvoices(companyId: string, scope: RecordScope = "all"
   }));
 }
 
+/**
+ * What's still owed on each of these invoices, after payments and credit
+ * notes. Callers pass invoices already scoped to the company.
+ */
+export async function invoiceAmountsDue(
+  list: { id: string; grossPence: number }[],
+): Promise<Map<string, number>> {
+  const due = new Map<string, number>();
+  if (list.length === 0) return due;
+  const db = getDb();
+  const ids = list.map((i) => i.id);
+  const paidRows = await db
+    .select({
+      invoiceId: payments.invoiceId,
+      total: sum(payments.amountPence).mapWith(Number),
+    })
+    .from(payments)
+    .where(inArray(payments.invoiceId, ids))
+    .groupBy(payments.invoiceId);
+  const paid = new Map(paidRows.map((r) => [r.invoiceId, r.total ?? 0]));
+  const credits = await creditAdjustmentsByInvoice(db, ids);
+  for (const inv of list) {
+    due.set(
+      inv.id,
+      invoiceAmountDuePence({
+        grossPence: inv.grossPence,
+        paidPence: paid.get(inv.id) ?? 0,
+        ...credits.get(inv.id),
+      }),
+    );
+  }
+  return due;
+}
+
 export async function getInvoiceDetail(
   companyId: string,
   id: string,

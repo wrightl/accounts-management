@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/json.dart';
 import '../api/api_client.dart';
+import '../api/api_errors.dart';
 import '../models/api_response.dart';
 import '../models/books.dart';
 
@@ -12,6 +13,33 @@ class BooksRepository {
   final ApiClient _apiClient;
 
   static const pageSize = 50;
+
+  Future<ApiResponse<bool>> _post(String path, Map<String, dynamic> body) async {
+    try {
+      await _apiClient.post(path, data: body);
+      return ApiResponse.success(true);
+    } on DioException catch (e) {
+      return apiErrorFrom(e);
+    } catch (e) {
+      return ApiResponse.error('Unexpected error: $e');
+    }
+  }
+
+  /// Money received against an invoice, as Record payment on the web.
+  Future<ApiResponse<bool>> recordPayment(
+    String invoiceId, {
+    required int amountPence,
+    required DateTime receivedAt,
+    String? reference,
+  }) =>
+      _post('${AppConstants.invoicesEndpoint}/$invoiceId/payments', {
+        'amountPence': amountPence,
+        'receivedAt': receivedAt.toIso8601String().split('T').first,
+        if (reference != null && reference.isNotEmpty) 'reference': reference,
+      });
+
+  Future<ApiResponse<bool>> markReimbursementPaid(String runId) =>
+      _post('${AppConstants.reimbursementsEndpoint}/$runId/paid', const {});
 
   Future<ApiResponse<BooksPage>> getPage(String resource, {int offset = 0}) async {
     try {

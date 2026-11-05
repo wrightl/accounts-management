@@ -8,7 +8,11 @@ import {
   auditLog,
   clients,
   expenses,
+  invoices,
   labels,
+  payments,
+  reimbursementItems,
+  reimbursements,
   users,
 } from "@/db/schema";
 import { seedCompany } from "@/lib/test/seed-company";
@@ -29,6 +33,8 @@ import { HIDDEN_PUSH_TITLE, withLockScreenPrivacy } from "@/lib/notifications/pu
 import { GET as listQueriesRoute } from "@/app/api/mobile/queries/route";
 import { GET as getQueryRoute } from "@/app/api/mobile/queries/[id]/route";
 import { POST as replyRoute } from "@/app/api/mobile/queries/[id]/reply/route";
+import { POST as recordPaymentRoute } from "@/app/api/mobile/invoices/[id]/payments/route";
+import { POST as markPaidRoute } from "@/app/api/mobile/reimbursements/[id]/paid/route";
 import {
   GET as askStatusRoute,
   POST as askRoute,
@@ -491,6 +497,126 @@ describe("mobile AI bookkeeper questions", () => {
     const company = await seedCompany(db, { name: "Acc Ask Co" });
     await seedUser(company.id, "accountant");
     const res = await askRoute(postJson("/api/mobile/bookkeeper/ask", { question: "Hi there" }));
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("mobile payments and reimbursement runs", () => {
+  async function seedInvoice(companyId: string, createdByUserId: string, status = "sent") {
+    const [client] = await db.insert(clients).values({ companyId, name: "Ada" }).returning();
+    const [invoice] = await db
+      .insert(invoices)
+      .values({
+        companyId,
+        number: `INV-${Math.random().toString(36).slice(2, 8)}`,
+        clientId: client.id,
+        status,
+        issueDate: "2026-03-01",
+        dueDate: "2099-03-15",
+        grossPence: 10000,
+        netPence: 10000,
+        createdByUserId,
+      })
+      .returning();
+    return invoice;
+  }
+
+  it("offers Record payment with what's owed, and records it like the web", async () => {
+    const company = await seedCompany(db, { name: "Pay Co" });
+    const user = await seedUser(company.id);
+    const invoice = await seedInvoice(company.id, user.id);
+    await seedInvoice(company.id, user.id, "draft");
+
+    const list = (await (await listRecords(get("/api/mobile/records?resource=invoices"))).json()).data;
+    const row = list.items.find((i: { id: string }) => i.id === invoice.id);
+    expect(row.actions).toEqual({ recordPayment: { amountDuePence: 10000 } });
+    expect(list.items.filter((i: { actions?: unknown }) => i.actions)).toHaveLength(1);
+
+    const part = await recordPaymentRoute(
+      postJson(`/api/mobile/invoices/${invoice.id}/payments`, { amountPence: 4000, receivedAt: "2026-03-10" }),
+      params({ id: invoice.id }),
+    );
+    expect(part.status).toBe(201);
+    const after = (await (await listRecords(get("/api/mobile/records?resource=invoices"))).json()).data;
+    expect(after.items.find((i: { id: string }) => i.id === invoice.id).actions).toEqual({
+      recordPayment: { amountDuePence: 6000 },
+    });
+
+    const tooMuch = await recordPaymentRoute(
+      postJson(`/api/mobile/invoices/${invoice.id}/payments`, { amountPence: 7000 }),
+      params({ id: invoice.id }),
+    );
+    expect(tooMuch.status).toBe(400);
+    expect((await tooMuch.json()).error).toMatch(/exceeds remaining balance/);
+
+    await recordPaymentRoute(
+      postJson(`/api/mobile/invoices/${invoice.id}/payments`, { amountPence: 6000 }),
+      params({ id: invoice.id }),
+    );
+    const [paid] = await db.select().from(invoices).where(eq(invoices.id, invoice.id));
+    expect(paid.status).toBe("paid");
+    expect(await db.select().from(payments).where(eq(payments.invoiceId, invoice.id))).toHaveLength(2);
+    const audits = await db.select().from(auditLog).where(eq(auditLog.action, "payment.record"));
+    expect(audits).toHaveLength(2);
+  });
+
+  it("refuses another company's invoice", async () => {
+    const company = await seedCompany(db, { name: "Mine" });
+    const other = await seedCompany(db, { name: "Theirs" });
+    const user = await seedUser(company.id);
+    const theirs = await seedInvoice(other.id, user.id);
+
+    const res = await recordPaymentRoute(
+      postJson(`/api/mobile/invoices/${theirs.id}/payments`, { amountPence: 100 }),
+      params({ id: theirs.id }),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("marks a reimbursement run paid", async () => {
+    const company = await seedCompany(db, { name: "Run Co" });
+    const user = await seedUser(company.id);
+    const [expense] = await db
+      .insert(expenses)
+      .values({
+        companyId: company.id,
+        description: "Train",
+        amountPence: 4500,
+        status: "reimbursable",
+        paidByUserId: user.id,
+        spentAt: "2026-03-01",
+      })
+      .returning();
+    const [run] = await db
+      .insert(reimbursements)
+      .values({ companyId: company.id, payeeUserId: user.id, status: "pending", totalPence: 4500 })
+      .returning();
+    await db.insert(reimbursementItems).values({ reimbursementId: run.id, expenseId: expense.id });
+
+    const list = (await (await listRecords(get("/api/mobile/records?resource=reimbursements"))).json()).data;
+    expect(list.items[0].actions).toEqual({ markPaid: true });
+
+    const res = await markPaidRoute(postJson(`/api/mobile/reimbursements/${run.id}/paid`, {}), params({ id: run.id }));
+    expect(res.status).toBe(200);
+    const [after] = await db.select().from(reimbursements).where(eq(reimbursements.id, run.id));
+    expect(after.status).toBe("paid");
+
+    const again = await markPaidRoute(postJson(`/api/mobile/reimbursements/${run.id}/paid`, {}), params({ id: run.id }));
+    expect(again.status).toBe(400);
+  });
+
+  it("offers no actions to someone who can't write", async () => {
+    const company = await seedCompany(db, { name: "Read Co" });
+    const admin = await db
+      .insert(users)
+      .values({ companyId: company.id, clerkUserId: "other_admin", email: "a@x.com", role: "admin" })
+      .returning()
+      .then((r) => r[0]);
+    await seedInvoice(company.id, admin.id);
+    await seedUser(company.id, "accountant");
+
+    const res = await listRecords(get("/api/mobile/records?resource=invoices"));
+    // Accountants don't get the mobile record lists at all.
     expect(res.status).toBe(403);
   });
 });

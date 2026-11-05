@@ -23,6 +23,8 @@ class BookRecord {
     this.status,
     this.date,
     required this.details,
+    this.amountDuePence,
+    this.canMarkPaid = false,
   });
 
   final String id;
@@ -33,8 +35,16 @@ class BookRecord {
   final String? date;
   final Map<String, String> details;
 
+  /// Set on a sent invoice still owed money: Record payment prefills this.
+  final int? amountDuePence;
+
+  /// An unpaid reimbursement run that can be marked paid now.
+  final bool canMarkPaid;
+
   factory BookRecord.fromJson(Map<String, dynamic> json) {
     final rawDetails = asMap(json['details']);
+    final actions = asMap(json['actions']);
+    final payment = asMap(actions['recordPayment']);
     return BookRecord(
       id: asString(json['id']),
       title: asString(json['title']),
@@ -46,6 +56,9 @@ class BookRecord {
         for (final entry in rawDetails.entries)
           entry.key: asString(entry.value, '—'),
       },
+      amountDuePence:
+          payment['amountDuePence'] == null ? null : asInt(payment['amountDuePence']),
+      canMarkPaid: actions['markPaid'] == true,
     );
   }
 }

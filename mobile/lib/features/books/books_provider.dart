@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../../../data/models/api_response.dart';
 import '../../../data/models/books.dart';
 import '../../../data/repositories/books_repository.dart';
 
@@ -33,6 +34,27 @@ class BooksProvider with ChangeNotifier {
   }
 
   Future<void> refresh(String resource) => load(resource, force: true);
+
+  /// Record a payment, then reload invoices so the amount owed is current.
+  Future<ApiResponse<bool>> recordPayment(
+    String invoiceId, {
+    required int amountPence,
+    required DateTime receivedAt,
+  }) async {
+    final result = await _repository.recordPayment(
+      invoiceId,
+      amountPence: amountPence,
+      receivedAt: receivedAt,
+    );
+    if (result.success) await refresh('invoices');
+    return result;
+  }
+
+  Future<ApiResponse<bool>> markReimbursementPaid(String runId) async {
+    final result = await _repository.markReimbursementPaid(runId);
+    if (result.success) await refresh('reimbursements');
+    return result;
+  }
 
   /// The next page of [resource], appended to what's shown.
   Future<void> loadMore(String resource) async {
