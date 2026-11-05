@@ -46,6 +46,12 @@
 		<string>https</string>
 		<string>http</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Alfa uses the camera to photograph receipts for your expenses.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Alfa opens your photos so you can attach a receipt to an expense.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Alfa can use Face ID to keep your books locked when you're not using the app.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

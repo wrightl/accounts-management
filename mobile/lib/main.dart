@@ -17,6 +17,7 @@ import 'features/expenses/expense_provider.dart';
 import 'features/expenses/screens/expense_capture_screen.dart';
 import 'features/notifications/notification_provider.dart';
 import 'core/push/push_notification_service.dart';
+import 'core/security/app_lock.dart';
 import 'core/share/share_intake.dart';
 import 'shared/widgets/home_screen.dart';
 import 'shared/widgets/product_lockup.dart';
@@ -56,6 +57,13 @@ class MyApp extends StatelessWidget {
           ChangeNotifierProvider(create: (_) => ExpenseProvider()),
           ChangeNotifierProvider(create: (_) => BooksProvider()),
           ChangeNotifierProvider(create: (_) => NotificationProvider()),
+          ChangeNotifierProvider(
+            create: (_) {
+              final lock = AppLock()..load();
+              WidgetsBinding.instance.addObserver(lock);
+              return lock;
+            },
+          ),
         ],
         child: MaterialApp(
           title: AppConstants.appName,
@@ -68,7 +76,10 @@ class MyApp extends StatelessWidget {
           ],
           supportedLocales: const [Locale('en')],
           builder: (context, child) => ClerkErrorListener(
-            child: child ?? const SizedBox.shrink(),
+            child: AppLockGate(
+              lock: context.read<AppLock>(),
+              child: child ?? const SizedBox.shrink(),
+            ),
           ),
           home: const AuthGate(),
           onGenerateRoute: (settings) {

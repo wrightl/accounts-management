@@ -5,6 +5,7 @@ import '../../../core/utils/web_links.dart';
 import '../../../features/auth/auth_provider.dart';
 import '../../../features/auth/sign_out.dart';
 import '../../../features/notifications/screens/notification_prefs_screen.dart';
+import '../../../core/security/app_lock.dart';
 import '../../queries/queries_screen.dart';
 import '../../work/bookkeeper_screen.dart';
 import '../../work/deadlines_screen.dart';
@@ -87,6 +88,7 @@ class MoreScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         children: [
           for (final item in items) _MoreTile(item: item),
+          const _AppLockTile(),
           const SizedBox(height: 16),
           Text('On the web', style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 4),
@@ -200,4 +202,32 @@ class _MoreItem {
   final String subtitle;
   final IconData icon;
   final WidgetBuilder screen;
+}
+
+/// Turn the Face ID / fingerprint lock on or off for this phone.
+class _AppLockTile extends StatelessWidget {
+  const _AppLockTile();
+
+  @override
+  Widget build(BuildContext context) {
+    final lock = context.watch<AppLock?>();
+    if (lock == null || !lock.supported) return const SizedBox.shrink();
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: SwitchListTile(
+        secondary: const Icon(Icons.lock_outline),
+        title: const Text('Lock with Face ID or fingerprint'),
+        subtitle: const Text('Asks when you open Alfa, and after 5 minutes away.'),
+        value: lock.enabled,
+        onChanged: (on) async {
+          final ok = await lock.setEnabled(on);
+          if (!ok && context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("The lock wasn't turned on.")),
+            );
+          }
+        },
+      ),
+    );
+  }
 }
