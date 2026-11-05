@@ -11,7 +11,7 @@ import '../support/signed_in.dart';
 
 class _EmptyBooks extends BooksRepository {
   @override
-  Future<ApiResponse<BooksPage>> getPage(String resource) async =>
+  Future<ApiResponse<BooksPage>> getPage(String resource, {int offset = 0}) async =>
       ApiResponse.success(
         BooksPage(title: resource, emptyMessage: 'Nothing yet.', stats: [], items: []),
       );

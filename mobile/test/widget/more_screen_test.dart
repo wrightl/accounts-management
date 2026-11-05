@@ -49,4 +49,17 @@ void main() {
     expect(find.text('Deadlines'), findsNothing);
     expect(find.text('Notifications'), findsOneWidget);
   });
+
+  testWidgets('shows Queries to people who can reply to the accountant', (tester) async {
+    await _pump(
+      tester,
+      await signedIn(permissions: ['accounts:read', 'accounts:write', 'queries:read']),
+    );
+    expect(find.text('Queries'), findsOneWidget);
+  });
+
+  testWidgets('hides Queries without queries:read', (tester) async {
+    await _pump(tester, await signedIn());
+    expect(find.text('Queries'), findsNothing);
+  });
 }

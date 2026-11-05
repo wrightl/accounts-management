@@ -54,6 +54,7 @@ class AppConstants {
   static const String expenseAnnotationsEndpoint =
       '/api/mobile/expenses/:id/annotations';
   static const String labelsEndpoint = '/api/mobile/labels';
+  static const String queriesEndpoint = '/api/mobile/queries';
   static const String notificationsEndpoint = '/api/mobile/notifications';
   static const String notificationsUnreadEndpoint =
       '/api/mobile/notifications/unread-count';

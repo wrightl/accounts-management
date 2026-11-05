@@ -5,6 +5,7 @@ import '../../../core/utils/web_links.dart';
 import '../../../features/auth/auth_provider.dart';
 import '../../../features/auth/sign_out.dart';
 import '../../../features/notifications/screens/notification_prefs_screen.dart';
+import '../../queries/queries_screen.dart';
 import '../../work/bookkeeper_screen.dart';
 import '../../work/deadlines_screen.dart';
 import '../../work/weekly_close_screen.dart';
@@ -34,6 +35,13 @@ class MoreScreen extends StatelessWidget {
           subtitle: 'Category and receipt suggestions to review',
           icon: Icons.auto_awesome_outlined,
           screen: (_) => const BookkeeperScreen(),
+        ),
+      if (user?.canReadQueries ?? false)
+        _MoreItem(
+          title: 'Queries',
+          subtitle: "Your accountant's questions",
+          icon: Icons.help_outline,
+          screen: (_) => const QueriesScreen(),
         ),
       if (user?.canReadAccounts ?? false)
         _MoreItem(

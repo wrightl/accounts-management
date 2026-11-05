@@ -2,7 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
 import { eq } from "drizzle-orm";
-import { auditLog, clients, expenses, labels, users } from "@/db/schema";
+import {
+  accountantQueries,
+  accountantQueryMessages,
+  auditLog,
+  clients,
+  expenses,
+  labels,
+  users,
+} from "@/db/schema";
 import { seedCompany } from "@/lib/test/seed-company";
 import {
   GET as listExpenses,
@@ -18,6 +26,9 @@ import {
   PUT as putNotificationPrefs,
 } from "@/app/api/mobile/notifications/prefs/route";
 import { HIDDEN_PUSH_TITLE, withLockScreenPrivacy } from "@/lib/notifications/push";
+import { GET as listQueriesRoute } from "@/app/api/mobile/queries/route";
+import { GET as getQueryRoute } from "@/app/api/mobile/queries/[id]/route";
+import { POST as replyRoute } from "@/app/api/mobile/queries/[id]/reply/route";
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -77,8 +88,10 @@ async function seedUser(
   return row;
 }
 
+/** A GET as Next passes it, with `nextUrl` for routes that read it. */
 function get(url: string) {
-  return new Request(`http://localhost${url}`) as never;
+  const full = `http://localhost${url}`;
+  return Object.assign(new Request(full), { nextUrl: new URL(full) }) as never;
 }
 
 describe("mobile paging", () => {
@@ -134,10 +147,7 @@ describe("mobile record paging", () => {
       ["Ada", "Bea", "Cy"].map((name) => ({ companyId: company.id, name })),
     );
 
-    const req = (qs: string) =>
-      Object.assign(new Request(`http://localhost/api/mobile/records?${qs}`), {
-        nextUrl: new URL(`http://localhost/api/mobile/records?${qs}`),
-      }) as never;
+    const req = (qs: string) => get(`/api/mobile/records?${qs}`);
     const first = (await (await listRecords(req("resource=clients&limit=2"))).json()).data;
     expect(first.items).toHaveLength(2);
     expect(first.hasMore).toBe(true);
@@ -351,5 +361,89 @@ describe("lock-screen privacy", () => {
 
     const data = (await (await getNotificationPrefs()).json()).data;
     expect(data.userOverrides["invoice.paid"]?.push).toBe(true);
+  });
+});
+
+describe("mobile replies to accountant queries", () => {
+  async function seedQuery(companyId: string, status = "open") {
+    const [accountant] = await db
+      .insert(users)
+      .values({
+        companyId,
+        clerkUserId: `user_acc_${companyId}`,
+        email: "acc@example.com",
+        role: "accountant",
+        name: "Acc",
+      })
+      .returning();
+    const [query] = await db
+      .insert(accountantQueries)
+      .values({ companyId, subject: "What was this taxi?", status, raisedByUserId: accountant.id })
+      .returning();
+    await db.insert(accountantQueryMessages).values({
+      companyId,
+      queryId: query.id,
+      authorUserId: accountant.id,
+      body: "Client meeting?",
+    });
+    return query;
+  }
+
+  it("lists the queries and shows the thread", async () => {
+    const company = await seedCompany(db, { name: "Query Co" });
+    await seedUser(company.id);
+    const query = await seedQuery(company.id);
+
+    const list = await (await listQueriesRoute(get("/api/mobile/queries"))).json();
+    expect(list.data).toEqual([
+      expect.objectContaining({ id: query.id, statusLabel: "Waiting for the team", raisedByName: "Acc" }),
+    ]);
+
+    const detail = await (await getQueryRoute(get(`/api/mobile/queries/${query.id}`), params({ id: query.id }))).json();
+    expect(detail.data.messages.map((m: { body: string }) => m.body)).toEqual(["Client meeting?"]);
+  });
+
+  it("a founder's reply marks the query answered and is audited", async () => {
+    const company = await seedCompany(db, { name: "Reply Co" });
+    await seedUser(company.id, "user");
+    const query = await seedQuery(company.id);
+
+    const res = await replyRoute(
+      postJson(`/api/mobile/queries/${query.id}/reply`, { body: "Yes, with Ada Ltd." }),
+      params({ id: query.id }),
+    );
+    expect(res.status).toBe(200);
+
+    const [row] = await db.select().from(accountantQueries).where(eq(accountantQueries.id, query.id));
+    expect(row.status).toBe("answered");
+    const audits = await db.select().from(auditLog).where(eq(auditLog.entityId, query.id));
+    expect(audits.map((a) => a.action)).toContain("query.reply");
+  });
+
+  it("refuses a reply to a closed query or another company's", async () => {
+    const company = await seedCompany(db, { name: "Closed Co" });
+    const other = await seedCompany(db, { name: "Other Co" });
+    await seedUser(company.id);
+    const closed = await seedQuery(company.id, "closed");
+    const theirs = await seedQuery(other.id);
+
+    const closedRes = await replyRoute(
+      postJson(`/api/mobile/queries/${closed.id}/reply`, { body: "Hello" }),
+      params({ id: closed.id }),
+    );
+    expect(closedRes.status).toBe(400);
+
+    const theirsRes = await replyRoute(
+      postJson(`/api/mobile/queries/${theirs.id}/reply`, { body: "Hello" }),
+      params({ id: theirs.id }),
+    );
+    expect(theirsRes.status).toBe(400);
+    const notFound = await getQueryRoute(get(`/api/mobile/queries/${theirs.id}`), params({ id: theirs.id }));
+    expect(notFound.status).toBe(404);
+    const messages = await db
+      .select()
+      .from(accountantQueryMessages)
+      .where(eq(accountantQueryMessages.queryId, theirs.id));
+    expect(messages).toHaveLength(1);
   });
 });
