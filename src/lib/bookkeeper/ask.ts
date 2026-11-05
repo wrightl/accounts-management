@@ -3,7 +3,8 @@ import { generateText, isStepCount } from "ai";
 import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { auditLog, companies } from "@/db/schema";
-import { ASSISTANT_MODEL } from "@/lib/ai/models";
+import { ASSISTANT_MODEL, aiGatewayConfigured } from "@/lib/ai/models";
+import { writeAudit } from "@/lib/audit";
 import { assistantToolsFor } from "@/lib/assistant/tools/catalog";
 import { toAiSdkTools } from "@/lib/assistant/tools/ai-sdk";
 import { financialYearEndDate, financialYearStartDate, todayIsoDate } from "@/lib/dates";
@@ -80,3 +81,46 @@ If the data can't answer the question, say so and suggest where in the app to lo
   return { ok: true, answer, sources: [...new Set(sources)] };
 }
 
+
+/**
+ * Check, answer and record one question, for the web page and the phone.
+ * Only `ai.ask` counts towards the daily limit, so a failed call to the model
+ * doesn't use up one of the company's questions.
+ */
+export async function askBookkeeperFor(
+  ctx: { companyId: string; localUserId: string | null; role: Role },
+  question: string,
+): Promise<AnswerResult> {
+  const { companyId } = ctx;
+  const trimmed = question.trim();
+  if (trimmed.length < 3) return { ok: false, error: "Type a question first." };
+  if (trimmed.length > QUESTION_MAX_LENGTH) {
+    return { ok: false, error: `Keep questions under ${QUESTION_MAX_LENGTH} characters.` };
+  }
+  if (!aiGatewayConfigured()) {
+    return { ok: false, error: "AI isn't set up on this deployment yet." };
+  }
+  if ((await questionsAskedToday(companyId)) >= DAILY_QUESTION_LIMIT) {
+    return {
+      ok: false,
+      error: `Your company has asked ${DAILY_QUESTION_LIMIT} questions today. Try again tomorrow.`,
+    };
+  }
+
+  let result: AnswerResult;
+  let action = "ai.ask";
+  try {
+    result = await answerQuestion(companyId, trimmed, ctx.role);
+  } catch (e) {
+    console.error("[bookkeeper] answer failed", e);
+    action = "ai.ask_failed";
+    result = { ok: false, error: "Couldn't answer that just now. Try again in a moment." };
+  }
+  await writeAudit({
+    companyId,
+    actorUserId: ctx.localUserId,
+    action,
+    meta: { question: trimmed, ok: result.ok, sources: result.ok ? result.sources : [] },
+  });
+  return result;
+}

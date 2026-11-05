@@ -1,16 +1,8 @@
 "use server";
 
-import { writeAudit } from "@/lib/audit";
 import { requireActionPermission } from "@/lib/auth";
 import { mutate, mutateWide } from "@/lib/mutate";
-import { aiGatewayConfigured } from "@/lib/ai/models";
-import {
-  DAILY_QUESTION_LIMIT,
-  QUESTION_MAX_LENGTH,
-  answerQuestion,
-  questionsAskedToday,
-  type AnswerResult,
-} from "@/lib/bookkeeper/ask";
+import { askBookkeeperFor, type AnswerResult } from "@/lib/bookkeeper/ask";
 import {
   acceptCategorySuggestionsFor,
   acceptReceiptMatchFor,
@@ -75,37 +67,8 @@ export async function askBookkeeper(question: string): Promise<AnswerResult> {
   if (!authz.ok) return authz;
   const companyId = authz.user.companyId;
   if (!companyId) return { ok: false, error: "Complete onboarding first." };
-  const trimmed = question.trim();
-  if (trimmed.length < 3) return { ok: false, error: "Type a question first." };
-  if (trimmed.length > QUESTION_MAX_LENGTH) {
-    return { ok: false, error: `Keep questions under ${QUESTION_MAX_LENGTH} characters.` };
-  }
-  if (!aiGatewayConfigured()) {
-    return { ok: false, error: "AI isn't set up on this deployment yet." };
-  }
-  if ((await questionsAskedToday(companyId)) >= DAILY_QUESTION_LIMIT) {
-    return {
-      ok: false,
-      error: `Your company has asked ${DAILY_QUESTION_LIMIT} questions today. Try again tomorrow.`,
-    };
-  }
-
-  let result: AnswerResult;
-  // Only `ai.ask` counts towards the daily limit, so a failed call to the model
-  // doesn't use up one of the company's questions.
-  let action = "ai.ask";
-  try {
-    result = await answerQuestion(companyId, trimmed, authz.user.role);
-  } catch (e) {
-    console.error("[bookkeeper] answer failed", e);
-    action = "ai.ask_failed";
-    result = { ok: false, error: "Couldn't answer that just now. Try again in a moment." };
-  }
-  await writeAudit({
-    companyId,
-    actorUserId: authz.user.localUserId ?? null,
-    action,
-    meta: { question: trimmed, ok: result.ok, sources: result.ok ? result.sources : [] },
-  });
-  return result;
+  return askBookkeeperFor(
+    { companyId, localUserId: authz.user.localUserId ?? null, role: authz.user.role },
+    question,
+  );
 }

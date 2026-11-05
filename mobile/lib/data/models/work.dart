@@ -225,3 +225,16 @@ class BookkeeperPage {
             .toList(),
       );
 }
+
+/// The AI bookkeeper's answer to a question, with the figures it used.
+class BookkeeperAnswer {
+  BookkeeperAnswer({required this.answer, required this.sources});
+
+  final String answer;
+  final List<String> sources;
+
+  factory BookkeeperAnswer.fromJson(Map<String, dynamic> json) => BookkeeperAnswer(
+        answer: asString(json['answer']),
+        sources: asList(json['sources']).map(asString).toList(),
+      );
+}

@@ -29,10 +29,19 @@ import { HIDDEN_PUSH_TITLE, withLockScreenPrivacy } from "@/lib/notifications/pu
 import { GET as listQueriesRoute } from "@/app/api/mobile/queries/route";
 import { GET as getQueryRoute } from "@/app/api/mobile/queries/[id]/route";
 import { POST as replyRoute } from "@/app/api/mobile/queries/[id]/reply/route";
+import {
+  GET as askStatusRoute,
+  POST as askRoute,
+} from "@/app/api/mobile/bookkeeper/ask/route";
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
+
+vi.mock("@/lib/ai/models", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/ai/models")>()),
+  aiGatewayConfigured: () => true,
+}));
 
 // 1.25 euros to the pound, whatever the day.
 vi.mock("@/lib/bank/fx", async (importOriginal) => ({
@@ -445,5 +454,43 @@ describe("mobile replies to accountant queries", () => {
       .from(accountantQueryMessages)
       .where(eq(accountantQueryMessages.queryId, theirs.id));
     expect(messages).toHaveLength(1);
+  });
+});
+
+describe("mobile AI bookkeeper questions", () => {
+  it("refuses an empty question without using one up", async () => {
+    const company = await seedCompany(db, { name: "Ask Co" });
+    await seedUser(company.id);
+
+    const res = await askRoute(postJson("/api/mobile/bookkeeper/ask", { question: "  " }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("Type a question first.");
+    expect((await (await askStatusRoute()).json()).data.remaining).toBe(40);
+  });
+
+  it("stops at the company's daily limit, shared with the web", async () => {
+    const company = await seedCompany(db, { name: "Busy Co" });
+    const user = await seedUser(company.id);
+    await db.insert(auditLog).values(
+      Array.from({ length: 40 }, () => ({
+        companyId: company.id,
+        actorUserId: user.id,
+        action: "ai.ask",
+      })),
+    );
+
+    expect((await (await askStatusRoute()).json()).data.remaining).toBe(0);
+    const res = await askRoute(
+      postJson("/api/mobile/bookkeeper/ask", { question: "What did we spend on software?" }),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/40 questions today/);
+  });
+
+  it("is closed to people without reports:read", async () => {
+    const company = await seedCompany(db, { name: "Acc Ask Co" });
+    await seedUser(company.id, "accountant");
+    const res = await askRoute(postJson("/api/mobile/bookkeeper/ask", { question: "Hi there" }));
+    expect(res.status).toBe(403);
   });
 });

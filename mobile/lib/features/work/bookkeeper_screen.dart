@@ -6,6 +6,7 @@ import '../../data/models/work.dart';
 import '../../data/repositories/work_repository.dart';
 import '../../shared/widgets/loaded_list.dart';
 import '../auth/auth_provider.dart';
+import 'ask_bookkeeper_box.dart';
 
 /// AI bookkeeper suggestions to accept or dismiss, as on the web. Nothing
 /// changes until someone accepts it.
@@ -28,6 +29,8 @@ class BookkeeperScreen extends StatelessWidget {
           Future<void> run(Future<ApiResponse<bool>> Function() action, String done) =>
               runAndReload(context, action, done: done, reload: reload);
           return [
+            if (page.aiReady && (user?.canReadReports ?? false))
+              AskBookkeeperBox(repository: repo),
             Text(
               'Suggestions to speed up the bookkeeping. Nothing changes until someone '
               'accepts it.',
