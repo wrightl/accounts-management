@@ -25,6 +25,8 @@ class Expense {
     required this.receipts,
     this.createdByName,
     this.paymentSource,
+    this.notes,
+    this.labels = const [],
     required this.createdAt,
     required this.updatedAt,
   });
@@ -58,6 +60,10 @@ class Expense {
 
   /// How a pending emailed expense was probably paid; null once reviewed.
   final ExpensePaymentSource? paymentSource;
+
+  /// The team's own note and labels; not part of the accountant pack.
+  final String? notes;
+  final List<ExpenseLabel> labels;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -106,10 +112,40 @@ class Expense {
       paymentSource: json['paymentSource'] is Map
           ? ExpensePaymentSource.fromJson(asMap(json['paymentSource']))
           : null,
+      notes: json['notes'] is String && (json['notes'] as String).isNotEmpty
+          ? json['notes'] as String
+          : null,
+      labels: asList(json['labels'])
+          .whereType<Map>()
+          .map((e) => ExpenseLabel.fromJson(asMap(e)))
+          .toList(),
       createdAt: asDateTime(json['createdAt']),
       updatedAt: asDateTime(json['updatedAt'] ?? json['createdAt']),
     );
   }
+}
+
+/// A company label, as on the web (name and one of the web's colours).
+class ExpenseLabel {
+  ExpenseLabel({required this.id, required this.name, required this.color});
+
+  final String id;
+  final String name;
+  final String color;
+
+  factory ExpenseLabel.fromJson(Map<String, dynamic> json) => ExpenseLabel(
+        id: asString(json['id']),
+        name: asString(json['name']),
+        color: asString(json['color'], 'slate'),
+      );
+}
+
+/// One page of the expense list.
+class ExpensePage {
+  ExpensePage({required this.items, required this.hasMore});
+
+  final List<Expense> items;
+  final bool hasMore;
 }
 
 /// The server's suggestion for how an emailed expense was paid, and why.

@@ -93,6 +93,8 @@ class _RecordListScreenState extends State<RecordListScreen> {
                     record: item,
                     onTap: () => _showDetail(item),
                   ),
+              if (page?.hasMore ?? false)
+                _LoadMore(onVisible: () => provider.loadMore(widget.resource)),
             ],
           ),
         );
@@ -155,6 +157,31 @@ class _RecordListScreenState extends State<RecordListScreen> {
       },
     );
   }
+}
+
+/// Shown at the end of a list with more to come; asks for the next page
+/// when it's built, i.e. when the list scrolls to it.
+class _LoadMore extends StatefulWidget {
+  const _LoadMore({required this.onVisible});
+
+  final VoidCallback onVisible;
+
+  @override
+  State<_LoadMore> createState() => _LoadMoreState();
+}
+
+class _LoadMoreState extends State<_LoadMore> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => widget.onVisible());
+  }
+
+  @override
+  Widget build(BuildContext context) => const Padding(
+        padding: EdgeInsets.all(16),
+        child: Center(child: CircularProgressIndicator()),
+      );
 }
 
 class _StatChip extends StatelessWidget {

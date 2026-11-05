@@ -8,6 +8,7 @@ import { listDividendDeclarations } from "@/lib/reports/queries";
 import { getCompanySettings } from "@/lib/settings/queries";
 import { getSpendingSummary, getTopSpending } from "@/lib/spending/queries";
 import type { MobileResource } from "@/lib/mobile/resources";
+import { pageResult, type MobilePage } from "@/lib/mobile/paging";
 
 export type { MobileResource } from "@/lib/mobile/resources";
 export {
@@ -36,6 +37,8 @@ export type BooksPage = {
   emptyMessage: string;
   stats: BookStat[];
   items: BookRecord[];
+  /** More items after this page. */
+  hasMore: boolean;
 };
 
 function asDate(value: Date | string | null | undefined): string | null {
@@ -48,11 +51,27 @@ function record(partial: BookRecord): BookRecord {
   return partial;
 }
 
+/**
+ * One page of a read-only list. The shared list queries load every row (the
+ * web shows them all), so this pages what is sent to the phone; the stats
+ * still count everything.
+ */
 export async function loadBooksPage(
+  companyId: string,
+  user: SessionUser,
+  resource: MobileResource,
+  page: MobilePage = { limit: Number.MAX_SAFE_INTEGER, offset: 0 },
+): Promise<BooksPage> {
+  const all = await loadAllRecords(companyId, user, resource);
+  const { items, hasMore } = pageResult(all.items.slice(page.offset), page);
+  return { ...all, items, hasMore };
+}
+
+async function loadAllRecords(
   companyId: string,
   _user: SessionUser,
   resource: MobileResource,
-): Promise<BooksPage> {
+): Promise<Omit<BooksPage, "hasMore">> {
   switch (resource) {
     case "clients": {
       const rows = await listClients(companyId);

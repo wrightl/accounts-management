@@ -1,14 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
-import { expenses, users } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { auditLog, clients, expenses, labels, users } from "@/db/schema";
 import { seedCompany } from "@/lib/test/seed-company";
 import {
   GET as listExpenses,
   POST as createExpense,
 } from "@/app/api/mobile/expenses/route";
 import { GET as expenseOptions } from "@/app/api/mobile/expenses/options/route";
+import { GET as listLabels, POST as createLabel } from "@/app/api/mobile/labels/route";
+import { POST as annotateExpense } from "@/app/api/mobile/expenses/[id]/annotations/route";
 import { parseMobilePage } from "@/lib/mobile/paging";
+import { GET as listRecords } from "@/app/api/mobile/records/route";
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -117,6 +121,29 @@ function postJson(url: string, body: unknown, method = "POST") {
   }) as never;
 }
 
+describe("mobile record paging", () => {
+  it("pages a record list but counts everything", async () => {
+    const company = await seedCompany(db, { name: "Records Co" });
+    await seedUser(company.id);
+    await db.insert(clients).values(
+      ["Ada", "Bea", "Cy"].map((name) => ({ companyId: company.id, name })),
+    );
+
+    const req = (qs: string) =>
+      Object.assign(new Request(`http://localhost/api/mobile/records?${qs}`), {
+        nextUrl: new URL(`http://localhost/api/mobile/records?${qs}`),
+      }) as never;
+    const first = (await (await listRecords(req("resource=clients&limit=2"))).json()).data;
+    expect(first.items).toHaveLength(2);
+    expect(first.hasMore).toBe(true);
+    expect(first.stats[0].value).toBe("3");
+
+    const rest = (await (await listRecords(req("resource=clients&limit=2&offset=2"))).json()).data;
+    expect(rest.items).toHaveLength(1);
+    expect(rest.hasMore).toBe(false);
+  });
+});
+
 describe("mobile foreign-currency expenses", () => {
   const base = {
     description: "Paris train",
@@ -173,5 +200,105 @@ describe("mobile foreign-currency expenses", () => {
     const body = await (await expenseOptions()).json();
     expect(body.data.currencies[0]).toBe("GBP");
     expect(body.data.currencies).toContain("EUR");
+  });
+});
+
+function params<T extends Record<string, string>>(value: T) {
+  return { params: Promise.resolve(value) };
+}
+
+describe("mobile labels and notes", () => {
+  async function seedExpense(companyId: string, description = "Taxi") {
+    const [row] = await db
+      .insert(expenses)
+      .values({ companyId, description, amountPence: 900, status: "recorded" })
+      .returning();
+    return row;
+  }
+
+  it("creates labels, tags an expense, writes a note, and audits both", async () => {
+    const company = await seedCompany(db, { name: "Labels Co" });
+    await seedUser(company.id);
+    const expense = await seedExpense(company.id);
+
+    const created = await createLabel(postJson("/api/mobile/labels", { name: "Client A", color: "blue" }));
+    expect(created.status).toBe(201);
+    const labelId = (await created.json()).data.id;
+
+    const listed = await (await listLabels()).json();
+    expect(listed.data.labels.map((l: { name: string }) => l.name)).toEqual(["Client A"]);
+
+    const res = await annotateExpense(
+      postJson(`/api/mobile/expenses/${expense.id}/annotations`, {
+        labelIds: [labelId],
+        note: "Shared with Bea",
+      }),
+      params({ id: expense.id }),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.labels).toEqual([{ id: labelId, name: "Client A", color: "blue" }]);
+    expect(body.data.notes).toBe("Shared with Bea");
+
+    const actions = (await db.select().from(auditLog).where(eq(auditLog.entityId, expense.id))).map(
+      (a) => a.action,
+    );
+    expect(actions).toEqual(expect.arrayContaining(["expense.set_labels", "expense.update_note"]));
+  });
+
+  it("filters the list by label", async () => {
+    const company = await seedCompany(db, { name: "Filter Co" });
+    await seedUser(company.id);
+    const tagged = await seedExpense(company.id, "Tagged");
+    await seedExpense(company.id, "Untagged");
+    const [label] = await db
+      .insert(labels)
+      .values({ companyId: company.id, name: "Trip", color: "red" })
+      .returning();
+    await annotateExpense(
+      postJson(`/api/mobile/expenses/${tagged.id}/annotations`, { labelIds: [label.id] }),
+      params({ id: tagged.id }),
+    );
+
+    const body = await (await listExpenses(get(`/api/mobile/expenses?label=${label.id}`))).json();
+    expect(body.data.map((e: { description: string }) => e.description)).toEqual(["Tagged"]);
+  });
+
+  it("refuses another company's label or expense", async () => {
+    const company = await seedCompany(db, { name: "Mine" });
+    const other = await seedCompany(db, { name: "Theirs" });
+    await seedUser(company.id);
+    const mine = await seedExpense(company.id);
+    const theirs = await seedExpense(other.id);
+    const [theirLabel] = await db
+      .insert(labels)
+      .values({ companyId: other.id, name: "Secret", color: "red" })
+      .returning();
+
+    const wrongLabel = await annotateExpense(
+      postJson(`/api/mobile/expenses/${mine.id}/annotations`, { labelIds: [theirLabel.id] }),
+      params({ id: mine.id }),
+    );
+    expect(wrongLabel.status).toBe(400);
+
+    const wrongExpense = await annotateExpense(
+      postJson(`/api/mobile/expenses/${theirs.id}/annotations`, { note: "hi" }),
+      params({ id: theirs.id }),
+    );
+    expect(wrongExpense.status).toBe(404);
+    const [untouched] = await db.select().from(expenses).where(eq(expenses.id, theirs.id));
+    expect(untouched.notes).toBeNull();
+  });
+
+  it("doesn't let an accountant annotate", async () => {
+    const company = await seedCompany(db, { name: "Acc Co" });
+    await seedUser(company.id, "accountant");
+    const expense = await seedExpense(company.id);
+
+    const res = await annotateExpense(
+      postJson(`/api/mobile/expenses/${expense.id}/annotations`, { note: "x" }),
+      params({ id: expense.id }),
+    );
+    expect(res.status).toBe(403);
   });
 });

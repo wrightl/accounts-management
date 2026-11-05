@@ -10,6 +10,7 @@ class BooksProvider with ChangeNotifier {
   final Map<String, BooksPage> _pages = {};
   final Map<String, String> _errors = {};
   final Set<String> _loading = {};
+  final Set<String> _loadingMore = {};
 
   BooksPage? pageFor(String resource) => _pages[resource];
   String? errorFor(String resource) => _errors[resource];
@@ -32,4 +33,22 @@ class BooksProvider with ChangeNotifier {
   }
 
   Future<void> refresh(String resource) => load(resource, force: true);
+
+  /// The next page of [resource], appended to what's shown.
+  Future<void> loadMore(String resource) async {
+    final current = _pages[resource];
+    if (current == null || !current.hasMore) return;
+    if (_loadingMore.contains(resource) || _loading.contains(resource)) return;
+    _loadingMore.add(resource);
+    notifyListeners();
+
+    final response = await _repository.getPage(resource, offset: current.items.length);
+    if (response.success && response.data != null) {
+      _pages[resource] = current.append(response.data!);
+    } else {
+      _errors[resource] = response.error ?? 'Failed to load';
+    }
+    _loadingMore.remove(resource);
+    notifyListeners();
+  }
 }

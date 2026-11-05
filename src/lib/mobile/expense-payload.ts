@@ -38,6 +38,9 @@ export type MobileExpenseInput = {
   createdAt?: Date | string | null;
   createdByName?: string | null;
   receipts?: ReceiptInput[];
+  /** The team's own notes and labels. */
+  notes?: string | null;
+  labels?: { id: string; name: string; color: string }[];
   /** How a pending expense was probably paid; omitted for reviewed ones. */
   paymentSource?: PaymentSourceSuggestion | null;
 };
@@ -94,6 +97,8 @@ export function toMobileExpense(expense: MobileExpenseInput) {
       uploadedAt: isoDate(receipt.uploadedAt),
     })),
     createdByName: expense.createdByName ?? null,
+    notes: expense.notes ?? null,
+    labels: (expense.labels ?? []).map(({ id, name, color }) => ({ id, name, color })),
     paymentSource: expense.paymentSource
       ? paymentSourceSummary(expense.paymentSource)
       : null,

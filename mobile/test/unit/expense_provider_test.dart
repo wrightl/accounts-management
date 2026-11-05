@@ -9,7 +9,74 @@ import 'package:ddapp_mobile/data/models/api_response.dart';
 @GenerateMocks([ExpenseRepository])
 import 'expense_provider_test.mocks.dart';
 
+Future<ApiResponse<ExpensePage>> _getExpenses(
+  MockExpenseRepository repository, {
+  dynamic offset,
+}) =>
+    repository.getExpenses(
+      status: anyNamed('status'),
+      labelId: anyNamed('labelId'),
+      limit: anyNamed('limit'),
+      offset: offset ?? anyNamed('offset'),
+    );
+
+Expense _expense(String id) => Expense(
+      id: id,
+      companyId: 'company1',
+      description: 'Expense $id',
+      amountPence: 1000,
+      category: 'Travel',
+      expenseDate: DateTime(2026, 3, 1),
+      status: 'recorded',
+      billable: false,
+      source: 'manual',
+      receipts: [],
+      createdAt: DateTime(2026, 3, 1),
+      updatedAt: DateTime(2026, 3, 1),
+    );
+
 void main() {
+  group('ExpenseProvider paging', () {
+    late MockExpenseRepository repository;
+    late ExpenseProvider provider;
+
+    setUp(() {
+      repository = MockExpenseRepository();
+      provider = ExpenseProvider(repository: repository);
+    });
+
+    test('loads the next page after the ones already shown', () async {
+      when(_getExpenses(repository, offset: 0)).thenAnswer((_) async =>
+          ApiResponse.success(ExpensePage(items: [_expense('1'), _expense('2')], hasMore: true)));
+      when(_getExpenses(repository, offset: 2)).thenAnswer((_) async =>
+          ApiResponse.success(ExpensePage(items: [_expense('3')], hasMore: false)));
+
+      await provider.loadExpenses();
+      expect(provider.hasMore, true);
+      await provider.loadMore();
+
+      expect(provider.expenses.map((e) => e.id), ['1', '2', '3']);
+      expect(provider.hasMore, false);
+      await provider.loadMore();
+      verifyNever(_getExpenses(repository, offset: 3));
+    });
+
+    test('filters keep applying to later pages', () async {
+      when(_getExpenses(repository)).thenAnswer((_) async =>
+          ApiResponse.success(ExpensePage(items: [_expense('1')], hasMore: true)));
+
+      await provider.applyFilters(status: 'pending', labelId: 'l1');
+      await provider.loadMore();
+
+      verify(repository.getExpenses(
+        status: 'pending',
+        labelId: 'l1',
+        limit: ExpenseProvider.pageSize,
+        offset: 1,
+      )).called(1);
+    });
+  });
+
   group('ExpenseProvider', () {
     late MockExpenseRepository mockRepository;
     late ExpenseProvider provider;
@@ -37,8 +104,10 @@ void main() {
         ),
       ];
 
-      when(mockRepository.getExpenses())
-          .thenAnswer((_) async => ApiResponse.success(mockExpenses));
+      when(_getExpenses(mockRepository))
+          .thenAnswer((_) async => ApiResponse.success(
+                ExpensePage(items: mockExpenses, hasMore: false),
+              ));
 
       await provider.loadExpenses();
 
@@ -49,7 +118,7 @@ void main() {
     });
 
     test('loadExpenses sets error on failure', () async {
-      when(mockRepository.getExpenses())
+      when(_getExpenses(mockRepository))
           .thenAnswer((_) async => ApiResponse.error('Network error'));
 
       await provider.loadExpenses();

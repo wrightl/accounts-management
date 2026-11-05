@@ -7,6 +7,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../data/models/expense.dart';
 import 'expense_capture_screen.dart' show ExpensePaymentFields;
 import 'receipt_viewer_screen.dart';
+import '../widgets/expense_labels.dart';
 
 class ExpenseListScreen extends StatefulWidget {
   const ExpenseListScreen({super.key});
@@ -16,19 +17,46 @@ class ExpenseListScreen extends StatefulWidget {
 }
 
 class _ExpenseListScreenState extends State<ExpenseListScreen> {
-  String _selectedFilter = 'all';
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadExpenses();
+      context.read<ExpenseProvider>().loadLabels();
     });
   }
 
   Future<void> _loadExpenses() async {
-    final status = _selectedFilter == 'all' ? null : _selectedFilter;
-    await context.read<ExpenseProvider>().loadExpenses(status: status);
+    await context.read<ExpenseProvider>().loadExpenses();
+  }
+
+  Future<void> _chooseLabel(ExpenseProvider provider) async {
+    final chosen = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            ListTile(
+              title: const Text('All labels'),
+              onTap: () => Navigator.pop(context, ''),
+            ),
+            for (final label in provider.labels)
+              ListTile(
+                leading: Icon(Icons.label, color: labelColor(label.color)),
+                title: Text(label.name),
+                selected: provider.labelFilter == label.id,
+                onTap: () => Navigator.pop(context, label.id),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (chosen == null) return;
+    await provider.applyFilters(
+      status: provider.statusFilter,
+      labelId: chosen.isEmpty ? null : chosen,
+    );
   }
 
   /// Capture and review need write access and an editable plan, as on the web.
@@ -44,11 +72,26 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
       appBar: AppBar(
         title: const Text('Expenses'),
         actions: [
+          Consumer<ExpenseProvider>(
+            builder: (context, provider, _) => provider.labels.isEmpty
+                ? const SizedBox.shrink()
+                : IconButton(
+                    tooltip: 'Filter by label',
+                    icon: Icon(
+                      provider.labelFilter == null ? Icons.label_outline : Icons.label,
+                    ),
+                    onPressed: () => _chooseLabel(provider),
+                  ),
+          ),
           PopupMenuButton<String>(
-            initialValue: _selectedFilter,
+            tooltip: 'Filter by status',
+            initialValue: context.watch<ExpenseProvider>().statusFilter ?? 'all',
             onSelected: (value) {
-              setState(() => _selectedFilter = value);
-              _loadExpenses();
+              final provider = context.read<ExpenseProvider>();
+              provider.applyFilters(
+                status: value == 'all' ? null : value,
+                labelId: provider.labelFilter,
+              );
             },
             itemBuilder: (context) => [
               const PopupMenuItem(value: 'all', child: Text('All')),
@@ -113,8 +156,16 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
             onRefresh: _loadExpenses,
             child: ListView.builder(
               padding: const EdgeInsets.all(16),
-              itemCount: provider.expenses.length,
+              itemCount: provider.expenses.length + (provider.hasMore ? 1 : 0),
               itemBuilder: (context, index) {
+                if (index == provider.expenses.length) {
+                  // Reaching the end loads the next page.
+                  WidgetsBinding.instance.addPostFrameCallback((_) => provider.loadMore());
+                  return const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
                 final expense = provider.expenses[index];
                 return Card(
                   margin: const EdgeInsets.only(bottom: 12),
@@ -133,6 +184,10 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
                           DateUtils.formatDate(expense.expenseDate),
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
+                        if (expense.labels.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          LabelChips(labels: expense.labels),
+                        ],
                       ],
                     ),
                     trailing: Column(
@@ -250,7 +305,22 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
                   _buildDetailRow('VAT rate', '${expense.vatRate}%'),
                 if (expense.createdByName != null)
                   _buildDetailRow('Created by', expense.createdByName!),
+                if (expense.labels.isNotEmpty) ...[
+                  Text('Labels', style: Theme.of(context).textTheme.bodySmall),
+                  const SizedBox(height: 4),
+                  LabelChips(labels: expense.labels),
+                  const SizedBox(height: 16),
+                ],
+                if (expense.notes != null) _buildDetailRow('Note', expense.notes!),
                 ExpenseReceiptsList(receipts: expense.receipts),
+                if (canWrite) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => _editLabelsAndNote(expense),
+                    icon: const Icon(Icons.label_outline),
+                    label: const Text('Labels and note'),
+                  ),
+                ],
                 const SizedBox(height: 24),
                 if (expense.isPending && canWrite) ...[
                   Row(
@@ -282,6 +352,23 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
         },
       ),
     );
+  }
+
+  Future<void> _editLabelsAndNote(Expense expense) async {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => EditLabelsAndNoteSheet(expense: expense),
+    );
+    if (saved != true || !mounted) return;
+    // Reopen the detail with the saved labels and note.
+    Navigator.of(context).pop();
+    final updated = context
+        .read<ExpenseProvider>()
+        .expenses
+        .where((e) => e.id == expense.id)
+        .firstOrNull;
+    if (updated != null) _showExpenseDetail(updated, canWrite: true);
   }
 
   Widget _buildDetailRow(String label, String value) {

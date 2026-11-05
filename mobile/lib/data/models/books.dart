@@ -56,12 +56,28 @@ class BooksPage {
     required this.emptyMessage,
     required this.stats,
     required this.items,
+    this.hasMore = false,
   });
 
   final String title;
   final String emptyMessage;
   final List<BookStat> stats;
   final List<BookRecord> items;
+
+  /// More items after these; ask with `offset: items.length`.
+  final bool hasMore;
+
+  /// This page followed by the next one.
+  BooksPage append(BooksPage next) {
+    final seen = items.map((i) => i.id).toSet();
+    return BooksPage(
+      title: title,
+      emptyMessage: emptyMessage,
+      stats: stats,
+      items: [...items, ...next.items.where((i) => !seen.contains(i.id))],
+      hasMore: next.hasMore,
+    );
+  }
 
   factory BooksPage.fromJson(Map<String, dynamic> json) {
     return BooksPage(
@@ -75,6 +91,7 @@ class BooksPage {
           .whereType<Map>()
           .map((e) => BookRecord.fromJson(asMap(e)))
           .toList(),
+      hasMore: json['hasMore'] == true,
     );
   }
 }

@@ -51,6 +51,9 @@ class AppConstants {
   static const String expenseApproveEndpoint = '/api/mobile/expenses/:id/approve';
   static const String expenseRejectEndpoint = '/api/mobile/expenses/:id/reject';
   static const String uploadReceiptEndpoint = '/api/mobile/expenses/:id/receipts';
+  static const String expenseAnnotationsEndpoint =
+      '/api/mobile/expenses/:id/annotations';
+  static const String labelsEndpoint = '/api/mobile/labels';
   static const String notificationsEndpoint = '/api/mobile/notifications';
   static const String notificationsUnreadEndpoint =
       '/api/mobile/notifications/unread-count';

@@ -210,7 +210,10 @@ export async function setRowNote(
   }
   const db = getDb();
   if (kind === "expense") {
-    await db.update(expenses).set({ notes: value }).where(eq(expenses.id, rowId));
+    await db
+      .update(expenses)
+      .set({ notes: value })
+      .where(and(eq(expenses.id, rowId), eq(expenses.companyId, companyId)));
   } else {
     await db.update(bankTransactions).set({ notes: value }).where(eq(bankTransactions.id, rowId));
   }

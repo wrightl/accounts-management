@@ -6,6 +6,7 @@ import '../api/api_errors.dart';
 import '../models/expense.dart';
 import '../models/api_response.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/utils/json.dart';
 
 class ExpenseRepository {
   final ApiClient _apiClient;
@@ -13,14 +14,16 @@ class ExpenseRepository {
   ExpenseRepository({ApiClient? apiClient})
       : _apiClient = apiClient ?? ApiClient();
 
-  Future<ApiResponse<List<Expense>>> getExpenses({
+  Future<ApiResponse<ExpensePage>> getExpenses({
     String? status,
+    String? labelId,
     int? limit,
     int? offset,
   }) async {
     try {
       final queryParams = <String, dynamic>{};
       if (status != null) queryParams['status'] = status;
+      if (labelId != null) queryParams['label'] = labelId;
       if (limit != null) queryParams['limit'] = limit;
       if (offset != null) queryParams['offset'] = offset;
 
@@ -33,7 +36,9 @@ class ExpenseRepository {
         final expenses = (response.data['data'] as List)
             .map((json) => Expense.fromJson(json))
             .toList();
-        return ApiResponse.success(expenses);
+        return ApiResponse.success(
+          ExpensePage(items: expenses, hasMore: response.data['hasMore'] == true),
+        );
       } else {
         return ApiResponse.error('Failed to load expenses');
       }
@@ -67,6 +72,62 @@ class ExpenseRepository {
             ? 'This receipt file is no longer available'
             : (e.message ?? 'Could not load the receipt'),
       );
+    } catch (e) {
+      return ApiResponse.error('Unexpected error: $e');
+    }
+  }
+
+  Future<ApiResponse<({List<ExpenseLabel> labels, List<String> colors})>>
+      getLabels() async {
+    try {
+      final response = await _apiClient.get(AppConstants.labelsEndpoint);
+      final data = asMap(response.data['data']);
+      return ApiResponse.success((
+        labels: asList(data['labels'])
+            .whereType<Map>()
+            .map((e) => ExpenseLabel.fromJson(asMap(e)))
+            .toList(),
+        colors: asList(data['colors']).map(asString).toList(),
+      ));
+    } on DioException catch (e) {
+      return apiErrorFrom(e);
+    } catch (e) {
+      return ApiResponse.error('Unexpected error: $e');
+    }
+  }
+
+  Future<ApiResponse<String>> createLabel(String name, String color) async {
+    try {
+      final response = await _apiClient.post(
+        AppConstants.labelsEndpoint,
+        data: {'name': name, 'color': color},
+      );
+      return ApiResponse.success(asString(asMap(response.data['data'])['id']));
+    } on DioException catch (e) {
+      return apiErrorFrom(e);
+    } catch (e) {
+      return ApiResponse.error('Unexpected error: $e');
+    }
+  }
+
+  /// Replace the expense's labels and/or note; null leaves that part alone.
+  Future<ApiResponse<Expense>> annotateExpense(
+    String id, {
+    List<String>? labelIds,
+    String? note,
+    bool setNote = false,
+  }) async {
+    try {
+      final response = await _apiClient.post(
+        AppConstants.expenseAnnotationsEndpoint.replaceAll(':id', id),
+        data: {
+          'labelIds': ?labelIds,
+          if (setNote) 'note': note,
+        },
+      );
+      return ApiResponse.success(Expense.fromJson(asMap(response.data['data'])));
+    } on DioException catch (e) {
+      return apiErrorFrom(e);
     } catch (e) {
       return ApiResponse.error('Unexpected error: $e');
     }

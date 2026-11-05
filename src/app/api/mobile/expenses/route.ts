@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { writeAudit } from "@/lib/audit";
 import { createExpenseRecord } from "@/lib/expenses/create";
 import { listExpenses } from "@/lib/expenses/queries";
+import { parseLabelIds } from "@/lib/labels/params";
 import { parseExpenseInput } from "@/lib/expenses/schema";
 import { requireMobileAuth } from "@/lib/mobile-auth";
 import { toMobileExpense } from "@/lib/mobile/expense-payload";
@@ -21,10 +22,11 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status") || undefined;
+    const labels = parseLabelIds(searchParams.getAll("label"));
     const page = parseMobilePage(searchParams);
 
     const { items: rows, hasMore } = pageResult(
-      await listExpenses(user.companyId, { status }, pageProbe(page)),
+      await listExpenses(user.companyId, { status, labels }, pageProbe(page)),
       page,
     );
     const [receipts, paymentSources] = await Promise.all([

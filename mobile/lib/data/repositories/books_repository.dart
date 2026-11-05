@@ -11,11 +11,17 @@ class BooksRepository {
 
   final ApiClient _apiClient;
 
-  Future<ApiResponse<BooksPage>> getPage(String resource) async {
+  static const pageSize = 50;
+
+  Future<ApiResponse<BooksPage>> getPage(String resource, {int offset = 0}) async {
     try {
       final response = await _apiClient.get(
         AppConstants.recordsEndpoint,
-        queryParameters: {'resource': resource},
+        queryParameters: {
+          'resource': resource,
+          'limit': pageSize,
+          'offset': offset,
+        },
       );
       if (response.statusCode == 200 && response.data is Map) {
         final body = asMap(response.data);
