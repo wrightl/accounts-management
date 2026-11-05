@@ -9,11 +9,13 @@ opens on the web app. See `MOBILE_IMPLEMENTATION.md` at the repo root.
 
 - **Overview**: needs attention, headline figures, safe to pay, next deadline;
   the web's charts behind "More insights"
-- **Expenses**: capture with receipt reading and mileage; review emailed
-  receipts with the same approve choices as the web
-- **Sales**: invoices, quotes (if in your menu) and clients
-- **More**: weekly close, AI bookkeeper, deadlines, spending, reimbursements,
-  dividends, notifications, links to the web, sign out
+- **Expenses**: capture with receipt reading, mileage, foreign currency and
+  PDFs; saved offline and sent later; receipts, labels and notes; review
+  emailed receipts with the same approve choices as the web
+- **Sales**: invoices (with Record payment), quotes (if in your menu) and clients
+- **More**: weekly close, AI bookkeeper (with questions), queries, deadlines,
+  spending, reimbursements (Mark as paid), dividends, notifications, app lock,
+  links to the web, sign out
 - **Secure Authentication**: Clerk sign-in (Google and other dashboard providers), same instance as the web app
 
 ## Requirements
@@ -149,15 +151,20 @@ The app talks to `/api/mobile/*` on the web app. Each route calls the same
 | --- | --- |
 | `POST /auth/validate` | Session user, permissions, menu features, billing |
 | `GET /dashboard` | Overview figures, safe to pay, next deadline |
-| `GET/POST /expenses` | List; create (same validation as the web form) |
-| `GET /expenses/options` | Payers, clients, orders, VAT and mileage defaults |
-| `POST /expenses/extract` | Read a receipt photo |
-| `GET /expenses/:id`, `POST /expenses/:id/approve`, `/reject`, `/receipts` | One expense; review; receipt upload |
+| `GET/POST /expenses` | List (`limit`, `offset`, `label`); create (same validation as the web form, deduped on `clientRequestId`) |
+| `GET /expenses/options` | Payers, clients, orders, currencies, VAT and mileage defaults |
+| `POST /expenses/extract` | Read a receipt photo or PDF |
+| `GET /expenses/:id`, `POST /expenses/:id/approve`, `/reject`, `/receipts`, `/annotations` | One expense; review; receipt upload; labels and note |
+| `GET/POST /labels` | List and create labels |
 | `GET/POST /deadlines` | List; mark done or undo |
 | `GET/POST /close` | Weekly close checklist; close the week |
 | `GET/POST /bookkeeper` | AI suggestions; accept, dismiss, find |
-| `GET /records?resource=` | Read-only lists: clients, invoices, quotes, reimbursements, spending, dividends |
-| `/notifications/*` | Inbox, unread count, preferences, push token |
+| `GET/POST /bookkeeper/ask` | Questions left today; ask a question |
+| `GET /records?resource=` | Lists (`limit`, `offset`): clients, invoices, quotes, reimbursements, spending, dividends |
+| `POST /invoices/:id/payments` | Record a payment |
+| `POST /reimbursements/:id/paid` | Mark a run paid |
+| `GET /queries`, `GET /queries/:id`, `POST /queries/:id/reply` | Accountant queries and replies |
+| `/notifications/*` | Inbox, unread count, preferences (including lock-screen privacy), push token |
 
 ## Authentication
 
