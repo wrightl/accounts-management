@@ -44,6 +44,9 @@ class ApiResponse<T> {
     );
   }
 
+  /// The request never reached the server (see `apiErrorFrom`).
+  bool get isOffline => code == 'offline';
+
   bool get isBillingBlocked =>
       code == 'trial_expired' ||
       code == 'plan_read_only' ||

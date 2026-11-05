@@ -701,10 +701,15 @@ export const expenses = pgTable(
     createdByUserId: uuid("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
+    /** Set by the phone so a capture retried after going offline isn't saved twice. */
+    clientRequestId: text("client_request_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
     index("idx_expenses_company").on(t.companyId),
+    uniqueIndex("uniq_expenses_client_request")
+      .on(t.companyId, t.clientRequestId)
+      .where(sql`${t.clientRequestId} is not null`),
     index("idx_expenses_inbound_email_job").on(t.inboundEmailJobId),
     index("idx_expenses_status").on(t.status),
     index("idx_expenses_paid_by").on(t.paidByUserId),

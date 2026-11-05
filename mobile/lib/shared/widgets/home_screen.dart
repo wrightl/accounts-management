@@ -4,6 +4,7 @@ import '../../features/expenses/screens/expense_list_screen.dart';
 import '../../features/books/screens/sales_hub_screen.dart';
 import '../../features/books/screens/more_screen.dart';
 import '../../features/auth/auth_provider.dart';
+import '../../features/expenses/expense_provider.dart';
 import '../../features/notifications/notification_provider.dart';
 import '../../features/notifications/screens/inbox_screen.dart';
 import '../../core/theme/app_theme.dart';
@@ -26,6 +27,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<NotificationProvider>().refreshUnread();
+      context.read<ExpenseProvider>().sendQueued();
     });
   }
 
@@ -39,6 +41,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       context.read<NotificationProvider>().refreshUnread();
+      // Back in signal, perhaps: send expenses saved offline.
+      context.read<ExpenseProvider>().sendQueued();
     }
   }
 

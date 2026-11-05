@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../expense_provider.dart';
+import '../offline_expense_queue.dart';
 import '../../../data/models/expense.dart';
 import '../../../core/utils/formatters.dart';
 
@@ -49,6 +50,10 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
   /// Set once the expense is saved but its receipt didn't upload, so the
   /// person can retry rather than lose the receipt without noticing.
   String? _savedWithoutReceiptId;
+
+  /// One id for this capture, so pressing Save again, or sending it later
+  /// from the offline queue, never saves it twice.
+  final String _clientRequestId = newClientRequestId();
 
   @override
   void initState() {
@@ -233,6 +238,7 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
       amountPence: amount == null ? null : CurrencyUtils.poundsToPence(amount),
       currency: foreign ? _currency : null,
       originalAmount: foreign ? _amountController.text.trim() : null,
+      clientRequestId: _clientRequestId,
       category: _selectedCategory,
       expenseDate: _selectedDate,
       status: _status!,
@@ -250,6 +256,12 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
     final success = await provider.createExpense(request);
 
     if (!mounted) return;
+    if (!success && provider.lastFailureOffline) {
+      await provider.queueExpense(request, receiptPath: _capturedReceipt?.path);
+      if (!mounted) return;
+      _finish("Saved on this phone. It'll send when you're back online.");
+      return;
+    }
     if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(provider.error ?? 'Could not save the expense')),

@@ -8,6 +8,7 @@ import '../../../data/models/expense.dart';
 import 'expense_capture_screen.dart' show ExpensePaymentFields;
 import 'receipt_viewer_screen.dart';
 import '../widgets/expense_labels.dart';
+import '../offline_expense_queue.dart';
 
 class ExpenseListScreen extends StatefulWidget {
   const ExpenseListScreen({super.key});
@@ -26,8 +27,11 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
     });
   }
 
+  /// Sends anything saved offline first, so the list includes it.
   Future<void> _loadExpenses() async {
-    await context.read<ExpenseProvider>().loadExpenses();
+    final provider = context.read<ExpenseProvider>();
+    await provider.sendQueued();
+    await provider.loadExpenses();
   }
 
   Future<void> _chooseLabel(ExpenseProvider provider) async {
@@ -128,7 +132,7 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
             );
           }
 
-          if (provider.expenses.isEmpty) {
+          if (provider.expenses.isEmpty && provider.queued.isEmpty) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -156,8 +160,14 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
             onRefresh: _loadExpenses,
             child: ListView.builder(
               padding: const EdgeInsets.all(16),
-              itemCount: provider.expenses.length + (provider.hasMore ? 1 : 0),
+              itemCount: provider.queued.length +
+                  provider.expenses.length +
+                  (provider.hasMore ? 1 : 0),
               itemBuilder: (context, index) {
+                if (index < provider.queued.length) {
+                  return QueuedExpenseTile(item: provider.queued[index]);
+                }
+                index -= provider.queued.length;
                 if (index == provider.expenses.length) {
                   // Reaching the end loads the next page.
                   WidgetsBinding.instance.addPostFrameCallback((_) => provider.loadMore());
@@ -572,6 +582,39 @@ class _ApproveSheetState extends State<_ApproveSheet> {
               },
               child: const Text('Approve'),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// An expense saved on this phone while offline.
+class QueuedExpenseTile extends StatelessWidget {
+  const QueuedExpenseTile({super.key, required this.item});
+
+  final QueuedExpense item;
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.read<ExpenseProvider>();
+    final error = item.lastError;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ListTile(
+        leading: Icon(
+          error == null ? Icons.cloud_upload_outlined : Icons.error_outline,
+          color: error == null ? Colors.grey : Theme.of(context).colorScheme.error,
+        ),
+        title: Text(item.description),
+        subtitle: Text(error ?? "Waiting to send. It'll go when you're back online."),
+        trailing: PopupMenuButton<String>(
+          onSelected: (value) => value == 'retry'
+              ? provider.retryQueued(item.clientRequestId)
+              : provider.discardQueued(item.clientRequestId),
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: 'retry', child: Text('Try again')),
+            PopupMenuItem(value: 'discard', child: Text('Discard')),
           ],
         ),
       ),

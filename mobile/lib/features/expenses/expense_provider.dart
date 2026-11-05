@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../data/repositories/expense_repository.dart';
 import '../../../data/models/expense.dart';
+import 'offline_expense_queue.dart';
 
 class ExpenseProvider with ChangeNotifier {
   final ExpenseRepository _repository;
@@ -28,8 +29,47 @@ class ExpenseProvider with ChangeNotifier {
   ExpenseProvider({
     ExpenseRepository? repository,
     ImagePicker? imagePicker,
+    OfflineExpenseQueue? offlineQueue,
   })  : _repository = repository ?? ExpenseRepository(),
-        _imagePicker = imagePicker ?? ImagePicker();
+        _imagePicker = imagePicker ?? ImagePicker(),
+        _queue = offlineQueue ?? OfflineExpenseQueue();
+
+  final OfflineExpenseQueue _queue;
+  List<QueuedExpense> _queued = [];
+  bool _lastFailureOffline = false;
+
+  /// Expenses saved on this phone while offline, oldest first.
+  List<QueuedExpense> get queued => _queued;
+
+  /// Whether the last create failed for want of a connection.
+  bool get lastFailureOffline => _lastFailureOffline;
+
+  /// Keep an expense (and its receipt) on the phone until it can be sent.
+  Future<void> queueExpense(CreateExpenseRequest request, {String? receiptPath}) async {
+    await _queue.add(request.toJson(), receiptPath: receiptPath);
+    _queued = await _queue.items();
+    notifyListeners();
+  }
+
+  /// Send what's waiting; reloads the list if anything went.
+  Future<int> sendQueued() async {
+    final sent = await _queue.flush(_repository);
+    _queued = await _queue.items();
+    notifyListeners();
+    if (sent > 0) await loadExpenses();
+    return sent;
+  }
+
+  Future<void> retryQueued(String clientRequestId) async {
+    await _queue.retry(clientRequestId);
+    await sendQueued();
+  }
+
+  Future<void> discardQueued(String clientRequestId) async {
+    await _queue.remove(clientRequestId);
+    _queued = await _queue.items();
+    notifyListeners();
+  }
   
   List<Expense> get expenses => _expenses;
   bool get hasMore => _hasMore;
@@ -175,6 +215,7 @@ class ExpenseProvider with ChangeNotifier {
     notifyListeners();
     
     final response = await _repository.createExpense(request);
+    _lastFailureOffline = response.isOffline;
     
     if (response.success && response.data != null) {
       _expenses.insert(0, response.data!);

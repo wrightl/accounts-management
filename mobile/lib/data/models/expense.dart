@@ -238,7 +238,12 @@ class CreateExpenseRequest {
     this.vatRate = 0,
     this.mileageMiles,
     this.mileageRatePence,
+    this.clientRequestId,
   });
+
+  /// One id per captured expense, so a retry after going offline isn't
+  /// saved twice.
+  final String? clientRequestId;
 
   final String description;
 
@@ -286,6 +291,7 @@ class CreateExpenseRequest {
         'clientId': clientId,
         'orderId': orderId,
         'vatRate': vatRate,
+        'clientRequestId': ?clientRequestId,
         if (isMileage) ...{
           'useMileage': true,
           'mileageMiles': mileageMiles,

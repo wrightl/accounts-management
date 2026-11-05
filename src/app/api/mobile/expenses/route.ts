@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { and, eq } from "drizzle-orm";
+import { getDb } from "@/db";
+import { expenses } from "@/db/schema";
+import { isUniqueViolation } from "@/lib/db-errors";
 import { writeAudit } from "@/lib/audit";
 import { createExpenseRecord } from "@/lib/expenses/create";
 import { listExpenses } from "@/lib/expenses/queries";
@@ -99,6 +103,23 @@ function expenseRawFromJson(body: Record<string, unknown>): Record<string, unkno
   };
 }
 
+function parseClientRequestId(value: unknown): string | null {
+  return typeof value === "string" && /^[A-Za-z0-9-]{8,64}$/.test(value) ? value : null;
+}
+
+async function findByClientRequestId(
+  companyId: string,
+  clientRequestId: string | null,
+): Promise<string | null> {
+  if (!clientRequestId) return null;
+  const [row] = await getDb()
+    .select({ id: expenses.id })
+    .from(expenses)
+    .where(and(eq(expenses.companyId, companyId), eq(expenses.clientRequestId, clientRequestId)))
+    .limit(1);
+  return row?.id ?? null;
+}
+
 // Same validation and saving as the web form (createExpense).
 export async function POST(request: NextRequest) {
   try {
@@ -122,11 +143,38 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // An expense queued offline carries its own id; a retry returns the one
+    // already saved instead of saving it again.
+    const clientRequestId = parseClientRequestId(body.clientRequestId);
+    const earlier = await findByClientRequestId(user.companyId, clientRequestId);
+    if (earlier) {
+      return NextResponse.json({
+        success: true,
+        duplicate: true,
+        data: await loadMobileExpense(user.companyId, earlier),
+      });
+    }
+
     const localUserId = await ensureLocalUser(user);
-    const result = await createExpenseRecord(
-      { companyId: user.companyId, localUserId },
-      parsed.data,
-    );
+    let result;
+    try {
+      result = await createExpenseRecord(
+        { companyId: user.companyId, localUserId },
+        parsed.data,
+        { clientRequestId },
+      );
+    } catch (error) {
+      // Two retries raced; the other one saved it.
+      const raced = isUniqueViolation(error)
+        ? await findByClientRequestId(user.companyId, clientRequestId)
+        : null;
+      if (!raced) throw error;
+      return NextResponse.json({
+        success: true,
+        duplicate: true,
+        data: await loadMobileExpense(user.companyId, raced),
+      });
+    }
     if (!result.ok || !result.id) {
       return NextResponse.json(
         {

@@ -620,3 +620,57 @@ describe("mobile payments and reimbursement runs", () => {
     expect(res.status).toBe(403);
   });
 });
+
+describe("mobile offline capture", () => {
+  it("saves a retried capture once", async () => {
+    const company = await seedCompany(db, { name: "Offline Co" });
+    await seedUser(company.id);
+    const body = {
+      description: "Coffee",
+      amountPence: 350,
+      category: "Meals",
+      expenseDate: "2026-03-02",
+      status: "recorded",
+      clientRequestId: "4f6c1a2e-0b1d-4c55-9a0e-2b7d0e3f9a11",
+    };
+
+    const first = await createExpense(postJson("/api/mobile/expenses", body));
+    expect(first.status).toBe(201);
+    const firstId = (await first.json()).data.id;
+
+    const retry = await createExpense(postJson("/api/mobile/expenses", body));
+    expect(retry.status).toBe(200);
+    const retried = await retry.json();
+    expect(retried.duplicate).toBe(true);
+    expect(retried.data.id).toBe(firstId);
+
+    const rows = await db.select().from(expenses).where(eq(expenses.companyId, company.id));
+    expect(rows).toHaveLength(1);
+  });
+
+  it("keys retries per company", async () => {
+    const mine = await seedCompany(db, { name: "Mine" });
+    const theirs = await seedCompany(db, { name: "Theirs" });
+    await seedUser(mine.id);
+    await db.insert(expenses).values({
+      companyId: theirs.id,
+      description: "Theirs",
+      amountPence: 100,
+      status: "recorded",
+      clientRequestId: "same-id-0001",
+    });
+
+    const res = await createExpense(
+      postJson("/api/mobile/expenses", {
+        description: "Mine",
+        amountPence: 100,
+        category: "Meals",
+        expenseDate: "2026-03-02",
+        status: "recorded",
+        clientRequestId: "same-id-0001",
+      }),
+    );
+    expect(res.status).toBe(201);
+    expect((await res.json()).data.description).toBe("Mine");
+  });
+});

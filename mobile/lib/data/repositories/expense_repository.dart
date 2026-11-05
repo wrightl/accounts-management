@@ -151,13 +151,15 @@ class ExpenseRepository {
     }
   }
 
-  Future<ApiResponse<Expense>> createExpense(
-    CreateExpenseRequest request,
-  ) async {
+  Future<ApiResponse<Expense>> createExpense(CreateExpenseRequest request) =>
+      createExpenseFromJson(request.toJson());
+
+  /// Create from a request body, e.g. one saved while offline.
+  Future<ApiResponse<Expense>> createExpenseFromJson(Map<String, dynamic> body) async {
     try {
       final response = await _apiClient.post(
         AppConstants.expensesEndpoint,
-        data: request.toJson(),
+        data: body,
       );
 
       if (response.statusCode == 201 || response.statusCode == 200) {
