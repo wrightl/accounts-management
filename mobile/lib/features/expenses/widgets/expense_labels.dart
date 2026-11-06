@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../data/models/expense.dart';
 import '../expense_provider.dart';
 
-/// The web's label colours (Tailwind 600 shades).
+/// The web's label colours (Tailwind 600 shades), for icons and checkmarks.
 const _labelColors = <String, Color>{
   'slate': Color(0xFF475569),
   'red': Color(0xFFDC2626),
@@ -18,7 +18,39 @@ const _labelColors = <String, Color>{
   'pink': Color(0xFFDB2777),
 };
 
+/// Text on a pale fill, as the web chips (`LABEL_CHIP_CLASSES`): 900 text on
+/// 100 (slate 200), so a chip stays readable on a tinted row.
+typedef ChipColors = ({Color foreground, Color background});
+
+const labelChipColors = <String, ChipColors>{
+  'slate': (foreground: Color(0xFF0F172A), background: Color(0xFFE2E8F0)),
+  'red': (foreground: Color(0xFF7F1D1D), background: Color(0xFFFEE2E2)),
+  'orange': (foreground: Color(0xFF7C2D12), background: Color(0xFFFFEDD5)),
+  'amber': (foreground: Color(0xFF78350F), background: Color(0xFFFEF3C7)),
+  'green': (foreground: Color(0xFF14532D), background: Color(0xFFDCFCE7)),
+  'teal': (foreground: Color(0xFF134E4A), background: Color(0xFFCCFBF1)),
+  'blue': (foreground: Color(0xFF1E3A8A), background: Color(0xFFDBEAFE)),
+  'indigo': (foreground: Color(0xFF312E81), background: Color(0xFFE0E7FF)),
+  'purple': (foreground: Color(0xFF581C87), background: Color(0xFFF3E8FF)),
+  'pink': (foreground: Color(0xFF831843), background: Color(0xFFFCE7F3)),
+};
+
+/// Expense status chips, same pairing as the labels.
+const statusChipColors = <String, ChipColors>{
+  'pending': (foreground: Color(0xFF78350F), background: Color(0xFFFEF3C7)),
+  'recorded': (foreground: Color(0xFF1E3A8A), background: Color(0xFFDBEAFE)),
+  'reimbursable': (foreground: Color(0xFF581C87), background: Color(0xFFF3E8FF)),
+  'reimbursed': (foreground: Color(0xFF14532D), background: Color(0xFFDCFCE7)),
+  'company_paid': (foreground: Color(0xFF134E4A), background: Color(0xFFCCFBF1)),
+};
+
 Color labelColor(String name) => _labelColors[name] ?? _labelColors['slate']!;
+
+ChipColors labelChipColor(String name) =>
+    labelChipColors[name] ?? labelChipColors['slate']!;
+
+ChipColors statusChipColor(String status) =>
+    statusChipColors[status] ?? labelChipColors['slate']!;
 
 class LabelChip extends StatelessWidget {
   const LabelChip({super.key, required this.label});
@@ -27,15 +59,15 @@ class LabelChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = labelColor(label.color);
+    final colors = labelChipColor(label.color);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
+        color: colors.background,
+        border: Border.all(color: colors.foreground.withValues(alpha: 0.3)),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Text(label.name, style: TextStyle(fontSize: 12, color: color)),
+      child: Text(label.name, style: TextStyle(fontSize: 12, color: colors.foreground)),
     );
   }
 }

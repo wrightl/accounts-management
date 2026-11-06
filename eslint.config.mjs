@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Flutter app; iOS builds check out Swift packages with their own JS here.
+    "mobile/**",
   ]),
   {
     rules: {

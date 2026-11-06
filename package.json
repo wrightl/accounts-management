@@ -22,6 +22,9 @@
         "marketing:capture": "PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers tsx scripts/capture-marketing.ts",
         "marketing:capture:production": "PROMO_BASE_URL=https://alfa.dotanddashconsulting.com PROMO_SEED_ALLOW_REMOTE=1 PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers tsx scripts/capture-marketing.ts",
         "marketing:capture:prod-local": "PROMO_BASE_URL=http://localhost:3002 PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers tsx scripts/capture-marketing.ts",
+        "mobile:narrative": "tsx scripts/app-store-narrative.ts",
+        "mobile:screenshots": "mobile/scripts/screenshots.sh",
+        "mobile:release": "mobile/scripts/release.sh",
         "db:push": "drizzle-kit push",
         "db:studio": "drizzle-kit studio",
         "tunnel": "ngrok http 3001 --log=stdout"

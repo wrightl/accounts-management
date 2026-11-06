@@ -5,6 +5,10 @@ import '../../core/constants/app_constants.dart';
 class ApiClient {
   static Future<String?> Function()? sessionTokenProvider;
 
+  /// Answers every request without a network, for the store screenshots
+  /// (`integration_test/store_screenshots_test.dart`). Null in the app.
+  static HttpClientAdapter? adapterOverride;
+
   late final Dio _dio;
   final FlutterSecureStorage _storage;
   
@@ -21,7 +25,8 @@ class ApiClient {
         },
       ),
     );
-    
+    if (adapterOverride != null) _dio.httpClientAdapter = adapterOverride!;
+
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {

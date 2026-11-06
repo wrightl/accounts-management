@@ -59,6 +59,10 @@ Regenerate JSON code and test mocks with `dart run build_runner build` from `mob
 - Server: `tests/integration/mobile-api.test.ts` (expense rules, roles, menu), `tests/integration/mobile-next.test.ts` (receipts, mileage, deadlines, weekly close, bookkeeper, dashboard) and `tests/integration/mobile-catch-up.test.ts` (paging, foreign currency, labels and notes, queries, questions, payments, reimbursement runs, lock-screen privacy, offline retries).
 - App: `mobile/test/unit` for models and providers; `mobile/test/widget` for the dashboard layout, More and Sales menu filtering, and role gating on deadlines. `test/support/signed_in.dart` gives a signed-in `AuthProvider` with chosen permissions and menu.
 
+## Releasing
+
+`mobile/scripts/release.sh` builds and uploads to TestFlight and the Play internal track, with store copy drafted by Claude and screenshots from fixture data. Setup and flags are under "Releasing" in [mobile/README.md](mobile/README.md). The screenshot test (`mobile/integration_test/store_screenshots_test.dart`) uses the real screens, so a new screen worth showing goes into its flow and its JSON into `integration_test/fixtures/demo_books.dart`.
+
 ## Roadmap
 
 The shared Mobile app roadmap doc tracks what's done and what's next.
