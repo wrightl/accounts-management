@@ -1,0 +1,63 @@
+# Uploads builds made by scripts/release.sh. Lanes upload to beta tracks only
+# (TestFlight, Play internal); promote to production in the consoles.
+#
+#   bundle exec fastlane ios beta
+#   bundle exec fastlane android beta
+#   bundle exec fastlane ios beta metadata_only:true   # copy and screenshots only
+
+default_platform(:ios)
+
+METADATA = File.expand_path("metadata", __dir__)
+SCREENSHOTS = File.expand_path("screenshots", __dir__)
+BUILD = File.expand_path("../build", __dir__)
+
+def metadata_only?(options)
+  options[:metadata_only].to_s == "true"
+end
+
+platform :ios do
+  desc "Upload the .ipa to TestFlight, then the App Store copy and screenshots"
+  lane :beta do |options|
+    app_store_connect_api_key(
+      key_id: ENV.fetch("ASC_KEY_ID"),
+      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+      key_filepath: ENV.fetch("ASC_KEY_PATH"),
+    )
+
+    unless metadata_only?(options)
+      ipa = Dir[File.join(BUILD, "ios/ipa/*.ipa")].max_by { |f| File.mtime(f) }
+      UI.user_error!("No .ipa in build/ios/ipa. Run scripts/release.sh first.") unless ipa
+      upload_to_testflight(ipa: ipa, skip_waiting_for_build_processing: true)
+    end
+
+    deliver(
+      skip_binary_upload: true,
+      submit_for_review: false,
+      automatic_release: false,
+      force: true, # no HTML preview prompt
+      metadata_path: File.join(METADATA, "ios"),
+      screenshots_path: SCREENSHOTS,
+      skip_screenshots: !Dir.exist?(SCREENSHOTS),
+      overwrite_screenshots: true,
+      run_precheck_before_submit: false,
+    )
+  end
+end
+
+platform :android do
+  desc "Upload the .aab to the Play internal track with the store copy and screenshots"
+  lane :beta do |options|
+    upload_to_play_store(
+      track: "internal",
+      json_key: ENV.fetch("PLAY_JSON_KEY_PATH"),
+      aab: metadata_only?(options) ? nil : File.join(BUILD, "app/outputs/bundle/release/app-release.aab"),
+      skip_upload_aab: metadata_only?(options),
+      skip_upload_apk: true,
+      metadata_path: File.join(METADATA, "android"),
+      # Play only takes draft releases until the app is first published. Set
+      # PLAY_RELEASE_STATUS=completed after that, so testers get builds
+      # without rolling each one out in the console.
+      release_status: ENV.fetch("PLAY_RELEASE_STATUS", "draft"),
+    )
+  end
+end

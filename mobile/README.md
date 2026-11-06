@@ -113,6 +113,75 @@ Android:
 flutter build apk --release --dart-define-from-file=.env.production
 ```
 
+## Releasing
+
+`scripts/release.sh` (or `npm run mobile:release` from the repo root) bumps the
+build number, runs the tests, drafts the store copy, takes the screenshots,
+builds, and uploads to **TestFlight** and the **Play internal track**. Nothing
+is submitted for review: promote the build to production in App Store Connect
+and the Play Console. It then commits the version and copy and tags
+`mobile-v<version>+<build>`.
+
+```bash
+scripts/release.sh                      # both platforms
+scripts/release.sh ios --version 1.1.0  # new marketing version
+scripts/release.sh android --no-upload  # build only
+```
+
+Other flags: `--skip-narrative`, `--skip-screenshots`, `--yes` (don't stop to
+review the copy). Upload changed copy or screenshots without a new build with
+`bundle exec fastlane ios beta metadata_only:true` (or `android`).
+
+### Store copy
+
+`npm run mobile:narrative` asks Claude (through the AI Gateway) to draft the
+listing from this README, `MOBILE_IMPLEMENTATION.md` and the commits since the
+last `mobile-v*` tag, into `fastlane/metadata/`. Only docs and commit subjects
+go into the prompt. Fields over the store limits are shortened; any still too
+long are listed for you to trim. The release script stops for you to review and
+edit the diff. `--dry-run` prints the copy instead. Set `NARRATIVE_MODEL` to use
+another gateway model (Anthropic models need paid gateway credits).
+
+`support_url`, `privacy_url`, `marketing_url`, `copyright`, the categories and
+the review notes are kept by hand; the script never touches them.
+
+### Screenshots
+
+`scripts/screenshots.sh` (`--ios`, `--android`) runs
+`integration_test/store_screenshots_test.dart` on an iPhone 6.9" and iPad 13"
+simulator and the Android phone and tablet emulators. The test renders the
+real screens with fictional data from `integration_test/fixtures/` through
+`ApiClient.adapterOverride`, so it needs no sign-in or server. Screenshots are
+generated, not committed, and the script fails on any size the stores reject.
+Change devices with `IOS_PHONE`, `IOS_TABLET`, `ANDROID_PHONE` and
+`ANDROID_TABLET`.
+
+### One-off setup
+
+1. **Apps**: create the app in App Store Connect (`com.dotanddash.ddappMobile`)
+   and the Play Console (`com.dotanddash.ddapp_mobile`). Fill in the privacy
+   details, content rating and data safety forms there.
+2. **iOS signing**: in Xcode, Runner → Signing & Capabilities, choose the team.
+   Create an App Store Connect API key (Users and Access → Integrations) and
+   export `ASC_KEY_ID`, `ASC_ISSUER_ID` and `ASC_KEY_PATH` (the `.p8` file).
+3. **Android signing**: create an upload key and `android/key.properties`
+   (`storeFile` relative to `android/`, `storePassword`, `keyAlias`,
+   `keyPassword`). Without it release builds use the debug key and the release
+   script refuses to run. Enrol in Play App Signing.
+4. **Play API**: create a service account with release access and export
+   `PLAY_JSON_KEY_PATH`. Upload the first `.aab` by hand in the Play Console;
+   Google doesn't allow the API to create the first release. Uploads arrive as
+   draft releases, the only kind Play accepts before the app is first
+   published; roll each one out in the console. After that, export
+   `PLAY_RELEASE_STATUS=completed` so testers get builds straight away.
+5. **App Review sign-in**: put a demo account in
+   `fastlane/metadata/ios/review_information/demo_user.txt` and
+   `demo_password.txt` (not committed).
+6. **Push**: add `ios/Runner/GoogleService-Info.plist` and
+   `android/app/google-services.json`, or the build ships with push off (the
+   release script warns).
+7. `bundle install` in `mobile/` for fastlane.
+
 ## Testing
 
 Run unit tests:

@@ -1,0 +1,1 @@
+Alfa is the phone companion to the Alfa web app (alfa.dotanddashconsulting.com). Sign in with the demo account in the sign-in fields of this submission. It opens a fictional company with sample expenses, invoices and deadlines.
