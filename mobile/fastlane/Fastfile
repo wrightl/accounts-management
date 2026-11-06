@@ -54,8 +54,10 @@ platform :android do
       skip_upload_aab: metadata_only?(options),
       skip_upload_apk: true,
       metadata_path: File.join(METADATA, "android"),
-      # Fresh apps stay draft until the first production review.
-      release_status: ENV.fetch("PLAY_RELEASE_STATUS", "completed"),
+      # Play only takes draft releases until the app is first published. Set
+      # PLAY_RELEASE_STATUS=completed after that, so testers get builds
+      # without rolling each one out in the console.
+      release_status: ENV.fetch("PLAY_RELEASE_STATUS", "draft"),
     )
   end
 end

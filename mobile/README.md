@@ -170,8 +170,10 @@ Change devices with `IOS_PHONE`, `IOS_TABLET`, `ANDROID_PHONE` and
    script refuses to run. Enrol in Play App Signing.
 4. **Play API**: create a service account with release access and export
    `PLAY_JSON_KEY_PATH`. Upload the first `.aab` by hand in the Play Console;
-   Google doesn't allow the API to create the first release. Until the app has
-   passed its first review, set `PLAY_RELEASE_STATUS=draft`.
+   Google doesn't allow the API to create the first release. Uploads arrive as
+   draft releases, the only kind Play accepts before the app is first
+   published; roll each one out in the console. After that, export
+   `PLAY_RELEASE_STATUS=completed` so testers get builds straight away.
 5. **App Review sign-in**: put a demo account in
    `fastlane/metadata/ios/review_information/demo_user.txt` and
    `demo_password.txt` (not committed).
