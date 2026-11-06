@@ -93,7 +93,21 @@ version="${new_version:-${BASH_REMATCH[1]}}"
 build=$(( BASH_REMATCH[2] + 1 ))
 release="$version+$build"
 step "Version $current -> $release"
-sed -i '' "s/^version: .*/version: $release/" pubspec.yaml
+# Not sed -i: its flags differ between macOS and Linux.
+sed "s/^version: .*/version: $release/" pubspec.yaml > pubspec.yaml.tmp
+mv pubspec.yaml.tmp pubspec.yaml
+
+# Undo the bump if we stop before uploading. Pre-flight required a clean
+# mobile/, so HEAD has the old version. Once an upload starts, keep it: a build
+# may already be in a store, and the stores refuse a build number twice.
+keep_bump=false
+restore_version() {
+  if ! $keep_bump; then
+    git checkout -- pubspec.yaml
+    echo "Version left at $current."
+  fi
+}
+trap restore_version EXIT
 
 # --- Tests ------------------------------------------------------------------
 step "Running tests"
@@ -110,7 +124,7 @@ if $narrative; then
   if ! $assume_yes; then
     echo
     read -r -p "Edit mobile/fastlane/metadata now if needed. Continue with this copy? [y/N] " answer
-    [[ "$answer" =~ ^[Yy] ]] || fail "Stopped. The version bump and drafted copy are left in place."
+    [[ "$answer" =~ ^[Yy] ]] || fail "Stopped. The drafted copy is left in fastlane/metadata."
   fi
 fi
 
@@ -144,6 +158,8 @@ fi
 
 # --- Upload -----------------------------------------------------------------
 step "Uploading"
+keep_bump=true
+trap 'echo "Upload failed after $release may have reached a store. pubspec.yaml keeps $release; commit it before the next release so the build number moves on." >&2' ERR
 bundle check >/dev/null 2>&1 || bundle install
 if $ios; then bundle exec fastlane ios beta; fi
 if $android; then bundle exec fastlane android beta; fi
