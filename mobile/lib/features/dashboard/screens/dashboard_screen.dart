@@ -66,7 +66,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           );
         }
 
-        if (data.isPending || user?.role == 'pending') {
+        if (data.isPending || (user?.isPending ?? false)) {
           return _PendingState(user: user, firstName: data.firstName);
         }
 

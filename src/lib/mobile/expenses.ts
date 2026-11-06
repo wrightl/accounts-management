@@ -4,6 +4,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { getDb } from "@/db";
 import { clients, expenseReceipts, expenses, users } from "@/db/schema";
 import { clientDisplayName } from "@/lib/clients/display";
+import { labelsForExpenses } from "@/lib/labels/queries";
 import { toMobileExpense } from "@/lib/mobile/expense-payload";
 import { getPaymentSourceSuggestions } from "@/lib/expenses/payment-source-queries";
 import type { PaymentSourceSuggestion } from "@/lib/expenses/payment-source";
@@ -58,14 +59,18 @@ export async function loadMobileExpense(companyId: string, id: string) {
     .limit(1);
   if (!row) return null;
 
-  const receipts = (await receiptsByExpense([id])).get(id) ?? [];
-  const paymentSources = await pendingPaymentSources(companyId, [row.expense]);
+  const [receipts, paymentSources, labels] = await Promise.all([
+    receiptsByExpense([id]).then((byId) => byId.get(id) ?? []),
+    pendingPaymentSources(companyId, [row.expense]),
+    labelsForExpenses([id]).then((byId) => byId.get(id) ?? []),
+  ]);
   return toMobileExpense({
     paymentSource: paymentSources.get(id) ?? null,
     ...row.expense,
     paidByName: row.paidByName || row.paidByEmail,
     createdByName: row.createdByName || row.createdByEmail,
     clientName: row.client ? clientDisplayName(row.client) : null,
+    labels,
     receipts: receipts.map((r) => ({
       id: r.id,
       filename: r.filename,

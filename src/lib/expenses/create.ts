@@ -32,7 +32,7 @@ import type { ActionResult } from "@/actions/result";
 export async function createExpenseRecord(
   ctx: ReviewContext,
   input: ExpenseParsed,
-  opts: { pending?: boolean } = {},
+  opts: { pending?: boolean; clientRequestId?: string | null } = {},
 ): Promise<ActionResult> {
   const { companyId, localUserId } = ctx;
   if (input.foreignCurrency && !isAllowedExpenseCurrency(input.foreignCurrency)) {
@@ -110,6 +110,7 @@ export async function createExpenseRecord(
       originalAmountMinor: data.originalAmountMinor,
       createdByUserId: localUserId,
       submittedByUserId: opts.pending ? localUserId : null,
+      clientRequestId: opts.clientRequestId ?? null,
     })
     .returning({ id: expenses.id });
 

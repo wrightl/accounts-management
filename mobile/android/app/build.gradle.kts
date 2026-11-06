@@ -6,7 +6,8 @@ plugins {
 
 android {
     namespace = "com.dotanddash.ddapp_mobile"
-    compileSdk = flutter.compileSdkVersion
+    // receive_sharing_intent 1.9 needs 37; targetSdk stays on Flutter's default.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/books.dart';
+import '../../auth/auth_provider.dart';
 import '../books_provider.dart';
+import '../widgets/record_payment_sheet.dart';
 
 class RecordListScreen extends StatefulWidget {
   const RecordListScreen({
@@ -93,6 +95,8 @@ class _RecordListScreenState extends State<RecordListScreen> {
                     record: item,
                     onTap: () => _showDetail(item),
                   ),
+              if (page?.hasMore ?? false)
+                _LoadMore(onVisible: () => provider.loadMore(widget.resource)),
             ],
           ),
         );
@@ -106,7 +110,46 @@ class _RecordListScreenState extends State<RecordListScreen> {
     );
   }
 
+  Future<void> _recordPayment(BookRecord invoice) async {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => RecordPaymentSheet(invoice: invoice),
+    );
+    if (saved != true || !mounted) return;
+    Navigator.of(context).pop();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Payment recorded')),
+    );
+  }
+
+  Future<void> _markPaid(BookRecord run) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Mark as paid?'),
+        content: Text(
+          'Only once you have sent ${run.amount ?? 'the money'} to ${run.title}. '
+          'Match it to the bank payment on the web.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Mark as paid')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final result = await context.read<BooksProvider>().markReimbursementPaid(run.id);
+    if (!mounted) return;
+    if (result.success) Navigator.of(context).pop();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.success ? 'Marked as paid' : result.error ?? 'Could not mark it paid')),
+    );
+  }
+
   void _showDetail(BookRecord record) {
+    final user = context.read<AuthProvider>().user;
+    final canWrite = (user?.canWriteAccounts ?? false) && !(user?.isBillingReadOnly ?? false);
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -149,12 +192,49 @@ class _RecordListScreenState extends State<RecordListScreen> {
                     ],
                   ),
                 ),
+              if (canWrite && record.amountDuePence != null)
+                ElevatedButton.icon(
+                  onPressed: () => _recordPayment(record),
+                  icon: const Icon(Icons.payments_outlined),
+                  label: const Text('Record payment'),
+                ),
+              if (canWrite && record.canMarkPaid)
+                ElevatedButton.icon(
+                  onPressed: () => _markPaid(record),
+                  icon: const Icon(Icons.check),
+                  label: const Text('Mark as paid'),
+                ),
             ],
           ),
         );
       },
     );
   }
+}
+
+/// Shown at the end of a list with more to come; asks for the next page
+/// when it's built, i.e. when the list scrolls to it.
+class _LoadMore extends StatefulWidget {
+  const _LoadMore({required this.onVisible});
+
+  final VoidCallback onVisible;
+
+  @override
+  State<_LoadMore> createState() => _LoadMoreState();
+}
+
+class _LoadMoreState extends State<_LoadMore> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => widget.onVisible());
+  }
+
+  @override
+  Widget build(BuildContext context) => const Padding(
+        padding: EdgeInsets.all(16),
+        child: Center(child: CircularProgressIndicator()),
+      );
 }
 
 class _StatChip extends StatelessWidget {

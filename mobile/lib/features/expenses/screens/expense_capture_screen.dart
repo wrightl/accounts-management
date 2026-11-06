@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../expense_provider.dart';
+import '../offline_expense_queue.dart';
 import '../../../data/models/expense.dart';
 import '../../../core/utils/formatters.dart';
 
@@ -12,7 +13,10 @@ import '../../../core/utils/formatters.dart';
 const _vatRates = [20, 5, 0];
 
 class ExpenseCaptureScreen extends StatefulWidget {
-  const ExpenseCaptureScreen({super.key});
+  const ExpenseCaptureScreen({super.key, this.initialReceipt});
+
+  /// A receipt shared into Alfa from another app.
+  final XFile? initialReceipt;
 
   @override
   State<ExpenseCaptureScreen> createState() => _ExpenseCaptureScreenState();
@@ -24,6 +28,10 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
   final _amountController = TextEditingController();
   final _milesController = TextEditingController();
   final _rateController = TextEditingController();
+
+  /// Sterling figure for a foreign expense; blank converts on the server.
+  final _gbpController = TextEditingController();
+  String _currency = 'GBP';
 
   String _selectedCategory = 'Other';
   bool _categoryChosen = false;
@@ -39,10 +47,21 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
   int? _vatRate;
   XFile? _capturedReceipt;
 
+  /// Set once the expense is saved but its receipt didn't upload, so the
+  /// person can retry rather than lose the receipt without noticing.
+  String? _savedWithoutReceiptId;
+
+  /// One id for this capture, so pressing Save again, or sending it later
+  /// from the offline queue, never saves it twice.
+  final String _clientRequestId = newClientRequestId();
+
   @override
   void initState() {
     super.initState();
+    _capturedReceipt = widget.initialReceipt;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final shared = widget.initialReceipt;
+      if (shared != null) _readReceipt(shared);
       final options = await context.read<ExpenseProvider>().loadOptions();
       if (!mounted || options == null) return;
       setState(() {
@@ -60,12 +79,23 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
     _amountController.dispose();
     _milesController.dispose();
     _rateController.dispose();
+    _gbpController.dispose();
     super.dispose();
   }
 
   Future<void> _captureReceipt() async {
     final provider = context.read<ExpenseProvider>();
     final file = await provider.captureReceipt();
+
+    if (file != null) {
+      setState(() => _capturedReceipt = file);
+      await _readReceipt(file);
+    }
+  }
+
+  Future<void> _pickFile() async {
+    final provider = context.read<ExpenseProvider>();
+    final file = await provider.pickReceiptFile();
 
     if (file != null) {
       setState(() => _capturedReceipt = file);
@@ -121,10 +151,19 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
           categories.contains(extraction.category)) {
         _selectedCategory = extraction.category!;
       }
-      _receiptNote = extraction.isForeignCurrency
-          ? '${extraction.summary}. This receipt looks like it is in '
-                '${extraction.currency}: enter the amount in pounds.'
-          : extraction.summary;
+      final currencies = provider.options?.currencies ?? const ['GBP'];
+      final detected = extraction.currency?.toUpperCase();
+      if (extraction.isForeignCurrency && currencies.contains(detected)) {
+        // The amount read is in the receipt's currency; the server converts.
+        _currency = detected!;
+        _receiptNote = '${extraction.summary}. The receipt is in $detected, '
+            'so Alfa converts it to pounds when you save.';
+      } else if (extraction.isForeignCurrency) {
+        _receiptNote = '${extraction.summary}. The receipt looks like it is '
+            "in $detected, which Alfa can't convert: enter the amount in pounds.";
+      } else {
+        _receiptNote = extraction.summary;
+      }
     });
   }
 
@@ -180,10 +219,14 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
       return;
     }
 
+    final foreign = !_useMileage && _currency != 'GBP';
+    final gbpOverride = double.tryParse(_gbpController.text.trim());
     final amount = _useMileage
         ? (_mileagePence ?? 0) / 100
-        : double.tryParse(_amountController.text);
-    if (amount == null) {
+        : foreign
+            ? gbpOverride
+            : double.tryParse(_amountController.text);
+    if (amount == null && !foreign) {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Invalid amount')));
       return;
@@ -192,7 +235,10 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
     final provider = context.read<ExpenseProvider>();
     final request = CreateExpenseRequest(
       description: _descriptionController.text,
-      amountPence: CurrencyUtils.poundsToPence(amount),
+      amountPence: amount == null ? null : CurrencyUtils.poundsToPence(amount),
+      currency: foreign ? _currency : null,
+      originalAmount: foreign ? _amountController.text.trim() : null,
+      clientRequestId: _clientRequestId,
       category: _selectedCategory,
       expenseDate: _selectedDate,
       status: _status!,
@@ -210,6 +256,12 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
     final success = await provider.createExpense(request);
 
     if (!mounted) return;
+    if (!success && provider.lastFailureOffline) {
+      await provider.queueExpense(request, receiptPath: _capturedReceipt?.path);
+      if (!mounted) return;
+      _finish("Saved on this phone. It'll send when you're back online.");
+      return;
+    }
     if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(provider.error ?? 'Could not save the expense')),
@@ -219,27 +271,29 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
 
     final expenseId = provider.selectedExpense?.id;
     if (expenseId != null && _capturedReceipt != null) {
-      await _uploadReceipt(expenseId);
+      await _retryReceipt(expenseId);
+      return;
     }
-
-    if (mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Expense saved')));
-      Navigator.of(context).pop(true);
-    }
+    _finish('Expense saved');
   }
 
-  Future<void> _uploadReceipt(String expenseId) async {
-    if (_capturedReceipt == null) return;
-
+  /// Upload the receipt for a saved expense. On failure, stay here so the
+  /// person can try again or carry on without it.
+  Future<void> _retryReceipt(String expenseId) async {
     final provider = context.read<ExpenseProvider>();
     final success = await provider.uploadReceipt(expenseId, _capturedReceipt!);
-
-    if (mounted && !success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(provider.error ?? 'Failed to upload receipt')),
-      );
+    if (!mounted) return;
+    if (success) {
+      _finish('Expense saved');
+      return;
     }
+    setState(() => _savedWithoutReceiptId = expenseId);
+  }
+
+  void _finish(String message) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+    Navigator.of(context).pop(true);
   }
 
   @override
@@ -253,6 +307,16 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
           final orders = (options?.orders ?? const <ExpenseOrderChoice>[])
               .where((o) => _clientId == null || o.clientId == _clientId)
               .toList();
+          final savedId = _savedWithoutReceiptId;
+          if (savedId != null) {
+            return ReceiptUploadFailedView(
+              reason: provider.error,
+              uploading: provider.isUploading,
+              uploadProgress: provider.uploadProgress,
+              onRetry: () => _retryReceipt(savedId),
+              onSkip: () => _finish('Expense saved without its receipt'),
+            );
+          }
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
             child: Form(
@@ -263,16 +327,40 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
                   if (_capturedReceipt != null) ...[
                     Stack(
                       children: [
-                        Container(
-                          height: 200,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            image: DecorationImage(
-                              image: FileImage(File(_capturedReceipt!.path)),
-                              fit: BoxFit.cover,
+                        if (isPdfPath(_capturedReceipt!.path))
+                          Container(
+                            height: 120,
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[100],
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.picture_as_pdf_outlined, size: 40),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    _capturedReceipt!.name,
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 2,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          Container(
+                            height: 200,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              image: DecorationImage(
+                                image: FileImage(File(_capturedReceipt!.path)),
+                                fit: BoxFit.cover,
+                              ),
                             ),
                           ),
-                        ),
                         Positioned(
                           top: 8,
                           right: 8,
@@ -331,6 +419,12 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: _pickFile,
+                      icon: const Icon(Icons.folder_open),
+                      label: const Text('Choose a PDF or file'),
                     ),
                     const SizedBox(height: 24),
                   ],
@@ -421,24 +515,13 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
                       ),
                     ],
                   ] else
-                    TextFormField(
-                      controller: _amountController,
-                      decoration: const InputDecoration(
-                        labelText: 'Amount (£)',
-                        prefixIcon: Icon(Icons.currency_pound),
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Enter an amount';
-                        }
-                        if (!ValidationUtils.isValidAmount(value)) {
-                          return 'Invalid amount';
-                        }
-                        return null;
-                      },
+                    ExpenseAmountFields(
+                      currency: _currency,
+                      currencies: options?.currencies ?? const ['GBP'],
+                      amountController: _amountController,
+                      gbpController: _gbpController,
+                      onCurrencyChanged: (value) =>
+                          setState(() => _currency = value ?? 'GBP'),
                     ),
                   if (options?.vatRegistered == true && !_useMileage) ...[
                     const SizedBox(height: 16),
@@ -603,6 +686,161 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
           );
         },
       ),
+    );
+  }
+}
+
+/// The amount, in pounds or another currency. A foreign amount is converted
+/// to pounds on the server at the Bank of England rate, as on the web, unless
+/// a sterling figure is typed in.
+class ExpenseAmountFields extends StatelessWidget {
+  const ExpenseAmountFields({
+    super.key,
+    required this.currency,
+    required this.currencies,
+    required this.amountController,
+    required this.gbpController,
+    required this.onCurrencyChanged,
+  });
+
+  final String currency;
+  final List<String> currencies;
+  final TextEditingController amountController;
+  final TextEditingController gbpController;
+  final ValueChanged<String?> onCurrencyChanged;
+
+  static String? _required(String? value) {
+    if (value == null || value.isEmpty) return 'Enter an amount';
+    if (!ValidationUtils.isValidAmount(value)) return 'Invalid amount';
+    return null;
+  }
+
+  static String? _optional(String? value) {
+    if (value == null || value.trim().isEmpty) return null;
+    return ValidationUtils.isValidAmount(value) ? null : 'Invalid amount';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final foreign = currency != 'GBP';
+    const decimal = TextInputType.numberWithOptions(decimal: true);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (currencies.length > 1) ...[
+              SizedBox(
+                width: 104,
+                child: DropdownButtonFormField<String>(
+                  key: ValueKey('currency-$currency'),
+                  initialValue: currencies.contains(currency) ? currency : 'GBP',
+                  decoration: const InputDecoration(labelText: 'Currency'),
+                  items: [
+                    for (final code in currencies)
+                      DropdownMenuItem(value: code, child: Text(code)),
+                  ],
+                  onChanged: onCurrencyChanged,
+                ),
+              ),
+              const SizedBox(width: 12),
+            ],
+            Expanded(
+              child: TextFormField(
+                controller: amountController,
+                decoration: InputDecoration(
+                  labelText: foreign ? 'Amount ($currency)' : 'Amount (£)',
+                  prefixIcon: foreign ? null : const Icon(Icons.currency_pound),
+                ),
+                keyboardType: decimal,
+                validator: _required,
+              ),
+            ),
+          ],
+        ),
+        if (foreign) ...[
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: gbpController,
+            decoration: const InputDecoration(
+              labelText: 'Amount in £ (optional)',
+              prefixIcon: Icon(Icons.currency_pound),
+              helperText: 'Leave blank to convert at the Bank of England rate '
+                  'for the expense date.',
+              helperMaxLines: 2,
+            ),
+            keyboardType: decimal,
+            validator: _optional,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Shown when the expense saved but its receipt didn't upload, so the
+/// receipt isn't lost without the person noticing.
+class ReceiptUploadFailedView extends StatelessWidget {
+  const ReceiptUploadFailedView({
+    super.key,
+    required this.reason,
+    required this.uploading,
+    required this.uploadProgress,
+    required this.onRetry,
+    required this.onSkip,
+  });
+
+  final String? reason;
+  final bool uploading;
+  final double uploadProgress;
+  final VoidCallback onRetry;
+  final VoidCallback onSkip;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: scheme.errorContainer,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Expense saved, but the receipt didn't upload.",
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: scheme.onErrorContainer,
+                ),
+              ),
+              if (reason != null) ...[
+                const SizedBox(height: 4),
+                Text(reason!, style: TextStyle(color: scheme.onErrorContainer)),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (uploading) ...[
+          LinearProgressIndicator(value: uploadProgress),
+          const SizedBox(height: 16),
+        ],
+        ElevatedButton(
+          onPressed: uploading ? null : onRetry,
+          child: const Text('Try again'),
+        ),
+        const SizedBox(height: 8),
+        TextButton(
+          onPressed: uploading ? null : onSkip,
+          child: const Text('Done without the receipt'),
+        ),
+      ],
     );
   }
 }

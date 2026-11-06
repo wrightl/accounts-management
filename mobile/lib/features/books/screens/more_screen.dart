@@ -1,10 +1,12 @@
-import 'package:clerk_flutter/clerk_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/web_links.dart';
 import '../../../features/auth/auth_provider.dart';
+import '../../../features/auth/sign_out.dart';
 import '../../../features/notifications/screens/notification_prefs_screen.dart';
+import '../../../core/security/app_lock.dart';
+import '../../queries/queries_screen.dart';
 import '../../work/bookkeeper_screen.dart';
 import '../../work/deadlines_screen.dart';
 import '../../work/weekly_close_screen.dart';
@@ -34,6 +36,13 @@ class MoreScreen extends StatelessWidget {
           subtitle: 'Category and receipt suggestions to review',
           icon: Icons.auto_awesome_outlined,
           screen: (_) => const BookkeeperScreen(),
+        ),
+      if (user?.canReadQueries ?? false)
+        _MoreItem(
+          title: 'Queries',
+          subtitle: "Your accountant's questions",
+          icon: Icons.help_outline,
+          screen: (_) => const QueriesScreen(),
         ),
       if (user?.canReadAccounts ?? false)
         _MoreItem(
@@ -79,6 +88,7 @@ class MoreScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         children: [
           for (final item in items) _MoreTile(item: item),
+          const _AppLockTile(),
           const SizedBox(height: 16),
           Text('On the web', style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 4),
@@ -116,12 +126,7 @@ class MoreScreen extends StatelessWidget {
                 ListTile(
                   leading: const Icon(Icons.logout),
                   title: const Text('Sign out'),
-                  onTap: () async {
-                    await ClerkAuth.of(context, listen: false).signOut();
-                    if (context.mounted) {
-                      await context.read<AuthProvider>().logout();
-                    }
-                  },
+                  onTap: () => signOut(context),
                 ),
               ],
             ),
@@ -197,4 +202,32 @@ class _MoreItem {
   final String subtitle;
   final IconData icon;
   final WidgetBuilder screen;
+}
+
+/// Turn the Face ID / fingerprint lock on or off for this phone.
+class _AppLockTile extends StatelessWidget {
+  const _AppLockTile();
+
+  @override
+  Widget build(BuildContext context) {
+    final lock = context.watch<AppLock?>();
+    if (lock == null || !lock.supported) return const SizedBox.shrink();
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: SwitchListTile(
+        secondary: const Icon(Icons.lock_outline),
+        title: const Text('Lock with Face ID or fingerprint'),
+        subtitle: const Text('Asks when you open Alfa, and after 5 minutes away.'),
+        value: lock.enabled,
+        onChanged: (on) async {
+          final ok = await lock.setEnabled(on);
+          if (!ok && context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("The lock wasn't turned on.")),
+            );
+          }
+        },
+      ),
+    );
+  }
 }

@@ -21,6 +21,8 @@ class NotificationProvider extends ChangeNotifier {
   bool get loading => _loading;
   String? get error => _error;
   Map<String, NotificationChannels> get prefs => _prefs;
+  bool _hidePushDetails = false;
+  bool get hidePushDetails => _hidePushDetails;
   List<NotificationEventDef> get catalog => _catalog;
 
   Future<void> refreshUnread() async {
@@ -107,7 +109,20 @@ class NotificationProvider extends ChangeNotifier {
     }
     _catalog = result.data!.catalog;
     _prefs = Map.of(result.data!.effective);
+    _hidePushDetails = result.data!.hidePushDetails;
     notifyListeners();
+  }
+
+  /// Saved straight away, like the web toggle; put back if it fails.
+  Future<bool> setHidePushDetails(bool hide) async {
+    _hidePushDetails = hide;
+    notifyListeners();
+    final result = await _repository.saveHidePushDetails(hide);
+    if (!result.success) {
+      _hidePushDetails = !hide;
+      notifyListeners();
+    }
+    return result.success;
   }
 
   void setChannel(String type, NotificationChannels channels) {

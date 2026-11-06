@@ -1,15 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
+import { and, eq } from "drizzle-orm";
+import { getDb } from "@/db";
+import { expenses } from "@/db/schema";
+import { isUniqueViolation } from "@/lib/db-errors";
 import { writeAudit } from "@/lib/audit";
 import { createExpenseRecord } from "@/lib/expenses/create";
 import { listExpenses } from "@/lib/expenses/queries";
+import { parseLabelIds } from "@/lib/labels/params";
 import { parseExpenseInput } from "@/lib/expenses/schema";
 import { requireMobileAuth } from "@/lib/mobile-auth";
+import { parseClientRequestId } from "@/lib/mobile/client-request";
 import { toMobileExpense } from "@/lib/mobile/expense-payload";
 import {
   loadMobileExpense,
   pendingPaymentSources,
   receiptsByExpense,
 } from "@/lib/mobile/expenses";
+import { pageProbe, pageResult, parseMobilePage } from "@/lib/mobile/paging";
 import { ensureLocalUser } from "@/lib/users";
 
 export async function GET(request: NextRequest) {
@@ -20,9 +27,13 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status") || undefined;
-    const limit = searchParams.get("limit") ? parseInt(searchParams.get("limit")!) : 50;
+    const labels = parseLabelIds(searchParams.getAll("label"));
+    const page = parseMobilePage(searchParams);
 
-    const rows = (await listExpenses(user.companyId, { status })).slice(0, limit);
+    const { items: rows, hasMore } = pageResult(
+      await listExpenses(user.companyId, { status, labels }, pageProbe(page)),
+      page,
+    );
     const [receipts, paymentSources] = await Promise.all([
       receiptsByExpense(rows.map((row) => row.id)),
       pendingPaymentSources(user.companyId, rows),
@@ -43,6 +54,7 @@ export async function GET(request: NextRequest) {
           })),
         }),
       ),
+      hasMore,
     });
   } catch (error) {
     console.error("Expenses list error:", error);
@@ -57,7 +69,16 @@ function optionalString(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
-/** Map the mobile JSON body onto the web form's fields. */
+function optionalNumberString(value: unknown): string {
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return optionalString(value);
+}
+
+/**
+ * Map the mobile JSON body onto the web form's fields. For a foreign expense
+ * the app sends `currency` and `originalAmount` (e.g. "12.50") and leaves
+ * `amountPence` out, so the server converts at the Bank of England rate.
+ */
 function expenseRawFromJson(body: Record<string, unknown>): Record<string, unknown> {
   const pence = body.amountPence;
   return {
@@ -68,6 +89,8 @@ function expenseRawFromJson(body: Record<string, unknown>): Record<string, unkno
       typeof pence === "number" && Number.isFinite(pence)
         ? (pence / 100).toFixed(2)
         : "",
+    currency: optionalString(body.currency),
+    originalAmount: optionalNumberString(body.originalAmount),
     status: optionalString(body.status),
     billable: body.billable === true ? "true" : "",
     clientId: optionalString(body.clientId),
@@ -79,6 +102,19 @@ function expenseRawFromJson(body: Record<string, unknown>): Record<string, unkno
     mileageRatePence:
       typeof body.mileageRatePence === "number" ? String(body.mileageRatePence) : "",
   };
+}
+
+async function findByClientRequestId(
+  companyId: string,
+  clientRequestId: string | null,
+): Promise<string | null> {
+  if (!clientRequestId) return null;
+  const [row] = await getDb()
+    .select({ id: expenses.id })
+    .from(expenses)
+    .where(and(eq(expenses.companyId, companyId), eq(expenses.clientRequestId, clientRequestId)))
+    .limit(1);
+  return row?.id ?? null;
 }
 
 // Same validation and saving as the web form (createExpense).
@@ -104,11 +140,38 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // An expense queued offline carries its own id; a retry returns the one
+    // already saved instead of saving it again.
+    const clientRequestId = parseClientRequestId(body.clientRequestId);
+    const earlier = await findByClientRequestId(user.companyId, clientRequestId);
+    if (earlier) {
+      return NextResponse.json({
+        success: true,
+        duplicate: true,
+        data: await loadMobileExpense(user.companyId, earlier),
+      });
+    }
+
     const localUserId = await ensureLocalUser(user);
-    const result = await createExpenseRecord(
-      { companyId: user.companyId, localUserId },
-      parsed.data,
-    );
+    let result;
+    try {
+      result = await createExpenseRecord(
+        { companyId: user.companyId, localUserId },
+        parsed.data,
+        { clientRequestId },
+      );
+    } catch (error) {
+      // Two retries raced; the other one saved it.
+      const raced = isUniqueViolation(error)
+        ? await findByClientRequestId(user.companyId, clientRequestId)
+        : null;
+      if (!raced) throw error;
+      return NextResponse.json({
+        success: true,
+        duplicate: true,
+        data: await loadMobileExpense(user.companyId, raced),
+      });
+    }
     if (!result.ok || !result.id) {
       return NextResponse.json(
         {

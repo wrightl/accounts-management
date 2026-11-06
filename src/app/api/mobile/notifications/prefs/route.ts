@@ -4,7 +4,9 @@ import { requireMobileAuth } from "@/lib/mobile-auth";
 import { ensureLocalUser } from "@/lib/users";
 import {
   loadCompanyChannelDefaults,
+  loadHidePushDetails,
   loadUserChannelOverrides,
+  saveHidePushDetails,
   mergeChannelPrefs,
   parseChannelMatrix,
   saveUserChannelOverrides,
@@ -19,9 +21,10 @@ export async function GET() {
 
   const userId =
     auth.user.localUserId ?? (await ensureLocalUser(auth.user));
-  const [companyDefaults, userOverrides] = await Promise.all([
+  const [companyDefaults, userOverrides, hidePushDetails] = await Promise.all([
     loadCompanyChannelDefaults(auth.user.companyId),
     loadUserChannelOverrides(userId, auth.user.companyId),
+    loadHidePushDetails(userId, auth.user.companyId),
   ]);
 
   return NextResponse.json({
@@ -32,14 +35,19 @@ export async function GET() {
       userOverrides,
       effective: mergeChannelPrefs(companyDefaults, userOverrides),
       canManageCompany: can(auth.user.role, "settings:manage"),
+      hidePushDetails,
     },
   });
 }
 
-const putSchema = z.object({
-  scope: z.enum(["user", "company"]),
-  matrix: z.record(z.string(), z.unknown()),
-});
+const putSchema = z.union([
+  z.object({
+    scope: z.enum(["user", "company"]),
+    matrix: z.record(z.string(), z.unknown()),
+  }),
+  // The person's lock-screen setting, saved on its own like the web toggle.
+  z.object({ scope: z.literal("user"), hidePushDetails: z.boolean() }),
+]);
 
 export async function PUT(request: Request) {
   let json: unknown;
@@ -58,6 +66,14 @@ export async function PUT(request: Request) {
       { success: false, error: "Invalid request" },
       { status: 400 },
     );
+  }
+
+  if ("hidePushDetails" in parsed.data) {
+    const auth = await requireMobileAuth("workspace:read");
+    if (!auth.ok) return auth.response;
+    const userId = auth.user.localUserId ?? (await ensureLocalUser(auth.user));
+    await saveHidePushDetails(userId, auth.user.companyId, parsed.data.hidePushDetails);
+    return NextResponse.json({ success: true });
   }
 
   const matrix = parseChannelMatrix(parsed.data.matrix);

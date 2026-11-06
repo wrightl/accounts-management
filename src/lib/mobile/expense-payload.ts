@@ -1,7 +1,9 @@
+import { expenseOriginalAmount } from "@/lib/expenses/currency";
 import {
   paymentSourceSummary,
   type PaymentSourceSuggestion,
 } from "@/lib/expenses/payment-source";
+import { formatExpenseAmount } from "@/lib/money";
 
 type ReceiptInput = {
   id: string;
@@ -17,6 +19,9 @@ export type MobileExpenseInput = {
   companyId: string;
   description?: string | null;
   amountPence?: number | null;
+  /** Currency the receipt was in; null or GBP for sterling. */
+  detectedCurrency?: string | null;
+  originalAmountMinor?: number | null;
   category?: string | null;
   spentAt?: string | null;
   expenseDate?: string | null;
@@ -33,6 +38,9 @@ export type MobileExpenseInput = {
   createdAt?: Date | string | null;
   createdByName?: string | null;
   receipts?: ReceiptInput[];
+  /** The team's own notes and labels. */
+  notes?: string | null;
+  labels?: { id: string; name: string; color: string }[];
   /** How a pending expense was probably paid; omitted for reviewed ones. */
   paymentSource?: PaymentSourceSuggestion | null;
 };
@@ -50,11 +58,22 @@ function calendarDate(value: Date | string | null | undefined): string {
 
 export function toMobileExpense(expense: MobileExpenseInput) {
   const createdAt = isoDate(expense.createdAt);
+  const amountPence = expense.amountPence ?? 0;
+  const currencyFields = {
+    detectedCurrency: expense.detectedCurrency ?? null,
+    originalAmountMinor: expense.originalAmountMinor ?? null,
+  };
+  const original = expenseOriginalAmount(currencyFields);
   return {
     id: expense.id,
     companyId: expense.companyId,
     description: expense.description ?? "",
-    amountPence: expense.amountPence ?? 0,
+    amountPence,
+    /** Foreign currency and amount (minor units), or null for sterling. */
+    currency: original?.currency ?? null,
+    originalAmountMinor: original?.amountMinor ?? null,
+    /** As the web shows it, e.g. "£9.60 (US$12.00)". */
+    amountFormatted: formatExpenseAmount({ amountPence, ...currencyFields }),
     category: expense.category ?? "Other",
     expenseDate:
       expense.spentAt ??
@@ -78,6 +97,8 @@ export function toMobileExpense(expense: MobileExpenseInput) {
       uploadedAt: isoDate(receipt.uploadedAt),
     })),
     createdByName: expense.createdByName ?? null,
+    notes: expense.notes ?? null,
+    labels: (expense.labels ?? []).map(({ id, name, color }) => ({ id, name, color })),
     paymentSource: expense.paymentSource
       ? paymentSourceSummary(expense.paymentSource)
       : null,

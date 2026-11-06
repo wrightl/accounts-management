@@ -6,6 +6,7 @@ import '../../../features/books/screens/sales_hub_screen.dart';
 import '../../../features/work/bookkeeper_screen.dart';
 import '../../../features/work/deadlines_screen.dart';
 import '../../../features/work/weekly_close_screen.dart';
+import '../../queries/queries_screen.dart';
 
 class NotificationDetailScreen extends StatelessWidget {
   const NotificationDetailScreen({super.key, required this.notification});
@@ -61,6 +62,17 @@ class NotificationDetailScreen extends StatelessWidget {
                 : null;
     if (work != null) {
       Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => work));
+      return;
+    }
+    final query = RegExp(r'^/queries/([0-9a-fA-F-]{36})').firstMatch(href);
+    if (query != null || href == '/queries') {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => query != null
+              ? QueryThreadScreen(queryId: query.group(1)!)
+              : const QueriesScreen(),
+        ),
+      );
       return;
     }
     if (href.contains('/expenses')) {

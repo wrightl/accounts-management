@@ -2,9 +2,11 @@ import { guardTenantPage } from "@/lib/auth";
 import { ensureLocalUser } from "@/lib/users";
 import {
   loadCompanyChannelDefaults,
+  loadHidePushDetails,
   loadUserChannelOverrides,
   mergeChannelPrefs,
 } from "@/lib/notifications";
+import { LockScreenPrivacy } from "@/components/notifications/lock-screen-privacy";
 import { NotificationPrefsForm } from "@/components/notifications/notification-prefs-form";
 import { can } from "@/lib/roles";
 import Link from "next/link";
@@ -17,9 +19,10 @@ export default async function NotificationSettingsPage() {
     session.localUserId ?? (await ensureLocalUser(session));
   const canManageCompany = can(session.role, "settings:manage");
 
-  const [companyDefaults, userOverrides] = await Promise.all([
+  const [companyDefaults, userOverrides, hidePushDetails] = await Promise.all([
     loadCompanyChannelDefaults(session.companyId),
     loadUserChannelOverrides(userId, session.companyId),
+    loadHidePushDetails(userId, session.companyId),
   ]);
 
   return (
@@ -46,6 +49,8 @@ export default async function NotificationSettingsPage() {
           initial={mergeChannelPrefs(companyDefaults, userOverrides)}
           showPushEnable
         />
+
+        <LockScreenPrivacy initial={hidePushDetails} />
       </div>
     </div>
   );

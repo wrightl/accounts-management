@@ -56,6 +56,14 @@ class ApiClient {
     );
   }
   
+  /// A file the server streams back, e.g. a receipt, as raw bytes.
+  Future<Response<List<int>>> getBytes(String path) {
+    return _dio.get<List<int>>(
+      path,
+      options: Options(responseType: ResponseType.bytes),
+    );
+  }
+
   Future<Response> post(
     String path, {
     dynamic data,

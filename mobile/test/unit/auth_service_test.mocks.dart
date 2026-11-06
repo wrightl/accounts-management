@@ -103,6 +103,18 @@ class MockApiClient extends _i1.Mock implements _i4.ApiClient {
   ) as _i5.Future<_i2.Response<dynamic>>);
 
   @override
+  _i5.Future<_i2.Response<List<int>>> getBytes(String? path) =>
+      (super.noSuchMethod(
+        Invocation.method(#getBytes, [path]),
+        returnValue: _i5.Future<_i2.Response<List<int>>>.value(
+          _FakeResponse_0<List<int>>(
+            this,
+            Invocation.method(#getBytes, [path]),
+          ),
+        ),
+      ) as _i5.Future<_i2.Response<List<int>>>);
+
+  @override
   _i5.Future<_i2.Response<dynamic>> post(
     String? path, {
     dynamic data,

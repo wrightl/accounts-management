@@ -51,6 +51,25 @@ class WorkRepository {
 
   Future<ApiResponse<bool>> closeWeek() => _post(AppConstants.closeEndpoint, null);
 
+  /// A plain-English answer from the company's figures, and where it came from.
+  Future<ApiResponse<BookkeeperAnswer>> askBookkeeper(String question) async {
+    try {
+      final response = await _apiClient.post(
+        AppConstants.bookkeeperAskEndpoint,
+        data: {'question': question},
+      );
+      return ApiResponse.success(BookkeeperAnswer.fromJson(response.data['data']));
+    } on DioException catch (e) {
+      return apiErrorFrom(e);
+    } catch (e) {
+      return ApiResponse.error('Unexpected error: $e');
+    }
+  }
+
+  /// How many of today's questions the company has left.
+  Future<ApiResponse<int>> questionsRemaining() =>
+      _get(AppConstants.bookkeeperAskEndpoint, (data) => (data['remaining'] as num).toInt());
+
   Future<ApiResponse<BookkeeperPage>> getBookkeeper() =>
       _get(AppConstants.bookkeeperEndpoint, BookkeeperPage.fromJson);
 

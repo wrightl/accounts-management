@@ -154,6 +154,7 @@ export async function notify(payload: NotifyPayload): Promise<NotifyResult> {
     if (channels.push) {
       void sendPushToUser({
         userId,
+        companyId: payload.companyId,
         title: payload.title,
         body: payload.body,
         href: payload.href ?? null,

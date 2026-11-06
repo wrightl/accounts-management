@@ -42,27 +42,102 @@ class MockExpenseRepository extends _i1.Mock implements _i3.ExpenseRepository {
   }
 
   @override
-  _i4.Future<_i2.ApiResponse<List<_i5.Expense>>> getExpenses({
+  _i4.Future<_i2.ApiResponse<_i5.ExpensePage>> getExpenses({
     String? status,
+    String? labelId,
     int? limit,
     int? offset,
   }) => (super.noSuchMethod(
     Invocation.method(#getExpenses, [], {
       #status: status,
+      #labelId: labelId,
       #limit: limit,
       #offset: offset,
     }),
-    returnValue: _i4.Future<_i2.ApiResponse<List<_i5.Expense>>>.value(
-      _FakeApiResponse_0<List<_i5.Expense>>(
+    returnValue: _i4.Future<_i2.ApiResponse<_i5.ExpensePage>>.value(
+      _FakeApiResponse_0<_i5.ExpensePage>(
         this,
         Invocation.method(#getExpenses, [], {
           #status: status,
+          #labelId: labelId,
           #limit: limit,
           #offset: offset,
         }),
       ),
     ),
-  ) as _i4.Future<_i2.ApiResponse<List<_i5.Expense>>>);
+  ) as _i4.Future<_i2.ApiResponse<_i5.ExpensePage>>);
+
+  @override
+  _i4.Future<_i2.ApiResponse<_i5.ReceiptFile>> downloadReceipt(
+    _i5.ExpenseReceipt? receipt,
+  ) => (super.noSuchMethod(
+    Invocation.method(#downloadReceipt, [receipt]),
+    returnValue: _i4.Future<_i2.ApiResponse<_i5.ReceiptFile>>.value(
+      _FakeApiResponse_0<_i5.ReceiptFile>(
+        this,
+        Invocation.method(#downloadReceipt, [receipt]),
+      ),
+    ),
+  ) as _i4.Future<_i2.ApiResponse<_i5.ReceiptFile>>);
+
+  @override
+  _i4.Future<
+    _i2.ApiResponse<({List<String> colors, List<_i5.ExpenseLabel> labels})>
+  >
+  getLabels() =>
+      (super.noSuchMethod(
+        Invocation.method(#getLabels, []),
+        returnValue:
+            _i4.Future<
+              _i2.ApiResponse<
+                ({List<String> colors, List<_i5.ExpenseLabel> labels})
+              >
+            >.value(
+              _FakeApiResponse_0<
+                ({List<String> colors, List<_i5.ExpenseLabel> labels})
+              >(this, Invocation.method(#getLabels, [])),
+            ),
+      ) as _i4.Future<
+        _i2.ApiResponse<({List<String> colors, List<_i5.ExpenseLabel> labels})>
+      >);
+
+  @override
+  _i4.Future<_i2.ApiResponse<String>> createLabel(
+    String? name,
+    String? color,
+  ) => (super.noSuchMethod(
+    Invocation.method(#createLabel, [name, color]),
+    returnValue: _i4.Future<_i2.ApiResponse<String>>.value(
+      _FakeApiResponse_0<String>(
+        this,
+        Invocation.method(#createLabel, [name, color]),
+      ),
+    ),
+  ) as _i4.Future<_i2.ApiResponse<String>>);
+
+  @override
+  _i4.Future<_i2.ApiResponse<_i5.Expense>> annotateExpense(
+    String? id, {
+    List<String>? labelIds,
+    String? note,
+    bool? setNote = false,
+  }) => (super.noSuchMethod(
+    Invocation.method(
+      #annotateExpense,
+      [id],
+      {#labelIds: labelIds, #note: note, #setNote: setNote},
+    ),
+    returnValue: _i4.Future<_i2.ApiResponse<_i5.Expense>>.value(
+      _FakeApiResponse_0<_i5.Expense>(
+        this,
+        Invocation.method(
+          #annotateExpense,
+          [id],
+          {#labelIds: labelIds, #note: note, #setNote: setNote},
+        ),
+      ),
+    ),
+  ) as _i4.Future<_i2.ApiResponse<_i5.Expense>>);
 
   @override
   _i4.Future<_i2.ApiResponse<_i5.Expense>> getExpense(String? id) =>
@@ -85,6 +160,19 @@ class MockExpenseRepository extends _i1.Mock implements _i3.ExpenseRepository {
       _FakeApiResponse_0<_i5.Expense>(
         this,
         Invocation.method(#createExpense, [request]),
+      ),
+    ),
+  ) as _i4.Future<_i2.ApiResponse<_i5.Expense>>);
+
+  @override
+  _i4.Future<_i2.ApiResponse<_i5.Expense>> createExpenseFromJson(
+    Map<String, dynamic>? body,
+  ) => (super.noSuchMethod(
+    Invocation.method(#createExpenseFromJson, [body]),
+    returnValue: _i4.Future<_i2.ApiResponse<_i5.Expense>>.value(
+      _FakeApiResponse_0<_i5.Expense>(
+        this,
+        Invocation.method(#createExpenseFromJson, [body]),
       ),
     ),
   ) as _i4.Future<_i2.ApiResponse<_i5.Expense>>);

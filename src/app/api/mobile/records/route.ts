@@ -5,6 +5,7 @@ import {
   isMobileResource,
   loadBooksPage,
 } from "@/lib/mobile/records";
+import { parseMobilePage } from "@/lib/mobile/paging";
 
 export async function GET(request: NextRequest) {
   try {
@@ -36,7 +37,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const data = await loadBooksPage(user.companyId, user, resource);
+    const page = parseMobilePage(request.nextUrl.searchParams);
+    const data = await loadBooksPage(user.companyId, user, resource, page);
     return NextResponse.json({ success: true, data });
   } catch (error) {
     console.error("Mobile records error:", error);

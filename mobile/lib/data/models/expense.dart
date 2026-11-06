@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import '../../core/utils/formatters.dart';
 import '../../core/utils/json.dart';
 
 class Expense {
@@ -6,6 +9,9 @@ class Expense {
     required this.companyId,
     required this.description,
     required this.amountPence,
+    this.currency,
+    this.originalAmountMinor,
+    this.amountFormatted,
     required this.category,
     required this.expenseDate,
     required this.status,
@@ -19,6 +25,8 @@ class Expense {
     required this.receipts,
     this.createdByName,
     this.paymentSource,
+    this.notes,
+    this.labels = const [],
     required this.createdAt,
     required this.updatedAt,
   });
@@ -27,6 +35,16 @@ class Expense {
   final String companyId;
   final String description;
   final int amountPence;
+
+  /// The currency paid in, when not sterling; [amountPence] is the converted
+  /// sterling figure the books use.
+  final String? currency;
+
+  /// The amount in [currency], in minor units (cents).
+  final int? originalAmountMinor;
+
+  /// As the web shows it, e.g. "£9.60 (US\$12.00)".
+  final String? amountFormatted;
   final String category;
   final DateTime expenseDate;
   final String status;
@@ -42,6 +60,10 @@ class Expense {
 
   /// How a pending emailed expense was probably paid; null once reviewed.
   final ExpensePaymentSource? paymentSource;
+
+  /// The team's own note and labels; not part of the accountant pack.
+  final String? notes;
+  final List<ExpenseLabel> labels;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -53,12 +75,25 @@ class Expense {
 
   String get statusLabel => expenseStatusLabel(status);
 
+  bool get isForeign => currency != null && originalAmountMinor != null;
+
+  /// Sterling, then the amount paid when in another currency, as on the web.
+  String get displayAmount =>
+      amountFormatted ?? CurrencyUtils.formatPence(amountPence);
+
   factory Expense.fromJson(Map<String, dynamic> json) {
     return Expense(
       id: asString(json['id']),
       companyId: asString(json['companyId']),
       description: asString(json['description']),
       amountPence: asInt(json['amountPence']),
+      currency: json['currency'] is String ? json['currency'] as String : null,
+      originalAmountMinor: json['originalAmountMinor'] == null
+          ? null
+          : asInt(json['originalAmountMinor']),
+      amountFormatted: json['amountFormatted'] is String
+          ? json['amountFormatted'] as String
+          : null,
       category: asString(json['category'], 'Other'),
       expenseDate: asDateTime(json['expenseDate'] ?? json['spentAt']),
       status: asString(json['status'], 'recorded'),
@@ -77,10 +112,40 @@ class Expense {
       paymentSource: json['paymentSource'] is Map
           ? ExpensePaymentSource.fromJson(asMap(json['paymentSource']))
           : null,
+      notes: json['notes'] is String && (json['notes'] as String).isNotEmpty
+          ? json['notes'] as String
+          : null,
+      labels: asList(json['labels'])
+          .whereType<Map>()
+          .map((e) => ExpenseLabel.fromJson(asMap(e)))
+          .toList(),
       createdAt: asDateTime(json['createdAt']),
       updatedAt: asDateTime(json['updatedAt'] ?? json['createdAt']),
     );
   }
+}
+
+/// A company label, as on the web (name and one of the web's colours).
+class ExpenseLabel {
+  ExpenseLabel({required this.id, required this.name, required this.color});
+
+  final String id;
+  final String name;
+  final String color;
+
+  factory ExpenseLabel.fromJson(Map<String, dynamic> json) => ExpenseLabel(
+        id: asString(json['id']),
+        name: asString(json['name']),
+        color: asString(json['color'], 'slate'),
+      );
+}
+
+/// One page of the expense list.
+class ExpensePage {
+  ExpensePage({required this.items, required this.hasMore});
+
+  final List<Expense> items;
+  final bool hasMore;
 }
 
 /// The server's suggestion for how an emailed expense was paid, and why.
@@ -134,10 +199,35 @@ class ExpenseReceipt {
   }
 }
 
+/// Receipt files the server accepts, as on the web upload.
+const receiptFileExtensions = ['pdf', 'jpg', 'jpeg', 'png', 'heic', 'webp'];
+
+bool isPdfPath(String path) => path.toLowerCase().endsWith('.pdf');
+
+/// A downloaded receipt file.
+class ReceiptFile {
+  ReceiptFile({
+    required this.filename,
+    required this.contentType,
+    required this.bytes,
+  });
+
+  final String filename;
+  final String contentType;
+  final Uint8List bytes;
+
+  bool get isImage => contentType.startsWith('image/');
+  bool get isPdf =>
+      contentType == 'application/pdf' ||
+      filename.toLowerCase().endsWith('.pdf');
+}
+
 class CreateExpenseRequest {
   CreateExpenseRequest({
     required this.description,
-    required this.amountPence,
+    this.amountPence,
+    this.currency,
+    this.originalAmount,
     required this.category,
     required this.expenseDate,
     required this.status,
@@ -148,10 +238,24 @@ class CreateExpenseRequest {
     this.vatRate = 0,
     this.mileageMiles,
     this.mileageRatePence,
+    this.clientRequestId,
   });
 
+  /// One id per captured expense, so a retry after going offline isn't
+  /// saved twice.
+  final String? clientRequestId;
+
   final String description;
-  final int amountPence;
+
+  /// Sterling. Leave null for a foreign expense to have the server convert
+  /// [originalAmount] at the Bank of England rate.
+  final int? amountPence;
+
+  /// Set with [originalAmount] when paid in another currency.
+  final String? currency;
+
+  /// The amount paid in [currency], as typed, e.g. "12.50".
+  final String? originalAmount;
   final String category;
   final DateTime expenseDate;
 
@@ -169,9 +273,16 @@ class CreateExpenseRequest {
 
   bool get isMileage => mileageMiles != null;
 
+  bool get isForeign =>
+      currency != null && currency!.toUpperCase() != 'GBP' && !isMileage;
+
   Map<String, dynamic> toJson() => {
         'description': description,
-        'amountPence': amountPence,
+        if (amountPence != null) 'amountPence': amountPence,
+        if (isForeign) ...{
+          'currency': currency!.toUpperCase(),
+          'originalAmount': originalAmount,
+        },
         'category': category,
         'expenseDate': expenseDate.toIso8601String().split('T').first,
         'status': status,
@@ -180,6 +291,7 @@ class CreateExpenseRequest {
         'clientId': clientId,
         'orderId': orderId,
         'vatRate': vatRate,
+        'clientRequestId': ?clientRequestId,
         if (isMileage) ...{
           'useMileage': true,
           'mileageMiles': mileageMiles,
@@ -247,6 +359,7 @@ class ReceiptExtraction {
 class ExpenseOptions {
   ExpenseOptions({
     required this.categories,
+    this.currencies = const ['GBP'],
     required this.payers,
     this.defaultPayerId,
     required this.clients,
@@ -257,6 +370,9 @@ class ExpenseOptions {
   });
 
   final List<String> categories;
+
+  /// GBP first, then the currencies the server can convert.
+  final List<String> currencies;
   final List<ExpenseChoice> payers;
   final String? defaultPayerId;
   final List<ExpenseChoice> clients;
@@ -271,8 +387,10 @@ class ExpenseOptions {
         .map((e) => ExpenseChoice.fromJson(asMap(e)))
         .toList();
     final categories = asList(json['categories']).map(asString).toList();
+    final currencies = asList(json['currencies']).map(asString).toList();
     return ExpenseOptions(
       categories: categories.isEmpty ? expenseCategories : categories,
+      currencies: currencies.isEmpty ? const ['GBP'] : currencies,
       payers: choices(json['payers']),
       defaultPayerId: json['defaultPayerId'] as String?,
       clients: choices(json['clients']),

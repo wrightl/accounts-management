@@ -23,6 +23,8 @@ class BookRecord {
     this.status,
     this.date,
     required this.details,
+    this.amountDuePence,
+    this.canMarkPaid = false,
   });
 
   final String id;
@@ -33,8 +35,16 @@ class BookRecord {
   final String? date;
   final Map<String, String> details;
 
+  /// Set on a sent invoice still owed money: Record payment prefills this.
+  final int? amountDuePence;
+
+  /// An unpaid reimbursement run that can be marked paid now.
+  final bool canMarkPaid;
+
   factory BookRecord.fromJson(Map<String, dynamic> json) {
     final rawDetails = asMap(json['details']);
+    final actions = asMap(json['actions']);
+    final payment = asMap(actions['recordPayment']);
     return BookRecord(
       id: asString(json['id']),
       title: asString(json['title']),
@@ -46,6 +56,9 @@ class BookRecord {
         for (final entry in rawDetails.entries)
           entry.key: asString(entry.value, '—'),
       },
+      amountDuePence:
+          payment['amountDuePence'] == null ? null : asInt(payment['amountDuePence']),
+      canMarkPaid: actions['markPaid'] == true,
     );
   }
 }
@@ -56,12 +69,28 @@ class BooksPage {
     required this.emptyMessage,
     required this.stats,
     required this.items,
+    this.hasMore = false,
   });
 
   final String title;
   final String emptyMessage;
   final List<BookStat> stats;
   final List<BookRecord> items;
+
+  /// More items after these; ask with `offset: items.length`.
+  final bool hasMore;
+
+  /// This page followed by the next one.
+  BooksPage append(BooksPage next) {
+    final seen = items.map((i) => i.id).toSet();
+    return BooksPage(
+      title: title,
+      emptyMessage: emptyMessage,
+      stats: stats,
+      items: [...items, ...next.items.where((i) => !seen.contains(i.id))],
+      hasMore: next.hasMore,
+    );
+  }
 
   factory BooksPage.fromJson(Map<String, dynamic> json) {
     return BooksPage(
@@ -75,6 +104,7 @@ class BooksPage {
           .whereType<Map>()
           .map((e) => BookRecord.fromJson(asMap(e)))
           .toList(),
+      hasMore: json['hasMore'] == true,
     );
   }
 }

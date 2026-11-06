@@ -4,9 +4,15 @@ import { getDb } from "@/db";
 import { pushSubscriptions, type PushPlatform } from "@/db/schema";
 import { serverEnv } from "@/env";
 import { isWebPushEndpoint } from "./push-endpoint";
+import { loadHidePushDetails } from "./prefs";
 
 export type PushPayload = {
   userId: string;
+  /**
+   * The notification's company, whose lock-screen setting applies. Required
+   * so no caller can skip the setting; null only for notices with no company.
+   */
+  companyId: string | null;
   title: string;
   body: string;
   href?: string | null;
@@ -65,6 +71,19 @@ export async function deletePushSubscription(
   return deleted.length > 0;
 }
 
+export const HIDDEN_PUSH_TITLE = "New notification in Alfa";
+
+/**
+ * The payload as this person wants it on a locked screen: with their
+ * setting on, no title or body text. It still opens the right notification,
+ * where the app shows the text.
+ */
+export async function withLockScreenPrivacy(payload: PushPayload): Promise<PushPayload> {
+  if (payload.companyId == null) return payload;
+  if (!(await loadHidePushDetails(payload.userId, payload.companyId))) return payload;
+  return { ...payload, title: HIDDEN_PUSH_TITLE, body: "" };
+}
+
 export async function sendPushToUser(payload: PushPayload): Promise<void> {
   const db = getDb();
   const subs = await db
@@ -73,6 +92,7 @@ export async function sendPushToUser(payload: PushPayload): Promise<void> {
     .where(eq(pushSubscriptions.userId, payload.userId));
 
   if (subs.length === 0) return;
+  payload = await withLockScreenPrivacy(payload);
 
   await Promise.allSettled(
     subs.map(async (sub) => {

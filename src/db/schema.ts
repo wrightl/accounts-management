@@ -561,10 +561,15 @@ export const payments = pgTable(
     receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
     /** Set for online card payments; makes webhook delivery idempotent. */
     stripeCheckoutSessionId: text("stripe_checkout_session_id"),
+    /** Sent by the phone so a retried Record payment isn't saved twice. */
+    clientRequestId: text("client_request_id"),
   },
   (t) => [
     index("idx_payments_invoice").on(t.invoiceId),
     uniqueIndex("uniq_payments_stripe_checkout_session").on(t.stripeCheckoutSessionId),
+    uniqueIndex("uniq_payments_client_request")
+      .on(t.invoiceId, t.clientRequestId)
+      .where(sql`${t.clientRequestId} is not null`),
   ],
 );
 
@@ -701,10 +706,15 @@ export const expenses = pgTable(
     createdByUserId: uuid("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
+    /** Set by the phone so a capture retried after going offline isn't saved twice. */
+    clientRequestId: text("client_request_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
     index("idx_expenses_company").on(t.companyId),
+    uniqueIndex("uniq_expenses_client_request")
+      .on(t.companyId, t.clientRequestId)
+      .where(sql`${t.clientRequestId} is not null`),
     index("idx_expenses_inbound_email_job").on(t.inboundEmailJobId),
     index("idx_expenses_status").on(t.status),
     index("idx_expenses_paid_by").on(t.paidByUserId),
@@ -1789,6 +1799,8 @@ export const userNotificationPreferences = pgTable(
       .$type<Record<string, unknown>>()
       .notNull()
       .default(sql`'{}'::jsonb`),
+    /** Push alerts say only "New notification in Alfa", so nothing shows on a locked phone. */
+    hidePushDetails: boolean("hide_push_details").notNull().default(false),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
