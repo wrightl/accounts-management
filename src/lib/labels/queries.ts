@@ -215,7 +215,22 @@ export async function setRowNote(
       .set({ notes: value })
       .where(and(eq(expenses.id, rowId), eq(expenses.companyId, companyId)));
   } else {
-    await db.update(bankTransactions).set({ notes: value }).where(eq(bankTransactions.id, rowId));
+    // Bank rows get their company from the account.
+    await db
+      .update(bankTransactions)
+      .set({ notes: value })
+      .where(
+        and(
+          eq(bankTransactions.id, rowId),
+          inArray(
+            bankTransactions.bankAccountId,
+            db
+              .select({ id: bankAccounts.id })
+              .from(bankAccounts)
+              .where(eq(bankAccounts.companyId, companyId)),
+          ),
+        ),
+      );
   }
   return { ok: true };
 }

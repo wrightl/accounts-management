@@ -1,6 +1,6 @@
 import "server-only";
 import { and, eq, sql, sum } from "drizzle-orm";
-import { getDb } from "@/db";
+import { getDb, type Database } from "@/db";
 import { invoices, payments, reconciliationMatches } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
 import { poundsToPence } from "@/lib/money";
@@ -10,6 +10,7 @@ import {
   ReconciliationError,
 } from "@/lib/bank/queries";
 import { creditAdjustmentForInvoice } from "@/lib/credit-notes/adjustments";
+import type { Tx } from "@/lib/invoices/allocate";
 import { invoiceBalancePence, isInvoiceSettled } from "@/lib/invoices/balance";
 import {
   effectiveStatus,
@@ -20,6 +21,27 @@ import type { ActionResult } from "@/actions/result";
 import { parsePaymentInput } from "@/lib/payments/schema";
 import { FORM_FIELD_ERROR_SUMMARY } from "@/lib/validation/field-errors";
 import { checkPeriodOpen } from "@/lib/period-lock-queries";
+
+async function findRequestedPayment(
+  db: Database | Tx,
+  companyId: string,
+  invoiceId: string,
+  clientRequestId: string,
+): Promise<string | null> {
+  const [row] = await db
+    .select({ id: payments.id })
+    .from(payments)
+    .innerJoin(invoices, eq(invoices.id, payments.invoiceId))
+    .where(
+      and(
+        eq(payments.invoiceId, invoiceId),
+        eq(payments.clientRequestId, clientRequestId),
+        eq(invoices.companyId, companyId),
+      ),
+    )
+    .limit(1);
+  return row?.id ?? null;
+}
 
 class PaymentError extends Error {
   constructor(message: string) {
@@ -42,8 +64,14 @@ export async function recordInvoicePayment(
   raw: Record<string, unknown>,
   opts: { clientRequestId?: string | null } = {},
 ): Promise<ActionResult & { duplicate?: boolean }> {
-  const clientRequestId = opts.clientRequestId ?? null;
   const { companyId, localUserId } = ctx;
+  const clientRequestId = opts.clientRequestId ?? null;
+  // A retry returns the first payment before any check that could now fail,
+  // such as the period having been locked since.
+  if (clientRequestId) {
+    const earlier = await findRequestedPayment(getDb(), companyId, invoiceId, clientRequestId);
+    if (earlier) return { ok: true, id: earlier, duplicate: true };
+  }
   const parsed = parsePaymentInput(raw);
   if (!parsed.ok) {
     return {
@@ -107,22 +135,12 @@ export async function recordInvoicePayment(
         sql`select id from invoices where id = ${invoiceId} and company_id = ${companyId} for update`,
       );
 
+      // Two copies of the same request at once: the second waits on the lock.
       if (clientRequestId) {
-        const [existing] = await tx
-          .select({ id: payments.id })
-          .from(payments)
-          .innerJoin(invoices, eq(invoices.id, payments.invoiceId))
-          .where(
-            and(
-              eq(payments.invoiceId, invoiceId),
-              eq(payments.clientRequestId, clientRequestId),
-              eq(invoices.companyId, companyId),
-            ),
-          )
-          .limit(1);
+        const existing = await findRequestedPayment(tx, companyId, invoiceId, clientRequestId);
         if (existing) {
           duplicate = true;
-          return existing.id;
+          return existing;
         }
       }
 

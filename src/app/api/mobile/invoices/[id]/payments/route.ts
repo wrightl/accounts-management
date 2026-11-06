@@ -4,6 +4,7 @@ import { requireMobileAuth } from "@/lib/mobile-auth";
 import { parseClientRequestId } from "@/lib/mobile/client-request";
 import { mobileError, mobileFailure, mobileServerError } from "@/lib/mobile/respond";
 import { recordInvoicePayment } from "@/lib/payments/record";
+import { FORM_FIELD_ERROR_SUMMARY } from "@/lib/validation/field-errors";
 import { ensureLocalUser } from "@/lib/users";
 
 type Params = Promise<{ id: string }>;
@@ -23,12 +24,18 @@ export async function POST(request: NextRequest, segmentData: { params: Params }
 
     const body = await request.json().catch(() => null);
     const pence = body?.amountPence;
+    // Whole pence only: a fractional amount is a client bug, not something to round.
+    if (pence !== undefined && !Number.isSafeInteger(pence)) {
+      return mobileError(FORM_FIELD_ERROR_SUMMARY, 400, {
+        amountPence: "Enter the amount in whole pence",
+      });
+    }
     const result = await recordInvoicePayment(
       { companyId: user.companyId, localUserId: await ensureLocalUser(user) },
       id,
       {
         amountPounds:
-          typeof pence === "number" && Number.isFinite(pence) ? (pence / 100).toFixed(2) : "",
+          typeof pence === "number" ? (pence / 100).toFixed(2) : "",
         receivedAt: typeof body?.receivedAt === "string" ? body.receivedAt : "",
         reference: typeof body?.reference === "string" ? body.reference : "",
         method: "",

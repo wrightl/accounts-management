@@ -7,6 +7,7 @@ import {
   accountantQueryMessages,
   auditLog,
   clients,
+  companies,
   expenses,
   invoices,
   labels,
@@ -594,6 +595,41 @@ describe("mobile payments and reimbursement runs", () => {
     expect(json.data.paymentId).toBe((await first.json()).data.paymentId);
     expect(await db.select().from(payments).where(eq(payments.invoiceId, invoice.id))).toHaveLength(1);
     expect(await db.select().from(auditLog).where(eq(auditLog.action, "payment.record"))).toHaveLength(1);
+  });
+
+  it("returns the recorded payment on a retry after the period is locked", async () => {
+    const company = await seedCompany(db, { name: "Locked Retry Co" });
+    const user = await seedUser(company.id);
+    const invoice = await seedInvoice(company.id, user.id);
+    const body = { amountPence: 4000, receivedAt: "2026-03-10", clientRequestId: "pay-locked-0001" };
+
+    const first = await recordPaymentRoute(
+      postJson(`/api/mobile/invoices/${invoice.id}/payments`, body),
+      params({ id: invoice.id }),
+    );
+    expect(first.status).toBe(201);
+    await db.update(companies).set({ booksLockedThrough: "2026-03-31" }).where(eq(companies.id, company.id));
+
+    const again = await recordPaymentRoute(
+      postJson(`/api/mobile/invoices/${invoice.id}/payments`, body),
+      params({ id: invoice.id }),
+    );
+    expect(again.status).toBe(200);
+    expect((await again.json()).duplicate).toBe(true);
+  });
+
+  it("refuses a fractional amount of pence instead of rounding it", async () => {
+    const company = await seedCompany(db, { name: "Fraction Co" });
+    const user = await seedUser(company.id);
+    const invoice = await seedInvoice(company.id, user.id);
+
+    const res = await recordPaymentRoute(
+      postJson(`/api/mobile/invoices/${invoice.id}/payments`, { amountPence: 4000.5 }),
+      params({ id: invoice.id }),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).fieldErrors.amountPence).toMatch(/whole pence/);
+    expect(await db.select().from(payments).where(eq(payments.invoiceId, invoice.id))).toHaveLength(0);
   });
 
   it("refuses another company's reimbursement run", async () => {
