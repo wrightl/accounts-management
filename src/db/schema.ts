@@ -1964,3 +1964,37 @@ export const weeklyCloses = pgTable(
   },
   (t) => [index("idx_weekly_closes_company").on(t.companyId, t.closedAt)],
 );
+
+export type DataOnboardingStatus = "active" | "paused" | "completed" | "dismissed";
+
+/** A step someone ticked off by hand, which beats what the data says. */
+export interface DataOnboardingOverride {
+  state: "done" | "skipped" | "not_applicable";
+  at: string;
+  byUserId: string | null;
+}
+
+/**
+ * The "Bring in your history" checklist for loading historical data, shared by
+ * everyone in the company. No row means it hasn't been started. Progress is
+ * worked out from the data each time; only manual choices are stored here.
+ */
+export const dataOnboarding = pgTable("data_onboarding", {
+  companyId: uuid("company_id")
+    .primaryKey()
+    .references(() => companies.id, { onDelete: "cascade" }),
+  status: text("status").$type<DataOnboardingStatus>().notNull().default("active"),
+  /** First day the company wants its records in Alfa to cover. */
+  recordsStartDate: date("records_start_date"),
+  /** Keyed by step id ({@link import("@/lib/data-onboarding/steps").StepId}). */
+  overrides: jsonb("overrides")
+    .$type<Record<string, DataOnboardingOverride>>()
+    .notNull()
+    .default(sql`'{}'::jsonb`),
+  /** The step someone last opened, so Continue goes back to it. */
+  lastStepId: text("last_step_id"),
+  startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+  pausedAt: timestamp("paused_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});

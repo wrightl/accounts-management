@@ -25,6 +25,7 @@ import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { findLocalUser } from "@/lib/users";
 import { getCompany } from "@/lib/tenant";
 import { ExpenseImportButton } from "@/components/expenses/expense-import-panel";
+import { SetupStepBanner } from "@/components/data-onboarding/setup-step-banner";
 import { ExpenseLiveRefresh } from "@/components/expenses/expense-live-refresh";
 import { InboundAddress } from "@/components/expenses/inbound-address";
 import { sortHeaders } from "@/components/ui/sortable-th";
@@ -53,12 +54,13 @@ export default async function ExpensesPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const { companyId, role } = await guardTenantPage("records:read");
+  const { companyId, role, entityType } = await guardTenantPage("records:read");
   const scope = recordScopeFor(role);
   const canWrite = await hasPermission("accounts:write");
   const canRaiseQuery = can(role, "queries:raise");
   const user = await requireUser();
-  const parsed = parseExpenseListParams(await searchParams);
+  const sp = await searchParams;
+  const parsed = parseExpenseListParams(sp);
 
   const [localUser, settings, labels] = await Promise.all([
     findLocalUser(user.userId),
@@ -126,6 +128,7 @@ export default async function ExpensesPage({
   return (
     <div>
       {scope === "all" ? <ExpenseLiveRefresh initialFingerprint={emailFingerprint} /> : null}
+      <SetupStepBanner stepId="expenses" entityType={entityType} from={sp.from} />
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl font-semibold">Expenses</h1>
@@ -134,7 +137,7 @@ export default async function ExpensesPage({
         {canWrite && (
           <div className="flex flex-wrap gap-2">
             <ManageLabelsButton labels={labels} />
-            <ExpenseImportButton canWrite={canWrite} />
+            <ExpenseImportButton canWrite={canWrite} defaultOpen={sp.import === "1"} />
             <Link href="/expenses/new" className={buttonClasses("primary")}>
               New expense
             </Link>

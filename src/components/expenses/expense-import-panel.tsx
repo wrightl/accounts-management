@@ -20,9 +20,16 @@ import type { ParsedExpenseImportRow } from "@/lib/expenses/import-csv";
 import { parseExpenseImportCsvFile } from "@/lib/expenses/schema";
 import { expenseStatusLabel, type ExpenseStatus } from "@/lib/expenses/categories";
 
-export function ExpenseImportButton({ canWrite }: { canWrite: boolean }) {
+export function ExpenseImportButton({
+  canWrite,
+  defaultOpen = false,
+}: {
+  canWrite: boolean;
+  /** Open the import on arrival (`?import=1`, from the history checklist). */
+  defaultOpen?: boolean;
+}) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [rows, setRows] = useState<ParsedExpenseImportRow[] | null>(null);
   const {
     fieldErrors,

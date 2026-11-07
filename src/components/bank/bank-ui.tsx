@@ -263,14 +263,17 @@ export function BankToolbar({
   canWrite,
   customCategories,
   accountCards = [],
+  importOpenByDefault = false,
 }: {
   canWrite: boolean;
   customCategories: BankSpendingCategoryRow[];
   /** Bank accounts with their card endings, for the Company cards dialog. */
   accountCards?: BankAccountCards[];
+  /** Open the import dialog on arrival (`?import=1`, from the history checklist). */
+  importOpenByDefault?: boolean;
 }) {
   const router = useRouter();
-  const [importOpen, setImportOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(importOpenByDefault);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [cardsOpen, setCardsOpen] = useState(false);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);

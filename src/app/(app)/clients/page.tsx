@@ -2,6 +2,7 @@ import Link from "next/link";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { listClients } from "@/lib/clients/queries";
 import { ClientImportButton } from "@/components/clients/client-import-panel";
+import { SetupStepBanner } from "@/components/data-onboarding/setup-step-banner";
 import { buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
@@ -19,7 +20,7 @@ export default async function ClientsPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const { companyId } = await guardTenantPage("accounts:read");
+  const { companyId, entityType } = await guardTenantPage("accounts:read");
   const canWrite = await hasPermission("accounts:write");
   const sp = await searchParams;
   const sort = parseTableSort(sp, SORT);
@@ -34,6 +35,7 @@ export default async function ClientsPage({
 
   return (
     <div>
+      <SetupStepBanner stepId="clients" entityType={entityType} from={sp.from} />
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl font-semibold">Clients</h1>
@@ -41,7 +43,7 @@ export default async function ClientsPage({
         </div>
         {canWrite ? (
           <div className="flex flex-wrap gap-2">
-            <ClientImportButton canWrite={canWrite} />
+            <ClientImportButton canWrite={canWrite} defaultOpen={sp.import === "1"} />
             <Link href="/clients/new" className={buttonClasses("primary")}>
               New client
             </Link>

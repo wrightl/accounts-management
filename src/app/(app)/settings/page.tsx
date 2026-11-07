@@ -4,6 +4,8 @@ import { guardTenantPage } from "@/lib/auth";
 import { can } from "@/lib/roles";
 import { visibleSettingsPages, type SettingsPage } from "@/components/dashboard/nav";
 import { NAV_ICONS } from "@/components/dashboard/nav-icons";
+import { ReopenDataOnboardingButton } from "@/components/data-onboarding/reopen-data-onboarding-button";
+import { getDataOnboardingRow } from "@/lib/data-onboarding/queries";
 
 const SECTIONS: { id: SettingsPage["section"]; label: string }[] = [
   { id: "you", label: "You" },
@@ -14,6 +16,11 @@ const SECTIONS: { id: SettingsPage["section"]; label: string }[] = [
 export default async function SettingsHubPage() {
   const session = await guardTenantPage("workspace:read");
   const pages = visibleSettingsPages((permission) => can(session.role, permission));
+  // Once hidden, the history checklist comes back from here.
+  const onboarding = can(session.role, "accounts:write")
+    ? await getDataOnboardingRow(session.companyId)
+    : null;
+  const canReopen = onboarding?.status === "dismissed" || onboarding?.status === "completed";
 
   return (
     <div>
@@ -60,6 +67,20 @@ export default async function SettingsHubPage() {
             </section>
           );
         })}
+        {canReopen ? (
+          <section aria-labelledby="settings-history">
+            <h2 id="settings-history" className="mb-3 font-display text-lg font-semibold">
+              History setup
+            </h2>
+            <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-border bg-surface px-5 py-4">
+              <p className="min-w-0 flex-1 text-sm text-muted">
+                The checklist for loading past bank statements, invoices, expenses and
+                balances. Open it again on your dashboard.
+              </p>
+              <ReopenDataOnboardingButton />
+            </div>
+          </section>
+        ) : null}
       </div>
     </div>
   );

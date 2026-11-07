@@ -7,11 +7,17 @@ import { recordQueriesFor } from "@/lib/queries/queries";
 import { listShareholders } from "@/lib/shareholders/queries";
 import { TotalSharesForm } from "@/components/shareholders/total-shares-form";
 import { buttonClasses } from "@/components/ui/button";
+import { SetupStepBanner } from "@/components/data-onboarding/setup-step-banner";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 
-export default async function ShareholdersPage() {
+export default async function ShareholdersPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   const { companyId, entityType, role } = await guardTenantPage("records:read");
+  const sp = await searchParams;
   const canRaiseQuery = can(role, "queries:raise");
   if (entityType !== "limited_company") {
     redirect("/dashboard");
@@ -27,6 +33,7 @@ export default async function ShareholdersPage() {
 
   return (
     <div>
+      <SetupStepBanner stepId="shareholders" entityType={entityType} from={sp.from} />
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl font-semibold">Shareholders</h1>

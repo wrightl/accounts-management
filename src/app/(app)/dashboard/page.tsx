@@ -30,6 +30,9 @@ import { getMenuSuggestions, type MenuSuggestion } from "@/lib/menu/suggestions"
 import { DisplayDate } from "@/components/date-format-provider";
 import { getDateFormat } from "@/lib/date-format.server";
 import { todayIsoDate } from "@/lib/dates";
+import { DataOnboardingCard } from "@/components/data-onboarding/data-onboarding-card";
+import { getDataOnboarding, type DataOnboardingView } from "@/lib/data-onboarding/queries";
+import { stepsFor } from "@/lib/data-onboarding/steps";
 
 type MenuPrompt =
   | { kind: "questions" }
@@ -132,6 +135,30 @@ export default async function DashboardOverview({
     }
   }
 
+  // Shown even when the overview fails: new companies have the least to show.
+  const canWrite = can(user.role, "accounts:write");
+  let dataOnboarding: DataOnboardingView | null = null;
+  if (user.companyId && can(user.role, "accounts:read")) {
+    dataOnboarding = await getDataOnboarding(
+      user.companyId,
+      user.entityType,
+      await getDateFormat(),
+    ).catch((err) => {
+      void reportError({
+        source: "dashboard.data_onboarding",
+        error: err,
+        companyId: user.companyId,
+        actorUserId: user.localUserId,
+      });
+      return null;
+    });
+  }
+  const showDataOnboarding =
+    dataOnboarding !== null &&
+    (dataOnboarding.status === "active" ||
+      dataOnboarding.status === "paused" ||
+      (dataOnboarding.status === "not_started" && canWrite));
+
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -152,6 +179,17 @@ export default async function DashboardOverview({
         </div>
         {overview ? <PeriodChips current={overview.periodKey} /> : null}
       </div>
+
+      {showDataOnboarding && dataOnboarding ? (
+        <DataOnboardingCard
+          view={dataOnboarding}
+          canWrite={canWrite}
+          allowedSteps={stepsFor(user.entityType)
+            .filter((step) => can(user.role, step.permission))
+            .map((step) => step.id)}
+          today={todayIsoDate()}
+        />
+      ) : null}
 
       {!overview ? (
         <p className="mt-6 text-sm text-muted">
