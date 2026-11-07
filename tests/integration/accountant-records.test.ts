@@ -503,13 +503,15 @@ describe("pack scope", () => {
     const html = pageText(await InvoiceDetailPage(params(sent.id)));
     expect(html).toContain("S-1");
     expect(html).not.toContain(`/clients/${clientId}`);
-    expect(html).not.toContain("Client link");
+    expect(html).not.toContain("Copy Client Link");
+    expect(html).not.toContain("/i/");
     expect(html).not.toContain("Raise credit note");
 
     signInAs("admin");
     const adminHtml = pageText(await InvoiceDetailPage(params(sent.id)));
     expect(adminHtml).toContain(`/clients/${clientId}`);
-    expect(adminHtml).toContain("Client link");
+    expect(adminHtml).toContain("Copy Client Link");
+    expect(adminHtml).toContain("/i/");
   });
 });
 

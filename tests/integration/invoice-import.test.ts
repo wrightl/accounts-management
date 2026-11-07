@@ -27,7 +27,11 @@ import {
 } from "@/actions/invoice-import";
 import { sendEmail } from "@/lib/email";
 import { allocateInvoiceNumber } from "@/lib/invoices/allocate";
-import { getImportBatchReview } from "@/lib/invoices/import/queries";
+import {
+  getImportBatchReview,
+  getOpenImports,
+  listImportBatches,
+} from "@/lib/invoices/import/queries";
 import { enqueueOverdueReminders } from "@/lib/outbox";
 import { getProfitAndLoss, getVatSummary } from "@/lib/reports/queries";
 import { commitAll, importCsv, stageCsv } from "@/lib/test/import-invoices";
@@ -603,5 +607,55 @@ describe("discarding", () => {
     );
     await commitInvoiceImportChunk(batchId);
     expect((await discardInvoiceImport(batchId)).ok).toBe(false);
+  });
+});
+
+describe("listing imports", () => {
+  const csv = (prefix: string, count: number) =>
+    [
+      "number,client name,issue date,description,net",
+      ...Array.from({ length: count }, (_, i) => `${prefix}-${i},Acme,01/05/2026,W,10.00`),
+    ].join("\n");
+
+  it("lists every import with its counts, newest first, leaving out discarded ones", async () => {
+    const saved = await importCsv(csv("S", 2));
+    const undone = await importCsv(csv("U", 1));
+    expect((await undoInvoiceImport(undone)).ok).toBe(true);
+    const discarded = await stageCsv(csv("D", 1));
+    expect((await discardInvoiceImport(discarded)).ok).toBe(true);
+    const open = await stageCsv(csv("O", 3));
+
+    const batches = await listImportBatches(companyId);
+    expect(batches.map((b) => b.id)).toEqual([open, undone, saved]);
+    const [openRow, undoneRow, savedRow] = batches;
+    expect(openRow).toMatchObject({ status: "draft", counts: { ready: 3, committed: 0 } });
+    expect(openRow.expiresAt?.getTime()).toBe(openRow.createdAt.getTime() + 30 * 86_400_000);
+    expect(undoneRow.status).toBe("undone");
+    expect(savedRow).toMatchObject({ status: "committed", counts: { committed: 2 }, expiresAt: null });
+  });
+
+  it("doesn't give a purge date once part of an import is saved", async () => {
+    const batchId = await stageCsv(csv("P", 101));
+    await commitInvoiceImportChunk(batchId);
+    const [row] = await listImportBatches(companyId);
+    expect(row).toMatchObject({
+      status: "draft",
+      counts: { committed: 100, ready: 1 },
+      expiresAt: null,
+    });
+    expect((await getImportBatchReview(companyId, batchId))?.expiresAt).toBeNull();
+  });
+
+  it("finds only the imports not saved yet", async () => {
+    await importCsv(csv("S", 1));
+    const open = await stageCsv(csv("O", 1));
+    expect((await getOpenImports(companyId)).map((b) => b.id)).toEqual([open]);
+  });
+
+  it("doesn't list another company's imports", async () => {
+    await stageCsv(csv("O", 1));
+    const other = await seedCompany(db, { name: "Other" });
+    expect(await listImportBatches(other.id)).toEqual([]);
+    expect(await getOpenImports(other.id)).toEqual([]);
   });
 });

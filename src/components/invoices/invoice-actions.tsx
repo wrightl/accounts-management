@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label } from "@/components/ui/form";
 import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
@@ -37,6 +37,7 @@ export function InvoiceActions({
   clientName,
   companyName,
   isImported = false,
+  extraActions,
 }: {
   invoiceId: string;
   invoiceNumber: string;
@@ -47,6 +48,8 @@ export function InvoiceActions({
   companyName: string | null;
   /** Sending an imported invoice emails a client about something issued elsewhere. */
   isImported?: boolean;
+  /** More buttons for the same row, shown between Download PDF and the payment and send buttons. */
+  extraActions?: ReactNode;
 }) {
   const router = useRouter();
   const {
@@ -124,6 +127,17 @@ export function InvoiceActions({
             Download PDF
           </Button>
         </a>
+        {extraActions}
+        {(status === "sent" || status === "overdue") && (
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={pending}
+            onClick={togglePayment}
+          >
+            Record payment
+          </Button>
+        )}
         {(status === "draft" || status === "sent" || status === "overdue") && (
           <Button
             type="button"
@@ -146,16 +160,6 @@ export function InvoiceActions({
             }}
           >
             {pending ? "Sending…" : status === "draft" ? "Send invoice" : "Resend invoice"}
-          </Button>
-        )}
-        {(status === "sent" || status === "overdue") && (
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={pending}
-            onClick={togglePayment}
-          >
-            Record payment
           </Button>
         )}
       </div>

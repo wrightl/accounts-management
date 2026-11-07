@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   clients,
@@ -13,6 +13,7 @@ import { todayIsoDate } from "@/lib/dates";
 import { isBroughtForward } from "@/lib/invoices/cutover";
 import { suggestClient } from "@/lib/invoices/import/clients";
 import { readLocally } from "@/lib/invoices/import/pdf-local";
+import { importExpiresAt } from "@/lib/invoices/import/purge";
 import { formatInvoiceNumber } from "@/lib/invoices/numbering";
 
 /** Rows shown on the review page; the counts always cover the whole batch. */
@@ -111,6 +112,9 @@ export async function getImportBatchReview(companyId: string, batchId: string) {
   }
 
   const year = Number(todayIsoDate().slice(0, 4));
+  // The daily purge leaves an import alone once any of it is saved.
+  const expiresAt =
+    batch.status === "draft" && counts.committed === 0 ? importExpiresAt(batch.createdAt) : null;
   const prefix = company.invoiceNumberPrefix || "DD";
   return {
     batch,
@@ -133,9 +137,78 @@ export async function getImportBatchReview(companyId: string, batchId: string) {
     vatInAccounts,
     nextNumber: formatInvoiceNumber(prefix, year, series?.nextSeq ?? 1),
     nextSeq: series?.nextSeq ?? 1,
+    expiresAt,
   };
 }
 
 export type ImportBatchReview = NonNullable<
   Awaited<ReturnType<typeof getImportBatchReview>>
 >;
+
+type DraftCounts = { needs_review: number; ready: number; skipped: number; committed: number };
+
+/** The company's imports, newest first. Discarded ones have nothing left to show. */
+export async function listImportBatches(companyId: string, { openOnly = false } = {}) {
+  const db = getDb();
+  const batches = await db
+    .select({
+      id: invoiceImportBatches.id,
+      kind: invoiceImportBatches.kind,
+      status: invoiceImportBatches.status,
+      filename: invoiceImportBatches.filename,
+      createdAt: invoiceImportBatches.createdAt,
+      committedAt: invoiceImportBatches.committedAt,
+      undoneAt: invoiceImportBatches.undoneAt,
+    })
+    .from(invoiceImportBatches)
+    .where(
+      and(
+        eq(invoiceImportBatches.companyId, companyId),
+        openOnly
+          ? eq(invoiceImportBatches.status, "draft")
+          : ne(invoiceImportBatches.status, "discarded"),
+      ),
+    )
+    .orderBy(desc(invoiceImportBatches.createdAt));
+  if (batches.length === 0) return [];
+
+  const rows = await db
+    .select({
+      batchId: invoiceImportDrafts.batchId,
+      status: invoiceImportDrafts.status,
+      count: sql<number>`count(*)`.mapWith(Number),
+    })
+    .from(invoiceImportDrafts)
+    .where(
+      and(
+        eq(invoiceImportDrafts.companyId, companyId),
+        inArray(
+          invoiceImportDrafts.batchId,
+          batches.map((b) => b.id),
+        ),
+      ),
+    )
+    .groupBy(invoiceImportDrafts.batchId, invoiceImportDrafts.status);
+  const counts = new Map<string, DraftCounts>();
+  for (const row of rows) {
+    const c = counts.get(row.batchId) ?? { needs_review: 0, ready: 0, skipped: 0, committed: 0 };
+    c[row.status] = row.count;
+    counts.set(row.batchId, c);
+  }
+
+  return batches.map((b) => {
+    const c = counts.get(b.id) ?? { needs_review: 0, ready: 0, skipped: 0, committed: 0 };
+    return {
+      ...b,
+      counts: c,
+      expiresAt: b.status === "draft" && c.committed === 0 ? importExpiresAt(b.createdAt) : null,
+    };
+  });
+}
+
+export type ImportBatchSummary = Awaited<ReturnType<typeof listImportBatches>>[number];
+
+/** Imports started but not saved yet, for the invoice list banner. */
+export function getOpenImports(companyId: string) {
+  return listImportBatches(companyId, { openOnly: true });
+}

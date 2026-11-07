@@ -5,6 +5,7 @@ import { getDb } from "@/db";
 import {
   clients,
   creditNotes,
+  invoiceImportBatches,
   invoiceLineItems,
   invoices,
   orders,
@@ -99,9 +100,17 @@ export async function getInvoiceDetail(
     .select({
       invoice: invoices,
       client: clients,
+      importFilename: invoiceImportBatches.filename,
     })
     .from(invoices)
     .innerJoin(clients, eq(invoices.clientId, clients.id))
+    .leftJoin(
+      invoiceImportBatches,
+      and(
+        eq(invoices.importBatchId, invoiceImportBatches.id),
+        eq(invoiceImportBatches.companyId, companyId),
+      ),
+    )
     .where(
       and(
         eq(invoices.id, id),
@@ -161,6 +170,8 @@ export async function getInvoiceDetail(
       status,
       grossFormatted: formatGBP(inv.grossPence),
       netFormatted: formatGBP(inv.netPence),
+      vatFormatted: formatGBP(inv.vatPence),
+      importFilename: rows[0].importFilename,
     },
     client: rows[0].client,
     lines,

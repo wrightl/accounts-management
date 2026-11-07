@@ -2,9 +2,18 @@
 
 import { useState } from "react";
 import { buttonClasses } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 /** Copies `value` to the clipboard and briefly confirms. */
-export function CopyButton({ value }: { value: string }) {
+export function CopyButton({
+  value,
+  label = "Copy",
+  className,
+}: {
+  value: string;
+  label?: string;
+  className?: string;
+}) {
   const [copied, setCopied] = useState(false);
 
   async function onCopy() {
@@ -21,9 +30,10 @@ export function CopyButton({ value }: { value: string }) {
     <button
       type="button"
       onClick={onCopy}
-      className={buttonClasses("secondary", "text-xs shrink-0")}
+      aria-label={label}
+      className={cn(buttonClasses("secondary", "text-xs shrink-0"), className)}
     >
-      {copied ? "Copied" : "Copy"}
+      {copied ? "Copied" : label}
     </button>
   );
 }

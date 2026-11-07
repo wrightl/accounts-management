@@ -4,6 +4,8 @@ import { can } from "@/lib/roles";
 import { QueryCell, QueryHeaderCell } from "@/components/queries/query-cells";
 import { recordQueriesFor } from "@/lib/queries/queries";
 import { UnchasedImportsBanner } from "@/components/invoices/imported-invoice-chase";
+import { OpenImportsBanner } from "@/components/invoices/open-imports-banner";
+import { getOpenImports } from "@/lib/invoices/import/queries";
 import { recordScopeFor } from "@/lib/accountant/record-scope";
 import { getUnchasedImports, listInvoices } from "@/lib/invoices/queries";
 import { buttonClasses } from "@/components/ui/button";
@@ -35,7 +37,11 @@ export default async function InvoicesPage({
   const canWrite = await hasPermission("accounts:write");
   const canRaiseQuery = can(role, "queries:raise");
   const sp = await searchParams;
-  const unchased = scope === "all" ? await getUnchasedImports(companyId) : null;
+  const showImports = scope === "all";
+  const [unchased, openImports] = await Promise.all([
+    showImports ? getUnchasedImports(companyId) : null,
+    showImports && canWrite ? getOpenImports(companyId) : [],
+  ]);
   const sort = parseTableSort(sp, SORT);
   const th = sortHeaders("/invoices", sp, SORT, sort);
 
@@ -64,7 +70,7 @@ export default async function InvoicesPage({
             {canWrite ? (
               <>
                 <Link href="/invoices/import" className={buttonClasses("ghost")}>
-                  Import invoices
+                  Imports
                 </Link>
                 <Link href="/invoices/new" className={buttonClasses("primary")}>
                   New invoice
@@ -74,6 +80,8 @@ export default async function InvoicesPage({
           </>
         }
       />
+
+      <OpenImportsBanner imports={openImports} />
 
       {unchased && unchased.count > 0 ? (
         <UnchasedImportsBanner

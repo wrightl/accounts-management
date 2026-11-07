@@ -8,7 +8,12 @@ import {
 } from "@/db/schema";
 import { getStorage } from "@/lib/storage";
 
-const ABANDONED_AFTER_DAYS = 30;
+export const ABANDONED_AFTER_DAYS = 30;
+
+/** When an unsaved import started at `createdAt` is purged. */
+export function importExpiresAt(createdAt: Date): Date {
+  return new Date(createdAt.getTime() + ABANDONED_AFTER_DAYS * 86_400_000);
+}
 
 /** Remove imports abandoned before saving, including their files. */
 export async function purgeAbandonedImports(): Promise<number> {

@@ -29,7 +29,7 @@ export default async function InvoiceImportBatchPage({
     <div className="max-w-4xl">
       <SetupStepBanner stepId="invoices" entityType={entityType} from={sp.from} />
       <div className="mb-6">
-        <BackLink href="/invoices">Back to invoices</BackLink>
+        <BackLink href="/invoices/import">Back to imports</BackLink>
       </div>
       <h1 className="font-display text-2xl font-semibold">Review import</h1>
       <p className="mt-1 text-muted">{review.batch.filename}</p>

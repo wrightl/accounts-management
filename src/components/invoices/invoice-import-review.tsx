@@ -117,6 +117,25 @@ export function InvoiceImportReview({
   }
 
   const hasCommitted = counts.committed > 0;
+  const toCheck = counts.needs_review;
+
+  /** The one thing to do before this import can be saved. */
+  const nextStep = !cutover ? null : toCheck > 0 ? (
+    <>
+      <a className="underline" href="#import-invoices">
+        {batch.kind === "pdf"
+          ? `Check and approve ${toCheck} ${toCheck === 1 ? "invoice" : "invoices"} below`
+          : `Fix or leave out ${toCheck} ${toCheck === 1 ? "invoice" : "invoices"} with problems below`}
+      </a>
+      , then save.
+    </>
+  ) : hasCommitted && counts.ready > 0 ? (
+    `${counts.committed} invoices are saved and ${counts.ready} still to save. Save the rest to finish.`
+  ) : counts.ready > 0 ? (
+    `Click Save invoices to add ${counts.ready} ${counts.ready === 1 ? "invoice" : "invoices"}.`
+  ) : (
+    "Nothing is ready to save. Approve or fix an invoice below, or discard this import."
+  );
 
   /** The client an invoice will be saved against, as chosen in the Clients section. */
   function clientLabelFor(key: string, fallback: string): string {
@@ -138,14 +157,25 @@ export function InvoiceImportReview({
               ? "Import undone"
               : batch.status === "discarded"
                 ? "Import discarded"
-                : "What will happen"}
+                : "Not saved yet"}
         </h2>
+        {isOpen ? (
+          <p className="mt-1 text-muted">
+            Nothing is in your invoices until you click Save invoices.
+          </p>
+        ) : null}
         <ul className="mt-2 space-y-1">
           <li>{counts.ready + counts.committed} invoices {isOpen ? "ready" : "imported"}</li>
           {counts.needs_review > 0 ? <li>{counts.needs_review} {batch.kind === "pdf" ? "to check and approve" : "with problems to sort out"}</li> : null}
           {counts.skipped > 0 ? <li>{counts.skipped} left out</li> : null}
           {batch.skippedRows.length > 0 ? <li>{batch.skippedRows.length} skipped from the file (listed below)</li> : null}
         </ul>
+        {isOpen && nextStep ? (
+          <p className="mt-3 rounded-xl bg-wash px-4 py-3">
+            <span className="font-medium">Next step: </span>
+            {nextStep}
+          </p>
+        ) : null}
         {cutover ? (
           <p className="mt-3">
             Accounts start from <DisplayDate value={cutover} />. {review.broughtForward} invoices
@@ -154,7 +184,8 @@ export function InvoiceImportReview({
             their periods.
           </p>
         ) : (
-          <p className="mt-3">
+          <p className={isOpen ? "mt-3 rounded-xl bg-wash px-4 py-3" : "mt-3"}>
+            {isOpen ? <span className="font-medium">Next step: </span> : null}
             Set a cutover date first, so invoices from before it stay out of P&amp;L and VAT.{" "}
             {canSetCutover ? (
               <Link className="underline" href="/reports">
@@ -168,11 +199,21 @@ export function InvoiceImportReview({
         <p className="mt-3 text-muted">
           Clients aren&apos;t contacted. Unpaid imports aren&apos;t chased until you turn it on.
         </p>
+        {review.expiresAt ? (
+          <p className="mt-1 text-muted">
+            Unsaved imports are deleted after 30 days, so save this one by{" "}
+            <DisplayDate value={review.expiresAt} />.
+          </p>
+        ) : null}
 
         <div className="mt-4 flex flex-wrap gap-2">
           {isOpen ? (
             <Button type="button" disabled={pending || !cutover || hasProblems} onClick={commit}>
-              {pending && progress ? progress : "Save invoices"}
+              {pending && progress
+                ? progress
+                : hasCommitted
+                  ? `Save remaining ${counts.ready} invoices`
+                  : "Save invoices"}
             </Button>
           ) : null}
           {isOpen && !hasCommitted ? (
@@ -297,7 +338,7 @@ export function InvoiceImportReview({
         </section>
       ) : null}
 
-      <section>
+      <section id="import-invoices" className="scroll-mt-20">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-display text-lg font-semibold">Invoices</h2>
           {isOpen && batch.kind === "pdf" && review.approvable > 0 ? (

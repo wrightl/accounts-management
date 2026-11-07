@@ -242,7 +242,7 @@ export function HelpGuide({
               <>
                 Set your <strong>cutover date</strong> on{" "}
                 <HelpLink href="/reports">Reports</HelpLink>, then import invoices
-                on <HelpLink href="/invoices/import">Import invoices</HelpLink>,
+                with <HelpLink href="/invoices/import">Imports</HelpLink> on the Invoices page,
                 from a CSV or by uploading the invoice PDFs for AI to read. Each
                 PDF is kept with its invoice. You can bring in all your history.
                 Invoices dated before cutover
