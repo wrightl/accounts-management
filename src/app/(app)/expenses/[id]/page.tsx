@@ -19,7 +19,7 @@ import { isExpenseLinkable } from "@/lib/bank/expense-link";
 import { periodLockError } from "@/lib/period-lock";
 import { ExpenseForm } from "@/components/expenses/expense-form";
 import { ReceiptPanel } from "@/components/expenses/receipt-panel";
-import { buttonClasses } from "@/components/ui/button";
+import { BackLink } from "@/components/ui/back-link";
 import { EXPENSE_LIST_COOKIE, expenseListReturnHref } from "@/lib/expenses/list-params";
 import {
   ExpenseAmountCard,
@@ -93,13 +93,11 @@ export default async function ExpenseDetailPage({
   return (
     <div>
       <div className="mb-6">
-        <Link href={listHref} className={buttonClasses("ghost")}>
-          ← Expenses
-        </Link>
+        <BackLink href={listHref}>Expenses</BackLink>
       </div>
 
       {detail.expense.status === "pending" && (
-        <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+        <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           Submitted by email — review the details and attachments, then approve or reject.
           {detail.submitter ? (
             <span className="mt-1 block">
@@ -122,7 +120,7 @@ export default async function ExpenseDetailPage({
         <div
           className={
             paymentSource.conflict
-              ? "mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
+              ? "mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
               : "mb-6 rounded-lg border border-border bg-wash/50 px-4 py-3 text-sm"
           }
         >
@@ -151,7 +149,7 @@ export default async function ExpenseDetailPage({
       ) : null}
 
       {originalAmount && detail.expense.status === "pending" ? (
-        <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+        <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {needsAmountCheck(detail.expense)
             ? `The receipt is in ${originalAmount.currency}, and this expense was saved with one amount for both the receipt and GBP. Check both amounts before approving. If the receipt is actually in sterling, set the currency to GBP.`
             : `The receipt is in ${originalAmount.currency}. The GBP amount is converted at the Bank of England rate; change it to what your bank charged if you know it. If the receipt is actually in sterling, set the currency to GBP.`}
@@ -159,7 +157,7 @@ export default async function ExpenseDetailPage({
       ) : null}
 
       {receiptUploadFailed && (
-        <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+        <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           Expense saved, but receipt upload failed: {decodeURIComponent(receiptUploadFailed)}.
           Upload the receipt below.
         </div>
@@ -194,7 +192,7 @@ export default async function ExpenseDetailPage({
       )}
 
       {bankLinkFailed && (
-        <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+        <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           Expense saved, but it couldn&apos;t be linked to the bank transaction: {bankLinkFailed}
         </div>
       )}

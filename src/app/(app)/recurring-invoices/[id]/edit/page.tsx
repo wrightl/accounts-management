@@ -1,10 +1,9 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { guardTenantPage } from "@/lib/auth";
 import { listClients } from "@/lib/clients/queries";
 import { getRecurringInvoiceDetail } from "@/lib/invoices/recurring-queries";
 import { RecurringInvoiceForm } from "@/components/recurring-invoices/recurring-form";
-import { buttonClasses } from "@/components/ui/button";
+import { BackLink } from "@/components/ui/back-link";
 import { penceToPounds } from "@/lib/money";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { defaultLineVatRate } from "@/lib/vat";
@@ -29,12 +28,7 @@ export default async function EditRecurringInvoicePage({
   return (
     <div>
       <div className="mb-6">
-        <Link
-          href={`/recurring-invoices/${id}`}
-          className={buttonClasses("ghost")}
-        >
-          ← {template.name}
-        </Link>
+        <BackLink href={`/recurring-invoices/${id}`}>{template.name}</BackLink>
       </div>
       <h1 className="mb-6 font-display text-2xl font-semibold">Edit schedule</h1>
       <RecurringInvoiceForm

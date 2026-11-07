@@ -66,8 +66,8 @@ export function InvoicePdfImport() {
     <section className="mt-10 border-t border-border pt-6">
       <h2 className="font-display text-lg font-semibold">Or upload invoice PDFs</h2>
       <p className="mt-1 text-sm text-muted">
-        Good for a smaller number of invoices. AI reads each one, and you check it against the PDF
-        before anything is saved. Each file can be up to 4.5 MB and hold one invoice.
+        Good for a smaller number of invoices. Alfa reads each one, and you check it against the
+        PDF before anything is saved. Each file can be up to 4.5 MB and hold one invoice.
       </p>
       <div className="mt-3">
         <Label htmlFor="invoice-pdfs">PDF files</Label>

@@ -1,6 +1,12 @@
 @import "tailwindcss";
 
 /*
+ * There's no dark theme yet. Without this, Tailwind applies `dark:` classes
+ * from the OS setting, drawing dark-mode colours on the light page.
+ */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/*
  * Dot + Dash Consulting brand tokens, sampled from
  * https://www.dotanddashconsulting.com (Squarespace 7.1 theme):
  *
@@ -69,6 +75,50 @@ h2,
 h3,
 .font-display {
   font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
+}
+
+/* File inputs: a dashed drop area with a real button, so they read as clickable. */
+@layer base {
+  input[type="file"] {
+    display: block;
+    width: 100%;
+    max-width: 32rem;
+    margin-top: 0.25rem;
+    padding: 0.75rem;
+    border: 1.5px dashed rgb(23 29 58 / 0.3);
+    border-radius: 0.75rem;
+    background: var(--surface);
+    color: var(--muted);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+  }
+
+  input[type="file"]:hover:not(:disabled) {
+    border-color: var(--navy);
+    background: var(--wash);
+  }
+
+  input[type="file"]:focus-visible {
+    outline: 2px solid var(--navy);
+    outline-offset: 2px;
+  }
+
+  input[type="file"]:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  input[type="file"]::file-selector-button {
+    margin-right: 0.75rem;
+    padding: 0.4rem 1rem;
+    border: 0;
+    border-radius: 999px;
+    background: var(--navy);
+    color: var(--white);
+    font: inherit;
+    cursor: pointer;
+  }
 }
 
 ::selection {

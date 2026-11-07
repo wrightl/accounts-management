@@ -16,6 +16,7 @@ import { BankSettlements } from "@/components/bank/bank-settlements";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { buttonClasses } from "@/components/ui/button";
+import { BackLink } from "@/components/ui/back-link";
 import { InvoiceChaseToggle } from "@/components/invoices/imported-invoice-chase";
 import { InvoiceActions } from "@/components/invoices/invoice-actions";
 import { InvoiceOriginalDocument } from "@/components/invoices/invoice-original-document";
@@ -94,9 +95,7 @@ export default async function InvoiceDetailPage({
   return (
     <div>
       <div className="mb-6">
-        <Link href="/invoices" className={buttonClasses("ghost")}>
-          ← Invoices
-        </Link>
+        <BackLink href="/invoices">Invoices</BackLink>
       </div>
 
       <div className="flex flex-wrap items-start justify-between gap-4">

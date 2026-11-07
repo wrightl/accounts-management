@@ -6,6 +6,7 @@ import {
 } from '@/lib/billing/entitlements';
 import { ensureCompanyBilling } from '@/lib/billing/company-billing';
 import { getMenuFeatures } from '@/lib/menu/queries';
+import { aiGatewayConfigured } from '@/lib/ai/models';
 import { visibleMenuFeatures } from '@/lib/mobile/menu';
 import { permissionsFor } from '@/lib/roles';
 import { ensureLocalUser } from '@/lib/users';
@@ -77,6 +78,7 @@ export async function POST() {
                     user.role,
                     user.entityType,
                     enabledFeatures,
+                    aiGatewayConfigured(),
                 ),
                 billing,
             },

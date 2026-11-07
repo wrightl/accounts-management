@@ -1,5 +1,5 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
+import { BackLink } from "@/components/ui/back-link";
 
 /** Width for form-style settings pages. Table pages use the full width. */
 export const SETTINGS_FORM_WIDTH = "max-w-2xl";
@@ -24,12 +24,8 @@ export function SettingsPageHeader({
 }) {
   return (
     <div className="mb-8">
-      <p className="text-sm text-muted">
-        <Link href={backHref} className="hover:underline">
-          ← {backLabel}
-        </Link>
-      </p>
-      <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
+      <BackLink href={backHref}>{backLabel}</BackLink>
+      <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <h1 className="font-display text-2xl font-semibold">{title}</h1>
           {description ? <p className="mt-1 text-muted">{description}</p> : null}

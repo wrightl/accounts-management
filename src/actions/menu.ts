@@ -19,6 +19,8 @@ import {
   setMenuFeatures,
 } from "@/lib/menu/queries";
 import type { ActionResult } from "@/actions/result";
+import { NAV_GROUPS, aiOnlyFeatures } from "@/components/dashboard/nav";
+import { aiGatewayConfigured } from "@/lib/ai/models";
 
 /**
  * Menu choices are personal, like display settings: any member with a role can
@@ -64,7 +66,16 @@ async function saveFeatures(
 export async function updateMenuFeatures(formData: FormData): Promise<ActionResult> {
   const ctx = await menuContext();
   if (!ctx.ok) return ctx;
-  return saveFeatures(ctx, featuresFromFormData(formData), "user.menu.update");
+  const requested = featuresFromFormData(formData);
+  if (!aiGatewayConfigured()) {
+    // AI pages aren't on the form while AI is off: keep whether the person
+    // shows them, for when it's back. Null means they showed everything.
+    const { enabled } = await getMenuState(ctx.localUserId, ctx.companyId);
+    requested.push(
+      ...aiOnlyFeatures(NAV_GROUPS).filter((f) => enabled === null || enabled.includes(f)),
+    );
+  }
+  return saveFeatures(ctx, requested, "user.menu.update");
 }
 
 /**

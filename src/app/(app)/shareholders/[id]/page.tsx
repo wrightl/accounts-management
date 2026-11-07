@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { recordScopeFor } from "@/lib/accountant/record-scope";
@@ -6,7 +5,7 @@ import { RecordQueries } from "@/components/queries/record-queries";
 import { getShareholder } from "@/lib/shareholders/queries";
 import { listFounders } from "@/lib/expenses/queries";
 import { ShareholderForm } from "@/components/shareholders/shareholder-form";
-import { buttonClasses } from "@/components/ui/button";
+import { BackLink } from "@/components/ui/back-link";
 
 export default async function ShareholderDetailPage({
   params,
@@ -27,9 +26,7 @@ export default async function ShareholderDetailPage({
   return (
     <div>
       <div className="mb-6">
-        <Link href="/shareholders" className={buttonClasses("ghost")}>
-          ← Shareholders
-        </Link>
+        <BackLink href="/shareholders">Shareholders</BackLink>
       </div>
       <h1 className="mb-2 font-display text-2xl font-semibold">
         {shareholder.name}

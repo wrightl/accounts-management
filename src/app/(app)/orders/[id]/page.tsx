@@ -6,7 +6,7 @@ import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { OrderActions } from "@/components/orders/order-actions";
 import { InvoiceDueDate } from "@/components/invoices/invoice-due-date";
 import { StatusBadge } from "@/components/ui/badge";
-import { buttonClasses } from "@/components/ui/button";
+import { BackLink } from "@/components/ui/back-link";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import {
@@ -46,9 +46,7 @@ export default async function OrderDetailPage({
   return (
     <div>
       <div className="mb-6">
-        <Link href="/orders" className={buttonClasses("ghost")}>
-          ← Orders
-        </Link>
+        <BackLink href="/orders">Orders</BackLink>
       </div>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 flex-1">

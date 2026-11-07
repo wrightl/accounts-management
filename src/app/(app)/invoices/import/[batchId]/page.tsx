@@ -1,7 +1,6 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { InvoiceImportReview } from "@/components/invoices/invoice-import-review";
-import { buttonClasses } from "@/components/ui/button";
+import { BackLink } from "@/components/ui/back-link";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { SetupStepBanner } from "@/components/data-onboarding/setup-step-banner";
 import { getImportBatchReview } from "@/lib/invoices/import/queries";
@@ -30,9 +29,7 @@ export default async function InvoiceImportBatchPage({
     <div className="max-w-4xl">
       <SetupStepBanner stepId="invoices" entityType={entityType} from={sp.from} />
       <div className="mb-6">
-        <Link href="/invoices" className={buttonClasses("ghost")}>
-          Back to invoices
-        </Link>
+        <BackLink href="/invoices">Back to invoices</BackLink>
       </div>
       <h1 className="font-display text-2xl font-semibold">Review import</h1>
       <p className="mt-1 text-muted">{review.batch.filename}</p>

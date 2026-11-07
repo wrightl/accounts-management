@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import { ArrowLeft } from "lucide-react";
 import { completeOnboarding } from "@/actions/onboarding";
 import { lookupCompaniesHouse } from "@/actions/companies-house";
 import { Button } from "@/components/ui/button";
@@ -240,7 +241,7 @@ export function OnboardingForm({
       <div>
         <button
           type="button"
-          className="text-sm text-muted underline-offset-2 hover:underline"
+          className="inline-flex items-center gap-1 text-sm text-muted underline-offset-2 hover:underline"
           onClick={() => {
             setEntityType(null);
             setLogoFile(null);
@@ -249,7 +250,8 @@ export function OnboardingForm({
           }}
           disabled={pending}
         >
-          ← Change business type
+          <ArrowLeft className="size-4 shrink-0" aria-hidden />
+          Change business type
         </button>
         <p className="mt-2 text-sm text-muted">
           Plan:{" "}

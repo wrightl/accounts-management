@@ -1,10 +1,9 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { guardTenantPage } from "@/lib/auth";
 import { getReimbursementEditData } from "@/lib/reimbursements/queries";
 import { canEditReimbursement } from "@/lib/reimbursements/status";
 import { EditReimbursementForm } from "@/components/reimbursements/edit-form";
-import { buttonClasses } from "@/components/ui/button";
+import { BackLink } from "@/components/ui/back-link";
 
 export default async function EditReimbursementPage({
   params,
@@ -21,9 +20,7 @@ export default async function EditReimbursementPage({
   return (
     <div>
       <div className="mb-6 flex items-center gap-3">
-        <Link href={`/reimbursements/${id}`} className={buttonClasses("ghost")}>
-          ← {data.payeeLabel}
-        </Link>
+        <BackLink href={`/reimbursements/${id}`}>{data.payeeLabel}</BackLink>
       </div>
       <h1 className="mb-6 font-display text-2xl font-semibold">
         Edit reimbursement run

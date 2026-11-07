@@ -2,7 +2,7 @@ import Link from "next/link";
 import { guardTenantPage } from "@/lib/auth";
 import { listClients } from "@/lib/clients/queries";
 import { QuoteForm } from "@/components/quotes/quote-form";
-import { buttonClasses } from "@/components/ui/button";
+import { BackLink } from "@/components/ui/back-link";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { defaultLineVatRate } from "@/lib/vat";
 import { onlinePaymentsStatus } from "@/lib/payments/online-status";
@@ -18,9 +18,7 @@ export default async function NewQuotePage() {
   return (
     <div>
       <div className="mb-6 flex items-center gap-3">
-        <Link href="/quotes" className={buttonClasses("ghost")}>
-          ← Quotes
-        </Link>
+        <BackLink href="/quotes">Quotes</BackLink>
       </div>
       <h1 className="mb-6 font-display text-2xl font-semibold">New quote</h1>
       {clients.length === 0 ? (

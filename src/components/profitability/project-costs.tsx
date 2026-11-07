@@ -33,7 +33,7 @@ export function MarginCards({
       </Card>
       <Card>
         <CardTitle>Margin</CardTitle>
-        <CardValue className={margin.marginPence < 0 ? "text-red-700 dark:text-red-400" : undefined}>
+        <CardValue className={margin.marginPence < 0 ? "text-red-700" : undefined}>
           {formatGBP(margin.marginPence)}
         </CardValue>
         <p className="mt-2 text-xs text-muted">{marginLabel(margin)} of revenue</p>

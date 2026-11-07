@@ -51,6 +51,8 @@ export interface NavItem {
     permission: Permission;
     /** Optional item the person can hide from their menu. Omitted = core. */
     feature?: MenuFeature;
+    /** Only shown when the deployment can call the AI Gateway. */
+    requiresAi?: true;
     /** Other paths that highlight this item (e.g. pages under the Settings hub). */
     activePrefixes?: string[];
     /** Phase the section is planned for (shown as a badge in stubs). */
@@ -229,6 +231,7 @@ export const NAV_GROUPS: NavGroup[] = [
                 icon: 'bookkeeper',
                 permission: 'accounts:read',
                 feature: 'bookkeeper',
+                requiresAi: true,
             },
         ],
     },
@@ -411,6 +414,8 @@ export function flattenNavItems(groups: NavGroup[]): NavItem[] {
 export interface NavFilter {
     permissionCheck: (permission: Permission) => boolean;
     entityType?: string | null;
+    /** Whether AI is set up on this deployment (`aiGatewayConfigured()`). */
+    aiAvailable: boolean;
     /** Optional items this person shows. Null or omitted shows every item. */
     enabledFeatures?: readonly MenuFeature[] | null;
 }
@@ -418,6 +423,7 @@ export interface NavFilter {
 /** Whether the item exists for this role and entity type, shown or not. */
 function isAvailable(item: NavItem, filter: NavFilter): boolean {
     if (!filter.permissionCheck(item.permission)) return false;
+    if (item.requiresAi && !filter.aiAvailable) return false;
     if (item.feature && !featureAppliesTo(item.feature, filter.entityType)) {
         return false;
     }
@@ -462,6 +468,13 @@ export function hiddenNavGroups(groups: NavGroup[], filter: NavFilter): NavGroup
             isAvailable(item, filter) &&
             item.feature !== undefined &&
             !isFeatureEnabled(item.feature, filter.enabledFeatures),
+    );
+}
+
+/** Optional items that disappear when AI isn't set up on the deployment. */
+export function aiOnlyFeatures(groups: NavGroup[]): MenuFeature[] {
+    return flattenNavItems(groups).flatMap((item) =>
+        item.requiresAi && item.feature ? [item.feature] : [],
     );
 }
 

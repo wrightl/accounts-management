@@ -26,20 +26,24 @@ import {
 import {
   draftFromExtraction,
   extractInvoiceFromPdf,
+  type InvoiceExtraction,
 } from "@/lib/invoices/import/pdf-extract";
+import { LOCAL_READ_WARNING, readInvoicePdfLocally } from "@/lib/invoices/import/pdf-local";
 import { pdfImportMonthlyLimit } from "@/lib/invoices/import/limits";
 import { mutate, mutateWide } from "@/lib/mutate";
 import { getStorage } from "@/lib/storage";
 
-const EXTRACT_TIMEOUT_MS = 45_000;
+// Leaves room in the page's 60s for a local read if the model times out.
+const EXTRACT_TIMEOUT_MS = 30_000;
+/** The page's maxDuration (60s), less time to save the draft afterwards. */
+const READ_BUDGET_MS = 55_000;
+/** Below this, a local read isn't worth starting. */
+const MIN_LOCAL_READ_MS = 3_000;
 
 export type PdfBatchResult = { ok: true; id: string } | { ok: false; error: string };
 
 /** Start a batch for uploading invoice PDFs one at a time. */
 export async function createPdfImportBatch(): Promise<PdfBatchResult> {
-  if (!aiGatewayConfigured()) {
-    return { ok: false, error: "Reading PDFs isn't set up on this deployment" };
-  }
   return mutateWide<PdfBatchResult>("accounts:write", async ({ companyId, localUserId }) => {
     const [batch] = await getDb()
       .insert(invoiceImportBatches)
@@ -58,9 +62,12 @@ export async function createPdfImportBatch(): Promise<PdfBatchResult> {
  * Count one read against this month's allowance, or return false if it's used
  * up. A single statement, so parallel uploads can't both take the last one.
  */
-async function reservePdfRead(companyId: string, limit: number | null): Promise<boolean> {
+async function reservePdfRead(
+  companyId: string,
+  month: string,
+  limit: number | null,
+): Promise<boolean> {
   const db = getDb();
-  const month = todayIsoDate().slice(0, 7);
   if (limit != null && limit <= 0) return false;
   const reserved = await db
     .insert(invoicePdfReads)
@@ -72,6 +79,20 @@ async function reservePdfRead(companyId: string, limit: number | null): Promise<
     })
     .returning({ reads: invoicePdfReads.reads });
   return reserved.length > 0;
+}
+
+/** Give back a reserved read when the model didn't return one. */
+async function releasePdfRead(companyId: string, month: string) {
+  await getDb()
+    .update(invoicePdfReads)
+    .set({ reads: sql`${invoicePdfReads.reads} - 1` })
+    .where(
+      and(
+        eq(invoicePdfReads.companyId, companyId),
+        eq(invoicePdfReads.month, month),
+        sql`${invoicePdfReads.reads} > 0`,
+      ),
+    );
 }
 
 /** Problems that only the database can see, on top of the invoice's own checks. */
@@ -126,6 +147,69 @@ async function ensureClientResolution(
     );
 }
 
+function logReadFailure(reader: "ai" | "local", err: unknown) {
+  console.warn(
+    JSON.stringify({
+      level: "warn",
+      msg: "invoice_pdf_extract_failed",
+      reader,
+      error: err instanceof Error ? err.message : String(err),
+    }),
+  );
+}
+
+type PdfRead = {
+  extraction: InvoiceExtraction;
+  reader: "ai" | "local";
+  /** The monthly AI allowance, when it being used up is why AI wasn't used. */
+  overLimit?: number;
+};
+
+/**
+ * Read with the model when it's available and this month's allowance has
+ * room, otherwise (or if it fails) locally with pdf.js and Tesseract, in
+ * whatever time is left of the request. Null when neither could read it.
+ */
+async function readInvoicePdf(
+  companyId: string,
+  bytes: Buffer,
+  startedAt: number,
+): Promise<PdfRead | null> {
+  let overLimit: number | undefined;
+  if (aiGatewayConfigured()) {
+    const limit = pdfImportMonthlyLimit(await getEntitlements(companyId));
+    const month = todayIsoDate().slice(0, 7);
+    if (await reservePdfRead(companyId, month, limit)) {
+      try {
+        const extraction = await extractInvoiceFromPdf(
+          bytes,
+          AbortSignal.timeout(EXTRACT_TIMEOUT_MS),
+        );
+        return { extraction, reader: "ai" };
+      } catch (err) {
+        logReadFailure("ai", err);
+        // A failed read isn't one the company got, so it doesn't count.
+        await releasePdfRead(companyId, month);
+      }
+    } else if (limit != null) {
+      overLimit = limit;
+    }
+  }
+  const remaining = READ_BUDGET_MS - (Date.now() - startedAt);
+  if (remaining < MIN_LOCAL_READ_MS) {
+    logReadFailure("local", new Error(`Only ${remaining}ms left for a local read`));
+    return null;
+  }
+  try {
+    const extraction = await readInvoicePdfLocally(bytes, remaining);
+    console.info(JSON.stringify({ level: "info", msg: "invoice_pdf_extract", reader: "local" }));
+    return { extraction, reader: "local", overLimit };
+  } catch (err) {
+    logReadFailure("local", err);
+    return null;
+  }
+}
+
 export type UploadResult =
   | { ok: true; id: string }
   | { ok: false; error: string };
@@ -138,15 +222,13 @@ export async function uploadInvoicePdf(
   batchId: string,
   formData: FormData,
 ): Promise<UploadResult> {
+  const startedAt = Date.now();
   const file = formData.get("document");
   if (!(file instanceof File) || file.size === 0) return { ok: false, error: "Choose a PDF file" };
   if (file.size > MAX_RECEIPT_BYTES) return { ok: false, error: `${file.name} is over 4.5 MB` };
   const bytes = Buffer.from(await file.arrayBuffer());
   if (sniffReceiptContentType(bytes) !== "application/pdf") {
     return { ok: false, error: `${file.name} isn't a PDF` };
-  }
-  if (!aiGatewayConfigured()) {
-    return { ok: false, error: "Reading PDFs isn't set up on this deployment" };
   }
 
   return mutateWide<UploadResult>(
@@ -199,14 +281,6 @@ export async function uploadInvoicePdf(
         };
       }
 
-      const limit = pdfImportMonthlyLimit(await getEntitlements(companyId));
-      if (!(await reservePdfRead(companyId, limit))) {
-        return {
-          ok: false,
-          error: `You've reached this month's limit of ${limit} PDFs. Import the rest by CSV, or try again next month.`,
-        };
-      }
-
       const stored = await getStorage().put(
         `invoice-imports/${companyId}/${batchId}/${randomUUID()}.pdf`,
         bytes,
@@ -236,23 +310,19 @@ export async function uploadInvoicePdf(
       let invoice = blank;
       const errors: string[] = [];
       const warnings: string[] = [];
-      try {
-        const extraction = await extractInvoiceFromPdf(
-          bytes,
-          AbortSignal.timeout(EXTRACT_TIMEOUT_MS),
-        );
-        const draft = draftFromExtraction(extraction, company);
+      const read = await readInvoicePdf(companyId, bytes, startedAt);
+      if (read) {
+        const draft = draftFromExtraction(read.extraction, company);
         invoice = draft.invoice;
         errors.push(...draft.errors);
         warnings.push(...draft.warnings);
-      } catch (err) {
-        console.warn(
-          JSON.stringify({
-            level: "warn",
-            msg: "invoice_pdf_extract_failed",
-            error: err instanceof Error ? err.message : String(err),
-          }),
-        );
+        if (read.reader === "local") {
+          warnings.push(LOCAL_READ_WARNING);
+          if (read.overLimit) {
+            warnings.push(`This month's ${read.overLimit} AI reads are used up.`);
+          }
+        }
+      } else {
         errors.push("Alfa couldn't read this file. Fill in the details from the PDF.");
       }
       errors.push(...validateParsedInvoice(invoice));
@@ -435,6 +505,12 @@ export async function approveImportDrafts(
             eq(invoiceImportDrafts.companyId, companyId),
             eq(invoiceImportDrafts.status, "needs_review"),
             sql`jsonb_array_length(${invoiceImportDrafts.errors}) = 0`,
+            // Drafts read without AI are only approved one at a time.
+            "draftId" in selection
+              ? undefined
+              : sql`not (${invoiceImportDrafts.warnings} @> ${JSON.stringify([
+                  LOCAL_READ_WARNING,
+                ])}::jsonb)`,
             "draftId" in selection ? eq(invoiceImportDrafts.id, selection.draftId) : undefined,
           ),
         );

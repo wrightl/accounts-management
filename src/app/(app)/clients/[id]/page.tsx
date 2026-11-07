@@ -8,6 +8,7 @@ import { ClientSummaryPanel } from "@/components/clients/client-summary";
 import { InvoiceDueDate } from "@/components/invoices/invoice-due-date";
 import { StatusBadge } from "@/components/ui/badge";
 import { buttonClasses } from "@/components/ui/button";
+import { BackLink } from "@/components/ui/back-link";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import type { InvoiceStatus } from "@/lib/invoices/status";
 import { formatGBP } from "@/lib/money";
@@ -37,9 +38,7 @@ export default async function ClientDetailPage({
   return (
     <div>
       <div className="mb-6">
-        <Link href="/clients" className={buttonClasses("ghost")}>
-          ← Clients
-        </Link>
+        <BackLink href="/clients">Clients</BackLink>
       </div>
 
       <div className="flex items-center gap-2">

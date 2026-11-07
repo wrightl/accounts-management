@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { BackLink } from "@/components/ui/back-link";
 import { requirePlatformAdmin } from "@/lib/platform";
 import { hasDatabaseClient } from "@/db";
 import { getPlatformCompanyDetail } from "@/lib/platform/queries";
@@ -43,12 +44,8 @@ export default async function PlatformCompanyDetailPage({
 
   return (
     <div>
-      <p className="text-sm text-muted">
-        <Link href="/platform/companies" className="hover:underline">
-          ← Companies
-        </Link>
-      </p>
-      <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
+      <BackLink href="/platform/companies">Companies</BackLink>
+      <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl font-semibold">{company.name}</h1>
           <p className="mt-1 text-muted">

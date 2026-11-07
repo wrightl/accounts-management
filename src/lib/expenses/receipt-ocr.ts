@@ -1,7 +1,7 @@
 import { generateText, Output } from "ai";
 import type { Worker as TesseractWorker } from "tesseract.js";
 import { z } from "zod";
-import { serverEnv } from "@/env";
+import { aiGatewayConfigured } from "@/lib/ai/models";
 import { EXPENSE_CATEGORIES } from "@/lib/expenses/categories";
 import { normalizeReceiptOcrModel } from "@/lib/expenses/receipt-ocr-models";
 import {
@@ -30,7 +30,7 @@ function isPdfContent(bytes: Buffer, contentType: string): boolean {
   return contentType === "application/pdf" || isPdfBytes(bytes);
 }
 
-async function runTesseractOnImage(imageBytes: Buffer): Promise<string> {
+export async function runTesseractOnImage(imageBytes: Buffer): Promise<string> {
   const { createWorker } = await import("tesseract.js");
   const worker = await createWorker("eng");
   try {
@@ -96,7 +96,8 @@ export function createSharedImageOcr(size = 1): {
   };
 }
 
-async function extractPdfTextWithFallback(bytes: Buffer, ocrImage: ImageOcr): Promise<string> {
+/** PDF text layer, or Tesseract on page 1 when there isn't one. Empty if both fail. */
+export async function extractPdfTextWithFallback(bytes: Buffer, ocrImage: ImageOcr): Promise<string> {
   let text = "";
   try {
     text = await extractPdfText(bytes);
@@ -164,10 +165,9 @@ async function runAiGatewayOcr(
   model: string,
   abortSignal?: AbortSignal,
 ): Promise<ReceiptExtraction> {
-  const apiKey = serverEnv().AI_GATEWAY_API_KEY;
-  if (!apiKey) {
+  if (!aiGatewayConfigured()) {
     throw new Error(
-      "AI Gateway is not configured. Add AI_GATEWAY_API_KEY or switch to Local OCR in Platform settings.",
+      "AI Gateway is not configured. Add AI_GATEWAY_API_KEY, enable Vercel OIDC, or switch to Local OCR in Platform settings.",
     );
   }
 

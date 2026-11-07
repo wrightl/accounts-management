@@ -162,7 +162,7 @@ export async function extractInvoiceFromPdf(
     ],
   });
   console.info(
-    JSON.stringify({ level: "info", msg: "invoice_pdf_extract", usage }),
+    JSON.stringify({ level: "info", msg: "invoice_pdf_extract", reader: "ai", usage }),
   );
   return output;
 }

@@ -239,7 +239,7 @@ export default async function ExpensesPage({
             </THead>
             <TBody>
               {rows.map((e) => (
-                <TR key={e.id} className={e.status === "pending" ? "bg-amber-50/50 dark:bg-amber-950/20" : undefined}>
+                <TR key={e.id} className={e.status === "pending" ? "bg-amber-50/50" : undefined}>
                   <TD className="w-8 pr-0">
                     <RowNote kind="expense" rowId={e.id} note={e.notes} canWrite={canWrite} />
                     <RecordQueryIcon
@@ -264,7 +264,7 @@ export default async function ExpensesPage({
                       </span>
                     ) : null}
                     {e.status === "pending" && e.externalSenderEmail ? (
-                      <span className="block text-xs text-amber-800 dark:text-amber-200">
+                      <span className="block text-xs text-amber-800">
                         Sent by {e.externalSenderEmail}, check before approving
                       </span>
                     ) : null}

@@ -6,7 +6,7 @@ import { recordQueriesFor } from "@/lib/queries/queries";
 import { recordScopeFor } from "@/lib/accountant/record-scope";
 import { listCreditNotes } from "@/lib/credit-notes/queries";
 import { CreditNoteStatusBadge } from "@/components/credit-notes/credit-note-status-badge";
-import { buttonClasses } from "@/components/ui/button";
+import { BackLink } from "@/components/ui/back-link";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Table, THead, TBody, TR, TD } from "@/components/ui/table";
 import { sortHeaders } from "@/components/ui/sortable-th";
@@ -44,9 +44,7 @@ export default async function CreditNotesPage({
   return (
     <div>
       <div className="mb-6">
-        <Link href="/invoices" className={buttonClasses("ghost")}>
-          ← Invoices
-        </Link>
+        <BackLink href="/invoices">Invoices</BackLink>
       </div>
       <h1 className="font-display text-2xl font-semibold">Credit notes</h1>
       <p className="mt-1 text-muted">

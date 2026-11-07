@@ -1,8 +1,7 @@
-import Link from "next/link";
 import { guardTenantPage } from "@/lib/auth";
 import { listClients } from "@/lib/clients/queries";
 import { OrderForm } from "@/components/orders/order-form";
-import { buttonClasses } from "@/components/ui/button";
+import { BackLink } from "@/components/ui/back-link";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { defaultLineVatRate } from "@/lib/vat";
 
@@ -17,9 +16,7 @@ export default async function NewOrderPage() {
   return (
     <div>
       <div className="mb-6">
-        <Link href="/orders" className={buttonClasses("ghost")}>
-          ← Orders
-        </Link>
+        <BackLink href="/orders">Orders</BackLink>
       </div>
       <h1 className="mb-6 font-display text-2xl font-semibold">New order</h1>
       <div className="max-w-2xl">

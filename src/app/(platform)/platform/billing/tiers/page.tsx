@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BackLink } from "@/components/ui/back-link";
 import { requirePlatformAdmin } from "@/lib/platform";
 import { hasDatabaseClient } from "@/db";
 import { listSubscriptionTiers } from "@/lib/platform/billing-queries";
@@ -20,12 +21,8 @@ export default async function PlatformBillingTiersPage() {
 
   return (
     <div>
-      <p className="text-sm text-muted">
-        <Link href="/platform/billing" className="hover:underline">
-          ← Billing
-        </Link>
-      </p>
-      <h1 className="mt-2 font-display text-2xl font-semibold">
+      <BackLink href="/platform/billing">Billing</BackLink>
+      <h1 className="mt-4 font-display text-2xl font-semibold">
         Subscription tiers
       </h1>
       <p className="mt-1 max-w-2xl text-muted">

@@ -10,6 +10,7 @@ import { listBankSettlements } from "@/lib/bank/settlements";
 import { BankSettlements } from "@/components/bank/bank-settlements";
 import { ReimbursementActions } from "@/components/reimbursements/actions";
 import { buttonClasses } from "@/components/ui/button";
+import { BackLink } from "@/components/ui/back-link";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { DisplayDate } from "@/components/date-format-provider";
@@ -32,9 +33,7 @@ export default async function ReimbursementDetailPage({
   return (
     <div>
       <div className="mb-6">
-        <Link href="/reimbursements" className={buttonClasses("ghost")}>
-          ← Reimbursements
-        </Link>
+        <BackLink href="/reimbursements">Reimbursements</BackLink>
       </div>
 
       <div className="flex flex-wrap items-start justify-between gap-4">

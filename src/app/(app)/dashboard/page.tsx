@@ -26,6 +26,7 @@ import {
   hiddenNavGroups,
 } from "@/components/dashboard/nav";
 import { getMenuState } from "@/lib/menu/queries";
+import { aiGatewayConfigured } from "@/lib/ai/models";
 import { getMenuSuggestions, type MenuSuggestion } from "@/lib/menu/suggestions";
 import { DisplayDate } from "@/components/date-format-provider";
 import { getDateFormat } from "@/lib/date-format.server";
@@ -53,6 +54,7 @@ async function loadMenuPrompt(
     hiddenNavGroups(NAV_GROUPS, {
       permissionCheck: (permission) => can(user.role, permission),
       entityType: user.entityType,
+      aiAvailable: aiGatewayConfigured(),
       enabledFeatures: state.enabled,
     }),
   );

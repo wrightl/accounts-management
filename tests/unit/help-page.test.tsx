@@ -50,7 +50,11 @@ describe("help page", () => {
     const permissionCheck = (p: Parameters<typeof can>[1]) => can("accountant", p);
     const allowed = new Set([
       ...flattenNavItems(
-        filterNavGroups(NAV_GROUPS, { permissionCheck, entityType: "limited_company" }),
+        filterNavGroups(NAV_GROUPS, {
+          permissionCheck,
+          entityType: "limited_company",
+          aiAvailable: true,
+        }),
       ).map((i) => i.href),
       ...SETTINGS_PAGES.filter((p) => permissionCheck(p.permission)).map((p) => p.href),
     ]);
