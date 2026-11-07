@@ -1,8 +1,7 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { guardTenantPage } from "@/lib/auth";
 import { getQuoteVersionDetail } from "@/lib/quotes/queries";
-import { buttonClasses } from "@/components/ui/button";
+import { BackLink } from "@/components/ui/back-link";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import {
@@ -34,9 +33,7 @@ export default async function QuoteVersionPage({
   return (
     <div>
       <div className="mb-6">
-        <Link href={`/quotes/${id}`} className={buttonClasses("ghost")}>
-          ← Current quote
-        </Link>
+        <BackLink href={`/quotes/${id}`}>Current quote</BackLink>
       </div>
 
       <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">

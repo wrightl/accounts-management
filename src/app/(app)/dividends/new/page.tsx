@@ -1,8 +1,7 @@
-import Link from "next/link";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { getActiveShareholdersForSplit } from "@/lib/shareholders/queries";
 import { DividendDeclareForm } from "@/components/dividends/dividends-form";
-import { buttonClasses } from "@/components/ui/button";
+import { BackLink } from "@/components/ui/back-link";
 import { getReservesPosition } from "@/lib/ledger/queries";
 
 export default async function NewDividendPage({
@@ -24,9 +23,7 @@ export default async function NewDividendPage({
   return (
     <div>
       <div className="mb-6">
-        <Link href="/dividends" className={buttonClasses("ghost")}>
-          ← Dividends
-        </Link>
+        <BackLink href="/dividends">Dividends</BackLink>
       </div>
       <h1 className="mb-2 font-display text-2xl font-semibold">New dividend</h1>
       {split.balanced && (

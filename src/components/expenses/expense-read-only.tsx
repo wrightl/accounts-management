@@ -1,9 +1,8 @@
-import Link from "next/link";
 import { BankSettlements } from "@/components/bank/bank-settlements";
 import { DisplayDate } from "@/components/date-format-provider";
 import { ReceiptPanel } from "@/components/expenses/receipt-panel";
 import { RecordQueries } from "@/components/queries/record-queries";
-import { buttonClasses } from "@/components/ui/button";
+import { BackLink } from "@/components/ui/back-link";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { listBankSettlements } from "@/lib/bank/settlements";
 import { clientDisplayName } from "@/lib/clients/display";
@@ -42,9 +41,7 @@ export async function ExpenseReadOnly({
   return (
     <div>
       <div className="mb-6">
-        <Link href="/expenses" className={buttonClasses("ghost")}>
-          ← Expenses
-        </Link>
+        <BackLink href="/expenses">Expenses</BackLink>
       </div>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <h1 className="font-display text-2xl font-semibold">{expense.description}</h1>

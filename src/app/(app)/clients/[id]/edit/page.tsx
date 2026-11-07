@@ -1,10 +1,9 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { getClient } from "@/lib/clients/queries";
 import { clientDisplayName } from "@/lib/clients/display";
 import { ClientForm } from "@/components/clients/client-form";
-import { buttonClasses } from "@/components/ui/button";
+import { BackLink } from "@/components/ui/back-link";
 
 export default async function EditClientPage({
   params,
@@ -21,9 +20,7 @@ export default async function EditClientPage({
   return (
     <div>
       <div className="mb-6 flex items-center gap-3">
-        <Link href={`/clients/${id}`} className={buttonClasses("ghost")}>
-          ← {clientDisplayName(client)}
-        </Link>
+        <BackLink href={`/clients/${id}`}>{clientDisplayName(client)}</BackLink>
       </div>
       <h1 className="mb-6 font-display text-2xl font-semibold">Edit client</h1>
       <ClientForm mode="edit" client={client} canWrite={canWrite} />

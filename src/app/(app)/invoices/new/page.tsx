@@ -6,7 +6,7 @@ import { defaultLineVatRate } from "@/lib/vat";
 import { InvoiceForm } from "@/components/invoices/invoice-form";
 import { listRebillableExpenses } from "@/lib/profitability/queries";
 import { toRebillOptions } from "@/lib/profitability/rebill";
-import { buttonClasses } from "@/components/ui/button";
+import { BackLink } from "@/components/ui/back-link";
 
 export default async function NewInvoicePage({
   searchParams,
@@ -25,9 +25,7 @@ export default async function NewInvoicePage({
   return (
     <div>
       <div className="mb-6 flex items-center gap-3">
-        <Link href="/invoices" className={buttonClasses("ghost")}>
-          ← Invoices
-        </Link>
+        <BackLink href="/invoices">Invoices</BackLink>
       </div>
       <h1 className="mb-6 font-display text-2xl font-semibold">New invoice</h1>
       {clients.length === 0 ? (

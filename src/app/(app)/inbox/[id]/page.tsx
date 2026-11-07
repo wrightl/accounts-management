@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { BackLink } from "@/components/ui/back-link";
 import { notFound, redirect } from "next/navigation";
 import { guardTenantPage } from "@/lib/auth";
 import { ensureLocalUser } from "@/lib/users";
@@ -34,12 +34,7 @@ export default async function InboxDetailPage({
 
   return (
     <div className="mx-auto max-w-xl">
-      <Link
-        href="/inbox"
-        className="text-sm text-muted hover:text-foreground"
-      >
-        ← Back to inbox
-      </Link>
+      <BackLink href="/inbox">Back to inbox</BackLink>
       <article className="mt-4 rounded-2xl border border-border bg-surface p-6">
         <h1 className="font-display text-2xl font-semibold">
           {notification.title}

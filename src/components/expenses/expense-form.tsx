@@ -849,7 +849,7 @@ export function ExpenseForm({
                 </p>
               ) : null}
               {checkAmounts ? (
-                <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                <p className="mt-1 text-xs text-amber-700">
                   This expense was saved with one amount for both. Check the receipt
                   amount and the GBP amount before approving.
                 </p>

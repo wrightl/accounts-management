@@ -1,10 +1,9 @@
-import Link from "next/link";
 import { cookies } from "next/headers";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { listClients } from "@/lib/clients/queries";
 import { listFounders } from "@/lib/expenses/queries";
 import { ExpenseForm } from "@/components/expenses/expense-form";
-import { buttonClasses } from "@/components/ui/button";
+import { BackLink } from "@/components/ui/back-link";
 import { EXPENSE_LIST_COOKIE, expenseListReturnHref } from "@/lib/expenses/list-params";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { getReceiptOcrSettings } from "@/lib/platform-settings";
@@ -57,13 +56,13 @@ export default async function NewExpensePage({
   return (
     <div>
       <div className="mb-6">
-        <Link href={returnHref ?? listHref} scroll={!returnHref} className={buttonClasses("ghost")}>
-          {returnHref ? "← Transactions" : "← Expenses"}
-        </Link>
+        <BackLink href={returnHref ?? listHref} scroll={!returnHref}>
+          {returnHref ? "Transactions" : "Expenses"}
+        </BackLink>
       </div>
       <h1 className="mb-6 font-display text-2xl font-semibold">New expense</h1>
       {bankLinkError ? (
-        <div className="mx-auto mb-6 max-w-xl rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+        <div className="mx-auto mb-6 max-w-xl rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           This expense won&apos;t be linked to the bank transaction. {bankLinkError}
         </div>
       ) : null}

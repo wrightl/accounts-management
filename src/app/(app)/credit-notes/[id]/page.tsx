@@ -11,7 +11,7 @@ import { CreditNoteActions } from "@/components/credit-notes/credit-note-actions
 import { CreditNoteStatusBadge } from "@/components/credit-notes/credit-note-status-badge";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
-import { buttonClasses } from "@/components/ui/button";
+import { BackLink } from "@/components/ui/back-link";
 import {
   formatDiscountPercent,
   formatGBP,
@@ -45,9 +45,7 @@ export default async function CreditNoteDetailPage({
   return (
     <div>
       <div className="mb-6">
-        <Link href="/credit-notes" className={buttonClasses("ghost")}>
-          ← Credit notes
-        </Link>
+        <BackLink href="/credit-notes">Credit notes</BackLink>
       </div>
 
       <div className="flex flex-wrap items-start justify-between gap-4">

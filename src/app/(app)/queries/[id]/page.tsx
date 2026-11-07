@@ -4,7 +4,7 @@ import { guardTenantPage } from "@/lib/auth";
 import { QueryStatusBadge } from "@/components/queries/query-status-badge";
 import { QueryThreadActions } from "@/components/queries/query-thread-actions";
 import { DisplayDate } from "@/components/date-format-provider";
-import { buttonClasses } from "@/components/ui/button";
+import { BackLink } from "@/components/ui/back-link";
 import { recordScopeFor } from "@/lib/accountant/record-scope";
 import { isUuid } from "@/lib/labels/params";
 import { getQueryDetail } from "@/lib/queries/queries";
@@ -38,9 +38,7 @@ export default async function QueryDetailPage({
   return (
     <div>
       <div className="mb-6">
-        <Link href="/queries" className={buttonClasses("ghost")}>
-          ← Queries
-        </Link>
+        <BackLink href="/queries">Queries</BackLink>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="font-display text-2xl font-semibold">{query.subject}</h1>

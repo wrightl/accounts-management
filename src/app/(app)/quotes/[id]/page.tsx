@@ -11,6 +11,7 @@ import { QuoteActions } from "@/components/quotes/quote-actions";
 import { QuoteStatusActions } from "@/components/quotes/quote-status-actions";
 import { QuoteHistory } from "@/components/quotes/quote-history";
 import { buttonClasses } from "@/components/ui/button";
+import { BackLink } from "@/components/ui/back-link";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import {
@@ -70,9 +71,7 @@ export default async function QuoteDetailPage({
   return (
     <div>
       <div className="mb-6">
-        <Link href="/quotes" className={buttonClasses("ghost")}>
-          ← Quotes
-        </Link>
+        <BackLink href="/quotes">Quotes</BackLink>
       </div>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 flex-1">

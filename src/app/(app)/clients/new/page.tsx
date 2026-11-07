@@ -1,7 +1,6 @@
-import Link from "next/link";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { ClientForm } from "@/components/clients/client-form";
-import { buttonClasses } from "@/components/ui/button";
+import { BackLink } from "@/components/ui/back-link";
 
 export default async function NewClientPage() {
   await guardTenantPage("accounts:write");
@@ -10,9 +9,7 @@ export default async function NewClientPage() {
   return (
     <div>
       <div className="mb-6 flex items-center gap-3">
-        <Link href="/clients" className={buttonClasses("ghost")}>
-          ← Clients
-        </Link>
+        <BackLink href="/clients">Clients</BackLink>
       </div>
       <h1 className="mb-6 font-display text-2xl font-semibold">New client</h1>
       <ClientForm mode="create" canWrite={canWrite} />

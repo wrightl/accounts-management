@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { guardTenantPage } from "@/lib/auth";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
@@ -9,7 +8,7 @@ import { defaultLineVatRate } from "@/lib/vat";
 import { InvoiceForm } from "@/components/invoices/invoice-form";
 import { listRebillableExpenses } from "@/lib/profitability/queries";
 import { toRebillOptions } from "@/lib/profitability/rebill";
-import { buttonClasses } from "@/components/ui/button";
+import { BackLink } from "@/components/ui/back-link";
 import { penceToPounds } from "@/lib/money";
 
 export default async function EditInvoicePage({
@@ -46,9 +45,7 @@ export default async function EditInvoicePage({
   return (
     <div>
       <div className="mb-6 flex items-center gap-3">
-        <Link href={`/invoices/${id}`} className={buttonClasses("ghost")}>
-          ← {detail.invoice.number}
-        </Link>
+        <BackLink href={`/invoices/${id}`}>{detail.invoice.number}</BackLink>
       </div>
       <h1 className="mb-6 font-display text-2xl font-semibold">
         Edit {detail.invoice.number}

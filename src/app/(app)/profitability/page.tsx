@@ -37,7 +37,7 @@ const PERIODS = [
 
 function MarginCell({ m }: { m: Margin }) {
   return (
-    <TD className={cn("text-right", m.marginPence < 0 && "text-red-700 dark:text-red-400")}>
+    <TD className={cn("text-right", m.marginPence < 0 && "text-red-700")}>
       {formatGBP(m.marginPence)}
       <span className="ml-2 text-xs text-muted">{marginLabel(m)}</span>
     </TD>

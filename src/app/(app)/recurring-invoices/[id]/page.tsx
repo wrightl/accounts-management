@@ -9,6 +9,7 @@ import { RecurringInvoiceActions } from '@/components/recurring-invoices/recurri
 import { Card, CardTitle, CardValue } from '@/components/ui/card';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
 import { buttonClasses } from '@/components/ui/button';
+import { BackLink } from "@/components/ui/back-link";
 import { StatusBadge } from '@/components/ui/badge';
 import { clientDisplayName } from '@/lib/clients/display';
 import {
@@ -45,12 +46,7 @@ export default async function RecurringInvoiceDetailPage({
     return (
         <div>
             <div className="mb-6">
-                <Link
-                    href="/recurring-invoices"
-                    className={buttonClasses('ghost')}
-                >
-                    ← Recurring
-                </Link>
+                <BackLink href="/recurring-invoices">Recurring</BackLink>
             </div>
 
             <div className="flex flex-wrap items-start justify-between gap-4">

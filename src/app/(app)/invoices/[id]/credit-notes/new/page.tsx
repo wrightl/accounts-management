@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { guardTenantPage } from "@/lib/auth";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
@@ -6,7 +5,7 @@ import { storedStatus } from "@/lib/invoices/status";
 import { todayIsoDate } from "@/lib/dates";
 import { formatGBP, penceToPounds } from "@/lib/money";
 import { CreditNoteForm } from "@/components/credit-notes/credit-note-form";
-import { buttonClasses } from "@/components/ui/button";
+import { BackLink } from "@/components/ui/back-link";
 
 export default async function NewCreditNotePage({
   params,
@@ -42,9 +41,7 @@ export default async function NewCreditNotePage({
   return (
     <div>
       <div className="mb-6 flex items-center gap-3">
-        <Link href={`/invoices/${id}`} className={buttonClasses("ghost")}>
-          ← {invoice.number}
-        </Link>
+        <BackLink href={`/invoices/${id}`}>{invoice.number}</BackLink>
       </div>
       <h1 className="font-display text-2xl font-semibold">Credit note for {invoice.number}</h1>
       <p className="mt-1 mb-6 text-muted">
