@@ -1,33 +1,25 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-const { serverEnv, getVercelOidcTokenSync } = vi.hoisted(() => ({
-  serverEnv: vi.fn(),
-  getVercelOidcTokenSync: vi.fn(),
-}));
+const { serverEnv } = vi.hoisted(() => ({ serverEnv: vi.fn() }));
 vi.mock("@/env", () => ({ serverEnv }));
-vi.mock("@vercel/functions/oidc", () => ({ getVercelOidcTokenSync }));
 
 import { aiGatewayConfigured } from "@/lib/ai/models";
 
 describe("aiGatewayConfigured", () => {
-  beforeEach(() => {
-    serverEnv.mockReturnValue({ AI_GATEWAY_API_KEY: undefined });
-    getVercelOidcTokenSync.mockImplementation(() => {
-      throw new Error("The 'x-vercel-oidc-token' header is missing from the request.");
-    });
-  });
-
   it("is on with an API key", () => {
     serverEnv.mockReturnValue({ AI_GATEWAY_API_KEY: "key" });
     expect(aiGatewayConfigured()).toBe(true);
   });
 
-  it("is on with an OIDC token from the request, with no key or env var", () => {
-    getVercelOidcTokenSync.mockReturnValue("header-token");
-    expect(aiGatewayConfigured()).toBe(true);
+  it("is off without an API key, even on Vercel with an OIDC token", () => {
+    serverEnv.mockReturnValue({ AI_GATEWAY_API_KEY: undefined });
+    vi.stubEnv("VERCEL_OIDC_TOKEN", "token");
+    expect(aiGatewayConfigured()).toBe(false);
+    vi.unstubAllEnvs();
   });
 
-  it("is off with neither", () => {
+  it("is off with an empty API key", () => {
+    serverEnv.mockReturnValue({ AI_GATEWAY_API_KEY: "" });
     expect(aiGatewayConfigured()).toBe(false);
   });
 });

@@ -1,4 +1,3 @@
-import { getVercelOidcTokenSync } from "@vercel/functions/oidc";
 import { serverEnv } from "@/env";
 
 /** Answers questions about the books with tool calls. */
@@ -10,16 +9,10 @@ export const BULK_MODEL = "anthropic/claude-haiku-5.5";
 export const INVOICE_EXTRACT_MODEL = "anthropic/claude-sonnet-5.5";
 
 /**
- * Whether calls to the AI Gateway can be made from this deployment: an API
- * key, or a Vercel OIDC token. On Vercel the token arrives as a request
- * header rather than an env var, so call this inside a request, not at
- * module load.
+ * Whether AI is switched on for this deployment: only when
+ * `AI_GATEWAY_API_KEY` is set. A Vercel OIDC token alone doesn't count,
+ * because every Vercel deployment has one.
  */
 export function aiGatewayConfigured(): boolean {
-  if (serverEnv().AI_GATEWAY_API_KEY) return true;
-  try {
-    return Boolean(getVercelOidcTokenSync());
-  } catch {
-    return false;
-  }
+  return Boolean(serverEnv().AI_GATEWAY_API_KEY);
 }
