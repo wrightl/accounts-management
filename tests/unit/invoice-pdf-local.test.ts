@@ -72,6 +72,13 @@ Total £60.00`;
     });
   });
 
+  it("leaves non-UK amounts blank rather than reading part of them", () => {
+    expect(parseInvoiceText("Total 1.234,56").grossPounds).toBeNull();
+    expect(parseInvoiceText("Total 1 234,56").grossPounds).toBeNull();
+    expect(parseInvoiceText("Total 1 234.56").grossPounds).toBeNull();
+    expect(parseInvoiceText("Total £1,234.56.").grossPounds).toBe("1234.56");
+  });
+
   it("doesn't take the next label for the invoice number", () => {
     expect(parseInvoiceText("Invoice Number\nInvoice Date\n01/02/2026").number).toBeNull();
   });

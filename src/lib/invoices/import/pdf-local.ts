@@ -46,7 +46,9 @@ export async function readInvoicePdfLocally(
   }
 }
 
-const MONEY = String.raw`(-?[£$€]?\s?\d{1,3}(?:,\d{3})+\.\d{2}|-?[£$€]?\s?\d+\.\d{2})`;
+// UK format only. The lookarounds reject a match inside a longer number, so
+// "1.234,56" or "1 234.56" leaves the field blank rather than reading £1.23.
+const MONEY = String.raw`(?<![\d,.])(-?[£$€]?\s?\d{1,3}(?:,\d{3})+\.\d{2}|-?[£$€]?\s?\d+\.\d{2})(?![\d,.]*\d)`;
 const DATE = String.raw`(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{1,2}(?:st|nd|rd|th)?[\s-][A-Za-z]{3,9}\.?,?[\s-]\d{4})`;
 /** What may sit between a label and its value: punctuation, spaces, line breaks. */
 const GAP = String.raw`[^\dA-Za-z£$€]{0,20}`;
