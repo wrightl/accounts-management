@@ -62,11 +62,14 @@ import {
 } from "@/lib/credit-notes/period";
 import {
   formatDeltaPercent,
+  dashboardChartMonths,
   formatMonthLabel,
   parseDashboardPeriod,
+  pastFinancialYearOptions,
+  pastFinancialYearStart,
   resolveDashboardPeriod,
-  trailingChartMonths,
   type DashboardPeriodKey,
+  type PastFinancialYearKey,
 } from "@/lib/dashboard/period";
 
 export type { DashboardPeriodKey };
@@ -145,6 +148,8 @@ export type DashboardAttentionData = {
 
 export type DashboardOverviewData = {
   periodKey: DashboardPeriodKey;
+  /** Earlier financial years the period picker offers, newest first. */
+  pastYears: Array<{ value: PastFinancialYearKey; label: string }>;
   periodLabel: string;
   compareLabel: string;
   todayLabel: string;
@@ -603,22 +608,52 @@ function todayDisplayLabel(today: string): string {
   });
 }
 
+/**
+ * The earliest date the books could cover: incorporation, else the day after
+ * the opening balances, else when the company joined.
+ */
+function earliestBooksDate(settings: {
+  incorporatedOn: string | null;
+  openingBalancesAsAt: string | null;
+  createdAt: Date;
+}): string {
+  if (settings.incorporatedOn) return settings.incorporatedOn;
+  if (settings.openingBalancesAsAt) {
+    const [y, m, d] = settings.openingBalancesAsAt.split("-").map(Number);
+    return new Date(Date.UTC(y!, m! - 1, d! + 1)).toISOString().slice(0, 10);
+  }
+  return todayIsoDate(settings.createdAt);
+}
+
 export async function getDashboardOverview(
   companyId: string,
   user: SessionUser,
   periodRaw?: string | null,
 ): Promise<DashboardOverviewData> {
   const settings = await getCompanySettings(companyId);
-  const periodKey = parseDashboardPeriod(periodRaw);
+  const pastYears = pastFinancialYearOptions(
+    settings.financialYearEndMonth,
+    earliestBooksDate(settings),
+  );
+  const parsedKey = parseDashboardPeriod(periodRaw);
+  const periodKey =
+    pastFinancialYearStart(parsedKey) === null ||
+    pastYears.some((y) => y.value === parsedKey)
+      ? parsedKey
+      : "this-month";
   const period = resolveDashboardPeriod(
     periodKey,
     settings.financialYearEndMonth,
   );
-  const chartWindow = trailingChartMonths(12);
-  const spendingPeriod = resolvePeriod(
-    "current-month",
+  const chartWindow = dashboardChartMonths(
+    periodKey,
     settings.financialYearEndMonth,
   );
+  // An earlier year shows that year's spending; otherwise this month's.
+  const spendingPeriod =
+    pastFinancialYearStart(periodKey) === null
+      ? resolvePeriod("current-month", settings.financialYearEndMonth)
+      : period;
 
   const [
     invoiceKpis,
@@ -857,6 +892,7 @@ export async function getDashboardOverview(
 
   return {
     periodKey,
+    pastYears,
     periodLabel: period.label,
     compareLabel: period.compareLabel,
     todayLabel: todayDisplayLabel(todayIsoDate()),
