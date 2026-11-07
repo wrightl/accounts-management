@@ -1,13 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { extractPdfTextWithFallback } = vi.hoisted(() => ({
+const { extractPdfTextWithFallback, closeOcr } = vi.hoisted(() => ({
   extractPdfTextWithFallback: vi.fn(),
+  closeOcr: vi.fn(async () => {}),
 }));
 vi.mock("@/lib/expenses/receipt-ocr", () => ({
   extractPdfTextWithFallback,
-  runTesseractOnImage: vi.fn(),
+  createSharedImageOcr: () => ({ ocrImage: vi.fn(), close: closeOcr }),
 }));
 
+import { draftFromExtraction } from "@/lib/invoices/import/pdf-extract";
 import { parseInvoiceText, readInvoicePdfLocally } from "@/lib/invoices/import/pdf-local";
 
 // pdf.js joins text items with line breaks, so labels and values often sit
@@ -84,21 +86,38 @@ Total £60.00`;
     });
   });
 
-  it("notes a currency shown on the total", () => {
-    expect(parseInvoiceText("Amount due: $99.00").currency).toBe("USD");
+  it("notes a currency shown on the total, which blocks the draft", () => {
+    const extraction = parseInvoiceText("Amount due: $99.00");
+    expect(extraction.currency).toBe("USD");
+    const { errors } = draftFromExtraction(extraction, {
+      name: "Test Co",
+      legalName: null,
+      vatNumber: null,
+    });
+    expect(errors.join()).toContain("Alfa only holds invoices in GBP");
   });
 });
 
 describe("readInvoicePdfLocally", () => {
-  beforeEach(() => extractPdfTextWithFallback.mockReset());
+  beforeEach(() => {
+    extractPdfTextWithFallback.mockReset();
+    closeOcr.mockClear();
+  });
 
   it("parses whatever text the PDF (or its OCR) gives", async () => {
     extractPdfTextWithFallback.mockResolvedValue(PDF_TEXT);
-    expect((await readInvoicePdfLocally(Buffer.from("%PDF-"))).number).toBe("INV-0042");
+    expect((await readInvoicePdfLocally(Buffer.from("%PDF-"), 5_000)).number).toBe("INV-0042");
+    expect(closeOcr).toHaveBeenCalled();
   });
 
   it("fails when there's no text at all, so the caller leaves a blank draft", async () => {
     extractPdfTextWithFallback.mockResolvedValue("  ");
-    await expect(readInvoicePdfLocally(Buffer.from("%PDF-"))).rejects.toThrow();
+    await expect(readInvoicePdfLocally(Buffer.from("%PDF-"), 5_000)).rejects.toThrow();
+  });
+
+  it("gives up when OCR runs past its time, and stops the worker", async () => {
+    extractPdfTextWithFallback.mockReturnValue(new Promise(() => {}));
+    await expect(readInvoicePdfLocally(Buffer.from("%PDF-"), 20)).rejects.toThrow(/took over/);
+    expect(closeOcr).toHaveBeenCalled();
   });
 });

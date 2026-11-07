@@ -168,6 +168,21 @@ describe("uploading a PDF", () => {
     expect(draft.warnings.join()).toContain("Read without AI");
   });
 
+  it("doesn't count a failed AI read against the allowance", async () => {
+    generateText.mockRejectedValue(new Error("model down"));
+    await upload(await newBatch());
+    const [row] = await db.select().from(invoicePdfReads).where(eq(invoicePdfReads.companyId, companyId));
+    expect(row.reads).toBe(0);
+  });
+
+  it("gives the local read only the time left in the request", async () => {
+    generateText.mockRejectedValue(new Error("timed out"));
+    await upload(await newBatch());
+    const [, budget] = readLocally.mock.calls[0];
+    expect(budget).toBeGreaterThan(0);
+    expect(budget).toBeLessThanOrEqual(55_000);
+  });
+
   it("reads locally with no AI call when AI isn't set up", async () => {
     ai.on = false;
     readLocally.mockResolvedValue({ ...reading, issuerName: null, lines: [] });

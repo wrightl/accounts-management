@@ -1,18 +1,37 @@
 import {
+  createSharedImageOcr,
   extractPdfTextWithFallback,
-  runTesseractOnImage,
 } from "@/lib/expenses/receipt-ocr";
 import type { InvoiceExtraction } from "@/lib/invoices/import/pdf-extract";
 import { parseImportDate } from "@/lib/invoices/import/parse";
 
 /**
  * Read an invoice PDF without AI: its text layer, or Tesseract on page 1 for
- * a scan. Much rougher than the model, so every field needs checking.
+ * a scan. Much rougher than the model, so every field needs checking. Gives
+ * up after `timeoutMs`, stopping the OCR worker, so it fits the request.
  */
-export async function readInvoicePdfLocally(bytes: Buffer): Promise<InvoiceExtraction> {
-  const text = await extractPdfTextWithFallback(bytes, runTesseractOnImage);
-  if (!text.trim()) throw new Error("No text found in the PDF");
-  return parseInvoiceText(text);
+export async function readInvoicePdfLocally(
+  bytes: Buffer,
+  timeoutMs: number,
+): Promise<InvoiceExtraction> {
+  const ocr = createSharedImageOcr(1);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const text = await Promise.race([
+      extractPdfTextWithFallback(bytes, ocr.ocrImage),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`Local read took over ${timeoutMs}ms`)),
+          timeoutMs,
+        );
+      }),
+    ]);
+    if (!text.trim()) throw new Error("No text found in the PDF");
+    return parseInvoiceText(text);
+  } finally {
+    clearTimeout(timer);
+    await ocr.close();
+  }
 }
 
 const MONEY = String.raw`(-?[£$€]?\s?\d{1,3}(?:,\d{3})+\.\d{2}|-?[£$€]?\s?\d+\.\d{2})`;

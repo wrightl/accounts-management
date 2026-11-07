@@ -35,6 +35,10 @@ import { getStorage } from "@/lib/storage";
 
 // Leaves room in the page's 60s for a local read if the model times out.
 const EXTRACT_TIMEOUT_MS = 30_000;
+/** The page's maxDuration (60s), less time to save the draft afterwards. */
+const READ_BUDGET_MS = 55_000;
+/** Below this, a local read isn't worth starting. */
+const MIN_LOCAL_READ_MS = 3_000;
 
 export type PdfBatchResult = { ok: true; id: string } | { ok: false; error: string };
 
@@ -58,9 +62,12 @@ export async function createPdfImportBatch(): Promise<PdfBatchResult> {
  * Count one read against this month's allowance, or return false if it's used
  * up. A single statement, so parallel uploads can't both take the last one.
  */
-async function reservePdfRead(companyId: string, limit: number | null): Promise<boolean> {
+async function reservePdfRead(
+  companyId: string,
+  month: string,
+  limit: number | null,
+): Promise<boolean> {
   const db = getDb();
-  const month = todayIsoDate().slice(0, 7);
   if (limit != null && limit <= 0) return false;
   const reserved = await db
     .insert(invoicePdfReads)
@@ -72,6 +79,20 @@ async function reservePdfRead(companyId: string, limit: number | null): Promise<
     })
     .returning({ reads: invoicePdfReads.reads });
   return reserved.length > 0;
+}
+
+/** Give back a reserved read when the model didn't return one. */
+async function releasePdfRead(companyId: string, month: string) {
+  await getDb()
+    .update(invoicePdfReads)
+    .set({ reads: sql`${invoicePdfReads.reads} - 1` })
+    .where(
+      and(
+        eq(invoicePdfReads.companyId, companyId),
+        eq(invoicePdfReads.month, month),
+        sql`${invoicePdfReads.reads} > 0`,
+      ),
+    );
 }
 
 /** Problems that only the database can see, on top of the invoice's own checks. */
@@ -146,14 +167,19 @@ type PdfRead = {
 
 /**
  * Read with the model when it's available and this month's allowance has
- * room, otherwise (or if it fails) locally with pdf.js and Tesseract. Null
- * when neither could read it.
+ * room, otherwise (or if it fails) locally with pdf.js and Tesseract, in
+ * whatever time is left of the request. Null when neither could read it.
  */
-async function readInvoicePdf(companyId: string, bytes: Buffer): Promise<PdfRead | null> {
+async function readInvoicePdf(
+  companyId: string,
+  bytes: Buffer,
+  startedAt: number,
+): Promise<PdfRead | null> {
   let overLimit: number | undefined;
   if (aiGatewayConfigured()) {
     const limit = pdfImportMonthlyLimit(await getEntitlements(companyId));
-    if (await reservePdfRead(companyId, limit)) {
+    const month = todayIsoDate().slice(0, 7);
+    if (await reservePdfRead(companyId, month, limit)) {
       try {
         const extraction = await extractInvoiceFromPdf(
           bytes,
@@ -162,13 +188,20 @@ async function readInvoicePdf(companyId: string, bytes: Buffer): Promise<PdfRead
         return { extraction, reader: "ai" };
       } catch (err) {
         logReadFailure("ai", err);
+        // A failed read isn't one the company got, so it doesn't count.
+        await releasePdfRead(companyId, month);
       }
     } else if (limit != null) {
       overLimit = limit;
     }
   }
+  const remaining = READ_BUDGET_MS - (Date.now() - startedAt);
+  if (remaining < MIN_LOCAL_READ_MS) {
+    logReadFailure("local", new Error(`Only ${remaining}ms left for a local read`));
+    return null;
+  }
   try {
-    const extraction = await readInvoicePdfLocally(bytes);
+    const extraction = await readInvoicePdfLocally(bytes, remaining);
     console.info(JSON.stringify({ level: "info", msg: "invoice_pdf_extract", reader: "local" }));
     return { extraction, reader: "local", overLimit };
   } catch (err) {
@@ -189,6 +222,7 @@ export async function uploadInvoicePdf(
   batchId: string,
   formData: FormData,
 ): Promise<UploadResult> {
+  const startedAt = Date.now();
   const file = formData.get("document");
   if (!(file instanceof File) || file.size === 0) return { ok: false, error: "Choose a PDF file" };
   if (file.size > MAX_RECEIPT_BYTES) return { ok: false, error: `${file.name} is over 4.5 MB` };
@@ -276,7 +310,7 @@ export async function uploadInvoicePdf(
       let invoice = blank;
       const errors: string[] = [];
       const warnings: string[] = [];
-      const read = await readInvoicePdf(companyId, bytes);
+      const read = await readInvoicePdf(companyId, bytes, startedAt);
       if (read) {
         const draft = draftFromExtraction(read.extraction, company);
         invoice = draft.invoice;
