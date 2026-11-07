@@ -172,7 +172,7 @@ export function PlatformSettingsForm({
           <option value="ai_gateway">Vercel AI Gateway (vision model)</option>
         </Select>
         <p className="mt-1 text-xs text-muted">
-          AI Gateway requires <code>AI_GATEWAY_API_KEY</code>.
+          AI Gateway requires <code>AI_GATEWAY_API_KEY</code> or Vercel OIDC.
         </p>
         <FieldError id="defaultReceiptOcrProvider-error">
           {fieldErrors.defaultReceiptOcrProvider}

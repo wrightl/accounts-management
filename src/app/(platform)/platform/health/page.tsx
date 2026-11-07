@@ -1,5 +1,6 @@
 import { requirePlatformAdmin } from "@/lib/platform";
 import { serverEnv } from "@/env";
+import { aiGatewayConfigured } from "@/lib/ai/models";
 import { hasDatabaseClient } from "@/db";
 import { getPlatformSettings } from "@/lib/platform-settings";
 import {
@@ -73,7 +74,7 @@ export default async function PlatformHealthPage() {
       ok: env.EMAIL_PROVIDER === "console" || Boolean(env.RESEND_API_KEY),
     },
     { label: "Resend webhook secret", ok: Boolean(env.RESEND_WEBHOOK_SECRET) },
-    { label: "AI Gateway", ok: Boolean(env.AI_GATEWAY_API_KEY) },
+    { label: "AI Gateway", ok: aiGatewayConfigured() },
     { label: "Cron secret", ok: Boolean(env.CRON_SECRET) },
     {
       label: "Stripe secret key",

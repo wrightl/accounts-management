@@ -39,6 +39,9 @@ vi.mock("@clerk/nextjs/server", () => ({
   })),
 }));
 
+const ai = vi.hoisted(() => ({ on: true }));
+vi.mock("@/lib/ai/models", () => ({ aiGatewayConfigured: () => ai.on }));
+
 const TODAY = "2026-10-12";
 
 let ctx: Awaited<ReturnType<typeof createTestDb>>;
@@ -66,6 +69,7 @@ beforeEach(async () => {
   ctx = await createTestDb();
   db = ctx.db;
   setTestDb(db as unknown as Database);
+  ai.on = true;
   companyId = (await seedCompany(db)).id;
   userId = await seedUser("admin");
   const [client] = await db.insert(clients).values({ companyId, name: "Acme" }).returning();
@@ -120,6 +124,16 @@ describe("menu actions", () => {
     await db.insert(companyMemberships).values({ userId, companyId: other.id, role: "admin" });
     await updateMenuFeatures(form(["quotes"]));
     expect((await getMenuState(userId, other.id)).enabled).toBeNull();
+  });
+
+  it("keeps the AI bookkeeper choice while AI is off, as it isn't on the form", async () => {
+    ai.on = false;
+    await updateMenuFeatures(form(["quotes"]));
+    expect((await getMenuState(userId, companyId)).enabled).toEqual(["bookkeeper", "quotes"]);
+
+    await setMenuFeatures(userId, companyId, ["quotes"]);
+    await updateMenuFeatures(form(["forecast"]));
+    expect((await getMenuState(userId, companyId)).enabled).toEqual(["forecast"]);
   });
 
   it("lets a read-only accountant change their own menu", async () => {

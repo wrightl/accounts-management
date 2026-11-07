@@ -32,7 +32,11 @@ import { getStorage } from "@/lib/storage";
 import { commitAll } from "@/lib/test/import-invoices";
 import { seedCompany } from "@/lib/test/seed-company";
 
-const { generateText } = vi.hoisted(() => ({ generateText: vi.fn() }));
+const { generateText, readLocally, ai } = vi.hoisted(() => ({
+  generateText: vi.fn(),
+  readLocally: vi.fn(),
+  ai: { on: true },
+}));
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({
@@ -54,9 +58,10 @@ vi.mock("ai", () => ({
   Output: { object: (opts: unknown) => opts },
 }));
 vi.mock("@/lib/ai/models", () => ({
-  aiGatewayConfigured: () => true,
+  aiGatewayConfigured: () => ai.on,
   INVOICE_EXTRACT_MODEL: "test/model",
 }));
+vi.mock("@/lib/invoices/import/pdf-local", () => ({ readInvoicePdfLocally: readLocally }));
 
 const reading = {
   issuerName: "Test Co",
@@ -106,6 +111,9 @@ beforeEach(async () => {
   });
   generateText.mockReset();
   generateText.mockResolvedValue({ output: reading, usage: {} });
+  ai.on = true;
+  readLocally.mockReset();
+  readLocally.mockRejectedValue(new Error("No text found in the PDF"));
 });
 
 afterEach(async () => {
@@ -144,11 +152,31 @@ describe("uploading a PDF", () => {
     expect(await db.select().from(invoices)).toEqual([]);
   });
 
-  it("leaves an editable draft when reading fails", async () => {
+  it("leaves an editable draft when neither the model nor the local read can read it", async () => {
     generateText.mockRejectedValue(new Error("model down"));
     const draft = await upload(await newBatch());
+    expect(readLocally).toHaveBeenCalled();
     expect(draft.errors.join()).toContain("couldn't read");
     expect(draft.documentPath).toBeTruthy();
+  });
+
+  it("reads locally when the model fails, and says so", async () => {
+    generateText.mockRejectedValue(new Error("model down"));
+    readLocally.mockResolvedValue({ ...reading, issuerName: null, lines: [] });
+    const draft = await upload(await newBatch());
+    expect(draft.parsed).toMatchObject({ number: "PDF-1", grossPence: 12_000 });
+    expect(draft.warnings.join()).toContain("Read without AI");
+  });
+
+  it("reads locally with no AI call when AI isn't set up", async () => {
+    ai.on = false;
+    readLocally.mockResolvedValue({ ...reading, issuerName: null, lines: [] });
+    const draft = await upload(await newBatch());
+    expect(generateText).not.toHaveBeenCalled();
+    expect(draft.parsed).toMatchObject({ number: "PDF-1" });
+    expect(draft.warnings.join()).toContain("Read without AI");
+    const reads = await db.select().from(invoicePdfReads);
+    expect(reads).toEqual([]);
   });
 
   it("leaves an editable draft when the model's answer is unusable", async () => {
@@ -175,17 +203,17 @@ describe("uploading a PDF", () => {
     expect(generateText).not.toHaveBeenCalled();
   });
 
-  it("stops at the monthly limit, with no AI call", async () => {
+  it("reads locally at the monthly limit, with no AI call", async () => {
     const batchId = await newBatch();
     await db.insert(invoicePdfReads).values({
       companyId,
       month: todayIsoDate().slice(0, 7),
       reads: 25,
     });
-    const result = await uploadInvoicePdf(batchId, pdf());
-    expect(result.ok).toBe(false);
-    expect(!result.ok && result.error).toContain("limit");
+    readLocally.mockResolvedValue({ ...reading, issuerName: null, lines: [] });
+    const draft = await upload(batchId);
     expect(generateText).not.toHaveBeenCalled();
+    expect(draft.warnings.join()).toContain("25 AI reads are used up");
   });
 
   it("doesn't win back allowance by discarding", async () => {
@@ -198,9 +226,9 @@ describe("uploading a PDF", () => {
     await upload(first);
     await discardInvoiceImport(first);
     generateText.mockClear();
-    const result = await uploadInvoicePdf(await newBatch(), pdf());
-    expect(result.ok).toBe(false);
+    await uploadInvoicePdf(await newBatch(), pdf());
     expect(generateText).not.toHaveBeenCalled();
+    expect(readLocally).toHaveBeenCalledTimes(1);
   });
 
   it("can't exceed the limit with parallel uploads", async () => {
@@ -214,8 +242,9 @@ describe("uploading a PDF", () => {
       uploadInvoicePdf(batchId, pdf()),
       uploadInvoicePdf(batchId, pdf()),
     ]);
-    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect(results.every((r) => r.ok)).toBe(true);
     expect(generateText).toHaveBeenCalledTimes(1);
+    expect(readLocally).toHaveBeenCalledTimes(1);
   });
 
   it("doesn't count a duplicate against the limit", async () => {

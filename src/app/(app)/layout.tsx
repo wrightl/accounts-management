@@ -17,6 +17,7 @@ import {
   type NavFilter,
 } from "@/components/dashboard/nav";
 import { getMenuFeatures } from "@/lib/menu/queries";
+import { aiGatewayConfigured } from "@/lib/ai/models";
 import { DashboardShell } from "@/components/dashboard/shell";
 import { DateFormatProvider } from "@/components/date-format-provider";
 import { SyncUiPrefsCookie } from "@/components/users/sync-ui-prefs-cookie";
@@ -87,6 +88,7 @@ export default async function AppLayout({
   const navFilter: NavFilter = {
     permissionCheck: (permission) => can(user.role, permission),
     entityType: user.entityType ?? company.entityType,
+    aiAvailable: aiGatewayConfigured(),
     enabledFeatures,
   };
   const groups = filterNavGroups(NAV_GROUPS, navFilter);

@@ -7,6 +7,7 @@ import {
   flattenNavItems,
   filterNavGroups,
   hiddenNavGroups,
+  aiOnlyFeatures,
   optionalNavItems,
   visibleSettingsPages,
 } from "@/components/dashboard/nav";
@@ -62,7 +63,10 @@ describe("flattenNavItems", () => {
 describe("filterNavGroups", () => {
   it("shows every item when no menu choice has been made", () => {
     for (const role of ["admin", "user"] as const) {
-      const groups = filterNavGroups(NAV_GROUPS, { permissionCheck: forRole(role) });
+      const groups = filterNavGroups(NAV_GROUPS, {
+        permissionCheck: forRole(role),
+        aiAvailable: true,
+      });
       expect(flattenNavItems(groups)).toHaveLength(23);
     }
   });
@@ -70,6 +74,7 @@ describe("filterNavGroups", () => {
   it("shows accountants the filing pages and what the pack contains", () => {
     const groups = filterNavGroups(NAV_GROUPS, {
       permissionCheck: forRole("accountant"),
+      aiAvailable: true,
       entityType: "limited_company",
     });
     expect(flattenNavItems(groups).map((i) => i.href).sort()).toEqual([
@@ -93,6 +98,7 @@ describe("filterNavGroups", () => {
     const labelFor = (role: "admin" | "user" | "accountant") =>
       filterNavGroups(NAV_GROUPS, {
         permissionCheck: forRole(role),
+        aiAvailable: true,
         entityType: "limited_company",
       }).find((g) => g.id === "payingYourself")?.label;
     expect(labelFor("admin")).toBe("Paying yourself");
@@ -103,6 +109,7 @@ describe("filterNavGroups", () => {
   it("drops limited-company items for sole traders", () => {
     const groups = filterNavGroups(NAV_GROUPS, {
       permissionCheck: forRole("admin"),
+      aiAvailable: true,
       entityType: "sole_trader",
     });
     const labels = flattenNavItems(groups).map((i) => i.label);
@@ -114,6 +121,7 @@ describe("filterNavGroups", () => {
   it("shows only core items when every optional item is off", () => {
     const groups = filterNavGroups(NAV_GROUPS, {
       permissionCheck: forRole("admin"),
+      aiAvailable: true,
       entityType: "limited_company",
       enabledFeatures: [],
     });
@@ -123,6 +131,7 @@ describe("filterNavGroups", () => {
   it("shows enabled optional items in menu order", () => {
     const groups = filterNavGroups(NAV_GROUPS, {
       permissionCheck: forRole("user"),
+      aiAvailable: true,
       enabledFeatures: ["recurring", "quotes"],
     });
     const sales = groups.find((g) => g.id === "sales");
@@ -135,7 +144,9 @@ describe("filterNavGroups", () => {
   });
 
   it("drops empty groups after filtering", () => {
-    expect(filterNavGroups(NAV_GROUPS, { permissionCheck: () => false })).toHaveLength(0);
+    expect(
+      filterNavGroups(NAV_GROUPS, { permissionCheck: () => false, aiAvailable: true }),
+    ).toHaveLength(0);
   });
 });
 
@@ -144,6 +155,7 @@ describe("hiddenNavGroups", () => {
     const hidden = flattenNavItems(
       hiddenNavGroups(NAV_GROUPS, {
         permissionCheck: forRole("admin"),
+        aiAvailable: true,
         entityType: "sole_trader",
         enabledFeatures: ["quotes", "orders"],
       }),
@@ -157,7 +169,11 @@ describe("hiddenNavGroups", () => {
 
   it("is empty when everything shows", () => {
     expect(
-      hiddenNavGroups(NAV_GROUPS, { permissionCheck: forRole("admin"), enabledFeatures: null }),
+      hiddenNavGroups(NAV_GROUPS, {
+        permissionCheck: forRole("admin"),
+        aiAvailable: true,
+        enabledFeatures: null,
+      }),
     ).toHaveLength(0);
   });
 });
@@ -165,14 +181,38 @@ describe("hiddenNavGroups", () => {
 describe("optionalNavItems", () => {
   it("lists every optional item available to the role and entity", () => {
     expect(
-      optionalNavItems(NAV_GROUPS, { permissionCheck: forRole("admin") }),
+      optionalNavItems(NAV_GROUPS, { permissionCheck: forRole("admin"), aiAvailable: true }),
     ).toHaveLength(MENU_FEATURES.length);
     expect(
       optionalNavItems(NAV_GROUPS, {
         permissionCheck: forRole("admin"),
+        aiAvailable: true,
         entityType: "sole_trader",
       }).map((i) => i.feature),
     ).not.toContain("dividends");
+  });
+});
+
+describe("without AI", () => {
+  const filter = { permissionCheck: forRole("admin"), aiAvailable: false } as const;
+
+  it("drops the AI bookkeeper from the menu, hidden items and options", () => {
+    const hrefs = (groups: ReturnType<typeof filterNavGroups>) =>
+      flattenNavItems(groups).map((i) => i.href);
+    expect(hrefs(filterNavGroups(NAV_GROUPS, filter))).not.toContain("/bookkeeper");
+    expect(hrefs(filterNavGroups(NAV_GROUPS, { ...filter, aiAvailable: true }))).toContain(
+      "/bookkeeper",
+    );
+    expect(
+      hrefs(hiddenNavGroups(NAV_GROUPS, { ...filter, enabledFeatures: [] })),
+    ).not.toContain("/bookkeeper");
+    expect(optionalNavItems(NAV_GROUPS, filter).map((i) => i.feature)).not.toContain(
+      "bookkeeper",
+    );
+  });
+
+  it("names the AI-only features", () => {
+    expect(aiOnlyFeatures(NAV_GROUPS)).toEqual(["bookkeeper"]);
   });
 });
 

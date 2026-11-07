@@ -26,20 +26,20 @@ import {
 import {
   draftFromExtraction,
   extractInvoiceFromPdf,
+  type InvoiceExtraction,
 } from "@/lib/invoices/import/pdf-extract";
+import { readInvoicePdfLocally } from "@/lib/invoices/import/pdf-local";
 import { pdfImportMonthlyLimit } from "@/lib/invoices/import/limits";
 import { mutate, mutateWide } from "@/lib/mutate";
 import { getStorage } from "@/lib/storage";
 
-const EXTRACT_TIMEOUT_MS = 45_000;
+// Leaves room in the page's 60s for a local read if the model times out.
+const EXTRACT_TIMEOUT_MS = 30_000;
 
 export type PdfBatchResult = { ok: true; id: string } | { ok: false; error: string };
 
 /** Start a batch for uploading invoice PDFs one at a time. */
 export async function createPdfImportBatch(): Promise<PdfBatchResult> {
-  if (!aiGatewayConfigured()) {
-    return { ok: false, error: "Reading PDFs isn't set up on this deployment" };
-  }
   return mutateWide<PdfBatchResult>("accounts:write", async ({ companyId, localUserId }) => {
     const [batch] = await getDb()
       .insert(invoiceImportBatches)
@@ -126,6 +126,57 @@ async function ensureClientResolution(
     );
 }
 
+function logReadFailure(reader: "ai" | "local", err: unknown) {
+  console.warn(
+    JSON.stringify({
+      level: "warn",
+      msg: "invoice_pdf_extract_failed",
+      reader,
+      error: err instanceof Error ? err.message : String(err),
+    }),
+  );
+}
+
+type PdfRead = {
+  extraction: InvoiceExtraction;
+  reader: "ai" | "local";
+  /** The monthly AI allowance, when it being used up is why AI wasn't used. */
+  overLimit?: number;
+};
+
+/**
+ * Read with the model when it's available and this month's allowance has
+ * room, otherwise (or if it fails) locally with pdf.js and Tesseract. Null
+ * when neither could read it.
+ */
+async function readInvoicePdf(companyId: string, bytes: Buffer): Promise<PdfRead | null> {
+  let overLimit: number | undefined;
+  if (aiGatewayConfigured()) {
+    const limit = pdfImportMonthlyLimit(await getEntitlements(companyId));
+    if (await reservePdfRead(companyId, limit)) {
+      try {
+        const extraction = await extractInvoiceFromPdf(
+          bytes,
+          AbortSignal.timeout(EXTRACT_TIMEOUT_MS),
+        );
+        return { extraction, reader: "ai" };
+      } catch (err) {
+        logReadFailure("ai", err);
+      }
+    } else if (limit != null) {
+      overLimit = limit;
+    }
+  }
+  try {
+    const extraction = await readInvoicePdfLocally(bytes);
+    console.info(JSON.stringify({ level: "info", msg: "invoice_pdf_extract", reader: "local" }));
+    return { extraction, reader: "local", overLimit };
+  } catch (err) {
+    logReadFailure("local", err);
+    return null;
+  }
+}
+
 export type UploadResult =
   | { ok: true; id: string }
   | { ok: false; error: string };
@@ -144,9 +195,6 @@ export async function uploadInvoicePdf(
   const bytes = Buffer.from(await file.arrayBuffer());
   if (sniffReceiptContentType(bytes) !== "application/pdf") {
     return { ok: false, error: `${file.name} isn't a PDF` };
-  }
-  if (!aiGatewayConfigured()) {
-    return { ok: false, error: "Reading PDFs isn't set up on this deployment" };
   }
 
   return mutateWide<UploadResult>(
@@ -199,14 +247,6 @@ export async function uploadInvoicePdf(
         };
       }
 
-      const limit = pdfImportMonthlyLimit(await getEntitlements(companyId));
-      if (!(await reservePdfRead(companyId, limit))) {
-        return {
-          ok: false,
-          error: `You've reached this month's limit of ${limit} PDFs. Import the rest by CSV, or try again next month.`,
-        };
-      }
-
       const stored = await getStorage().put(
         `invoice-imports/${companyId}/${batchId}/${randomUUID()}.pdf`,
         bytes,
@@ -236,23 +276,20 @@ export async function uploadInvoicePdf(
       let invoice = blank;
       const errors: string[] = [];
       const warnings: string[] = [];
-      try {
-        const extraction = await extractInvoiceFromPdf(
-          bytes,
-          AbortSignal.timeout(EXTRACT_TIMEOUT_MS),
-        );
-        const draft = draftFromExtraction(extraction, company);
+      const read = await readInvoicePdf(companyId, bytes);
+      if (read) {
+        const draft = draftFromExtraction(read.extraction, company);
         invoice = draft.invoice;
         errors.push(...draft.errors);
         warnings.push(...draft.warnings);
-      } catch (err) {
-        console.warn(
-          JSON.stringify({
-            level: "warn",
-            msg: "invoice_pdf_extract_failed",
-            error: err instanceof Error ? err.message : String(err),
-          }),
-        );
+        if (read.reader === "local") {
+          warnings.push(
+            read.overLimit
+              ? `Read without AI, as this month's ${read.overLimit} AI reads are used up. Check every field against the PDF.`
+              : "Read without AI. Check every field against the PDF.",
+          );
+        }
+      } else {
         errors.push("Alfa couldn't read this file. Fill in the details from the PDF.");
       }
       errors.push(...validateParsedInvoice(invoice));
