@@ -167,7 +167,7 @@ async function runAiGatewayOcr(
 ): Promise<ReceiptExtraction> {
   if (!aiGatewayConfigured()) {
     throw new Error(
-      "AI Gateway is not configured. Add AI_GATEWAY_API_KEY, enable Vercel OIDC, or switch to Local OCR in Platform settings.",
+      "AI Gateway is not configured. Add AI_GATEWAY_API_KEY or switch to Local OCR in Platform settings.",
     );
   }
 

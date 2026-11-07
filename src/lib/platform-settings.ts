@@ -1,6 +1,7 @@
 import "server-only";
 import { eq } from "drizzle-orm";
 import { getDb, hasDatabaseClient } from "@/db";
+import { aiGatewayConfigured } from "@/lib/ai/models";
 import {
   platformSettings,
   type PlatformSettings,
@@ -78,14 +79,18 @@ export async function updatePlatformSettings(
   return updated;
 }
 
-/** Platform-wide receipt OCR provider + model (not per-company). */
+/**
+ * Platform-wide receipt OCR provider + model (not per-company). AI Gateway
+ * falls back to local reading when AI isn't set up on this deployment.
+ */
 export async function getReceiptOcrSettings(): Promise<{
   provider: string;
   model: string;
 }> {
   const settings = await getPlatformSettings();
+  const stored = settings.defaultReceiptOcrProvider || "local";
   return {
-    provider: settings.defaultReceiptOcrProvider || "local",
+    provider: stored === "ai_gateway" && !aiGatewayConfigured() ? "local" : stored,
     model: settings.defaultReceiptOcrModel || "google/gemini-2.5-flash",
   };
 }
