@@ -5,20 +5,21 @@ import { and, eq, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
 import {
+  bankAccounts,
+  bankTransactions,
   clients,
   companies,
   invoiceImportBatches,
   invoiceImportDrafts,
   invoicePdfReads,
   invoices,
+  reconciliationMatches,
 } from "@/db/schema";
 import type { ActionResult } from "@/actions/result";
 import { aiGatewayConfigured } from "@/lib/ai/models";
 import { requireActionPermission } from "@/lib/auth";
 import {
   findBankTransactionsForImportDraft,
-  getBankTransactionById,
-  isBankTransactionAvailable,
   type InvoiceBankMatch,
 } from "@/lib/bank/queries";
 import { getEntitlements } from "@/lib/billing/entitlements";
@@ -432,7 +433,25 @@ async function bankLinkProblem(
   bankTransactionId: string,
   invoice: ParsedInvoice,
 ): Promise<{ error: string } | { bookedAt: string }> {
-  const tx = await getBankTransactionById(companyId, bankTransactionId);
+  const [tx] = await getDb()
+    .select({
+      amountPence: bankTransactions.amountPence,
+      bookedAt: bankTransactions.bookedAt,
+      matchId: reconciliationMatches.id,
+    })
+    .from(bankTransactions)
+    .innerJoin(bankAccounts, eq(bankTransactions.bankAccountId, bankAccounts.id))
+    .leftJoin(
+      reconciliationMatches,
+      eq(reconciliationMatches.bankTransactionId, bankTransactions.id),
+    )
+    .where(
+      and(
+        eq(bankTransactions.id, bankTransactionId),
+        eq(bankAccounts.companyId, companyId),
+      ),
+    )
+    .limit(1);
   if (!tx || tx.amountPence <= 0) return { error: "Bank payment not found" };
   if (invoice.status !== "paid" || invoice.amountPaidPence !== invoice.grossPence) {
     return { error: "Only an invoice paid in full can be linked to a bank payment" };
@@ -440,9 +459,7 @@ async function bankLinkProblem(
   if (tx.amountPence !== invoice.grossPence) {
     return { error: "The bank payment must be for the invoice's gross total" };
   }
-  if (!(await isBankTransactionAvailable(bankTransactionId))) {
-    return { error: "That bank payment is already reconciled" };
-  }
+  if (tx.matchId) return { error: "That bank payment is already reconciled" };
   const [taken] = await getDb()
     .select({ id: invoiceImportDrafts.id })
     .from(invoiceImportDrafts)

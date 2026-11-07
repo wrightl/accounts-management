@@ -637,6 +637,32 @@ describe("linking a bank payment", () => {
     expect(await db.select().from(reconciliationMatches)).toEqual([]);
   });
 
+  it("won't undo an import payment that was later reconciled by hand", async () => {
+    const tx = await credit();
+    const batchId = await newBatch();
+    const draft = await upload(batchId);
+    await updateImportDraft(batchId, draft.id, paid(draft.parsed));
+    await approveImportDrafts(batchId, { draftId: draft.id });
+    await commitAll(batchId);
+    const [invoice] = await db.select().from(invoices);
+    const [payment] = await db.select().from(payments);
+    await db.insert(reconciliationMatches).values({
+      bankTransactionId: tx.id,
+      matchType: "invoice_payment",
+      paymentId: payment.id,
+      invoiceId: invoice.id,
+      confirmed: true,
+    });
+
+    const result = await undoInvoiceImport(batchId);
+    expect(result).toMatchObject({
+      ok: true,
+      kept: [expect.objectContaining({ reason: "Matched to a bank transaction" })],
+    });
+    expect(await db.select().from(invoices)).toHaveLength(1);
+    expect(await db.select().from(reconciliationMatches)).toHaveLength(1);
+  });
+
   it("refuses a payment for the wrong amount, one already reconciled, or an unpaid invoice", async () => {
     const wrong = await credit(5_000);
     const taken = await credit();

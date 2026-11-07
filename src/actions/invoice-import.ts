@@ -1,6 +1,6 @@
 "use server";
 
-import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   auditLog,
@@ -747,6 +747,7 @@ export async function undoInvoiceImport(batchId: string): Promise<UndoResult> {
               tx
                 .select({
                   id: reconciliationMatches.id,
+                  bankTransactionId: reconciliationMatches.bankTransactionId,
                   invoiceId: reconciliationMatches.invoiceId,
                   paymentInvoiceId: payments.invoiceId,
                   paymentMethod: payments.method,
@@ -764,9 +765,32 @@ export async function undoInvoiceImport(batchId: string): Promise<UndoResult> {
         };
         for (const p of paymentRows) if (p.method !== "import") block(p.invoiceId, "Has a payment recorded in Alfa");
         for (const c of creditRows) block(c.invoiceId, "Has a credit note");
-        // A bank payment linked by the import itself goes with it.
+        // Only the bank payment a draft linked when the import was saved goes
+        // with it. Any other match, such as one made by hand later, still blocks.
+        const linkedDrafts = none
+          ? []
+          : await tx
+              .select({
+                invoiceId: invoiceImportDrafts.invoiceId,
+                bankTransactionId: invoiceImportDrafts.bankTransactionId,
+              })
+              .from(invoiceImportDrafts)
+              .where(
+                and(
+                  eq(invoiceImportDrafts.companyId, companyId),
+                  eq(invoiceImportDrafts.batchId, batchId),
+                  eq(invoiceImportDrafts.status, "committed"),
+                  isNotNull(invoiceImportDrafts.bankTransactionId),
+                ),
+              );
+        const linkedByImport = new Set(
+          linkedDrafts.map((d) => `${d.invoiceId}:${d.bankTransactionId}`),
+        );
+        const importOwned = (m: (typeof matchRows)[number]) =>
+          m.paymentMethod === "import" &&
+          linkedByImport.has(`${m.paymentInvoiceId}:${m.bankTransactionId}`);
         for (const m of matchRows) {
-          if (m.paymentMethod !== "import") block(m.invoiceId ?? m.paymentInvoiceId, "Matched to a bank transaction");
+          if (!importOwned(m)) block(m.invoiceId ?? m.paymentInvoiceId, "Matched to a bank transaction");
         }
         for (const j of jobRows) block(j.invoiceId, "Has been emailed to the client");
         for (const c of claimRows) block(c.invoiceId, "Has a late payment claim");
@@ -788,7 +812,7 @@ export async function undoInvoiceImport(batchId: string): Promise<UndoResult> {
         if (removable.length > 0) {
           const removableIds = new Set(removable.map((r) => r.id));
           const importMatchIds = matchRows.flatMap((m) =>
-            m.paymentMethod === "import" && removableIds.has((m.invoiceId ?? m.paymentInvoiceId) as string)
+            importOwned(m) && removableIds.has((m.invoiceId ?? m.paymentInvoiceId) as string)
               ? [m.id]
               : [],
           );
