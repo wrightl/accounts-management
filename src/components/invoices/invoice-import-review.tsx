@@ -6,7 +6,8 @@ import { Fragment, useState, useTransition } from "react";
 import {
   commitInvoiceImportChunk,
   discardInvoiceImport,
-  setImportClientResolution,
+  setImportClientForKey,
+  setImportDraftClient,
   setImportDraftsSkipped,
   setNextInvoiceSequence,
   undoInvoiceImport,
@@ -27,6 +28,9 @@ const BASIS_NOTE = {
   name: "Same name as an existing client",
   similar: "Similar to an existing client: check before linking",
 } as const;
+
+/** The Clients section's value when a file client's invoices go to different clients. */
+const MIXED = "__mixed";
 
 export function InvoiceImportReview({
   review,
@@ -137,14 +141,65 @@ export function InvoiceImportReview({
     "Nothing is ready to save. Approve or fix an invoice below, or discard this import."
   );
 
-  /** The client an invoice will be saved against, as chosen in the Clients section. */
-  function clientLabelFor(key: string, fallback: string): string {
-    const row = review.clients.find((c) => c.key === key);
-    if (!row) return fallback;
-    const existing = row.resolution
-      ? review.existingClients.find((c) => c.id === row.resolution)
+  type Draft = ImportBatchReview["drafts"][number];
+
+  function fileClientName(draft: Draft): string {
+    const { client } = draft.parsed;
+    return client.companyName || client.name || client.email || "Client";
+  }
+
+  /** The client an invoice is (or will be) saved against. */
+  function clientLabelFor(draft: Draft): string {
+    const existing = draft.clientId
+      ? review.existingClients.find((c) => c.id === draft.clientId)
       : null;
-    return existing ? existing.label : `${row.label} (new client)`;
+    if (existing) return existing.label;
+    return draft.status === "committed" || !isOpen
+      ? fileClientName(draft)
+      : `${fileClientName(draft)} (new client)`;
+  }
+
+  /** A client picker for invoices from one client in the file, suggestion first. */
+  function clientSelect({
+    key,
+    value,
+    label,
+    onChange,
+    extraOptions = [],
+  }: {
+    key: string;
+    value: string;
+    label: string;
+    onChange: (id: string | null) => void;
+    extraOptions?: { value: string; label: string }[];
+  }) {
+    const suggestion = review.clients.find((c) => c.key === key)?.suggestion;
+    const suggestedId = suggestion && !suggestion.preselect ? suggestion.clientId : null;
+    return (
+      <ClientSelect
+        aria-label={label}
+        value={value}
+        disabled={pending}
+        onChange={(id) => {
+          if (id !== MIXED) onChange(id || null);
+        }}
+        leadingOptions={[
+          ...extraOptions,
+          { value: "", label: "Create a new client from the file" },
+          ...(suggestedId
+            ? [
+                {
+                  value: suggestedId,
+                  label: `${review.existingClients.find((c) => c.id === suggestedId)?.label} (suggested)`,
+                },
+              ]
+            : []),
+        ]}
+        clients={review.existingClients
+          .filter((c) => c.id !== suggestedId)
+          .map((c) => ({ id: c.id, name: c.label }))}
+      />
+    );
   }
 
   return (
@@ -281,8 +336,9 @@ export function InvoiceImportReview({
         <section id="import-clients" className="scroll-mt-20">
           <h2 className="font-display text-lg font-semibold">Clients</h2>
           <p className="mt-1 text-sm text-muted">
-            Link to a client you already have, or create a new one. Existing client details
-            aren&apos;t changed.
+            Link to a client you already have, or create a new one. A choice here applies to
+            every unsaved invoice from that client; change a single invoice in its row below.
+            Existing client details aren&apos;t changed.
           </p>
           <div className="mt-3 overflow-x-auto">
             <Table>
@@ -307,28 +363,16 @@ export function InvoiceImportReview({
                       {client.invoiceCount} ({formatGBP(client.grossPence)})
                     </TD>
                     <TD>
-                      <ClientSelect
-                        aria-label={`Client in Alfa for ${client.label}`}
-                        value={client.resolution ?? ""}
-                        disabled={pending}
-                        onChange={(id) =>
-                          run(() => setImportClientResolution(batch.id, client.key, id || null))
-                        }
-                        leadingOptions={[
-                          { value: "", label: "Create a new client from the file" },
-                          ...(client.suggestion.clientId && !client.suggestion.preselect
-                            ? [
-                                {
-                                  value: client.suggestion.clientId,
-                                  label: `${review.existingClients.find((c) => c.id === client.suggestion.clientId)?.label} (suggested)`,
-                                },
-                              ]
-                            : []),
-                        ]}
-                        clients={review.existingClients
-                          .filter((c) => client.suggestion.preselect || c.id !== client.suggestion.clientId)
-                          .map((c) => ({ id: c.id, name: c.label }))}
-                      />
+                      {clientSelect({
+                        key: client.key,
+                        value: client.mixed ? MIXED : (client.resolution ?? ""),
+                        label: `Client in Alfa for ${client.label}`,
+                        onChange: (id) =>
+                          run(() => setImportClientForKey(batch.id, client.key, id)),
+                        extraOptions: client.mixed
+                          ? [{ value: MIXED, label: "Several clients: pick one to set all" }]
+                          : [],
+                      })}
                     </TD>
                   </TR>
                 ))}
@@ -395,12 +439,20 @@ export function InvoiceImportReview({
                       ) : null}
                     </TD>
                     <TD>
-                      {isOpen
-                        ? clientLabelFor(
-                            parsed.client.key,
-                            parsed.client.companyName || parsed.client.name || parsed.client.email || "Client",
-                          )
-                        : parsed.client.companyName || parsed.client.name || parsed.client.email}
+                      {isOpen && draft.status !== "committed" && draft.status !== "skipped" ? (
+                        <>
+                          {clientSelect({
+                            key: parsed.client.key,
+                            value: draft.clientId ?? "",
+                            label: `Client in Alfa for ${parsed.number ?? fileClientName(draft)}`,
+                            onChange: (id) =>
+                              run(() => setImportDraftClient(batch.id, draft.id, id)),
+                          })}
+                          <div className="text-xs text-muted">In the file: {fileClientName(draft)}</div>
+                        </>
+                      ) : (
+                        clientLabelFor(draft)
+                      )}
                     </TD>
                     <TD>{parsed.issueDate ? <DisplayDate value={parsed.issueDate} /> : "—"}</TD>
                     <TD>
@@ -457,10 +509,7 @@ export function InvoiceImportReview({
                           batchId={batch.id}
                           draftId={draft.id}
                           invoice={parsed}
-                          clientLabel={clientLabelFor(
-                            parsed.client.key,
-                            parsed.client.companyName || parsed.client.name || parsed.client.email || "Client",
-                          )}
+                          clientLabel={clientLabelFor(draft)}
                           bankTransactionId={draft.bankTransactionId}
                           errors={draft.errors}
                           warnings={draft.warnings}

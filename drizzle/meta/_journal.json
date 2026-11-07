@@ -603,6 +603,13 @@
       "when": 1794064164877,
       "tag": "0085_import_draft_bank_link",
       "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1794069506803,
+      "tag": "0086_import_draft_client",
+      "breakpoints": true
     }
   ]
 }

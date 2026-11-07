@@ -1,7 +1,7 @@
 "use server";
 
 import { createHash, randomUUID } from "node:crypto";
-import { and, eq, ne, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
 import {
@@ -55,12 +55,7 @@ export async function createPdfImportBatch(): Promise<PdfBatchResult> {
   return mutateWide<PdfBatchResult>("accounts:write", async ({ companyId, localUserId }) => {
     const [batch] = await getDb()
       .insert(invoiceImportBatches)
-      .values({
-        companyId,
-        kind: "pdf",
-        filename: "Uploaded PDFs",
-        createdByUserId: localUserId,
-      })
+      .values({ companyId, kind: "pdf", createdByUserId: localUserId })
       .returning({ id: invoiceImportBatches.id });
     return { ok: true, id: batch.id };
   });
@@ -122,13 +117,33 @@ async function numberProblem(
   return taken ? `Invoice number ${invoice.number} is already in Alfa` : null;
 }
 
-/** Record how this draft's client resolves, without overriding an earlier choice. */
-async function ensureClientResolution(
+/**
+ * The client a new draft starts linked to: whatever an earlier draft in this
+ * import with the same client uses, else a confident match, else none.
+ */
+async function initialDraftClient(
   companyId: string,
   batchId: string,
   invoice: ParsedInvoice,
-) {
+): Promise<string | null> {
+  const { client } = invoice;
+  if (!client.name && !client.companyName && !client.email) return null;
   const db = getDb();
+  const [earlier] = await db
+    .select({ clientId: invoiceImportDrafts.clientId })
+    .from(invoiceImportDrafts)
+    .where(
+      and(
+        eq(invoiceImportDrafts.companyId, companyId),
+        eq(invoiceImportDrafts.batchId, batchId),
+        isNotNull(invoiceImportDrafts.clientId),
+        ne(invoiceImportDrafts.status, "skipped"),
+        sql`${invoiceImportDrafts.parsed} -> 'client' ->> 'key' = ${client.key}`,
+      ),
+    )
+    .orderBy(desc(invoiceImportDrafts.position))
+    .limit(1);
+  if (earlier?.clientId) return earlier.clientId;
   const existing = await db
     .select({
       id: clients.id,
@@ -138,21 +153,8 @@ async function ensureClientResolution(
     })
     .from(clients)
     .where(eq(clients.companyId, companyId));
-  const suggestion = suggestClient(invoice.client, existing);
-  const entry = JSON.stringify({
-    [invoice.client.key]: suggestion.preselect ? suggestion.clientId : null,
-  });
-  await db
-    .update(invoiceImportBatches)
-    .set({
-      clientResolutions: sql`${entry}::jsonb || ${invoiceImportBatches.clientResolutions}`,
-    })
-    .where(
-      and(
-        eq(invoiceImportBatches.id, batchId),
-        eq(invoiceImportBatches.companyId, companyId),
-      ),
-    );
+  const suggestion = suggestClient(client, existing);
+  return suggestion.preselect ? suggestion.clientId : null;
 }
 
 function logReadFailure(reader: "ai" | "local", err: unknown) {
@@ -359,6 +361,7 @@ export async function uploadInvoicePdf(
           position,
           status: "needs_review",
           parsed: invoice,
+          clientId: await initialDraftClient(companyId, batchId, invoice),
           errors: [...new Set(errors)],
           warnings,
           documentPath: stored.path,
@@ -367,9 +370,6 @@ export async function uploadInvoicePdf(
           documentSha256: sha256,
         })
         .returning({ id: invoiceImportDrafts.id });
-      if (invoice.client.name || invoice.client.companyName || invoice.client.email) {
-        await ensureClientResolution(companyId, batchId, invoice);
-      }
       return { ok: true, id: draft.id };
     },
     { paths: [`/invoices/import/${batchId}`] },

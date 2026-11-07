@@ -26,6 +26,7 @@ import {
 import {
   commitInvoiceImportChunk,
   discardInvoiceImport,
+  setImportDraftClient,
   setImportDraftsSkipped,
   undoInvoiceImport,
 } from "@/actions/invoice-import";
@@ -296,6 +297,32 @@ describe("uploading a PDF", () => {
     const draft = await upload(await newBatch());
     expect(draft.errors.join()).toContain("several invoices");
     expect(draft.errors.join()).toContain("EUR");
+  });
+});
+
+describe("choosing the client", () => {
+  it("links a later PDF for the same client to the one chosen earlier", async () => {
+    const [chosen] = await db
+      .insert(clients)
+      .values({ companyId, name: "Chosen Client" })
+      .returning();
+    const batchId = await newBatch();
+    const first = await upload(batchId);
+    expect(first.clientId).toBeNull();
+    expect((await setImportDraftClient(batchId, first.id, chosen.id)).ok).toBe(true);
+
+    generateText.mockResolvedValueOnce({ output: { ...reading, number: "PDF-2" }, usage: {} });
+    const second = await upload(batchId);
+    expect(second.clientId).toBe(chosen.id);
+  });
+
+  it("starts linked to an existing client with the same email", async () => {
+    const [existing] = await db
+      .insert(clients)
+      .values({ companyId, name: "Jane", email: "jane@acme.example" })
+      .returning();
+    const draft = await upload(await newBatch());
+    expect(draft.clientId).toBe(existing.id);
   });
 });
 

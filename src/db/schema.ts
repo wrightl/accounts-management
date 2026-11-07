@@ -449,17 +449,6 @@ export const invoiceImportBatches = pgTable(
       .notNull()
       .default("draft"),
     filename: text("filename"),
-    columnMapping: jsonb("column_mapping").$type<Record<string, string>>(),
-    dateFormat: text("date_format"),
-    /** How each client in the file resolves: an existing client id, or null to create one. */
-    clientResolutions: jsonb("client_resolutions")
-      .$type<Record<string, string | null>>()
-      .notNull()
-      .default(sql`'{}'::jsonb`),
-    createdClientIds: uuid("created_client_ids")
-      .array()
-      .notNull()
-      .default(sql`'{}'::uuid[]`),
     skippedRows: jsonb("skipped_rows")
       .$type<{ rows: number[]; number: string | null; reason: string }[]>()
       .notNull()
@@ -510,6 +499,10 @@ export const invoiceImportDrafts = pgTable(
       .$type<"needs_review" | "ready" | "skipped" | "committed">()
       .notNull(),
     parsed: jsonb("parsed").$type<ParsedInvoice>().notNull(),
+    /** The client this invoice is saved against. Null creates one from the file on saving. */
+    clientId: uuid("client_id").references(() => clients.id, { onDelete: "set null" }),
+    /** The import created this client, so undoing it can remove the client too. */
+    clientCreated: boolean("client_created").notNull().default(false),
     errors: jsonb("errors").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
     warnings: jsonb("warnings").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
     /** The uploaded PDF, which becomes the invoice's original when the draft is saved. */
@@ -530,6 +523,7 @@ export const invoiceImportDrafts = pgTable(
   (t) => [
     index("idx_invoice_import_drafts_batch").on(t.batchId, t.position),
     index("idx_invoice_import_drafts_company_sha").on(t.companyId, t.documentSha256),
+    index("idx_invoice_import_drafts_client").on(t.clientId),
     check(
       "invoice_import_drafts_status_known",
       sql`${t.status} in ('needs_review', 'ready', 'skipped', 'committed')`,

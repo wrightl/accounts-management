@@ -75,10 +75,15 @@ export async function getImportBatchReview(companyId: string, batchId: string) {
       email: string | null;
       invoiceCount: number;
       grossPence: number;
+      /** The client its unsaved invoices share, or null to create one. */
       resolution: string | null;
+      /** Its unsaved invoices are linked to different clients. */
+      mixed: boolean;
       suggestion: ReturnType<typeof suggestClient>;
     }
   >();
+  /** Whether any unsaved invoice has been seen for each row yet. */
+  const seenOpen = new Set<string>();
   let broughtForward = 0;
   let counted = 0;
   let netInAccounts = 0;
@@ -94,20 +99,30 @@ export async function getImportBatchReview(companyId: string, batchId: string) {
       netInAccounts += parsed.netPence;
       vatInAccounts += parsed.vatPence;
     }
-    const row = clientRows.get(parsed.client.key);
+    const { key } = parsed.client;
+    let row = clientRows.get(key);
     if (row) {
       row.invoiceCount += 1;
       row.grossPence += parsed.grossPence;
     } else {
-      clientRows.set(parsed.client.key, {
-        key: parsed.client.key,
+      row = {
+        key,
         label: parsed.client.companyName || parsed.client.name || parsed.client.email || "Client",
         email: parsed.client.email,
         invoiceCount: 1,
         grossPence: parsed.grossPence,
-        resolution: batch.clientResolutions[parsed.client.key] ?? null,
+        resolution: null,
+        mixed: false,
         suggestion: suggestClient(parsed.client, existingClients),
-      });
+      };
+      clientRows.set(key, row);
+    }
+    if (draft.status === "committed") continue;
+    if (!seenOpen.has(key)) {
+      seenOpen.add(key);
+      row.resolution = draft.clientId;
+    } else if (row.resolution !== draft.clientId) {
+      row.mixed = true;
     }
   }
 
@@ -121,7 +136,8 @@ export async function getImportBatchReview(companyId: string, batchId: string) {
     drafts: drafts.slice(0, MAX_REVIEW_ROWS),
     totalDrafts: drafts.length,
     counts,
-    clients: [...clientRows.values()],
+    // A client whose invoices are all saved has nothing left to choose.
+    clients: [...clientRows.values()].filter((row) => seenOpen.has(row.key)),
     approvable: drafts.filter(
       (d) =>
         d.status === "needs_review" && d.errors.length === 0 && !readLocally(d.warnings),

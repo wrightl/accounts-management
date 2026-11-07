@@ -1,6 +1,6 @@
 "use server";
 
-import { and, asc, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   auditLog,
@@ -197,11 +197,12 @@ export async function stageInvoiceImport(
       stageable.push(draft);
     }
 
-    const resolutions: Record<string, string | null> = {};
+    // Linked only on a confident match; anything else creates a client unless the user picks one.
+    const linked = new Map<string, string | null>();
     for (const { invoice } of stageable) {
-      if (invoice.client.key in resolutions) continue;
+      if (linked.has(invoice.client.key)) continue;
       const suggestion = suggestClient(invoice.client, existingClients);
-      resolutions[invoice.client.key] = suggestion.preselect ? suggestion.clientId : null;
+      linked.set(invoice.client.key, suggestion.preselect ? suggestion.clientId : null);
     }
 
     const batchId = await db.transaction(async (tx) => {
@@ -211,9 +212,6 @@ export async function stageInvoiceImport(
           companyId,
           kind: "csv",
           filename: read.file.name,
-          columnMapping: mapping as Record<string, string>,
-          dateFormat,
-          clientResolutions: resolutions,
           skippedRows: skipped,
           createdByUserId: localUserId,
         })
@@ -226,6 +224,7 @@ export async function stageInvoiceImport(
             position: i + offset,
             status: draftStatus(draft),
             parsed: draft.invoice,
+            clientId: linked.get(draft.invoice.client.key) ?? null,
             errors: draft.errors,
             warnings: draft.warnings,
           })),
@@ -251,19 +250,21 @@ async function loadBatch(companyId: string, batchId: string) {
   return batch ?? null;
 }
 
-/** Link a client in the file to an existing client, or null to create a new one. */
-export async function setImportClientResolution(
+/**
+ * Point unsaved drafts at an existing client, or null to create one from the
+ * file. Shares the batch lock with saving, so a draft can't change mid-save.
+ */
+async function setDraftsClient(
   batchId: string,
-  key: string,
   clientId: string | null,
+  which: (scope: SQL) => SQL | undefined,
 ): Promise<ActionResult> {
   return mutate(
     "accounts:write",
     async ({ companyId }) => {
       return getDb().transaction(async (tx): Promise<ActionResult> => {
-        // Read under a row lock, so two choices made together both survive.
         const [batch] = await tx
-          .select()
+          .select({ status: invoiceImportBatches.status })
           .from(invoiceImportBatches)
           .where(
             and(
@@ -271,9 +272,8 @@ export async function setImportClientResolution(
               eq(invoiceImportBatches.companyId, companyId),
             ),
           )
-          .for("update");
-        if (!batch || batch.status !== "draft") return { ok: false, error: "Import not found" };
-        if (!(key in batch.clientResolutions)) return { ok: false, error: "Client not found in this import" };
+          .for("share");
+        if (batch?.status !== "draft") return { ok: false, error: "Import not found" };
         if (clientId) {
           const [client] = await tx
             .select({ id: clients.id })
@@ -282,19 +282,43 @@ export async function setImportClientResolution(
             .limit(1);
           if (!client) return { ok: false, error: "Client not found" };
         }
-        await tx
-          .update(invoiceImportBatches)
-          .set({ clientResolutions: { ...batch.clientResolutions, [key]: clientId } })
-          .where(
-            and(
-              eq(invoiceImportBatches.id, batchId),
-              eq(invoiceImportBatches.companyId, companyId),
-            ),
-          );
+        const scope = and(
+          eq(invoiceImportDrafts.batchId, batchId),
+          eq(invoiceImportDrafts.companyId, companyId),
+          ne(invoiceImportDrafts.status, "committed"),
+        )!;
+        const updated = await tx
+          .update(invoiceImportDrafts)
+          .set({ clientId, clientCreated: false })
+          .where(which(scope))
+          .returning({ id: invoiceImportDrafts.id });
+        if (updated.length === 0) return { ok: false, error: "Invoice not found in this import" };
         return { ok: true };
       });
     },
     { paths: [`/invoices/import/${batchId}`] },
+  );
+}
+
+/** Set the client for every unsaved invoice from one client in the file. */
+export async function setImportClientForKey(
+  batchId: string,
+  key: string,
+  clientId: string | null,
+): Promise<ActionResult> {
+  return setDraftsClient(batchId, clientId, (scope) =>
+    and(scope, sql`${invoiceImportDrafts.parsed} -> 'client' ->> 'key' = ${key}`),
+  );
+}
+
+/** Set the client for one unsaved invoice. */
+export async function setImportDraftClient(
+  batchId: string,
+  draftId: string,
+  clientId: string | null,
+): Promise<ActionResult> {
+  return setDraftsClient(batchId, clientId, (scope) =>
+    and(scope, eq(invoiceImportDrafts.id, draftId)),
   );
 }
 
@@ -523,9 +547,7 @@ export async function commitInvoiceImportChunk(
           if (bankLocked) return flag(draft.id, bankLocked);
         }
 
-        const resolutions: Record<string, string | null> = { ...batch.clientResolutions };
-        const createdClientIds = [...batch.createdClientIds];
-        const clientIds = Object.values(resolutions).filter((id): id is string => Boolean(id));
+        const clientIds = [...new Set(drafts.flatMap((d) => (d.clientId ? [d.clientId] : [])))];
         const valid = clientIds.length
           ? await tx
               .select({ id: clients.id })
@@ -534,10 +556,9 @@ export async function commitInvoiceImportChunk(
           : [];
         const validIds = new Set(valid.map((c) => c.id));
         // Before anything is written: returning from this transaction commits it.
-        for (const { parsed } of drafts) {
-          const chosen = resolutions[parsed.client.key];
-          if (chosen && !validIds.has(chosen)) {
-            return { ok: false, error: `A client chosen for ${parsed.number ?? "an invoice"} no longer exists` };
+        for (const { clientId, parsed } of drafts) {
+          if (clientId && !validIds.has(clientId)) {
+            return { ok: false, error: `The client chosen for ${parsed.number ?? "an invoice"} no longer exists` };
           }
         }
 
@@ -548,9 +569,16 @@ export async function commitInvoiceImportChunk(
         );
 
         const createdInvoiceIds: string[] = [];
+        /** Clients created in this chunk, by their key in the file. */
+        const createdByKey = new Map<string, string>();
         for (const draft of drafts) {
           const { parsed } = draft;
-          let clientId = resolutions[parsed.client.key] ?? null;
+          let clientId = draft.clientId;
+          let clientCreated = draft.clientCreated;
+          if (!clientId) {
+            clientCreated = true;
+            clientId = createdByKey.get(parsed.client.key) ?? null;
+          }
           if (!clientId) {
             const [created] = await tx
               .insert(clients)
@@ -563,9 +591,20 @@ export async function commitInvoiceImportChunk(
               })
               .returning({ id: clients.id });
             clientId = created.id;
-            resolutions[parsed.client.key] = clientId;
-            validIds.add(clientId);
-            createdClientIds.push(clientId);
+            createdByKey.set(parsed.client.key, clientId);
+            // Later chunks save the rest of this client's invoices against it too.
+            await tx
+              .update(invoiceImportDrafts)
+              .set({ clientId, clientCreated: true })
+              .where(
+                and(
+                  eq(invoiceImportDrafts.batchId, batchId),
+                  eq(invoiceImportDrafts.companyId, companyId),
+                  ne(invoiceImportDrafts.status, "committed"),
+                  isNull(invoiceImportDrafts.clientId),
+                  sql`${invoiceImportDrafts.parsed} -> 'client' ->> 'key' = ${parsed.client.key}`,
+                ),
+              );
           }
 
           const paymentDate = parsed.amountPaidPence > 0 ? parsed.paidDate ?? parsed.issueDate : null;
@@ -632,7 +671,7 @@ export async function commitInvoiceImportChunk(
           }
           await tx
             .update(invoiceImportDrafts)
-            .set({ status: "committed", invoiceId: invoice.id })
+            .set({ status: "committed", invoiceId: invoice.id, clientId, clientCreated })
             .where(
               and(
                 eq(invoiceImportDrafts.id, draft.id),
@@ -652,19 +691,17 @@ export async function commitInvoiceImportChunk(
             ),
           );
         const left = remaining[0]?.count ?? 0;
-        await tx
-          .update(invoiceImportBatches)
-          .set({
-            clientResolutions: resolutions,
-            createdClientIds,
-            ...(left === 0 ? { status: "committed" as const, committedAt: new Date() } : {}),
-          })
-          .where(
-            and(
-              eq(invoiceImportBatches.id, batchId),
-              eq(invoiceImportBatches.companyId, companyId),
-            ),
-          );
+        if (left === 0) {
+          await tx
+            .update(invoiceImportBatches)
+            .set({ status: "committed", committedAt: new Date() })
+            .where(
+              and(
+                eq(invoiceImportBatches.id, batchId),
+                eq(invoiceImportBatches.companyId, companyId),
+              ),
+            );
+        }
         await tx.insert(auditLog).values({
           companyId,
           actorUserId: localUserId,
@@ -828,20 +865,35 @@ export async function undoInvoiceImport(batchId: string): Promise<UndoResult> {
           );
         }
 
-        const stillUsed = new Set<string>();
-        if (batch.createdClientIds.length > 0) {
+        // Deleting a client clears it from the drafts, so undoing again only sees ones still here.
+        const createdRows = await tx
+          .selectDistinct({ clientId: invoiceImportDrafts.clientId })
+          .from(invoiceImportDrafts)
+          .where(
+            and(
+              eq(invoiceImportDrafts.companyId, companyId),
+              eq(invoiceImportDrafts.batchId, batchId),
+              eq(invoiceImportDrafts.clientCreated, true),
+              isNotNull(invoiceImportDrafts.clientId),
+            ),
+          );
+        const createdClientIds = createdRows.flatMap((r) => (r.clientId ? [r.clientId] : []));
+        if (createdClientIds.length > 0) {
           const used = await Promise.all(
             [invoices, quotes, orders, creditNotes].map((table) =>
               tx
                 .select({ clientId: table.clientId })
                 .from(table)
-                .where(inArray(table.clientId, batch.createdClientIds)),
+                .where(
+                  and(
+                    eq(table.companyId, companyId),
+                    inArray(table.clientId, createdClientIds),
+                  ),
+                ),
             ),
           );
-          for (const rowsForTable of used) {
-            for (const row of rowsForTable) stillUsed.add(row.clientId);
-          }
-          const unused = batch.createdClientIds.filter((id) => !stillUsed.has(id));
+          const stillUsed = new Set(used.flat().map((row) => row.clientId));
+          const unused = createdClientIds.filter((id) => !stillUsed.has(id));
           if (unused.length > 0) {
             await tx
               .delete(clients)
@@ -852,19 +904,17 @@ export async function undoInvoiceImport(batchId: string): Promise<UndoResult> {
         const kept = rows
           .filter((r) => reasons.has(r.id))
           .map((r) => ({ number: r.number, reason: reasons.get(r.id)! }));
-        await tx
-          .update(invoiceImportBatches)
-          .set(
-            kept.length === 0
-              ? { status: "undone", undoneAt: new Date() }
-              : { createdClientIds: [...stillUsed] },
-          )
-          .where(
-            and(
-              eq(invoiceImportBatches.id, batchId),
-              eq(invoiceImportBatches.companyId, companyId),
-            ),
-          );
+        if (kept.length === 0) {
+          await tx
+            .update(invoiceImportBatches)
+            .set({ status: "undone", undoneAt: new Date() })
+            .where(
+              and(
+                eq(invoiceImportBatches.id, batchId),
+                eq(invoiceImportBatches.companyId, companyId),
+              ),
+            );
+        }
         await tx.insert(auditLog).values({
           companyId,
           actorUserId: localUserId,

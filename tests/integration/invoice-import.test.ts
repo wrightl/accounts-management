@@ -19,7 +19,8 @@ import {
 import {
   commitInvoiceImportChunk,
   discardInvoiceImport,
-  setImportClientResolution,
+  setImportClientForKey,
+  setImportDraftClient,
   setImportDraftsSkipped,
   setNextInvoiceSequence,
   stageInvoiceImport,
@@ -225,9 +226,99 @@ describe("importing invoices", () => {
     expect(review?.clients[0].resolution).toBeNull();
 
     const key = review!.clients[0].key;
-    expect((await setImportClientResolution(batchId, key, existing.id)).ok).toBe(true);
+    expect((await setImportClientForKey(batchId, key, existing.id)).ok).toBe(true);
     await commitAll(batchId);
     expect((await byNumber("S-1")).clientId).toBe(existing.id);
+  });
+});
+
+describe("choosing a client for each invoice", () => {
+  const TWO_FOR_ACME = [
+    "number,client name,issue date,description,net",
+    "P-1,Acme,01/05/2026,W,10.00",
+    "P-2,Acme,01/05/2026,W,20.00",
+    "P-3,Acme,01/05/2026,W,30.00",
+  ].join("\n");
+
+  it("links a confident match on staging", async () => {
+    const [existing] = await db.insert(clients).values({ companyId, name: "Acme" }).returning();
+    const batchId = await stageCsv(TWO_FOR_ACME);
+    expect((await draftsOf(batchId)).map((d) => d.clientId)).toEqual([
+      existing.id,
+      existing.id,
+      existing.id,
+    ]);
+  });
+
+  it("saves one invoice to another client and still creates the file's client once", async () => {
+    const [other] = await db.insert(clients).values({ companyId, name: "Other Co" }).returning();
+    const batchId = await stageCsv(TWO_FOR_ACME);
+    const p2 = (await draftsOf(batchId)).find((d) => d.parsed.number === "P-2")!;
+    expect((await setImportDraftClient(batchId, p2.id, other.id)).ok).toBe(true);
+
+    const review = await getImportBatchReview(companyId, batchId);
+    expect(review?.clients[0]).toMatchObject({ mixed: true });
+
+    await commitAll(batchId);
+    expect((await byNumber("P-2")).clientId).toBe(other.id);
+    const p1 = await byNumber("P-1");
+    expect((await byNumber("P-3")).clientId).toBe(p1.clientId);
+    const rows = await db.select().from(clients).where(eq(clients.companyId, companyId));
+    expect(rows.map((c) => c.name).sort()).toEqual(["Acme", "Other Co"]);
+
+    const drafts = await draftsOf(batchId);
+    expect(drafts.find((d) => d.parsed.number === "P-2")).toMatchObject({
+      clientId: other.id,
+      clientCreated: false,
+    });
+    expect(drafts.find((d) => d.parsed.number === "P-1")).toMatchObject({
+      clientId: p1.clientId,
+      clientCreated: true,
+    });
+  });
+
+  it("sets every unsaved invoice from a file client at once, leaving saved ones", async () => {
+    const [first, second] = await db
+      .insert(clients)
+      .values([
+        { companyId, name: "First Existing" },
+        { companyId, name: "Second Existing" },
+      ])
+      .returning();
+    const batchId = await stageCsv(TWO_FOR_ACME);
+    const [key] = (await draftsOf(batchId)).map((d) => d.parsed.client.key);
+    await setImportClientForKey(batchId, key, first.id);
+    const p1 = (await draftsOf(batchId)).find((d) => d.parsed.number === "P-1")!;
+    await db
+      .update(invoiceImportDrafts)
+      .set({ status: "committed" })
+      .where(eq(invoiceImportDrafts.id, p1.id));
+
+    expect((await setImportClientForKey(batchId, key, second.id)).ok).toBe(true);
+    const byNum = Object.fromEntries(
+      (await draftsOf(batchId)).map((d) => [d.parsed.number, d.clientId]),
+    );
+    expect(byNum).toEqual({ "P-1": first.id, "P-2": second.id, "P-3": second.id });
+  });
+
+  it("won't link an invoice to another company's client", async () => {
+    const other = await seedCompany(db, { name: "Other" });
+    const [theirs] = await db
+      .insert(clients)
+      .values({ companyId: other.id, name: "Theirs" })
+      .returning();
+    const batchId = await stageCsv(TWO_FOR_ACME);
+    const [draft] = await draftsOf(batchId);
+    expect((await setImportDraftClient(batchId, draft.id, theirs.id)).ok).toBe(false);
+    expect((await draftsOf(batchId)).every((d) => d.clientId === null)).toBe(true);
+  });
+
+  it("can't change an invoice once it's saved", async () => {
+    const [existing] = await db.insert(clients).values({ companyId, name: "Other Co" }).returning();
+    const batchId = await stageCsv(TWO_FOR_ACME);
+    const [draft] = await draftsOf(batchId);
+    await commitAll(batchId);
+    expect((await setImportDraftClient(batchId, draft.id, existing.id)).ok).toBe(false);
   });
 });
 
@@ -411,21 +502,17 @@ describe("saving safely", () => {
     );
     const keys = (await draftsOf(batchId)).map((d) => d.parsed.client.key);
     const results = await Promise.all([
-      setImportClientResolution(batchId, keys[0], first.id),
-      setImportClientResolution(batchId, keys[1], second.id),
+      setImportClientForKey(batchId, keys[0], first.id),
+      setImportClientForKey(batchId, keys[1], second.id),
     ]);
     expect(results.every((r) => r.ok)).toBe(true);
-    const [batch] = await db
-      .select()
-      .from(invoiceImportBatches)
-      .where(eq(invoiceImportBatches.id, batchId));
-    expect(batch.clientResolutions).toEqual({
-      [keys[0]]: first.id,
-      [keys[1]]: second.id,
-    });
+    const linked = Object.fromEntries(
+      (await draftsOf(batchId)).map((d) => [d.parsed.client.key, d.clientId]),
+    );
+    expect(linked).toEqual({ [keys[0]]: first.id, [keys[1]]: second.id });
   });
 
-  it("saves nothing when a chosen client has since been deleted", async () => {
+  it("creates a client from the file when the chosen one has since been deleted", async () => {
     const [gone] = await db
       .insert(clients)
       .values({ companyId, name: "Gone Client" })
@@ -439,14 +526,16 @@ describe("saving safely", () => {
     );
     const drafts = await draftsOf(batchId);
     const beta = drafts.find((d) => d.parsed.number === "B-1")!;
-    await setImportClientResolution(batchId, beta.parsed.client.key, gone.id);
+    await setImportDraftClient(batchId, beta.id, gone.id);
     await db.delete(clients).where(eq(clients.id, gone.id));
+    expect((await draftsOf(batchId)).find((d) => d.id === beta.id)?.clientId).toBeNull();
 
-    const result = await commitInvoiceImportChunk(batchId);
-    expect(result.ok).toBe(false);
-    expect(await allInvoices()).toHaveLength(0);
-    expect(await db.select().from(clients).where(eq(clients.companyId, companyId))).toHaveLength(0);
-    expect((await draftsOf(batchId)).every((d) => d.status === "ready")).toBe(true);
+    await commitAll(batchId);
+    const [client] = await db
+      .select()
+      .from(clients)
+      .where(eq(clients.id, (await byNumber("B-1")).clientId));
+    expect(client.name).toBe("Beta");
   });
 
   it("records what was imported in the audit log", async () => {
@@ -497,6 +586,21 @@ describe("undo", () => {
       .from(invoiceImportBatches)
       .where(eq(invoiceImportBatches.id, batchId));
     expect(batch.status).toBe("undone");
+  });
+
+  it("removes a client it created once that client's last invoice goes, on a second undo", async () => {
+    const batchId = await importCsv(SAMPLE);
+    const kept = await byNumber("OLD-2");
+    const [payment] = await db
+      .insert(payments)
+      .values({ invoiceId: kept.id, amountPence: 500, receivedAt: new Date(), method: "bank" })
+      .returning();
+    await undoInvoiceImport(batchId);
+    expect(await db.select().from(clients).where(eq(clients.id, kept.clientId))).toHaveLength(1);
+
+    await db.delete(payments).where(eq(payments.id, payment.id));
+    expect(await undoInvoiceImport(batchId)).toMatchObject({ ok: true, kept: [] });
+    expect(await db.select().from(clients).where(eq(clients.companyId, companyId))).toHaveLength(0);
   });
 
   it("keeps clients that existed before", async () => {
