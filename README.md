@@ -137,10 +137,10 @@ they never join a tenant. Later operators are invited from the portal UI.
 | `npm test`            | Vitest unit + integration (PGlite)                                                                                                                       |
 | `npm run test:watch`  | Vitest watch mode                                                                                                                                        |
 | `npm run test:e2e`    | Playwright e2e (own server on port 3100)                                                                                                                 |
-| `npm run db:generate` | Generate a Drizzle migration from the schema                                                                                                             |
+| `npm run db:generate` | Generate a Drizzle migration and snapshot from the schema. Write every migration this way; `npm test` fails if a snapshot is missing                     |
 | `npm run db:migrate`  | Apply schema migrations then install-time data migrations over a direct Postgres connection (`pg`)                                                       |
 | `npm run auth:agent`  | Mint a one-time Clerk sign-in URL for a local tenant founder (Cursor agent browser). Development keys only.                                              |
-| `npm run db:push`     | **Unsafe** while Drizzle meta snapshots lag behind hand migrations (after `0010`). Prefer `db:generate` + `db:migrate`. Do not point at Neon production. |
+| `npm run db:push`     | Push the schema straight to a database without a migration. Local throwaway databases only; never Neon production                                        |
 | `npm run db:studio`   | Drizzle Studio                                                                                                                                           |
 | `npm run tunnel`      | ngrok to port 3001 (inbound webhooks in local dev)                                                                                                       |
 | `npm run promo:all`   | Seed demo data, record UI, assemble the promo video                                                                                                      |

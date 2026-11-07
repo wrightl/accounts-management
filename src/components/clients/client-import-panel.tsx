@@ -21,9 +21,16 @@ import {
   type ParsedClientImportRow,
 } from "@/lib/clients/import-csv";
 
-export function ClientImportButton({ canWrite }: { canWrite: boolean }) {
+export function ClientImportButton({
+  canWrite,
+  defaultOpen = false,
+}: {
+  canWrite: boolean;
+  /** Open the import on arrival (`?import=1`, from the history checklist). */
+  defaultOpen?: boolean;
+}) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [rows, setRows] = useState<ParsedClientImportRow[] | null>(null);
   const {
     fieldErrors,

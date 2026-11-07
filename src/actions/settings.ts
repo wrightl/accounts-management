@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { companySettings } from "@/db/schema";
+import { companies } from "@/db/schema";
 import { requireActionPermission } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { deleteCompanyById } from "@/lib/companies/delete";
@@ -64,13 +64,13 @@ export async function updateCompany(formData: FormData): Promise<ActionResult> {
       };
       const db = getDb();
       await db
-        .update(companySettings)
+        .update(companies)
         .set({
           ...patch,
           financialYearEndMonth: financialYearEndMonth(fyStart),
           updatedAt: new Date(),
         })
-        .where(eq(companySettings.id, current.id));
+        .where(eq(companies.id, current.id));
 
       const logo = formData.get("logo");
       if (logo instanceof File && logo.size > 0) {

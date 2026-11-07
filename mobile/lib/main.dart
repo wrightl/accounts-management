@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+
 import 'core/config/clerk_oauth.dart';
 import 'core/constants/app_constants.dart';
 import 'core/theme/app_theme.dart';
@@ -46,60 +47,61 @@ class MyApp extends StatelessWidget {
       config: ClerkAuthConfig(
         publishableKey: publishableKey,
         redirectionGenerator: ClerkOAuth.redirectFor,
-        deepLinkStream: ClerkOAuth.deepLinkStream(),
         // iOS Simulator has no hardware security keys; passkeys fail there.
         supportsHardwareSecurityKeys: !kDebugMode,
       ),
-      child: MultiProvider(
-        providers: [
-          ChangeNotifierProvider(create: (_) => AuthProvider()),
-          ChangeNotifierProvider(create: (_) => DashboardProvider()),
-          ChangeNotifierProvider(create: (_) => ExpenseProvider()),
-          ChangeNotifierProvider(create: (_) => BooksProvider()),
-          ChangeNotifierProvider(create: (_) => NotificationProvider()),
-          ChangeNotifierProvider(
-            create: (_) {
-              final lock = AppLock()..load();
-              WidgetsBinding.instance.addObserver(lock);
-              return lock;
-            },
-          ),
-        ],
-        child: MaterialApp(
-          title: AppConstants.appName,
-          theme: AppTheme.lightTheme,
-          debugShowCheckedModeBanner: false,
-          localizationsDelegates: const [
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
-          supportedLocales: const [Locale('en')],
-          builder: (context, child) => ClerkErrorListener(
-            child: AppLockGate(
-              lock: context.read<AppLock>(),
-              child: child ?? const SizedBox.shrink(),
+      child: ClerkOAuthCallbacks(
+        child: MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (_) => AuthProvider()),
+            ChangeNotifierProvider(create: (_) => DashboardProvider()),
+            ChangeNotifierProvider(create: (_) => ExpenseProvider()),
+            ChangeNotifierProvider(create: (_) => BooksProvider()),
+            ChangeNotifierProvider(create: (_) => NotificationProvider()),
+            ChangeNotifierProvider(
+              create: (_) {
+                final lock = AppLock()..load();
+                WidgetsBinding.instance.addObserver(lock);
+                return lock;
+              },
             ),
-          ),
-          home: const AuthGate(),
-          onGenerateRoute: (settings) {
-            if (ClerkOAuth.isCallbackRoute(settings.name)) {
+          ],
+          child: MaterialApp(
+            title: AppConstants.appName,
+            theme: AppTheme.lightTheme,
+            debugShowCheckedModeBanner: false,
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            supportedLocales: const [Locale('en')],
+            builder: (context, child) => ClerkErrorListener(
+              child: AppLockGate(
+                lock: context.read<AppLock>(),
+                child: child ?? const SizedBox.shrink(),
+              ),
+            ),
+            home: const AuthGate(),
+            onGenerateRoute: (settings) {
+              if (ClerkOAuth.isCallbackRoute(settings.name)) {
+                return MaterialPageRoute<void>(
+                  settings: const RouteSettings(name: '/'),
+                  builder: (_) => const AuthGate(),
+                );
+              }
+              return null;
+            },
+            onUnknownRoute: (settings) {
               return MaterialPageRoute<void>(
                 settings: const RouteSettings(name: '/'),
                 builder: (_) => const AuthGate(),
               );
-            }
-            return null;
-          },
-          onUnknownRoute: (settings) {
-            return MaterialPageRoute<void>(
-              settings: const RouteSettings(name: '/'),
-              builder: (_) => const AuthGate(),
-            );
-          },
-          routes: {
-            '/expenses/capture': (context) => const ExpenseCaptureScreen(),
-          },
+            },
+            routes: {
+              '/expenses/capture': (context) => const ExpenseCaptureScreen(),
+            },
+          ),
         ),
       ),
     );
@@ -146,7 +148,9 @@ class _SignedInShellState extends State<SignedInShell> {
     final user = context.read<AuthProvider>().user;
     if (user == null || !user.canWriteAccounts || user.isBillingReadOnly) {
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text("You can't add expenses in this company.")),
+        const SnackBar(
+          content: Text("You can't add expenses in this company."),
+        ),
       );
       return;
     }
@@ -213,10 +217,7 @@ class _LoadingScaffold extends StatelessWidget {
 }
 
 class _AuthErrorScaffold extends StatelessWidget {
-  const _AuthErrorScaffold({
-    required this.message,
-    required this.onRetry,
-  });
+  const _AuthErrorScaffold({required this.message, required this.onRetry});
 
   final String message;
   final VoidCallback onRetry;
@@ -249,10 +250,7 @@ class _AuthErrorScaffold extends StatelessWidget {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: onRetry,
-                child: const Text('Retry'),
-              ),
+              ElevatedButton(onPressed: onRetry, child: const Text('Retry')),
               const SizedBox(height: 12),
               OutlinedButton(
                 onPressed: () => signOut(context),

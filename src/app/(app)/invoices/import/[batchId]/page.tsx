@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { InvoiceImportReview } from "@/components/invoices/invoice-import-review";
 import { buttonClasses } from "@/components/ui/button";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
+import { SetupStepBanner } from "@/components/data-onboarding/setup-step-banner";
 import { getImportBatchReview } from "@/lib/invoices/import/queries";
 
 // Server Actions on this page commit and undo large imports.
@@ -10,11 +11,14 @@ export const maxDuration = 60;
 
 export default async function InvoiceImportBatchPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ batchId: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const { companyId } = await guardTenantPage("accounts:write");
+  const { companyId, entityType } = await guardTenantPage("accounts:write");
   const { batchId } = await params;
+  const sp = await searchParams;
   const review = await getImportBatchReview(companyId, batchId);
   if (!review) notFound();
   const [canSetCutover, canSetNumber] = await Promise.all([
@@ -24,6 +28,7 @@ export default async function InvoiceImportBatchPage({
 
   return (
     <div className="max-w-4xl">
+      <SetupStepBanner stepId="invoices" entityType={entityType} from={sp.from} />
       <div className="mb-6">
         <Link href="/invoices" className={buttonClasses("ghost")}>
           Back to invoices

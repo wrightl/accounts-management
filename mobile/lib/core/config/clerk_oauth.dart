@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:app_links/app_links.dart';
 import 'package:clerk_auth/clerk_auth.dart';
+import 'package:clerk_flutter/clerk_flutter.dart' show ClerkAuth;
 import 'package:flutter/widgets.dart';
 
 /// Google (and other OAuth) sign-in via the system browser, not WKWebView.
@@ -21,6 +24,28 @@ class ClerkOAuth {
     return null;
   }
 
+  /// Finishes a sign-in from the browser's callback link.
+  ///
+  /// Clerk's own handler only swaps the nonce while the OAuth verification is
+  /// still unverified. Its client refresh (every ~10s) marks it verified while
+  /// the user is in the browser, so it skipped the swap and left them signed
+  /// out. Swap it whenever we're signed out instead.
+  static Future<void> complete(Auth auth, Uri uri) async {
+    if (auth.isSignedIn) return;
+    try {
+      final nonce = uri.queryParameters['rotating_token_nonce'];
+      if (nonce != null && (auth.signIn ?? auth.signUp) != null) {
+        await auth.completeOAuthSignIn(token: nonce);
+      } else {
+        await auth.refreshClient();
+      }
+      // A Google account with no Clerk user yet comes back transferable.
+      await auth.transfer();
+    } catch (error) {
+      auth.handleError(error);
+    }
+  }
+
   static Stream<Uri?> deepLinkStream() async* {
     final initial = await _appLinks.getInitialLink();
     if (initial != null) yield _clerkLink(initial);
@@ -40,4 +65,36 @@ class ClerkOAuth {
   }
 
   static Uri? _clerkLink(Uri uri) => isCallback(uri) ? uri : null;
+}
+
+/// Completes OAuth sign-in when the browser hands the callback link back.
+class ClerkOAuthCallbacks extends StatefulWidget {
+  const ClerkOAuthCallbacks({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<ClerkOAuthCallbacks> createState() => _ClerkOAuthCallbacksState();
+}
+
+class _ClerkOAuthCallbacksState extends State<ClerkOAuthCallbacks> {
+  StreamSubscription<Uri?>? _links;
+
+  @override
+  void initState() {
+    super.initState();
+    _links = ClerkOAuth.deepLinkStream().listen((uri) {
+      if (uri == null || !mounted) return;
+      ClerkOAuth.complete(ClerkAuth.of(context, listen: false), uri);
+    });
+  }
+
+  @override
+  void dispose() {
+    _links?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

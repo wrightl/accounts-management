@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { OpeningBalancesForm } from "@/components/ledger/opening-balances-form";
+import { SetupStepBanner } from "@/components/data-onboarding/setup-step-banner";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { financialYearStartDate } from "@/lib/dates";
@@ -28,8 +29,13 @@ function percent(rate: number): string {
   return `${(rate * 100).toFixed(1)}%`;
 }
 
-export default async function ReservesPage() {
+export default async function ReservesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   const { companyId, entityType } = await guardTenantPage("filing:read");
+  const sp = await searchParams;
   if (entityType !== "limited_company") redirect("/reports");
   const canSetOpening = await hasPermission("books:lock");
 
@@ -52,6 +58,7 @@ export default async function ReservesPage() {
 
   return (
     <div>
+      <SetupStepBanner stepId="opening_balances" entityType={entityType} from={sp.from} />
       <h1 className="font-display text-2xl font-semibold">Tax &amp; reserves</h1>
       <p className="mt-1 max-w-2xl text-muted">
         A running estimate of corporation tax and of the profit the company can pay out as
@@ -180,7 +187,10 @@ export default async function ReservesPage() {
       </section>
 
       {canSetOpening ? (
-        <section className="mt-10 rounded-2xl border border-border bg-surface p-5">
+        <section
+          id="opening-balances"
+          className="mt-10 scroll-mt-6 rounded-2xl border border-border bg-surface p-5"
+        >
           <h2 className="font-display text-lg font-semibold">Opening balances</h2>
           <p className="mb-4 mt-1 max-w-2xl text-sm text-muted">
             For a company that traded before its records in Alfa. Enter the figures from the

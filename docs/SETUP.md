@@ -24,9 +24,11 @@ outside the repo; once done, add the listed secrets to the Cursor agent
    → `scripts/migrate-on-build.mjs` → Drizzle migrator over a direct `pg`
    connection when `DATABASE_URL` or `DATABASE_URL_UNPOOLED` is set). Prefer
    `DATABASE_URL_UNPOOLED` for migrations. CI builds without a database skip
-   migrate. Do **not** use `npm run db:push` against Neon — meta snapshots after
-   `0010` are incomplete, so push can invent wrong diffs. Always use
-   `db:generate` + `db:migrate` (or rely on migrate-on-build).
+   migrate. Do **not** use `npm run db:push` against Neon. Make schema changes
+   with `npm run db:generate`, which writes the SQL and a snapshot in
+   `drizzle/meta`; edit the generated SQL if you need to, but keep its
+   snapshot. A unit test fails when `schema.ts` and the newest snapshot
+   disagree, or when a migration has no snapshot.
 5. After schema migrate, the same install step runs **data migrations**
    (`src/db/data-migrations/`). The first one bootstraps the platform operator
    (`lee+admin@dotanddashconsulting.com` as `platform_admin`, no company) and

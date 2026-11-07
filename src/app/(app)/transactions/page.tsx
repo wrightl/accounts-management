@@ -7,6 +7,7 @@ import { getBankTransactionSummary } from "@/lib/bank/summary";
 import { parseBankListParams, hasActiveBankFilters, BANK_PAGE_SIZE, resolveBankListDateRange } from "@/lib/bank/list-params";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { BankToolbar } from "@/components/bank/bank-ui";
+import { SetupStepBanner } from "@/components/data-onboarding/setup-step-banner";
 import { BankFilters } from "@/components/bank/bank-filters";
 import {
   BankPagination,
@@ -32,11 +33,12 @@ export default async function TransactionsPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const { companyId, role } = await guardTenantPage("records:read");
+  const { companyId, role, entityType } = await guardTenantPage("records:read");
   const inPack = recordScopeFor(role) === "pack";
   const canRaiseQuery = can(role, "queries:raise");
   const canWrite = await hasPermission("accounts:write");
-  const parsed = parseBankListParams(await searchParams);
+  const sp = await searchParams;
+  const parsed = parseBankListParams(sp);
 
   const [settings, labels] = await Promise.all([
     getOrCreateCompanySettings(companyId),
@@ -112,6 +114,7 @@ export default async function TransactionsPage({
 
   return (
     <div>
+      <SetupStepBanner stepId="bank" entityType={entityType} from={sp.from} />
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl font-semibold">Transactions</h1>
@@ -137,6 +140,7 @@ export default async function TransactionsPage({
           canWrite={canWrite}
           customCategories={customCategories}
           accountCards={accountCards}
+          importOpenByDefault={sp.import === "1"}
         />
       </div>
 

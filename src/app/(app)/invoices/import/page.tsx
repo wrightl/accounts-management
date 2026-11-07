@@ -4,14 +4,21 @@ import { InvoicePdfImport } from "@/components/invoices/invoice-pdf-import";
 import { buttonClasses } from "@/components/ui/button";
 import { aiGatewayConfigured } from "@/lib/ai/models";
 import { guardTenantPage } from "@/lib/auth";
+import { SetupStepBanner } from "@/components/data-onboarding/setup-step-banner";
 
 // Server Actions on this page stage and commit large files.
 export const maxDuration = 60;
 
-export default async function InvoiceImportPage() {
-  await guardTenantPage("accounts:write");
+export default async function InvoiceImportPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
+  const { entityType } = await guardTenantPage("accounts:write");
+  const sp = await searchParams;
   return (
     <div className="max-w-3xl">
+      <SetupStepBanner stepId="invoices" entityType={entityType} from={sp.from} />
       <div className="mb-6">
         <Link href="/invoices" className={buttonClasses("ghost")}>
           Back to invoices

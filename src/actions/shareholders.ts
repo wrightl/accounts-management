@@ -2,7 +2,7 @@
 
 import { and, eq, isNull, ne, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { companySettings, shareholders } from "@/db/schema";
+import { companies, shareholders } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
 import { mutate } from "@/lib/mutate";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
@@ -73,9 +73,9 @@ export async function updateTotalShares(formData: FormData): Promise<ActionResul
         const db = getDb();
         const settings = await getOrCreateCompanySettings(companyId);
         await db
-          .update(companySettings)
+          .update(companies)
           .set({ totalShares: null, updatedAt: new Date() })
-          .where(eq(companySettings.id, settings.id));
+          .where(eq(companies.id, settings.id));
         await writeAudit({
           companyId,
           actorUserId: localUserId,
@@ -115,9 +115,9 @@ export async function updateTotalShares(formData: FormData): Promise<ActionResul
       const db = getDb();
       const settings = await getOrCreateCompanySettings(companyId);
       await db
-        .update(companySettings)
+        .update(companies)
         .set({ totalShares, updatedAt: new Date() })
-        .where(eq(companySettings.id, settings.id));
+        .where(eq(companies.id, settings.id));
 
       await writeAudit({
         companyId,
@@ -279,12 +279,12 @@ export async function archiveShareholder(id: string): Promise<ActionResult> {
       // Keep register balanced: reduce total shares by the archived count when set.
       if (settings.totalShares != null) {
         await db
-          .update(companySettings)
+          .update(companies)
           .set({
             totalShares: nextSum > 0 ? nextSum : null,
             updatedAt: new Date(),
           })
-          .where(eq(companySettings.id, settings.id));
+          .where(eq(companies.id, settings.id));
       }
 
       return { ok: true, id };

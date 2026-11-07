@@ -4,7 +4,7 @@ import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
 import {
   clients,
-  companySettings,
+  companies,
   invoices,
   invoiceLineItems,
   recurringInvoices,
@@ -40,9 +40,9 @@ beforeEach(async () => {
   companyId = company.id;
 
   await db
-    .update(companySettings)
+    .update(companies)
     .set({ invoicePaymentTermsDays: 30 })
-    .where(eq(companySettings.id, companyId));
+    .where(eq(companies.id, companyId));
 
   vi.mocked(enqueueSendJob).mockClear();
   vi.mocked(processSendJob).mockClear();
