@@ -23,6 +23,7 @@ import {
   sortRows,
 } from "@/lib/table-sort";
 import { DisplayDate } from "@/components/date-format-provider";
+import { PageHeader } from "@/components/ui/page-header";
 
 const SORT = defineTableSort({
   columns: ["payee", "status", "reference", "date", "created", "total"],
@@ -90,22 +91,20 @@ export default async function ReimbursementsPage({
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-semibold">Reimbursements</h1>
-          <p className="mt-1 text-muted">
-            {inPack ? "Reimbursement runs that have been paid." : "Batch founder expenses into runs and settle them."}
-          </p>
-        </div>
-        <CreateReimbursementButton
-          canWrite={canWrite}
-          founders={founders}
-          expenses={reimbursable}
-          initialPayeeUserId={initialPayee}
-          initialExpenseId={initialExpense?.id}
-          defaultOpen={Boolean(initialPayee)}
-        />
-      </div>
+      <PageHeader
+        title="Reimbursements"
+        description={inPack ? "Reimbursement runs that have been paid." : "Batch founder expenses into runs and settle them."}
+        actions={
+          <CreateReimbursementButton
+            canWrite={canWrite}
+            founders={founders}
+            expenses={reimbursable}
+            initialPayeeUserId={initialPayee}
+            initialExpenseId={initialExpense?.id}
+            defaultOpen={Boolean(initialPayee)}
+          />
+        }
+      />
 
       {inPack ? null : (
         <ol className="mt-4 list-inside list-decimal space-y-1 text-sm text-muted">

@@ -48,6 +48,7 @@ import { RowNote } from "@/components/labels/row-note";
 import { RecordQueryIcon } from "@/components/queries/record-query-icon";
 import { recordQueriesFor } from "@/lib/queries/queries";
 import { listLabels } from "@/lib/labels/queries";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function ExpensesPage({
   searchParams,
@@ -129,21 +130,21 @@ export default async function ExpensesPage({
     <div>
       {scope === "all" ? <ExpenseLiveRefresh initialFingerprint={emailFingerprint} /> : null}
       <SetupStepBanner stepId="expenses" entityType={entityType} from={sp.from} />
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-semibold">Expenses</h1>
-          <p className="mt-1 text-muted">Log spend and attach receipts.</p>
-        </div>
-        {canWrite && (
-          <div className="flex flex-wrap gap-2">
-            <ManageLabelsButton labels={labels} />
-            <ExpenseImportButton canWrite={canWrite} defaultOpen={sp.import === "1"} />
-            <Link href="/expenses/new" className={buttonClasses("primary")}>
-              New expense
-            </Link>
-          </div>
-        )}
-      </div>
+      <PageHeader
+        title="Expenses"
+        description="Log spend and attach receipts."
+        actions={
+          canWrite ? (
+            <>
+              <ManageLabelsButton labels={labels} />
+              <ExpenseImportButton canWrite={canWrite} defaultOpen={sp.import === "1"} />
+              <Link href="/expenses/new" className={buttonClasses("primary")}>
+                New expense
+              </Link>
+            </>
+          ) : null
+        }
+      />
 
       {inboundAlias ? (
         <InboundAddress

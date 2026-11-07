@@ -19,6 +19,7 @@ import { Card, CardTitle, CardValue } from '@/components/ui/card';
 import { Input, Label } from '@/components/ui/form';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
 import { DisplayDate } from "@/components/date-format-provider";
+import { PageHeader } from '@/components/ui/page-header';
 
 export default async function ReportsPage({
     searchParams,
@@ -61,52 +62,55 @@ export default async function ReportsPage({
 
     return (
         <div>
-            <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                    <h1 className="font-display text-2xl font-semibold">
-                        Reports
-                    </h1>
-                    <p className="mt-1 text-muted">
-                        Accrual P&amp;L (invoiced income net of VAT), VAT summary,
-                        receivables, and accountant export (CSVs, invoice PDFs,
-                        receipt files, bank, and dividends from the Dividends page).
-                    </p>
-                    <p className="mt-2 text-sm">
-                        {bank.reconciledThrough
-                            ? <>Books up to date to <DisplayDate value={bank.reconciledThrough} /> (bank reconciled)</>
-                            : 'No bank transactions imported yet'}
-                        {lastClose
-                            ? <> · last weekly close <DisplayDate value={lastClose.closedAt} />{lastClose.closedByName ? ` by ${lastClose.closedByName}` : ''}</>
-                            : ''}
-                        {canOpenClose ? (
-                            <>
-                                {' · '}
-                                <Link href="/close" className="underline">
-                                    Weekly close
-                                </Link>
-                            </>
-                        ) : null}
-                    </p>
-                </div>
-                {canExport && (
-                    <div className="flex flex-wrap gap-2">
-                        {entitlements.vatExport && (
+            <PageHeader
+                title="Reports"
+                description={
+                    <>
+                        <p>
+                            Accrual P&amp;L (invoiced income net of VAT), VAT
+                            summary, receivables, and accountant export (CSVs,
+                            invoice PDFs, receipt files, bank, and dividends from
+                            the Dividends page).
+                        </p>
+                        <p className="mt-2 text-sm text-foreground">
+                            {bank.reconciledThrough
+                                ? <>Books up to date to <DisplayDate value={bank.reconciledThrough} /> (bank reconciled)</>
+                                : 'No bank transactions imported yet'}
+                            {lastClose
+                                ? <> · last weekly close <DisplayDate value={lastClose.closedAt} />{lastClose.closedByName ? ` by ${lastClose.closedByName}` : ''}</>
+                                : ''}
+                            {canOpenClose ? (
+                                <>
+                                    {' · '}
+                                    <Link href="/close" className="underline">
+                                        Weekly close
+                                    </Link>
+                                </>
+                            ) : null}
+                        </p>
+                    </>
+                }
+                actions={
+                    canExport ? (
+                        <>
+                            {entitlements.vatExport && (
+                                <a
+                                    href={`/api/reports/vat?from=${from}&to=${to}`}
+                                    className={buttonClasses('secondary')}
+                                >
+                                    Download VAT CSV
+                                </a>
+                            )}
                             <a
-                                href={`/api/reports/vat?from=${from}&to=${to}`}
-                                className={buttonClasses('secondary')}
+                                href={`/api/reports/accountant-pack?from=${from}&to=${to}`}
+                                className={buttonClasses('primary')}
                             >
-                                Download VAT CSV
+                                Download accountant pack
                             </a>
-                        )}
-                        <a
-                            href={`/api/reports/accountant-pack?from=${from}&to=${to}`}
-                            className={buttonClasses('primary')}
-                        >
-                            Download accountant pack
-                        </a>
-                    </div>
-                )}
-            </div>
+                        </>
+                    ) : null
+                }
+            />
 
             <form className="mt-6 flex flex-wrap items-end gap-3">
                 <div>

@@ -6,12 +6,12 @@ import { recordQueriesFor } from "@/lib/queries/queries";
 import { recordScopeFor } from "@/lib/accountant/record-scope";
 import { listCreditNotes } from "@/lib/credit-notes/queries";
 import { CreditNoteStatusBadge } from "@/components/credit-notes/credit-note-status-badge";
-import { BackLink } from "@/components/ui/back-link";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Table, THead, TBody, TR, TD } from "@/components/ui/table";
 import { sortHeaders } from "@/components/ui/sortable-th";
 import { defineTableSort, parseTableSort, rankIn, sortRows } from "@/lib/table-sort";
 import { DisplayDate } from "@/components/date-format-provider";
+import { PageHeader } from "@/components/ui/page-header";
 
 /** "created" is the loaded order (newest first) and has no header. */
 const SORT = defineTableSort({
@@ -43,13 +43,12 @@ export default async function CreditNotesPage({
 
   return (
     <div>
-      <div className="mb-6">
-        <BackLink href="/invoices">Invoices</BackLink>
-      </div>
-      <h1 className="font-display text-2xl font-semibold">Credit notes</h1>
-      <p className="mt-1 text-muted">
-        Corrections and refunds against invoices you&apos;ve already sent.
-      </p>
+      <PageHeader
+        backHref="/invoices"
+        backLabel="Invoices"
+        title="Credit notes"
+        description="Corrections and refunds against invoices you've already sent."
+      />
 
       <div className="mt-6">
         {rows.length === 0 ? (

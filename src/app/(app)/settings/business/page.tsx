@@ -8,7 +8,8 @@ import { CompaniesHouseForm } from "@/components/company/companies-house-form";
 import { Card } from "@/components/ui/card";
 import { IncomeCategoriesPanel } from "@/components/settings/income-categories-panel";
 import { DeleteCompanyDangerZone } from "@/components/settings/delete-company-danger-zone";
-import { SettingsPageHeader, SETTINGS_FORM_WIDTH } from "@/components/settings/settings-page-header";
+import { SettingsPageHeader } from "@/components/settings/settings-page-header";
+import { SettingsWithRail, type SettingsSection } from "@/components/settings/settings-section-nav";
 import { DisplayDate } from "@/components/date-format-provider";
 
 export default async function BusinessSettingsPage() {
@@ -19,16 +20,33 @@ export default async function BusinessSettingsPage() {
     listIncomeCategoriesWithUsage(companyId),
   ]);
 
+  const limited = settings.entityType === "limited_company";
+  const sections: SettingsSection[] = [
+    { id: "details", label: limited ? "Company profile" : "Business profile" },
+    { id: "vat", label: "VAT" },
+    { id: "bank", label: "Bank details" },
+    { id: "invoicing", label: "Invoicing" },
+    { id: "cutover", label: "Spreadsheet cutover" },
+    { id: "expenses", label: "Expenses" },
+    ...(limited ? [{ id: "companies-house", label: "Companies House" }] : []),
+    { id: "income-categories", label: "Income categories" },
+    { id: "danger-zone", label: "Delete company" },
+  ];
+
   return (
     <div>
-      <SettingsPageHeader
-        title="Business settings"
-        description="Company details, Companies House, VAT, financial year, bank details, numbering, and income categories."
-      />
-      <div className={SETTINGS_FORM_WIDTH}>
+      <SettingsWithRail
+        sections={sections}
+        header={
+          <SettingsPageHeader
+            title="Business settings"
+            description="Company details, Companies House, VAT, financial year, bank details, numbering, and income categories."
+          />
+        }
+      >
         <SettingsForm settings={settings} />
-        {settings.entityType === "limited_company" ? (
-          <Card id="companies-house" className="mt-10 scroll-mt-6 p-6">
+        {limited ? (
+          <Card id="companies-house" className="mt-10 scroll-mt-8 p-6">
             <h2 className="font-display text-lg font-semibold">Companies House</h2>
             <p className="mt-1 text-sm text-muted">
               Directors appear on board minutes and dividend vouchers. The dates
@@ -50,9 +68,13 @@ export default async function BusinessSettingsPage() {
             />
           </Card>
         ) : null}
-        <IncomeCategoriesPanel categories={incomeCategories} />
-        <DeleteCompanyDangerZone companyName={settings.name} />
-      </div>
+        <div id="income-categories" className="scroll-mt-8">
+          <IncomeCategoriesPanel categories={incomeCategories} />
+        </div>
+        <div id="danger-zone" className="scroll-mt-8">
+          <DeleteCompanyDangerZone companyName={settings.name} />
+        </div>
+      </SettingsWithRail>
     </div>
   );
 }

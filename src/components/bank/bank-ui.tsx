@@ -41,6 +41,8 @@ import { explainMatch } from "@/lib/bookkeeper/explain";
 import { cn } from "@/lib/utils";
 import type { ActionResult } from "@/actions/result";
 import type { BankSpendingCategoryRow } from "@/lib/bank/spending-categories";
+import type { LabelWithUsage } from "@/lib/labels/queries";
+import { ManageLabelsButton } from "@/components/labels/manage-labels";
 import { DisplayDate } from "@/components/date-format-provider";
 
 function isCreditExplainMatchType(value: string | null): boolean {
@@ -264,6 +266,7 @@ export function BankToolbar({
   customCategories,
   accountCards = [],
   importOpenByDefault = false,
+  labels,
 }: {
   canWrite: boolean;
   customCategories: BankSpendingCategoryRow[];
@@ -271,6 +274,8 @@ export function BankToolbar({
   accountCards?: BankAccountCards[];
   /** Open the import dialog on arrival (`?import=1`, from the history checklist). */
   importOpenByDefault?: boolean;
+  /** Shared labels, for the Labels button. Omitted when labels don't apply. */
+  labels?: LabelWithUsage[];
 }) {
   const router = useRouter();
   const [importOpen, setImportOpen] = useState(importOpenByDefault);
@@ -289,9 +294,7 @@ export function BankToolbar({
   return (
     <>
       <div className="flex flex-wrap gap-2">
-        <Button type="button" onClick={() => setImportOpen(true)}>
-          Import
-        </Button>
+        {labels ? <ManageLabelsButton labels={labels} /> : null}
         <Button
           type="button"
           variant="secondary"
@@ -313,6 +316,9 @@ export function BankToolbar({
         </Button>
         <Button type="button" variant="secondary" onClick={() => setCardsOpen(true)}>
           Company cards
+        </Button>
+        <Button type="button" onClick={() => setImportOpen(true)}>
+          Import
         </Button>
       </div>
       <CustomCategoriesDialog

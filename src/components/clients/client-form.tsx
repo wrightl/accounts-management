@@ -14,6 +14,7 @@ import {
   clientRawFromFormData,
   parseClientInput,
 } from "@/lib/clients/schema";
+import { PAGE_WIDTH } from "@/components/ui/page-width";
 
 export function ClientForm({
   mode,
@@ -100,7 +101,7 @@ export function ClientForm({
   }
 
   return (
-    <form ref={formRef} noValidate onSubmit={preventResetSubmit(onSubmit)} className="mx-auto max-w-xl space-y-4">
+    <form ref={formRef} noValidate onSubmit={preventResetSubmit(onSubmit)} className={`${PAGE_WIDTH.reading} space-y-4`}>
       <div>
         <Label htmlFor="companyName">Company name (optional)</Label>
         <Input

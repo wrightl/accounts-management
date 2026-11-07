@@ -21,6 +21,7 @@ import {
   type VatRateFieldValue,
 } from "@/components/documents/vat-rate-field";
 import { Plus, Trash2 } from "lucide-react";
+import { PAGE_WIDTH } from "@/components/ui/page-width";
 
 export interface CreditNoteLineDraft {
   key: string;
@@ -144,7 +145,7 @@ export function CreditNoteForm({
     : "sm:grid-cols-[1fr_80px_120px_80px_2.5rem]";
 
   return (
-    <form ref={formRef} noValidate onSubmit={preventResetSubmit(onSubmit)} className="mx-auto max-w-3xl space-y-6">
+    <form ref={formRef} noValidate onSubmit={preventResetSubmit(onSubmit)} className={`${PAGE_WIDTH.editor} space-y-6`}>
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <Label htmlFor="issueDate" required>

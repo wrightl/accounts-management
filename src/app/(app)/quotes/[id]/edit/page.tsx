@@ -9,6 +9,7 @@ import { penceToPounds } from "@/lib/money";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { defaultLineVatRate } from "@/lib/vat";
 import { onlinePaymentsStatus } from "@/lib/payments/online-status";
+import { PAGE_WIDTH } from "@/components/ui/page-width";
 
 export default async function EditQuotePage({
   params,
@@ -43,7 +44,7 @@ export default async function EditQuotePage({
       <h1 className="mb-6 font-display text-2xl font-semibold">
         Edit {detail.quote.reference}
       </h1>
-      <div className="max-w-2xl">
+      <div className={PAGE_WIDTH.editor}>
         <QuoteForm
           mode="edit"
           clients={clients}

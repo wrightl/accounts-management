@@ -13,6 +13,7 @@ import {
   queryStatusLabel,
 } from "@/lib/queries/status";
 import { can } from "@/lib/roles";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function QueriesPage({
   searchParams,
@@ -27,17 +28,17 @@ export default async function QueriesPage({
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-semibold">Queries</h1>
-          <p className="mt-1 text-muted">
+      <PageHeader
+        title="Queries"
+        description={
+          <>
             {canRaise
               ? "Ask the team to clarify anything in the records."
               : "Questions from your accountant about the records."}
-          </p>
-        </div>
-        {canRaise ? <RaiseQueryButton /> : null}
-      </div>
+          </>
+        }
+        actions={canRaise ? <RaiseQueryButton /> : null}
+      />
 
       <nav aria-label="Filter by status" className="mt-4 flex flex-wrap gap-2">
         <Link

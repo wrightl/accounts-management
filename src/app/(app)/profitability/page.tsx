@@ -100,15 +100,15 @@ export default async function ProfitabilityPage({
     orders.some((o) => o.current.costPence > 0) || clients.some((c) => c.costPence > 0);
 
   return (
-    <div className="max-w-5xl">
+    <div>
       <h1 className="font-display text-2xl font-semibold">Profitability</h1>
-      <p className="mt-1 text-muted">
+      <p className="mt-1 max-w-2xl text-muted">
         What each order and client earns once the costs you spent on them are taken off. All
         figures are net of VAT.
       </p>
 
       {!anyCosts ? (
-        <p className="mt-6 rounded-xl bg-wash px-4 py-3 text-sm">
+        <p className="mt-6 max-w-2xl rounded-xl bg-wash px-4 py-3 text-sm">
           No costs are tagged yet, so every margin is 100%. Open an expense and choose its client
           or order, or use <span className="font-medium">Add a cost</span> on an order.
         </p>

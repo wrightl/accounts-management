@@ -24,9 +24,9 @@ import { listBankSpendingCategoriesWithUsage } from "@/lib/bank/spending-categor
 import { listIncomeCategoryNames } from "@/lib/bank/income-category-catalog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getDateFormat } from "@/lib/date-format.server";
-import { ManageLabelsButton } from "@/components/labels/manage-labels";
 import { listLabels } from "@/lib/labels/queries";
 import { recordQueriesFor } from "@/lib/queries/queries";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function TransactionsPage({
   searchParams,
@@ -115,42 +115,46 @@ export default async function TransactionsPage({
   return (
     <div>
       <SetupStepBanner stepId="bank" entityType={entityType} from={sp.from} />
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-semibold">Transactions</h1>
-          <p className="mt-1 text-muted">
-            {inPack
-              ? "Bank transactions and how they were reconciled."
-              : "Import bank CSV and reconcile against payments and expenses."}
-          </p>
-          {canWrite ? (
-            <p className="mt-1 text-sm text-muted">
-              Paid for something from a personal account?{" "}
-              <NewExpenseFromBankListLink
-                params={{ status: "reimbursable" }}
-                className="font-medium text-navy underline underline-offset-2 hover:no-underline"
-              >
-                Add it as a reimbursable expense
-              </NewExpenseFromBankListLink>
-              .
+      <PageHeader
+        title="Transactions"
+        description={
+          <>
+            <p>
+              {inPack
+                ? "Bank transactions and how they were reconciled."
+                : "Import bank CSV and reconcile against payments and expenses."}
             </p>
-          ) : null}
-        </div>
-        <BankToolbar
-          canWrite={canWrite}
-          customCategories={customCategories}
-          accountCards={accountCards}
-          importOpenByDefault={sp.import === "1"}
-        />
-      </div>
+            {canWrite ? (
+              <p className="mt-1 text-sm">
+                Paid for something from a personal account?{" "}
+                <NewExpenseFromBankListLink
+                  params={{ status: "reimbursable" }}
+                  className="font-medium text-navy underline underline-offset-2 hover:no-underline"
+                >
+                  Add it as a reimbursable expense
+                </NewExpenseFromBankListLink>
+                .
+              </p>
+            ) : null}
+          </>
+        }
+        actions={
+          <BankToolbar
+            canWrite={canWrite}
+            customCategories={customCategories}
+            accountCards={accountCards}
+            importOpenByDefault={sp.import === "1"}
+            labels={inPack ? undefined : labels}
+          />
+        }
+      />
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_280px] xl:grid-cols-[1fr_320px]">
         <div>
           <BankFilters params={params} customCategories={customCategoryNames} labels={inPack ? [] : labels} />
 
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+          <div className="mt-6">
             <BankViewToggle params={params} />
-            {canWrite ? <ManageLabelsButton labels={labels} /> : null}
           </div>
 
           <div className="mt-4">

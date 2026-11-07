@@ -8,6 +8,7 @@ import { buttonClasses } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
 import { DisplayDate } from '@/components/date-format-provider';
+import { PageHeader } from '@/components/ui/page-header';
 
 export default async function RecurringInvoicesPage() {
     const { companyId, role } = await guardTenantPage('records:read');
@@ -25,25 +26,25 @@ export default async function RecurringInvoicesPage() {
 
     return (
         <div>
-            <div className="flex items-center justify-between gap-4">
-                <div>
-                    <h1 className="font-display text-2xl font-semibold">
-                        Recurring
-                    </h1>
-                    <p className="mt-1 text-muted">
+            <PageHeader
+                title="Recurring"
+                description={
+                    <>
                         Monthly retainers and schedules that create invoices
                         automatically.
-                    </p>
-                </div>
-                {canWrite && (
-                    <Link
-                        href="/recurring-invoices/new"
-                        className={buttonClasses('primary')}
-                    >
-                        New schedule
-                    </Link>
-                )}
-            </div>
+                    </>
+                }
+                actions={
+                    canWrite ? (
+                        <Link
+                            href="/recurring-invoices/new"
+                            className={buttonClasses('primary')}
+                        >
+                            New schedule
+                        </Link>
+                    ) : null
+                }
+            />
 
             <div className="mt-6">
                 {rows.length === 0 ? (

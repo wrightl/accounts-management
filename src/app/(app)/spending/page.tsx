@@ -17,6 +17,7 @@ import {
 import { buttonClasses } from "@/components/ui/button";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { getDateFormat } from "@/lib/date-format.server";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function SpendingPage({
   searchParams,
@@ -62,17 +63,19 @@ export default async function SpendingPage({
 
   return (
     <div>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-semibold">Spending</h1>
-          <p className="mt-1 text-muted">
+      <PageHeader
+        title="Spending"
+        description={
+          <>
             Cash outflows from your bank import — {resolved.label}.
-          </p>
-        </div>
-        <Link href="/transactions" className={buttonClasses("secondary")}>
-          Import CSV
-        </Link>
-      </div>
+          </>
+        }
+        actions={
+          <Link href="/transactions" className={buttonClasses("secondary")}>
+            Import CSV
+          </Link>
+        }
+      />
 
       <div className="mt-6">
         <PeriodChips

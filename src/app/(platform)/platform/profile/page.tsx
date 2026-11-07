@@ -6,6 +6,9 @@ import { ProfilePictureField } from "@/components/users/profile-picture-field";
 import { SignOutSection } from "@/components/users/sign-out-section";
 import { UiPrefsForm } from "@/components/users/ui-prefs-form";
 import { hasDatabaseClient } from "@/db";
+import { SettingsWithRail } from "@/components/settings/settings-section-nav";
+import { PROFILE_SECTIONS } from "@/components/users/profile-sections";
+import { PAGE_WIDTH } from "@/components/ui/page-width";
 
 export default async function PlatformProfilePage() {
   const session = await requirePlatformAdmin();
@@ -20,7 +23,7 @@ export default async function PlatformProfilePage() {
       <div>
         <h1 className="font-display text-2xl font-semibold">Profile</h1>
         <p className="mt-2 text-muted">Your profile could not be loaded.</p>
-        <div className="mx-auto mt-8 max-w-xl">
+        <div className={`mt-8 ${PAGE_WIDTH.reading}`}>
           <SignOutSection />
         </div>
       </div>
@@ -29,21 +32,34 @@ export default async function PlatformProfilePage() {
 
   return (
     <div>
-      <h1 className="mb-6 font-display text-2xl font-semibold">Profile</h1>
-      <div className="mx-auto max-w-xl space-y-8">
-        <ProfilePictureField
-          avatarUrl={(await safeCurrentUser())?.imageUrl ?? null}
-          userName={session.name ?? local.name}
-        />
-        <ProfileForm
-          email={local.email}
-          name={session.name ?? local.name}
-          role={local.role}
-          roleDisplay="Platform operator"
-        />
-        <UiPrefsForm prefs={local.uiPrefs} />
-        <SignOutSection />
-      </div>
+      <SettingsWithRail
+        sections={PROFILE_SECTIONS}
+        headerBackground="bg-wash"
+        header={<h1 className="mb-6 font-display text-2xl font-semibold">Profile</h1>}
+      >
+        <div className="space-y-8">
+          <section id="photo" className="scroll-mt-8">
+            <ProfilePictureField
+              avatarUrl={(await safeCurrentUser())?.imageUrl ?? null}
+              userName={session.name ?? local.name}
+            />
+          </section>
+          <section id="details" className="scroll-mt-8">
+            <ProfileForm
+              email={local.email}
+              name={session.name ?? local.name}
+              role={local.role}
+              roleDisplay="Platform operator"
+            />
+          </section>
+          <section id="display" className="scroll-mt-8">
+            <UiPrefsForm prefs={local.uiPrefs} />
+          </section>
+          <section id="session" className="scroll-mt-8">
+            <SignOutSection />
+          </section>
+        </div>
+      </SettingsWithRail>
     </div>
   );
 }

@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
-import { BackLink } from "@/components/ui/back-link";
+import { PageHeader } from "@/components/ui/page-header";
+import { PAGE_WIDTH } from "@/components/ui/page-width";
 
 /** Width for form-style settings pages. Table pages use the full width. */
-export const SETTINGS_FORM_WIDTH = "max-w-2xl";
+export const SETTINGS_FORM_WIDTH = PAGE_WIDTH.reading;
 
 /**
  * Shared header for every page reached from the Settings hub, so each one has
@@ -23,17 +24,13 @@ export function SettingsPageHeader({
   backLabel?: string;
 }) {
   return (
-    <div className="mb-8">
-      <BackLink href={backHref}>{backLabel}</BackLink>
-      <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="font-display text-2xl font-semibold">{title}</h1>
-          {description ? <p className="mt-1 text-muted">{description}</p> : null}
-        </div>
-        {actions ? (
-          <div className="flex flex-wrap items-center gap-2">{actions}</div>
-        ) : null}
-      </div>
-    </div>
+    <PageHeader
+      title={title}
+      description={description}
+      actions={actions}
+      backHref={backHref}
+      backLabel={backLabel}
+      className="mb-8"
+    />
   );
 }

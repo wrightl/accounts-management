@@ -6,6 +6,7 @@ import { BackLink } from "@/components/ui/back-link";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { defaultLineVatRate } from "@/lib/vat";
 import { onlinePaymentsStatus } from "@/lib/payments/online-status";
+import { PAGE_WIDTH } from "@/components/ui/page-width";
 
 export default async function NewQuotePage() {
   const { companyId } = await guardTenantPage("accounts:write");
@@ -30,7 +31,7 @@ export default async function NewQuotePage() {
           before creating a quote.
         </p>
       ) : (
-        <div className="max-w-2xl">
+        <div className={PAGE_WIDTH.editor}>
           <QuoteForm
             mode="create"
             clients={clients}

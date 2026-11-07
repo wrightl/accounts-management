@@ -5,6 +5,7 @@ import {
   listNotifications,
 } from "@/lib/notifications";
 import { InboxClient } from "@/components/notifications/inbox-client";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function InboxPage({
   searchParams,
@@ -29,16 +30,15 @@ export default async function InboxPage({
 
   return (
     <div>
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-semibold">Inbox</h1>
-          <p className="mt-1 text-sm text-muted">
-            {unreadCount > 0
-              ? `${unreadCount} unread notification${unreadCount === 1 ? "" : "s"}`
-              : "You're all caught up"}
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        className="mb-6"
+        title="Inbox"
+        description={
+          unreadCount > 0
+            ? `${unreadCount} unread notification${unreadCount === 1 ? "" : "s"}`
+            : "You're all caught up"
+        }
+      />
       <InboxClient initial={notifications} filter={filter} />
     </div>
   );

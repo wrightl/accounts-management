@@ -85,7 +85,8 @@ export function DashboardShell({
   }
 
   return (
-    <div className="flex h-dvh overflow-hidden">
+    <div className="flex h-dvh overflow-clip">
+      {/* clip, not hidden: a hidden box can still be scrolled by anchor jumps, which shifts the whole shell. */}
       <a href="#main-content" className="skip-link">
         Skip to main content
       </a>

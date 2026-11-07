@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Table, THead, TBody, TR, TD } from "@/components/ui/table";
 import { sortHeaders } from "@/components/ui/sortable-th";
 import { defineTableSort, parseTableSort, rankIn, sortRows } from "@/lib/table-sort";
+import { PageHeader } from "@/components/ui/page-header";
 
 /** "created" is the loaded order (newest first) and has no header. */
 const SORT = defineTableSort({
@@ -36,19 +37,17 @@ export default async function OrdersPage({
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-semibold">Orders</h1>
-          <p className="mt-1 text-muted">
-            Accepted quotes and manually created work orders before invoicing.
-          </p>
-        </div>
-        {canWrite && (
-          <Link href="/orders/new" className={buttonClasses("primary")}>
-            New order
-          </Link>
-        )}
-      </div>
+      <PageHeader
+        title="Orders"
+        description="Accepted quotes and manually created work orders before invoicing."
+        actions={
+          canWrite ? (
+            <Link href="/orders/new" className={buttonClasses("primary")}>
+              New order
+            </Link>
+          ) : null
+        }
+      />
 
       <div className="mt-6">
         {rows.length === 0 ? (

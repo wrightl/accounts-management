@@ -18,6 +18,7 @@ import {
   parseShareholderInput,
   shareholderRawFromFormData,
 } from "@/lib/shareholders/schema";
+import { PAGE_WIDTH } from "@/components/ui/page-width";
 
 type UserOption = { id: string; name: string | null; email: string };
 
@@ -123,7 +124,7 @@ export function ShareholderForm({
   }
 
   return (
-    <form ref={formRef} noValidate onSubmit={preventResetSubmit(onSubmit)} className="mx-auto max-w-xl space-y-4">
+    <form ref={formRef} noValidate onSubmit={preventResetSubmit(onSubmit)} className={`${PAGE_WIDTH.reading} space-y-4`}>
       <div>
         <Label htmlFor="name" required>
           Name

@@ -23,22 +23,22 @@ export default async function ForecastPage() {
   const isLtd = entityType === "limited_company";
 
   return (
-    <div className="max-w-4xl">
+    <div>
       <h1 className="font-display text-2xl font-semibold">Cash forecast</h1>
-      <p className="mt-1 text-muted">
+      <p className="mt-1 max-w-2xl text-muted">
         Cash at the end of each of the next 13 weeks, from the money you&apos;re owed and the
         bills you know about.
       </p>
 
       {oldDebtsPence > 0 ? (
-        <p className="mt-6 rounded-xl bg-wash px-4 py-3 text-sm">
+        <p className="mt-6 max-w-2xl rounded-xl bg-wash px-4 py-3 text-sm">
           Week one includes {formatGBP(oldDebtsPence)} still owed on invoices brought forward from
           before your cutover. These may be slow to collect, so treat that week as optimistic.
         </p>
       ) : null}
 
       {!inputs.cash.known ? (
-        <p className="mt-6 rounded-xl bg-wash px-4 py-3 text-sm">
+        <p className="mt-6 max-w-2xl rounded-xl bg-wash px-4 py-3 text-sm">
           Alfa doesn&apos;t know the bank balance yet, so this starts from £0.{" "}
           <Link href="/transactions" className="underline">
             Import a bank statement

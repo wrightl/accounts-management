@@ -15,6 +15,7 @@ import {
   reimbursementUpdateRawFromFormData,
 } from "@/lib/reimbursements/schema";
 import { DisplayDate } from "@/components/date-format-provider";
+import { PAGE_WIDTH } from "@/components/ui/page-width";
 
 export function EditReimbursementForm({
   id,
@@ -62,7 +63,7 @@ export function EditReimbursementForm({
     <form
       ref={formRef}
       noValidate
-      className="max-w-xl space-y-4"
+      className={`${PAGE_WIDTH.reading} space-y-4`}
       onSubmit={preventResetSubmit((formData) => {
         formData.set("expenseIdsJson", JSON.stringify([...selected]));
         formData.set("reference", reference);

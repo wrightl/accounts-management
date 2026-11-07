@@ -22,6 +22,7 @@ import {
   type VatRateFieldValue,
 } from "@/components/documents/vat-rate-field";
 import { Plus, Trash2 } from "lucide-react";
+import { PAGE_WIDTH } from "@/components/ui/page-width";
 
 export interface LineDraft {
   key: string;
@@ -209,7 +210,7 @@ export function InvoiceForm({
   }
 
   return (
-    <form ref={formRef} noValidate onSubmit={preventResetSubmit(onSubmit)} className="mx-auto max-w-3xl space-y-6">
+    <form ref={formRef} noValidate onSubmit={preventResetSubmit(onSubmit)} className={`${PAGE_WIDTH.editor} space-y-6`}>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
           <Label htmlFor="clientId" required>
