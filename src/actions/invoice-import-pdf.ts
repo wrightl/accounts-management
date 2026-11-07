@@ -28,7 +28,7 @@ import {
   extractInvoiceFromPdf,
   type InvoiceExtraction,
 } from "@/lib/invoices/import/pdf-extract";
-import { readInvoicePdfLocally } from "@/lib/invoices/import/pdf-local";
+import { LOCAL_READ_WARNING, readInvoicePdfLocally } from "@/lib/invoices/import/pdf-local";
 import { pdfImportMonthlyLimit } from "@/lib/invoices/import/limits";
 import { mutate, mutateWide } from "@/lib/mutate";
 import { getStorage } from "@/lib/storage";
@@ -317,11 +317,10 @@ export async function uploadInvoicePdf(
         errors.push(...draft.errors);
         warnings.push(...draft.warnings);
         if (read.reader === "local") {
-          warnings.push(
-            read.overLimit
-              ? `Read without AI, as this month's ${read.overLimit} AI reads are used up. Check every field against the PDF.`
-              : "Read without AI. Check every field against the PDF.",
-          );
+          warnings.push(LOCAL_READ_WARNING);
+          if (read.overLimit) {
+            warnings.push(`This month's ${read.overLimit} AI reads are used up.`);
+          }
         }
       } else {
         errors.push("Alfa couldn't read this file. Fill in the details from the PDF.");
@@ -506,6 +505,12 @@ export async function approveImportDrafts(
             eq(invoiceImportDrafts.companyId, companyId),
             eq(invoiceImportDrafts.status, "needs_review"),
             sql`jsonb_array_length(${invoiceImportDrafts.errors}) = 0`,
+            // Drafts read without AI are only approved one at a time.
+            "draftId" in selection
+              ? undefined
+              : sql`not (${invoiceImportDrafts.warnings} @> ${JSON.stringify([
+                  LOCAL_READ_WARNING,
+                ])}::jsonb)`,
             "draftId" in selection ? eq(invoiceImportDrafts.id, selection.draftId) : undefined,
           ),
         );

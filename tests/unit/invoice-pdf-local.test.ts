@@ -86,6 +86,14 @@ Total £60.00`;
     });
   });
 
+  it("flags a currency named by code, not only by symbol", () => {
+    expect(parseInvoiceText("Amount due\nUSD 1,200.00").currency).toBe("USD");
+    expect(parseInvoiceText("Currency: EUR\nTotal 1,200.00").currency).toBe("EUR");
+    expect(parseInvoiceText("Total GBP 50.00").currency).toBe("GBP");
+    // The total's own symbol wins over a code elsewhere on the page.
+    expect(parseInvoiceText("Paid by USD card\nTotal £50.00").currency).toBe("GBP");
+  });
+
   it("notes a currency shown on the total, which blocks the draft", () => {
     const extraction = parseInvoiceText("Amount due: $99.00");
     expect(extraction.currency).toBe("USD");

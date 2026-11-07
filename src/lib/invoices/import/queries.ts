@@ -12,6 +12,7 @@ import { clientDisplayName } from "@/lib/clients/display";
 import { todayIsoDate } from "@/lib/dates";
 import { isBroughtForward } from "@/lib/invoices/cutover";
 import { suggestClient } from "@/lib/invoices/import/clients";
+import { readLocally } from "@/lib/invoices/import/pdf-local";
 import { formatInvoiceNumber } from "@/lib/invoices/numbering";
 
 /** Rows shown on the review page; the counts always cover the whole batch. */
@@ -118,7 +119,8 @@ export async function getImportBatchReview(companyId: string, batchId: string) {
     counts,
     clients: [...clientRows.values()],
     approvable: drafts.filter(
-      (d) => d.status === "needs_review" && d.errors.length === 0,
+      (d) =>
+        d.status === "needs_review" && d.errors.length === 0 && !readLocally(d.warnings),
     ).length,
     existingClients: existingClients.map((c) => ({
       id: c.id,

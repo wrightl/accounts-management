@@ -6,6 +6,18 @@ import type { InvoiceExtraction } from "@/lib/invoices/import/pdf-extract";
 import { parseImportDate } from "@/lib/invoices/import/parse";
 
 /**
+ * Marks a draft read without AI. Such drafts can't be bulk-approved: each is
+ * opened and approved on its own, against the PDF.
+ */
+export const LOCAL_READ_WARNING =
+  "Read without AI. Check every field against the PDF, then approve it on its own.";
+
+/** Whether a draft was read without AI, so needs approving on its own. */
+export function readLocally(warnings: readonly string[]): boolean {
+  return warnings.includes(LOCAL_READ_WARNING);
+}
+
+/**
  * Read an invoice PDF without AI: its text layer, or Tesseract on page 1 for
  * a scan. Much rougher than the model, so every field needs checking. Gives
  * up after `timeoutMs`, stopping the OCR worker, so it fits the request.
@@ -66,11 +78,22 @@ function date(raw: string | null): string | null {
   return parseImportDate(tidy, "dmy");
 }
 
+const OTHER_CURRENCIES = /\b(USD|EUR|CAD|AUD|NZD|CHF|JPY|SEK|NOK|DKK|PLN|INR|HKD|SGD|ZAR)\b/;
+
+/**
+ * The total's currency. Any other currency named in the text wins over a
+ * guess of GBP, so a "USD 1,200.00" invoice is flagged rather than read as
+ * pounds; if that's wrong, saving the draft clears the flag.
+ */
 function currencyOf(amount: string | null, text: string): string | null {
   if (amount?.includes("£")) return "GBP";
   if (amount?.includes("$")) return "USD";
   if (amount?.includes("€")) return "EUR";
-  if (/£|\bGBP\b/.test(text)) return "GBP";
+  const other = OTHER_CURRENCIES.exec(text.toUpperCase());
+  if (other) return other[1];
+  if (/\$/.test(text)) return "USD";
+  if (/€/.test(text)) return "EUR";
+  if (/£|\bGBP\b/i.test(text)) return "GBP";
   return null;
 }
 

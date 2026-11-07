@@ -61,7 +61,10 @@ vi.mock("@/lib/ai/models", () => ({
   aiGatewayConfigured: () => ai.on,
   INVOICE_EXTRACT_MODEL: "test/model",
 }));
-vi.mock("@/lib/invoices/import/pdf-local", () => ({ readInvoicePdfLocally: readLocally }));
+vi.mock("@/lib/invoices/import/pdf-local", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/invoices/import/pdf-local")>()),
+  readInvoicePdfLocally: readLocally,
+}));
 
 const reading = {
   issuerName: "Test Co",
@@ -368,6 +371,25 @@ describe("reviewing", () => {
     await approveImportDrafts(batchId, { allWithoutProblems: true });
     const review = await getImportBatchReview(companyId, batchId);
     expect(review?.counts).toMatchObject({ ready: 1, needs_review: 1 });
+  });
+
+  it("never bulk-approves a draft read without AI, but approves it on its own", async () => {
+    const batchId = await newBatch();
+    await upload(batchId);
+    ai.on = false;
+    readLocally.mockResolvedValue({ ...reading, number: "PDF-2", issuerName: null, lines: [] });
+    const local = await upload(batchId);
+    expect(local.errors).toEqual([]);
+
+    expect((await getImportBatchReview(companyId, batchId))?.approvable).toBe(1);
+    await approveImportDrafts(batchId, { allWithoutProblems: true });
+    expect((await getImportBatchReview(companyId, batchId))?.counts).toMatchObject({
+      ready: 1,
+      needs_review: 1,
+    });
+
+    await approveImportDrafts(batchId, { draftId: local.id });
+    expect((await getImportBatchReview(companyId, batchId))?.counts).toMatchObject({ ready: 2 });
   });
 
   it("uses the same duplicate check as CSV", async () => {
