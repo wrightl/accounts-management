@@ -262,22 +262,31 @@ export function resolveSpendingPeriod(
   }
 
   const currentFyStart = financialYearStartDate(fyEndMonth, today);
-  const lastFyEnd = addDays(currentFyStart, -1);
-  const from = financialYearStartDate(fyEndMonth, lastFyEnd);
-  const to = lastFyEnd;
-  const prevFyStart = financialYearStartDate(fyEndMonth, addDays(from, -1));
-  const compareTo = addDays(prevFyStart, diffDays(from, to));
+  const lastFyStartYear = parseIso(financialYearStartDate(fyEndMonth, addDays(currentFyStart, -1))).year;
+  return { ...resolveFinancialYearPeriod(fyEndMonth, lastFyStartYear), preset };
+}
+
+/**
+ * The whole financial year starting in `fyStartYear`, compared with the one
+ * before it.
+ */
+export function resolveFinancialYearPeriod(
+  fyEndMonth: number,
+  fyStartYear: number,
+): ResolvedSpendingPeriod {
   const startMonth = financialYearStartMonth(fyEndMonth);
-  const endMonth = fyEndMonth;
-  const fyYear = parseIso(from).year;
+  const from = startOfMonth(fyStartYear, startMonth);
+  const end = shiftMonth(fyStartYear, startMonth, 11);
+  const to = endOfMonth(end.year, end.month);
   return {
-    preset,
+    preset: "custom",
     from,
     to,
-    compareFrom: prevFyStart,
-    compareTo,
+    compareFrom: startOfMonth(fyStartYear - 1, startMonth),
+    // The whole prior year, which can be a day longer when it holds 29 February.
+    compareTo: addDays(from, -1),
     buckets: "month",
-    label: `FY ${monthName(startMonth)} ${fyYear} – ${monthName(endMonth)} ${parseIso(to).year}`,
+    label: `FY ${monthName(startMonth)} ${fyStartYear} – ${monthName(fyEndMonth)} ${end.year}`,
     compareLabel: `Prior FY`,
   };
 }

@@ -179,7 +179,7 @@ export default async function DashboardOverview({
             </Link>
           </p>
         </div>
-        {overview ? <PeriodChips current={overview.periodKey} /> : null}
+        {overview ? <PeriodChips current={overview.periodKey} pastYears={overview.pastYears} /> : null}
       </div>
 
       {showDataOnboarding && dataOnboarding ? (

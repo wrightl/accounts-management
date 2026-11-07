@@ -2,17 +2,32 @@ import {
   eachMonth,
   financialYearStartDate,
   formatPeriodRangeLabel,
+  resolveFinancialYearPeriod,
   resolvePeriod,
   todayIsoDate,
   type ResolvedSpendingPeriod,
 } from "@/lib/dates";
 
-/** Dashboard period chips — subset of spending presets plus trailing 12 months. */
+/**
+ * Dashboard period chips — subset of spending presets plus trailing 12 months,
+ * or an earlier financial year as `fy-<year it starts in>`.
+ */
 export type DashboardPeriodKey =
   | "this-month"
   | "last-3-months"
   | "fy"
-  | "trailing-12";
+  | "trailing-12"
+  | PastFinancialYearKey;
+
+export type PastFinancialYearKey = `fy-${number}`;
+
+const PAST_FY_KEY = /^fy-(\d{4})$/;
+
+/** The year an `fy-YYYY` key's financial year starts in, otherwise null. */
+export function pastFinancialYearStart(key: DashboardPeriodKey): number | null {
+  const match = PAST_FY_KEY.exec(key);
+  return match ? Number(match[1]) : null;
+}
 
 export const DASHBOARD_PERIOD_OPTIONS: Array<{
   value: DashboardPeriodKey;
@@ -35,7 +50,39 @@ export function parseDashboardPeriod(
   ) {
     return raw;
   }
+  if (raw && PAST_FY_KEY.test(raw)) {
+    return raw as PastFinancialYearKey;
+  }
   return "this-month";
+}
+
+/** Short label for the financial year starting in `fyStartYear`: "FY 2024/25", or "FY 2024" for a December year end. */
+export function financialYearShortLabel(fyEndMonth: number, fyStartYear: number): string {
+  if (fyEndMonth === 12) return `FY ${fyStartYear}`;
+  return `FY ${fyStartYear}/${String((fyStartYear + 1) % 100).padStart(2, "0")}`;
+}
+
+/**
+ * Finished financial years, newest first, back to the one holding
+ * `earliestIso` and at most `max` of them.
+ */
+export function pastFinancialYearOptions(
+  fyEndMonth: number,
+  earliestIso: string,
+  today: string = todayIsoDate(),
+  max = 6,
+): Array<{ value: PastFinancialYearKey; label: string }> {
+  const currentStartYear = parseIso(financialYearStartDate(fyEndMonth, today)).year;
+  const earliestStartYear = parseIso(financialYearStartDate(fyEndMonth, earliestIso)).year;
+  const options: Array<{ value: PastFinancialYearKey; label: string }> = [];
+  for (
+    let year = currentStartYear - 1;
+    year >= earliestStartYear && options.length < max;
+    year--
+  ) {
+    options.push({ value: `fy-${year}`, label: financialYearShortLabel(fyEndMonth, year) });
+  }
+  return options;
 }
 
 function parseIso(iso: string): { year: number; month: number; day: number } {
@@ -108,6 +155,23 @@ export function resolveDashboardPeriod(
     case "trailing-12":
       return resolveTrailing12(today);
   }
+  const fyStartYear = pastFinancialYearStart(key);
+  if (fyStartYear === null) {
+    throw new Error(`Unknown dashboard period: ${key}`);
+  }
+  return resolveFinancialYearPeriod(fyEndMonth, fyStartYear);
+}
+
+/** Months for the dashboard charts: the chosen earlier financial year, otherwise the 12 months to today. */
+export function dashboardChartMonths(
+  key: DashboardPeriodKey,
+  fyEndMonth: number,
+  today: string = todayIsoDate(),
+): { from: string; to: string; months: string[] } {
+  const fyStartYear = pastFinancialYearStart(key);
+  if (fyStartYear === null) return trailingChartMonths(12, today);
+  const { from, to } = resolveFinancialYearPeriod(fyEndMonth, fyStartYear);
+  return { from, to, months: eachMonth(from, to) };
 }
 
 /** Month keys for the trailing chart window (always 12 months ending today). */
