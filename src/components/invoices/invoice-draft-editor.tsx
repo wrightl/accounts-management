@@ -40,7 +40,7 @@ export function InvoiceDraftEditor({
   batchId: string;
   draftId: string;
   invoice: ParsedInvoice;
-  /** The client chosen for this invoice in the import's Clients section. */
+  /** The client chosen for this invoice, changed from its row in the list. */
   clientLabel: string;
   bankTransactionId: string | null;
   errors: string[];
@@ -189,10 +189,7 @@ export function InvoiceDraftEditor({
         ))}
         <p>
           <span className="text-muted">Client: </span>
-          <span className="font-medium">{clientLabel}</span>{" "}
-          <a href="#import-clients" className="text-xs underline">
-            Change in Clients
-          </a>
+          <span className="font-medium">{clientLabel}</span>
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           {field("number", "Invoice number")}
