@@ -759,9 +759,14 @@ export const expenseReceipts = pgTable(
     filename: text("filename").notNull(),
     contentType: text("content_type"),
     sizeBytes: integer("size_bytes"),
+    /** SHA-256 of the file, so the same receipt sent twice can be spotted. Null on older uploads. */
+    contentSha256: text("content_sha256"),
     uploadedAt: timestamp("uploaded_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index("idx_receipts_expense").on(t.expenseId)],
+  (t) => [
+    index("idx_receipts_expense").on(t.expenseId),
+    index("idx_receipts_sha256").on(t.contentSha256),
+  ],
 );
 
 export const reimbursements = pgTable(

@@ -610,6 +610,13 @@
       "when": 1794069506803,
       "tag": "0086_import_draft_client",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1794076032943,
+      "tag": "0087_expense_receipt_sha256",
+      "breakpoints": true
     }
   ]
 }

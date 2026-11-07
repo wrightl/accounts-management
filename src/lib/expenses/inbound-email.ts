@@ -47,6 +47,7 @@ import {
 } from "@/lib/expenses/inbound-mailbox";
 import { formatExpenseAmount, poundsToPence } from "@/lib/money";
 import { sterlingFromForeign } from "@/lib/expenses/convert";
+import { receiptSha256 } from "@/lib/expenses/receipt-hash";
 import { getResendClient } from "@/lib/resend/client";
 import { getReceiptOcrSettings } from "@/lib/platform-settings";
 import { getStorage, type StoredObject } from "@/lib/storage";
@@ -771,6 +772,7 @@ async function deliverInboundEmail(
             filename: receipt.filename,
             contentType: receipt.contentType,
             sizeBytes: stored.size,
+            contentSha256: receiptSha256(receipt.bytes),
           });
         }
       }
