@@ -113,6 +113,7 @@ export function Select({
   disabled,
   required,
   className,
+  triggerClassName,
   "aria-invalid": ariaInvalid,
   "aria-describedby": ariaDescribedBy,
   "aria-label": ariaLabel,
@@ -128,6 +129,8 @@ export function Select({
   disabled?: boolean;
   required?: boolean;
   className?: string;
+  /** Classes for the trigger button; `className` styles the wrapper. */
+  triggerClassName?: string;
   "aria-invalid"?: boolean | "true" | "false";
   "aria-describedby"?: string;
   "aria-label"?: string;
@@ -358,6 +361,7 @@ export function Select({
           field,
           "flex items-center justify-between gap-2 text-left",
           disabled && "cursor-not-allowed",
+          triggerClassName,
         )}
       >
         <span className={cn("truncate", showPlaceholder && "text-muted")}>

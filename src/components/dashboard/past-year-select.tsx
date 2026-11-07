@@ -18,9 +18,10 @@ export function PastYearSelect({
   return (
     <Select
       aria-label="Earlier financial year"
-      className={cn(
-        "w-auto min-w-[8.5rem] rounded-full py-1",
-        active && "border-navy bg-navy text-white",
+      className="w-auto min-w-[8.5rem]"
+      triggerClassName={cn(
+        "rounded-full py-1",
+        active && "border-navy bg-navy text-white [&_svg]:text-white",
       )}
       value={active ? current : ""}
       placeholder="Earlier year"
