@@ -134,7 +134,7 @@ export function SettingsForm({
         })}
         className="space-y-4"
       >
-        <h2 className="font-display text-lg font-semibold">
+        <h2 id="details" className="scroll-mt-8 font-display text-lg font-semibold">
           {settings.entityType === "sole_trader"
             ? "Business profile"
             : "Company profile"}
@@ -304,7 +304,7 @@ export function SettingsForm({
           <FieldError id="logo-error">{fieldErrors.logo}</FieldError>
         </div>
 
-        <h2 className="pt-4 font-display text-lg font-semibold">VAT</h2>
+        <h2 id="vat" className="scroll-mt-8 pt-4 font-display text-lg font-semibold">VAT</h2>
         <label className="flex items-start gap-3 text-sm">
           <input
             type="checkbox"
@@ -415,7 +415,7 @@ export function SettingsForm({
           </>
         )}
 
-        <h2 className="pt-4 font-display text-lg font-semibold">Bank details</h2>
+        <h2 id="bank" className="scroll-mt-8 pt-4 font-display text-lg font-semibold">Bank details</h2>
         <BankFields
           bankProvider={settings.bankProvider}
           bankName={settings.bankName}
@@ -428,7 +428,7 @@ export function SettingsForm({
           onClearError={clearField}
         />
 
-        <h2 className="pt-4 font-display text-lg font-semibold">Invoicing</h2>
+        <h2 id="invoicing" className="scroll-mt-8 pt-4 font-display text-lg font-semibold">Invoicing</h2>
         <div>
           <Label htmlFor="invoiceNumberPrefix" required>
             Invoice number prefix
@@ -551,7 +551,7 @@ export function SettingsForm({
           </FieldError>
         </div>
 
-        <h2 className="pt-4 font-display text-lg font-semibold">
+        <h2 id="cutover" className="scroll-mt-8 pt-4 font-display text-lg font-semibold">
           Spreadsheet cutover
         </h2>
         <p className="text-sm text-muted">
@@ -597,7 +597,7 @@ export function SettingsForm({
           </div>
         </div>
 
-        <h2 className="pt-4 font-display text-lg font-semibold">Expenses</h2>
+        <h2 id="expenses" className="scroll-mt-8 pt-4 font-display text-lg font-semibold">Expenses</h2>
         <div>
           <Label htmlFor="defaultMileageRatePence" required>
             Default mileage rate (pence per mile)

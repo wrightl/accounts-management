@@ -48,6 +48,7 @@ import {
 } from "@/lib/expenses/schema";
 import { useDateFormat } from "@/components/date-format-provider";
 import { formatIsoDate } from "@/lib/dates";
+import { PAGE_WIDTH } from "@/components/ui/page-width";
 
 type ExpenseStatusOption = "" | "recorded" | "reimbursable" | "company_paid";
 
@@ -593,7 +594,7 @@ export function ExpenseForm({
   }
 
   return (
-    <form ref={formRef} noValidate onSubmit={preventResetSubmit(onSubmit)} className="mx-auto max-w-xl space-y-4">
+    <form ref={formRef} noValidate onSubmit={preventResetSubmit(onSubmit)} className={`${PAGE_WIDTH.reading} space-y-4`}>
       {mode === "create" && fromBankTransaction && (
         <div className="rounded-lg border border-border bg-wash/50 px-4 py-3 text-sm">
           <p className="font-medium">From bank transaction</p>

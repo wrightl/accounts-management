@@ -62,7 +62,7 @@ export default async function NewExpensePage({
       </div>
       <h1 className="mb-6 font-display text-2xl font-semibold">New expense</h1>
       {bankLinkError ? (
-        <div className="mx-auto mb-6 max-w-xl rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div className="mb-6 max-w-2xl rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           This expense won&apos;t be linked to the bank transaction. {bankLinkError}
         </div>
       ) : null}

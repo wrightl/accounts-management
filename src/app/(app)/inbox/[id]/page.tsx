@@ -7,6 +7,7 @@ import {
   markNotificationRead,
 } from "@/lib/notifications";
 import { DisplayDate } from "@/components/date-format-provider";
+import { PAGE_WIDTH } from "@/components/ui/page-width";
 
 export default async function InboxDetailPage({
   params,
@@ -33,7 +34,7 @@ export default async function InboxDetailPage({
   }
 
   return (
-    <div className="mx-auto max-w-xl">
+    <div className={PAGE_WIDTH.reading}>
       <BackLink href="/inbox">Back to inbox</BackLink>
       <article className="mt-4 rounded-2xl border border-border bg-surface p-6">
         <h1 className="font-display text-2xl font-semibold">

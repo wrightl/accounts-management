@@ -15,6 +15,7 @@ import { sortHeaders } from "@/components/ui/sortable-th";
 import type { InvoiceStatus } from "@/lib/invoices/status";
 import { defineTableSort, parseTableSort, rankIn, sortRows } from "@/lib/table-sort";
 import { DisplayDate } from "@/components/date-format-provider";
+import { PageHeader } from "@/components/ui/page-header";
 
 /** "created" is the loaded order (newest first) and has no header. */
 const SORT = defineTableSort({
@@ -52,27 +53,27 @@ export default async function InvoicesPage({
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-semibold">Invoices</h1>
-          <p className="mt-1 text-muted">Create, send and track client invoices.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link href="/credit-notes" className={buttonClasses("ghost")}>
-            Credit notes
-          </Link>
-          {canWrite ? (
-            <>
-              <Link href="/invoices/import" className={buttonClasses("ghost")}>
-                Import invoices
-              </Link>
-              <Link href="/invoices/new" className={buttonClasses("primary")}>
-                New invoice
-              </Link>
-            </>
-          ) : null}
-        </div>
-      </div>
+      <PageHeader
+        title="Invoices"
+        description="Create, send and track client invoices."
+        actions={
+          <>
+            <Link href="/credit-notes" className={buttonClasses("ghost")}>
+              Credit notes
+            </Link>
+            {canWrite ? (
+              <>
+                <Link href="/invoices/import" className={buttonClasses("ghost")}>
+                  Import invoices
+                </Link>
+                <Link href="/invoices/new" className={buttonClasses("primary")}>
+                  New invoice
+                </Link>
+              </>
+            ) : null}
+          </>
+        }
+      />
 
       {unchased && unchased.count > 0 ? (
         <UnchasedImportsBanner

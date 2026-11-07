@@ -59,15 +59,15 @@ export default async function SafeToPayPage() {
   const { result, cash } = data;
 
   return (
-    <div className="max-w-3xl">
+    <div>
       <h1 className="font-display text-2xl font-semibold">Safe to pay yourself</h1>
-      <p className="mt-1 text-muted">
+      <p className="mt-1 max-w-2xl text-muted">
         How much the company could pay out in dividends today without running short of cash or
         paying more than its profits allow.
       </p>
 
       {!cash.known ? (
-        <p className="mt-6 rounded-xl bg-wash px-4 py-3 text-sm">
+        <p className="mt-6 max-w-2xl rounded-xl bg-wash px-4 py-3 text-sm">
           Alfa doesn&apos;t know the company&apos;s bank balance yet.{" "}
           <Link href="/transactions" className="underline">
             Import a bank statement
@@ -80,7 +80,7 @@ export default async function SafeToPayPage() {
         </p>
       ) : null}
 
-      <section className="mt-6 grid gap-4 sm:grid-cols-2">
+      <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:max-w-5xl">
         <div className="rounded-2xl border border-border bg-surface p-5">
           <p className="text-sm text-muted">Safe to pay today</p>
           <p className="mt-1 font-display text-4xl font-semibold tabular-nums">
@@ -119,81 +119,83 @@ export default async function SafeToPayPage() {
         </p>
       ) : null}
 
-      <section className="mt-10">
-        <h2 className="font-display text-lg font-semibold">How it&apos;s worked out</h2>
-        <dl className="mt-3 grid grid-cols-[1fr_auto] gap-x-6 gap-y-2 text-sm">
-          <Row label="Cash at bank" pence={cash.known ? cash.cashPence : 0}>
-            {cash.known ? (
-              <span className="block text-xs">
-                {cash.source === "statement"
-                  ? <>From the latest statement balance, <DisplayDate value={cash.asOf} /></>
-                  : <>Opening cash plus transactions to <DisplayDate value={cash.asOf} /></>}
-              </span>
-            ) : null}
-          </Row>
-          {data.vatRegistered ? (
-            <Row label="VAT owed" pence={result.vatOwedPence} sign="−">
-              <Parts parts={data.vatParts} />
+      <div className="mt-10 grid gap-10 lg:grid-cols-[minmax(0,36rem)_minmax(0,28rem)] lg:items-start">
+        <section>
+          <h2 className="font-display text-lg font-semibold">How it&apos;s worked out</h2>
+          <dl className="mt-3 grid grid-cols-[1fr_auto] gap-x-6 gap-y-2 text-sm">
+            <Row label="Cash at bank" pence={cash.known ? cash.cashPence : 0}>
+              {cash.known ? (
+                <span className="block text-xs">
+                  {cash.source === "statement"
+                    ? <>From the latest statement balance, <DisplayDate value={cash.asOf} /></>
+                    : <>Opening cash plus transactions to <DisplayDate value={cash.asOf} /></>}
+                </span>
+              ) : null}
             </Row>
-          ) : null}
-          <Row label="Corporation tax" pence={result.corporationTaxPence} sign="−">
-            <Parts parts={data.taxParts} />
-          </Row>
-          <Row label="Reimbursements owed to the team" pence={result.billsDuePence} sign="−" />
-          <Row
-            label={`Buffer: ${data.bufferMonths} month${data.bufferMonths === 1 ? "" : "s"} of spending`}
-            pence={result.bufferPence}
-            sign="−"
-          >
-            <span className="block text-xs">
-              Average {formatGBP(data.monthlySpendPence)} a month over the last 3 months
-            </span>
-          </Row>
-          <Row label="Free cash" pence={result.freeCashPence} strong />
-          <Row label="Profits available to distribute" pence={result.reservesPence}>
-            <span className="block text-xs">
-              <Link href="/reserves" className="underline">
-                Tax &amp; reserves
-              </Link>
-              {data.hasOpeningBalances ? "" : " (add opening balances if you traded before Alfa)"}
-            </span>
-          </Row>
-          <Row label="Safe to pay today" pence={result.safeNowPence} strong>
-            <span className="block text-xs font-normal text-muted">The lower of the two</span>
-          </Row>
-        </dl>
+            {data.vatRegistered ? (
+              <Row label="VAT owed" pence={result.vatOwedPence} sign="−">
+                <Parts parts={data.vatParts} />
+              </Row>
+            ) : null}
+            <Row label="Corporation tax" pence={result.corporationTaxPence} sign="−">
+              <Parts parts={data.taxParts} />
+            </Row>
+            <Row label="Reimbursements owed to the team" pence={result.billsDuePence} sign="−" />
+            <Row
+              label={`Buffer: ${data.bufferMonths} month${data.bufferMonths === 1 ? "" : "s"} of spending`}
+              pence={result.bufferPence}
+              sign="−"
+            >
+              <span className="block text-xs">
+                Average {formatGBP(data.monthlySpendPence)} a month over the last 3 months
+              </span>
+            </Row>
+            <Row label="Free cash" pence={result.freeCashPence} strong />
+            <Row label="Profits available to distribute" pence={result.reservesPence}>
+              <span className="block text-xs">
+                <Link href="/reserves" className="underline">
+                  Tax &amp; reserves
+                </Link>
+                {data.hasOpeningBalances ? "" : " (add opening balances if you traded before Alfa)"}
+              </span>
+            </Row>
+            <Row label="Safe to pay today" pence={result.safeNowPence} strong>
+              <span className="block text-xs font-normal text-muted">The lower of the two</span>
+            </Row>
+          </dl>
 
-        <h3 className="mt-8 text-sm font-medium">
-          Expected in by <DisplayDate value={data.until} />
-        </h3>
-        <dl className="mt-2 grid grid-cols-[1fr_auto] gap-x-6 gap-y-1 text-sm">
-          {data.expectedParts.map((p) => (
-            <Row key={p.label} label={p.label} pence={p.pence} />
-          ))}
-        </dl>
+          <h3 className="mt-8 text-sm font-medium">
+            Expected in by <DisplayDate value={data.until} />
+          </h3>
+          <dl className="mt-2 grid grid-cols-[1fr_auto] gap-x-6 gap-y-1 text-sm">
+            {data.expectedParts.map((p) => (
+              <Row key={p.label} label={p.label} pence={p.pence} />
+            ))}
+          </dl>
 
-        <p className="mt-6 text-xs text-muted">
-          An estimate to help you decide, not advice. It assumes last quarter&apos;s VAT and last
-          year&apos;s corporation tax are unpaid until their deadlines, and doesn&apos;t include
-          PAYE, supplier bills not yet in Alfa, or money the company owes directors. Check with
-          your accountant before paying a large dividend. See the{" "}
-          <Link href="/forecast" className="underline">
-            cash forecast
-          </Link>{" "}
-          for how cash moves over the next 13 weeks.
-        </p>
-      </section>
-
-      {canManage ? (
-        <section className="mt-10 rounded-2xl border border-border bg-surface p-5">
-          <h2 className="mb-4 font-display text-lg font-semibold">Assumptions</h2>
-          <SafeToPayAssumptionsForm
-            vatRegistered={data.vatRegistered}
-            vatQuarterEndMonth={data.vatQuarterEndMonth}
-            bufferMonths={data.bufferMonths}
-          />
+          <p className="mt-6 text-xs text-muted">
+            An estimate to help you decide, not advice. It assumes last quarter&apos;s VAT and last
+            year&apos;s corporation tax are unpaid until their deadlines, and doesn&apos;t include
+            PAYE, supplier bills not yet in Alfa, or money the company owes directors. Check with
+            your accountant before paying a large dividend. See the{" "}
+            <Link href="/forecast" className="underline">
+              cash forecast
+            </Link>{" "}
+            for how cash moves over the next 13 weeks.
+          </p>
         </section>
-      ) : null}
+
+        {canManage ? (
+          <section className="rounded-2xl border border-border bg-surface p-5">
+            <h2 className="mb-4 font-display text-lg font-semibold">Assumptions</h2>
+            <SafeToPayAssumptionsForm
+              vatRegistered={data.vatRegistered}
+              vatQuarterEndMonth={data.vatQuarterEndMonth}
+              bufferMonths={data.bufferMonths}
+            />
+          </section>
+        ) : null}
+      </div>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { OrderForm } from "@/components/orders/order-form";
 import { BackLink } from "@/components/ui/back-link";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { defaultLineVatRate } from "@/lib/vat";
+import { PAGE_WIDTH } from "@/components/ui/page-width";
 
 export default async function NewOrderPage() {
   const { companyId } = await guardTenantPage("accounts:write");
@@ -19,7 +20,7 @@ export default async function NewOrderPage() {
         <BackLink href="/orders">Orders</BackLink>
       </div>
       <h1 className="mb-6 font-display text-2xl font-semibold">New order</h1>
-      <div className="max-w-2xl">
+      <div className={PAGE_WIDTH.editor}>
         <OrderForm
           clients={clients}
           vatRegistered={company.vatRegistered}

@@ -18,6 +18,7 @@ import {
   setTableSortParams,
   sortRows,
 } from "@/lib/table-sort";
+import { PageHeader } from "@/components/ui/page-header";
 
 /** "created" is the loaded order (newest first) and has no header. */
 const SORT = defineTableSort({
@@ -62,20 +63,22 @@ export default async function QuotesPage({
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-semibold">Quotes</h1>
-          <p className="mt-1 text-muted">
+      <PageHeader
+        title="Quotes"
+        description={
+          <>
             Estimates for clients. Send a PDF, mark accepted to create an order, or
             capture decline reasons for pipeline reporting.
-          </p>
-        </div>
-        {canWrite && (
-          <Link href="/quotes/new" className={buttonClasses("primary")}>
-            New quote
-          </Link>
-        )}
-      </div>
+          </>
+        }
+        actions={
+          canWrite ? (
+            <Link href="/quotes/new" className={buttonClasses("primary")}>
+              New quote
+            </Link>
+          ) : null
+        }
+      />
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_280px] xl:grid-cols-[1fr_320px]">
         <div>

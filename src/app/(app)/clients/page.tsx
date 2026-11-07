@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { sortHeaders } from "@/components/ui/sortable-th";
 import { defineTableSort, parseTableSort, sortRows } from "@/lib/table-sort";
+import { PageHeader } from "@/components/ui/page-header";
 
 const SORT = defineTableSort({
   columns: ["name", "company", "email"],
@@ -36,20 +37,20 @@ export default async function ClientsPage({
   return (
     <div>
       <SetupStepBanner stepId="clients" entityType={entityType} from={sp.from} />
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-semibold">Clients</h1>
-          <p className="mt-1 text-muted">People and companies you invoice.</p>
-        </div>
-        {canWrite ? (
-          <div className="flex flex-wrap gap-2">
-            <ClientImportButton canWrite={canWrite} defaultOpen={sp.import === "1"} />
-            <Link href="/clients/new" className={buttonClasses("primary")}>
-              New client
-            </Link>
-          </div>
-        ) : null}
-      </div>
+      <PageHeader
+        title="Clients"
+        description="People and companies you invoice."
+        actions={
+          canWrite ? (
+            <>
+              <ClientImportButton canWrite={canWrite} defaultOpen={sp.import === "1"} />
+              <Link href="/clients/new" className={buttonClasses("primary")}>
+                New client
+              </Link>
+            </>
+          ) : null
+        }
+      />
 
       <div className="mt-6">
         {rows.length === 0 ? (

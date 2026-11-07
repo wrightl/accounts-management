@@ -29,21 +29,21 @@ export default async function BookkeeperPage() {
   ]);
 
   return (
-    <div className="max-w-3xl">
+    <div>
       <h1 className="font-display text-2xl font-semibold">AI bookkeeper</h1>
-      <p className="mt-1 text-muted">
+      <p className="mt-1 max-w-2xl text-muted">
         Suggestions to speed up the bookkeeping, and answers from your own figures. Nothing
         changes until someone accepts it.
       </p>
       {!aiReady ? (
-        <p className="mt-4 rounded-xl bg-wash px-4 py-3 text-sm">
+        <p className="mt-4 max-w-2xl rounded-xl bg-wash px-4 py-3 text-sm">
           AI isn&apos;t set up on this deployment, so questions and AI suggestions are off.
           Categories learned from your own history still work.
         </p>
       ) : null}
 
       {canAsk && aiReady ? (
-        <section className="mt-8">
+        <section className="mt-8 max-w-3xl">
           <AskBox remaining={Math.max(0, DAILY_QUESTION_LIMIT - asked)} />
         </section>
       ) : null}
@@ -52,7 +52,7 @@ export default async function BookkeeperPage() {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="font-display text-lg font-semibold">Spending categories</h2>
-            <p className="mt-1 text-sm text-muted">
+            <p className="mt-1 max-w-2xl text-sm text-muted">
               {uncategorised} payment{uncategorised === 1 ? "" : "s"} out of the bank without a
               category. Suggestions follow how you&apos;ve categorised the same payee before, and
               get better each time you accept or correct one.
@@ -78,7 +78,7 @@ export default async function BookkeeperPage() {
 
       <section className="mt-10">
         <h2 className="font-display text-lg font-semibold">Receipts and card payments</h2>
-        <p className="mt-1 text-sm text-muted">
+        <p className="mt-1 max-w-2xl text-sm text-muted">
           Matches the exact matcher couldn&apos;t make: merchant names that look different on the
           statement, or amounts changed by a tip, fee or exchange rate. Exact matches appear in{" "}
           Transactions as usual.

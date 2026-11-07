@@ -10,6 +10,7 @@ import { buttonClasses } from "@/components/ui/button";
 import { SetupStepBanner } from "@/components/data-onboarding/setup-step-banner";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function ShareholdersPage({
   searchParams,
@@ -34,23 +35,25 @@ export default async function ShareholdersPage({
   return (
     <div>
       <SetupStepBanner stepId="shareholders" entityType={entityType} from={sp.from} />
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-semibold">Shareholders</h1>
-          <p className="mt-1 text-muted">
+      <PageHeader
+        title="Shareholders"
+        description={
+          <>
             Company share register. Dividends split pro rata across active
             holders when the register is balanced.
-          </p>
-        </div>
-        {canWrite && (
-          <Link
-            href="/shareholders/new"
-            className={buttonClasses("primary")}
-          >
-            New shareholder
-          </Link>
-        )}
-      </div>
+          </>
+        }
+        actions={
+          canWrite ? (
+            <Link
+              href="/shareholders/new"
+              className={buttonClasses("primary")}
+            >
+              New shareholder
+            </Link>
+          ) : null
+        }
+      />
 
       <div className="mt-6">
         <TotalSharesForm

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { Tag } from "lucide-react";
 import { createLabelAction, deleteLabelAction, updateLabelAction } from "@/actions/labels";
 import { LabelChip, LabelColorPicker } from "@/components/labels/label-chip";
 import { useAlert } from "@/components/ui/alert-dialog";
@@ -185,6 +186,7 @@ export function ManageLabelsButton({ labels }: { labels: LabelWithUsage[] }) {
   return (
     <>
       <Button type="button" variant="secondary" onClick={() => setOpen(true)}>
+        <Tag className="h-4 w-4" aria-hidden />
         Labels
       </Button>
       {open ? <ManageLabelsDialog labels={labels} onClose={() => setOpen(false)} /> : null}

@@ -17,6 +17,7 @@ import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { formatGBP } from "@/lib/money";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { DisplayDate } from "@/components/date-format-provider";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function DividendsPage({
   searchParams,
@@ -49,26 +50,28 @@ export default async function DividendsPage({
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-semibold">Dividends</h1>
-          <p className="mt-1 text-muted">
+      <PageHeader
+        title="Dividends"
+        description={
+          <>
             Declare a total that splits pro rata across the{" "}
             <Link href="/shareholders" className="underline">
               share register
             </Link>
             . Exported in the accountant pack.
-          </p>
-        </div>
-        {canWrite && (
-          <Link
-            href="/dividends/new"
-            className={buttonClasses("primary")}
-          >
-            New dividend
-          </Link>
-        )}
-      </div>
+          </>
+        }
+        actions={
+          canWrite ? (
+            <Link
+              href="/dividends/new"
+              className={buttonClasses("primary")}
+            >
+              New dividend
+            </Link>
+          ) : null
+        }
+      />
 
       <form className="mt-6 flex flex-wrap items-end gap-3">
         <div>
