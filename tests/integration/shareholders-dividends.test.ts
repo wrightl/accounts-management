@@ -3,7 +3,7 @@ import { eq, isNull } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
 import {
-  companySettings,
+  companies,
   dividendDeclarations,
   dividendPayouts,
   shareholders,
@@ -32,8 +32,8 @@ describe("shareholders + dividend declare integration", () => {
   it("creates balanced register and pro-rata payouts", async () => {
     const [settings] = await db
       .select()
-      .from(companySettings)
-      .where(eq(companySettings.id, companyId));
+      .from(companies)
+      .where(eq(companies.id, companyId));
     expect(settings).toBeTruthy();
 
     const [a] = await db
@@ -46,9 +46,9 @@ describe("shareholders + dividend declare integration", () => {
       .returning();
 
     await db
-      .update(companySettings)
+      .update(companies)
       .set({ totalShares: 100 })
-      .where(eq(companySettings.id, companyId));
+      .where(eq(companies.id, companyId));
 
     const totalPence = 10_000;
     const splits = splitDividendPence(

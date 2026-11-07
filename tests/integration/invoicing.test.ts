@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "@/db/pglite";
 import {
   clients,
-  companySettings,
+  companies,
   invoices,
   invoiceLineItems,
   payments,
@@ -40,8 +40,8 @@ describe("invoicing integration (PGlite)", () => {
   it("seeds company settings with invoice numbering defaults via migration", async () => {
     const [settings] = await db
       .select()
-      .from(companySettings)
-      .where(eq(companySettings.id, companyId));
+      .from(companies)
+      .where(eq(companies.id, companyId));
     expect(settings.invoiceNumberPrefix).toBe("DD");
     expect(settings.invoiceNextSeq).toBe(1);
   });
@@ -197,18 +197,18 @@ describe("invoicing integration (PGlite)", () => {
 
   it("persists company settings updates", async () => {
     await db
-      .update(companySettings)
+      .update(companies)
       .set({
         invoiceNumberPrefix: "XX",
         sortCode: "12-34-56",
         accountNumber: "12345678",
       })
-      .where(eq(companySettings.id, companyId));
+      .where(eq(companies.id, companyId));
 
     const [updated] = await db
       .select()
-      .from(companySettings)
-      .where(eq(companySettings.id, companyId));
+      .from(companies)
+      .where(eq(companies.id, companyId));
     expect(updated.invoiceNumberPrefix).toBe("XX");
     expect(updated.sortCode).toBe("12-34-56");
   });

@@ -3,7 +3,6 @@ import { eq } from "drizzle-orm";
 import { createTestDb } from "@/db/pglite";
 import {
   clients,
-  companySettings,
   invoices,
   invoiceLineItems,
   payments,
@@ -124,15 +123,5 @@ describe("database schema (PGlite)", () => {
       .where(eq(payments.invoiceId, invoice.id));
     expect(lines).toHaveLength(0);
     expect(pays).toHaveLength(0);
-  });
-
-  it("exposes company settings alias for companies table", async () => {
-    const { db } = ctx;
-    const company = await seedCompany(db, { name: "Alias Co" });
-    const [row] = await db
-      .select()
-      .from(companySettings)
-      .where(eq(companySettings.id, company.id));
-    expect(row?.name).toBe("Alias Co");
   });
 });

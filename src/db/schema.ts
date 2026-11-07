@@ -39,12 +39,13 @@ export const invoiceStatusEnum = pgEnum("invoice_status", [
   "overdue",
   "void",
 ]);
+// Order matches the database: "pending" was added later with ADD VALUE.
 export const expenseStatusEnum = pgEnum("expense_status", [
-  "pending", // submitted by email, awaiting review
   "recorded", // logged, not yet classified
   "reimbursable", // owed back to a founder
   "reimbursed", // paid back to the founder
   "company_paid", // paid directly by the company
+  "pending", // submitted by email, awaiting review
 ]);
 export const expenseSourceEnum = pgEnum("expense_source", ["manual", "email"]);
 export const expensePaymentSourceEnum = pgEnum("expense_payment_source", [
@@ -128,7 +129,7 @@ export const companies = pgTable("companies", {
    * Stripe Connect account (Standard: the company's own Stripe account) that
    * receives online invoice payments. Null until connected in Settings.
    */
-  stripeConnectAccountId: text("stripe_connect_account_id").unique(),
+  stripeConnectAccountId: text("stripe_connect_account_id"),
   /** Mirrors the account's `charges_enabled`; pay-now shows only when true. */
   stripeConnectChargesEnabled: boolean("stripe_connect_charges_enabled")
     .notNull()
@@ -204,10 +205,9 @@ export const companies = pgTable("companies", {
   suspendedReason: text("suspended_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
-
-/** @deprecated Use `companies`. Alias kept for gradual migration of imports. */
-export const companySettings = companies;
+}, (t) => [
+  uniqueIndex("companies_stripe_connect_account_id_unique").on(t.stripeConnectAccountId),
+]);
 
 export const documentSequenceKindEnum = pgEnum("document_sequence_kind", [
   "invoice",
@@ -260,7 +260,9 @@ export const users = pgTable(
       .notNull()
       .default(sql`'{}'::jsonb`),
     /** Set when an admin invites this user; used for invite-accepted notifications. */
-    invitedByUserId: uuid("invited_by_user_id"),
+    invitedByUserId: uuid("invited_by_user_id").references((): AnyPgColumn => users.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
@@ -428,6 +430,7 @@ export const invoices = pgTable(
     index("idx_invoices_status").on(t.status),
     index("idx_invoices_order").on(t.orderId),
     index("idx_invoices_payment_milestone").on(t.paymentMilestoneId),
+    index("idx_invoices_import_batch").on(t.importBatchId),
     uniqueIndex("uniq_invoices_public_token").on(t.publicToken),
   ],
 );
@@ -468,7 +471,14 @@ export const invoiceImportBatches = pgTable(
     committedAt: timestamp("committed_at", { withTimezone: true }),
     undoneAt: timestamp("undone_at", { withTimezone: true }),
   },
-  (t) => [index("idx_invoice_import_batches_company").on(t.companyId, t.createdAt)],
+  (t) => [
+    index("idx_invoice_import_batches_company").on(t.companyId, t.createdAt),
+    check("invoice_import_batches_kind_known", sql`${t.kind} in ('csv', 'pdf')`),
+    check(
+      "invoice_import_batches_status_known",
+      sql`${t.status} in ('draft', 'committed', 'undone', 'discarded')`,
+    ),
+  ],
 );
 
 /** PDFs read per calendar month (YYYY-MM), which deleting a draft doesn't reduce. */
@@ -515,6 +525,10 @@ export const invoiceImportDrafts = pgTable(
   (t) => [
     index("idx_invoice_import_drafts_batch").on(t.batchId, t.position),
     index("idx_invoice_import_drafts_company_sha").on(t.companyId, t.documentSha256),
+    check(
+      "invoice_import_drafts_status_known",
+      sql`${t.status} in ('needs_review', 'ready', 'skipped', 'committed')`,
+    ),
   ],
 );
 
@@ -1304,7 +1318,9 @@ export const quotes = pgTable(
   (t) => [
     uniqueIndex("uniq_quotes_company_number").on(t.companyId, t.number),
     index("idx_quotes_company").on(t.companyId),
-    uniqueIndex("uniq_quotes_public_token").on(t.publicToken),
+    uniqueIndex("uniq_quotes_public_token")
+      .on(t.publicToken)
+      .where(sql`${t.publicToken} is not null`),
   ],
 );
 
@@ -1482,7 +1498,14 @@ export const recurringInvoices = pgTable(
     lastGeneratedAt: timestamp("last_generated_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index("idx_recurring_invoices_company").on(t.companyId)],
+  (t) => [
+    index("idx_recurring_invoices_company").on(t.companyId),
+    check(
+      "recurring_invoices_day_of_month_range",
+      sql`${t.dayOfMonth} >= 1 and ${t.dayOfMonth} <= 28`,
+    ),
+    check("recurring_invoices_on_generate", sql`${t.onGenerate} in ('draft', 'send')`),
+  ],
 );
 
 export const billingPlanEnum = pgEnum("billing_plan", [
@@ -1895,7 +1918,6 @@ export type PushPlatform = (typeof pushPlatformEnum.enumValues)[number];
 export const schema = {
   users,
   companies,
-  companySettings,
   companyMemberships,
   releasedInboundAliases,
   clients,

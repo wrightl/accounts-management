@@ -4,7 +4,7 @@ import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
 import {
   clients,
-  companySettings,
+  companies,
   invoiceLineItems,
   invoices,
   orderPaymentMilestones,
@@ -275,7 +275,7 @@ describe("orders", () => {
   });
 
   it("uses company payment terms for full invoice due date", async () => {
-    await db.update(companySettings).set({ invoicePaymentTermsDays: 30 }).where(eq(companySettings.id, companyId));
+    await db.update(companies).set({ invoicePaymentTermsDays: 30 }).where(eq(companies.id, companyId));
     const { orderId } = await createTestOrder({ grossPounds: "500" });
     const form = new FormData();
     form.set("mode", "remaining");

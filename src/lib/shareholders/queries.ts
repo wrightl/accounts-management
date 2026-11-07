@@ -1,7 +1,7 @@
 import "server-only";
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { companySettings, shareholders, users } from "@/db/schema";
+import { companies, shareholders, users } from "@/db/schema";
 import { getCompanySettings } from "@/lib/settings/queries";
 
 export async function listShareholders(
@@ -115,8 +115,8 @@ export async function assertRegisterBalanced(
 ) {
   const [settings] = await db
     .select()
-    .from(companySettings)
-    .where(eq(companySettings.id, companyId))
+    .from(companies)
+    .where(eq(companies.id, companyId))
     .limit(1);
   const [sumRow] = await db
     .select({
