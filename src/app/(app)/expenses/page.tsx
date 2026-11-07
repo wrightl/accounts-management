@@ -4,6 +4,7 @@ import { guardTenantPage, hasPermission, requireUser } from "@/lib/auth";
 import { can } from "@/lib/roles";
 import { recordScopeFor, withoutTeamAnnotations } from "@/lib/accountant/record-scope";
 import {
+  findPossibleDuplicates,
   getEmailExpensesFingerprint,
   getReimbursableSummary,
   listExpenses,
@@ -49,6 +50,7 @@ import { RecordQueryIcon } from "@/components/queries/record-query-icon";
 import { recordQueriesFor } from "@/lib/queries/queries";
 import { listLabels } from "@/lib/labels/queries";
 import { PageHeader } from "@/components/ui/page-header";
+import { PossibleDuplicateChip } from "@/components/expenses/possible-duplicates";
 
 export default async function ExpensesPage({
   searchParams,
@@ -105,10 +107,11 @@ export default async function ExpensesPage({
 
   const queries = await recordQueriesFor(role, companyId, "expense", rows.map((r) => r.id));
 
-  const paymentSources = await getPaymentSourceSuggestions(
-    companyId,
-    rows.filter((r) => r.status === "pending").map((r) => r.id),
-  );
+  const pendingIds = rows.filter((r) => r.status === "pending").map((r) => r.id);
+  const [paymentSources, duplicates] = await Promise.all([
+    getPaymentSourceSuggestions(companyId, pendingIds),
+    findPossibleDuplicates(companyId, scope === "all" ? pendingIds : []),
+  ]);
 
   const isFounder = localUser?.role === "admin" || localUser?.role === "user";
   // Given out when someone becomes a founder, and backfilled for earlier founders.
@@ -240,8 +243,17 @@ export default async function ExpensesPage({
             </THead>
             <TBody>
               {rows.map((e) => (
-                <TR key={e.id} className={e.status === "pending" ? "bg-amber-50/50" : undefined}>
-                  <TD className="w-8 pr-0">
+                <TR
+                  key={e.id}
+                  className={e.status === "pending" ? "bg-amber-100 hover:bg-amber-200/70" : undefined}
+                >
+                  <TD
+                    className={
+                      e.status === "pending"
+                        ? "w-8 pr-0 shadow-[inset_4px_0_0_var(--color-amber-500)]"
+                        : "w-8 pr-0"
+                    }
+                  >
                     <RowNote kind="expense" rowId={e.id} note={e.notes} canWrite={canWrite} />
                     <RecordQueryIcon
                       recordKind="expense"
@@ -268,6 +280,9 @@ export default async function ExpensesPage({
                       <span className="block text-xs text-amber-800">
                         Sent by {e.externalSenderEmail}, check before approving
                       </span>
+                    ) : null}
+                    {duplicates.get(e.id) ? (
+                      <PossibleDuplicateChip matches={duplicates.get(e.id)!} />
                     ) : null}
                     <RowLabels
                       kind="expense"

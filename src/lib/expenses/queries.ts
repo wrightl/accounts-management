@@ -18,6 +18,11 @@ import type { ExpenseSortColumn } from "@/lib/expenses/list-sort";
 import type { TableSort } from "@/lib/table-sort";
 import { bankSearchPattern } from "@/lib/bank/list-params";
 import { labelsForExpenses } from "@/lib/labels/queries";
+import {
+  matchDuplicates,
+  type DuplicateCandidate,
+  type PossibleDuplicate,
+} from "@/lib/expenses/duplicates";
 
 export interface ExpenseFilters {
   /** Matches description or client name. */
@@ -306,4 +311,79 @@ export async function getEmailExpensesFingerprint(companyId: string): Promise<st
     .from(expenses)
     .where(and(eq(expenses.companyId, companyId), eq(expenses.source, "email")));
   return `${row?.total ?? 0}:${row?.latest ?? ""}`;
+}
+
+/** An expense with its receipt fingerprints, one row per receipt grouped back up. */
+function groupReceiptRows(
+  rows: (Omit<DuplicateCandidate, "receiptHashes"> & { receiptHash: string | null })[],
+): DuplicateCandidate[] {
+  const byId = new Map<string, DuplicateCandidate>();
+  for (const { receiptHash, ...row } of rows) {
+    const entry = byId.get(row.id) ?? { ...row, receiptHashes: [] };
+    if (receiptHash) entry.receiptHashes.push(receiptHash);
+    byId.set(row.id, entry);
+  }
+  return [...byId.values()];
+}
+
+/**
+ * Emailed expenses still pending review, among `expenseIds`, that look like
+ * another expense in the company: the same receipt file, or the same amount
+ * on the same day. Worked out on read, so it follows edits and deletes.
+ */
+export async function findPossibleDuplicates(
+  companyId: string,
+  expenseIds: string[],
+): Promise<Map<string, PossibleDuplicate[]>> {
+  if (!expenseIds.length) return new Map();
+  const db = getDb();
+  const columns = {
+    id: expenses.id,
+    description: expenses.description,
+    spentAt: expenses.spentAt,
+    amountPence: expenses.amountPence,
+    detectedCurrency: expenses.detectedCurrency,
+    originalAmountMinor: expenses.originalAmountMinor,
+    createdAt: expenses.createdAt,
+    receiptHash: expenseReceipts.contentSha256,
+  };
+
+  const targets = groupReceiptRows(
+    await db
+      .select(columns)
+      .from(expenses)
+      .leftJoin(expenseReceipts, eq(expenseReceipts.expenseId, expenses.id))
+      .where(
+        and(
+          eq(expenses.companyId, companyId),
+          inArray(expenses.id, expenseIds),
+          eq(expenses.source, "email"),
+          eq(expenses.status, "pending"),
+        ),
+      ),
+  );
+  const dates = [...new Set(targets.flatMap((t) => (t.spentAt ? [t.spentAt] : [])))];
+  const hashes = [...new Set(targets.flatMap((t) => t.receiptHashes))];
+  if (!dates.length && !hashes.length) return new Map();
+
+  // Any expense on the same day, or holding the same receipt; matched exactly below.
+  const sameDayOrReceipt = or(
+    dates.length ? inArray(expenses.spentAt, dates) : undefined,
+    hashes.length
+      ? sql`exists (
+          select 1 from ${expenseReceipts}
+          where ${expenseReceipts.expenseId} = ${expenses.id}
+            and ${inArray(expenseReceipts.contentSha256, hashes)}
+        )`
+      : undefined,
+  );
+  const candidates = groupReceiptRows(
+    await db
+      .select(columns)
+      .from(expenses)
+      .leftJoin(expenseReceipts, eq(expenseReceipts.expenseId, expenses.id))
+      .where(and(eq(expenses.companyId, companyId), sameDayOrReceipt)),
+  );
+
+  return matchDuplicates(targets, candidates);
 }

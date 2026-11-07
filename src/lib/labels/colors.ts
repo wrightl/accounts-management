@@ -19,7 +19,7 @@ export const DEFAULT_LABEL_COLOR: LabelColor = "blue";
 /**
  * Full class names, so Tailwind can find them when it scans this file.
  * 900 text and an inset ring keep chips readable on tinted rows (pending
- * expenses are amber-50).
+ * expenses are amber-100).
  */
 export const LABEL_CHIP_CLASSES: Record<LabelColor, string> = {
   slate: "bg-slate-200 text-slate-900 ring-1 ring-inset ring-slate-700/30",

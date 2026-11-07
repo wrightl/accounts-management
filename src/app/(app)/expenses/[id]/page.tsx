@@ -6,7 +6,7 @@ import { listClients } from "@/lib/clients/queries";
 import { recordScopeFor } from "@/lib/accountant/record-scope";
 import { ExpenseReadOnly } from "@/components/expenses/expense-read-only";
 import { RecordQueries } from "@/components/queries/record-queries";
-import { getExpenseDetail, listFounders } from "@/lib/expenses/queries";
+import { findPossibleDuplicates, getExpenseDetail, listFounders } from "@/lib/expenses/queries";
 import { expenseStatusLabel, type ExpenseStatus } from "@/lib/expenses/categories";
 import { getReimbursementForExpense } from "@/lib/reimbursements/queries";
 import { listBankSettlements } from "@/lib/bank/settlements";
@@ -34,6 +34,7 @@ import { paymentSourceSummary } from "@/lib/expenses/payment-source";
 import { formatInstantDateTime } from "@/lib/dates";
 import { getInboundEmailSummary } from "@/lib/expenses/inbound-email";
 import { EmailBodyPanel } from "@/components/expenses/email-body-panel";
+import { PossibleDuplicateList } from "@/components/expenses/possible-duplicates";
 import { DisplayDate } from "@/components/date-format-provider";
 import { getDateFormat } from "@/lib/date-format.server";
 
@@ -69,11 +70,12 @@ export default async function ExpenseDetailPage({
   ]);
 
   const isPending = detail.expense.status === "pending";
-  const [paymentSuggestion, inboundJob] = await Promise.all([
+  const [paymentSuggestion, inboundJob, duplicates] = await Promise.all([
     isPending ? getPaymentSourceSuggestion(companyId, id) : null,
     detail.expense.inboundEmailJobId
       ? getInboundEmailSummary(companyId, detail.expense.inboundEmailJobId)
       : null,
+    isPending ? findPossibleDuplicates(companyId, [id]) : null,
   ]);
   const paymentSource = paymentSuggestion ? paymentSourceSummary(paymentSuggestion) : null;
   const askedHowPaid =
@@ -113,6 +115,7 @@ export default async function ExpenseDetailPage({
                 : `It was sent by ${externalSender}, not by them. Check it is genuine before approving.`}
             </span>
           ) : null}
+          <PossibleDuplicateList matches={duplicates?.get(id) ?? []} />
         </div>
       )}
 

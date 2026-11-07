@@ -13,6 +13,7 @@ import {
 import { FORM_FIELD_ERROR_SUMMARY } from "@/lib/validation/field-errors";
 import { safeFilename } from "@/lib/files";
 import { parseReceiptFileAsync } from "@/lib/expenses/receipt-file";
+import { receiptSha256 } from "@/lib/expenses/receipt-hash";
 import { normalizeExpensePaymentFields } from "@/lib/expenses/schema";
 import { checkPayerInCompany } from "@/lib/expenses/payer";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
@@ -256,6 +257,7 @@ export async function storeExpenseReceipt(
       filename: safeFilename(file.name),
       contentType,
       sizeBytes: stored.size,
+      contentSha256: receiptSha256(bytes),
     })
     .returning({ id: expenseReceipts.id });
 

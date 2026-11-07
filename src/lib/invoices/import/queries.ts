@@ -12,7 +12,7 @@ import { clientDisplayName } from "@/lib/clients/display";
 import { todayIsoDate } from "@/lib/dates";
 import { isBroughtForward } from "@/lib/invoices/cutover";
 import { suggestClient } from "@/lib/invoices/import/clients";
-import { readLocally } from "@/lib/invoices/import/pdf-local";
+import { LOCAL_READ_WARNING, readLocally } from "@/lib/invoices/import/pdf-local";
 import { importExpiresAt } from "@/lib/invoices/import/purge";
 import { formatInvoiceNumber } from "@/lib/invoices/numbering";
 
@@ -133,7 +133,11 @@ export async function getImportBatchReview(companyId: string, batchId: string) {
   const prefix = company.invoiceNumberPrefix || "DD";
   return {
     batch,
-    drafts: drafts.slice(0, MAX_REVIEW_ROWS),
+    // The read-without-AI marker only gates bulk approval; it isn't shown.
+    drafts: drafts.slice(0, MAX_REVIEW_ROWS).map((d) => ({
+      ...d,
+      warnings: d.warnings.filter((w) => w !== LOCAL_READ_WARNING),
+    })),
     totalDrafts: drafts.length,
     counts,
     // A client whose invoices are all saved has nothing left to choose.

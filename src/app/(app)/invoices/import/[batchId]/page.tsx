@@ -26,7 +26,7 @@ export default async function InvoiceImportBatchPage({
   ]);
 
   return (
-    <div className="max-w-4xl">
+    <div>
       <SetupStepBanner stepId="invoices" entityType={entityType} from={sp.from} />
       <div className="mb-6">
         <BackLink href="/invoices/import">Back to imports</BackLink>

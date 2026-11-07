@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useState, useTransition } from "react";
+import { CircleCheck, CircleDashed, CircleMinus } from "lucide-react";
 import {
   commitInvoiceImportChunk,
   discardInvoiceImport,
@@ -22,6 +23,7 @@ import { FieldError, Input, Label } from "@/components/ui/form";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import type { ImportBatchReview } from "@/lib/invoices/import/queries";
 import { formatGBP } from "@/lib/money";
+import { cn } from "@/lib/utils";
 
 const BASIS_NOTE = {
   email: "Same email as an existing client",
@@ -142,6 +144,18 @@ export function InvoiceImportReview({
   );
 
   type Draft = ImportBatchReview["drafts"][number];
+
+  /** At a glance, which invoices are approved and which still need it. */
+  const DRAFT_ICON = {
+    ready: { Icon: CircleCheck, label: batch.kind === "pdf" ? "Approved" : "Ready", className: "text-success" },
+    committed: { Icon: CircleCheck, label: "Saved", className: "text-success" },
+    needs_review: {
+      Icon: CircleDashed,
+      label: batch.kind === "pdf" ? "Not approved yet" : "Has problems",
+      className: "text-amber-600",
+    },
+    skipped: { Icon: CircleMinus, label: "Left out", className: "text-muted" },
+  } satisfies Record<Draft["status"], unknown>;
 
   function fileClientName(draft: Draft): string {
     const { client } = draft.parsed;
@@ -429,14 +443,26 @@ export function InvoiceImportReview({
             <TBody>
               {review.drafts.map((draft) => {
                 const { parsed } = draft;
+                const icon = DRAFT_ICON[draft.status];
                 return (
                   <Fragment key={draft.id}>
                   <TR>
                     <TD>
-                      {parsed.number ?? "To be created"}
-                      {draft.documentFilename ? (
-                        <div className="text-xs text-muted">{draft.documentFilename}</div>
-                      ) : null}
+                      <div className="flex items-start gap-2">
+                        <icon.Icon
+                          className={cn("mt-0.5 h-4 w-4 shrink-0", icon.className)}
+                          role="img"
+                          aria-label={icon.label}
+                        >
+                          <title>{icon.label}</title>
+                        </icon.Icon>
+                        <div>
+                          {parsed.number ?? "To be created"}
+                          {draft.documentFilename ? (
+                            <div className="text-xs text-muted">{draft.documentFilename}</div>
+                          ) : null}
+                        </div>
+                      </div>
                     </TD>
                     <TD>
                       {isOpen && draft.status !== "committed" && draft.status !== "skipped" ? (
