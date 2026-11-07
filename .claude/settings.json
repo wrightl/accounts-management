@@ -7,7 +7,6 @@
             "Read(./.bank-exports/**)",
             "Read(./.vercel/**)",
             "Edit(./.env*)",
-            "Edit(./drizzle/meta/**)",
             "Bash(git push origin main:*)",
             "Bash(git push --force:*)",
             "Bash(gh pr merge:*)",
