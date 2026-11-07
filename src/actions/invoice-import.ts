@@ -4,6 +4,8 @@ import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   auditLog,
+  bankAccounts,
+  bankTransactions,
   clients,
   companies,
   creditNotes,
@@ -441,11 +443,33 @@ export async function commitInvoiceImportChunk(
                   ),
                 );
         const takenNumbers = new Set(taken.map((t) => t.number.toLowerCase()));
+        // Another open import can hold the same PDF, so check again on saving.
+        const shas = drafts.flatMap((d) => (d.documentSha256 ? [d.documentSha256] : []));
+        const attached =
+          shas.length === 0
+            ? []
+            : await tx
+                .select({ sha: invoices.originalDocumentSha256, number: invoices.number })
+                .from(invoices)
+                .where(
+                  and(
+                    eq(invoices.companyId, companyId),
+                    inArray(invoices.originalDocumentSha256, shas),
+                  ),
+                );
+        const attachedTo = new Map(attached.map((a) => [a.sha, a.number]));
 
         for (const draft of drafts) {
           const { parsed } = draft;
           if (parsed.number && takenNumbers.has(parsed.number.toLowerCase())) {
             return flag(draft.id, `Invoice number ${parsed.number} is already in Alfa`);
+          }
+          const attachedNumber = draft.documentSha256 && attachedTo.get(draft.documentSha256);
+          if (attachedNumber) {
+            return flag(
+              draft.id,
+              `${draft.documentFilename ?? "This PDF"} is already attached to invoice ${attachedNumber}`,
+            );
           }
           const broughtForward = isBroughtForward(parsed.issueDate, cutover);
           const paymentDate = parsed.amountPaidPence > 0 ? parsed.paidDate ?? parsed.issueDate : null;
@@ -457,6 +481,46 @@ export async function commitInvoiceImportChunk(
             : [parsed.issueDate, paymentDate];
           const locked = periodLockError(company.booksLockedThrough, ...dates);
           if (locked) return flag(draft.id, locked);
+        }
+
+        // A bank payment chosen on review may have been reconciled elsewhere since.
+        const linkIds = drafts.flatMap((d) => (d.bankTransactionId ? [d.bankTransactionId] : []));
+        const linked =
+          linkIds.length === 0
+            ? []
+            : await tx
+                .select({
+                  id: bankTransactions.id,
+                  amountPence: bankTransactions.amountPence,
+                  bookedAt: bankTransactions.bookedAt,
+                  matchId: reconciliationMatches.id,
+                })
+                .from(bankTransactions)
+                .innerJoin(bankAccounts, eq(bankTransactions.bankAccountId, bankAccounts.id))
+                .leftJoin(
+                  reconciliationMatches,
+                  eq(reconciliationMatches.bankTransactionId, bankTransactions.id),
+                )
+                .where(
+                  and(
+                    eq(bankAccounts.companyId, companyId),
+                    inArray(bankTransactions.id, linkIds),
+                  ),
+                )
+                .for("update", { of: bankTransactions });
+        const linkedById = new Map(linked.map((row) => [row.id, row]));
+        for (const draft of drafts) {
+          if (!draft.bankTransactionId) continue;
+          const row = linkedById.get(draft.bankTransactionId);
+          const label = draft.parsed.number ?? "an invoice";
+          if (!row || row.matchId) {
+            return flag(draft.id, `The bank payment for ${label} is already reconciled: pick another`);
+          }
+          if (draft.parsed.status !== "paid" || row.amountPence !== draft.parsed.grossPence) {
+            return flag(draft.id, `The bank payment for ${label} no longer matches its total`);
+          }
+          const bankLocked = periodLockError(company.booksLockedThrough, row.bookedAt);
+          if (bankLocked) return flag(draft.id, bankLocked);
         }
 
         const resolutions: Record<string, string | null> = { ...batch.clientResolutions };
@@ -546,13 +610,25 @@ export async function commitInvoiceImportChunk(
             })),
           );
           if (paymentDate) {
-            await tx.insert(payments).values({
-              invoiceId: invoice.id,
-              amountPence: parsed.amountPaidPence,
-              receivedAt: new Date(`${paymentDate}T12:00:00Z`),
-              reference: parsed.paymentReference,
-              method: "import",
-            });
+            const [payment] = await tx
+              .insert(payments)
+              .values({
+                invoiceId: invoice.id,
+                amountPence: parsed.amountPaidPence,
+                receivedAt: new Date(`${paymentDate}T12:00:00Z`),
+                reference: parsed.paymentReference,
+                method: "import",
+              })
+              .returning({ id: payments.id });
+            if (draft.bankTransactionId) {
+              await tx.insert(reconciliationMatches).values({
+                bankTransactionId: draft.bankTransactionId,
+                matchType: "invoice_payment",
+                paymentId: payment.id,
+                invoiceId: invoice.id,
+                confirmed: true,
+              });
+            }
           }
           await tx
             .update(invoiceImportDrafts)
@@ -669,7 +745,12 @@ export async function undoInvoiceImport(batchId: string): Promise<UndoResult> {
               tx.select({ id: payments.id, invoiceId: payments.invoiceId, method: payments.method, receivedAt: payments.receivedAt }).from(payments).where(inArray(payments.invoiceId, ids)),
               tx.select({ invoiceId: creditNotes.invoiceId }).from(creditNotes).where(inArray(creditNotes.invoiceId, ids)),
               tx
-                .select({ invoiceId: reconciliationMatches.invoiceId, paymentInvoiceId: payments.invoiceId })
+                .select({
+                  id: reconciliationMatches.id,
+                  invoiceId: reconciliationMatches.invoiceId,
+                  paymentInvoiceId: payments.invoiceId,
+                  paymentMethod: payments.method,
+                })
                 .from(reconciliationMatches)
                 .leftJoin(payments, eq(reconciliationMatches.paymentId, payments.id))
                 .where(or(inArray(reconciliationMatches.invoiceId, ids), inArray(payments.invoiceId, ids))),
@@ -683,7 +764,10 @@ export async function undoInvoiceImport(batchId: string): Promise<UndoResult> {
         };
         for (const p of paymentRows) if (p.method !== "import") block(p.invoiceId, "Has a payment recorded in Alfa");
         for (const c of creditRows) block(c.invoiceId, "Has a credit note");
-        for (const m of matchRows) block(m.invoiceId ?? m.paymentInvoiceId, "Matched to a bank transaction");
+        // A bank payment linked by the import itself goes with it.
+        for (const m of matchRows) {
+          if (m.paymentMethod !== "import") block(m.invoiceId ?? m.paymentInvoiceId, "Matched to a bank transaction");
+        }
         for (const j of jobRows) block(j.invoiceId, "Has been emailed to the client");
         for (const c of claimRows) block(c.invoiceId, "Has a late payment claim");
         // The same dates saving checks: removing an invoice moves whatever saving it added.
@@ -702,6 +786,16 @@ export async function undoInvoiceImport(batchId: string): Promise<UndoResult> {
 
         const removable = rows.filter((r) => !reasons.has(r.id));
         if (removable.length > 0) {
+          const removableIds = new Set(removable.map((r) => r.id));
+          const importMatchIds = matchRows.flatMap((m) =>
+            m.paymentMethod === "import" && removableIds.has((m.invoiceId ?? m.paymentInvoiceId) as string)
+              ? [m.id]
+              : [],
+          );
+          if (importMatchIds.length > 0) {
+            // Leaving these would keep the bank row reconciled to nothing.
+            await tx.delete(reconciliationMatches).where(inArray(reconciliationMatches.id, importMatchIds));
+          }
           await tx.delete(invoices).where(
             and(
               eq(invoices.companyId, companyId),

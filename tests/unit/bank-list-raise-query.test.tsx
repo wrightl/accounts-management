@@ -16,6 +16,10 @@ vi.mock("@/components/bank/bank-ui", () => ({
 }));
 vi.mock("@/components/bank/bank-page-size-select", () => ({ BankPageSizeSelect: () => null }));
 vi.mock("@/components/labels/row-labels", () => ({ RowLabels: () => null }));
+vi.mock("@/components/bank/bank-selection", () => ({
+  RowSelectCheckbox: () => null,
+  SelectAllCheckbox: () => null,
+}));
 vi.mock("@/components/labels/row-note", () => ({ RowNote: () => null }));
 vi.mock("@/components/queries/raise-query-button", () => ({
   RaiseQueryDialog: () => null,

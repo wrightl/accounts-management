@@ -1556,13 +1556,38 @@ const CREDIT_EXPLAIN_TYPES: readonly CreditExplainType[] = [
     'tax_or_loan',
 ];
 
-async function getBankTransactionForCompany(
+/** Explain an unmatched incoming credit (other income, transfer, tax/loan). */
+export async function explainBankCredit(
     companyId: string,
     transactionId: string,
-) {
+    input: CreditExplainInput,
+): Promise<{ matchId: string }> {
+    const { matchIds } = await explainBankCredits(companyId, [transactionId], input);
+    return { matchId: matchIds[0] };
+}
+
+/**
+ * Give several incoming credits the same explanation. All or nothing: if any
+ * row can't be explained, none are.
+ */
+export async function explainBankCredits(
+    companyId: string,
+    transactionIds: string[],
+    input: CreditExplainInput,
+): Promise<{ matchIds: string[] }> {
+    const ids = [...new Set(transactionIds)];
+    if (ids.length === 0) throw new ReconciliationError('Select some transactions');
+    const single = ids.length === 1;
+    const some = (count: number, what: string) =>
+        `${count} of the selected transactions ${what}`;
+
     const db = getDb();
-    const [row] = await db
-        .select({ tx: bankTransactions })
+    const rows = await db
+        .select({
+            id: bankTransactions.id,
+            amountPence: bankTransactions.amountPence,
+            bookedAt: bankTransactions.bookedAt,
+        })
         .from(bankTransactions)
         .innerJoin(
             bankAccounts,
@@ -1570,26 +1595,25 @@ async function getBankTransactionForCompany(
         )
         .where(
             and(
-                eq(bankTransactions.id, transactionId),
+                inArray(bankTransactions.id, ids),
                 eq(bankAccounts.companyId, companyId),
             ),
-        )
-        .limit(1);
-    return row?.tx ?? null;
-}
-
-/** Explain an unmatched incoming credit (other income, transfer, tax/loan). */
-export async function explainBankCredit(
-    companyId: string,
-    transactionId: string,
-    input: CreditExplainInput,
-): Promise<{ matchId: string }> {
-    const tx = await getBankTransactionForCompany(companyId, transactionId);
-    if (!tx) throw new ReconciliationError('Bank transaction not found');
-    if (tx.amountPence <= 0) {
-        throw new ReconciliationError('Only incoming credits can be explained this way');
+        );
+    if (rows.length !== ids.length) {
+        throw new ReconciliationError('Bank transaction not found');
     }
-    const locked = periodLockError(await getBooksLockedThrough(companyId), tx.bookedAt);
+    const outgoing = rows.filter((r) => r.amountPence <= 0).length;
+    if (outgoing > 0) {
+        throw new ReconciliationError(
+            single
+                ? 'Only incoming credits can be explained this way'
+                : some(outgoing, 'are not incoming credits'),
+        );
+    }
+    const locked = periodLockError(
+        await getBooksLockedThrough(companyId),
+        ...rows.map((r) => r.bookedAt),
+    );
     if (locked) throw new ReconciliationError(locked);
 
     const resolvedCategory =
@@ -1599,43 +1623,48 @@ export async function explainBankCredit(
     const parsed = parseCreditExplainInput(input, resolvedCategory);
     if (!parsed.ok) throw new ReconciliationError(parsed.error);
 
-    const db = getDb();
     return db.transaction(async (dbTx) => {
-        const [confirmed] = await dbTx
-            .select({ id: reconciliationMatches.id })
+        const confirmed = await dbTx
+            .select({ id: reconciliationMatches.bankTransactionId })
             .from(reconciliationMatches)
             .where(
                 and(
-                    eq(reconciliationMatches.bankTransactionId, transactionId),
+                    inArray(reconciliationMatches.bankTransactionId, ids),
                     eq(reconciliationMatches.confirmed, true),
                 ),
-            )
-            .limit(1);
-        if (confirmed) {
-            throw new ReconciliationError('This transaction is already reconciled');
+            );
+        const reconciled = new Set(confirmed.map((c) => c.id)).size;
+        if (reconciled > 0) {
+            throw new ReconciliationError(
+                single
+                    ? 'This transaction is already reconciled'
+                    : some(reconciled, 'are already reconciled'),
+            );
         }
 
         await dbTx
             .delete(reconciliationMatches)
             .where(
                 and(
-                    eq(reconciliationMatches.bankTransactionId, transactionId),
+                    inArray(reconciliationMatches.bankTransactionId, ids),
                     eq(reconciliationMatches.confirmed, false),
                 ),
             );
 
-        const [created] = await dbTx
+        const created = await dbTx
             .insert(reconciliationMatches)
-            .values({
-                bankTransactionId: transactionId,
-                matchType: parsed.value.matchType,
-                incomeCategory: parsed.value.incomeCategory,
-                note: parsed.value.note,
-                confirmed: true,
-            })
+            .values(
+                ids.map((bankTransactionId) => ({
+                    bankTransactionId,
+                    matchType: parsed.value.matchType,
+                    incomeCategory: parsed.value.incomeCategory,
+                    note: parsed.value.note,
+                    confirmed: true,
+                })),
+            )
             .returning({ id: reconciliationMatches.id });
 
-        return { matchId: created.id };
+        return { matchIds: created.map((c) => c.id) };
     });
 }
 
@@ -1717,17 +1746,71 @@ export async function findBankTransactionsForInvoice(
         oldDebt: invoice.source === 'import',
     };
 
+    return rankIncomingForInvoice(companyId, invoiceTarget, referenceDate, {
+        minScore: 70,
+    });
+}
+
+/**
+ * Bank payments that could settle an invoice still being imported: unmatched
+ * credits for exactly its gross, scored like an imported invoice. Rows chosen
+ * by other drafts are left out.
+ */
+export async function findBankTransactionsForImportDraft(
+    companyId: string,
+    draft: {
+        number: string | null;
+        clientName: string | null;
+        clientCompanyName: string | null;
+        grossPence: number;
+        issueDate: string;
+        dueDate: string | null;
+    },
+    excludeIds: ReadonlySet<string>,
+): Promise<InvoiceBankMatch[]> {
+    if (draft.grossPence <= 0) return [];
+    return rankIncomingForInvoice(
+        companyId,
+        {
+            id: '',
+            number: draft.number ?? '',
+            name: draft.clientName ?? '',
+            companyName: draft.clientCompanyName,
+            balancePence: draft.grossPence,
+            dueDate: draft.dueDate,
+            issueDate: draft.issueDate,
+            oldDebt: true,
+        },
+        draft.dueDate ?? draft.issueDate,
+        {
+            minScore: 1,
+            accept: (tx) =>
+                tx.amountPence === draft.grossPence && !excludeIds.has(tx.id),
+        },
+    );
+}
+
+async function rankIncomingForInvoice(
+    companyId: string,
+    invoiceTarget: Parameters<typeof scoreBankTxForInvoice>[1],
+    referenceDate: string,
+    opts: {
+        minScore: number;
+        accept?: (tx: typeof bankTransactions.$inferSelect) => boolean;
+    },
+): Promise<InvoiceBankMatch[]> {
     const unmatched = await listUnmatchedIncomingTransactions(companyId);
     const scored: InvoiceBankMatch[] = [];
 
     for (const { tx } of unmatched) {
-        if (tx.amountPence > balancePence) continue;
+        if (tx.amountPence > invoiceTarget.balancePence) continue;
+        if (opts.accept && !opts.accept(tx)) continue;
         const breakdown = scoreBankTxForInvoice(
             txLikeFromRow(tx),
             invoiceTarget,
             referenceDate,
         );
-        if (breakdown.total < 70) continue;
+        if (breakdown.total < opts.minScore) continue;
         scored.push({
             bankTransactionId: tx.id,
             bookedAt: tx.bookedAt,

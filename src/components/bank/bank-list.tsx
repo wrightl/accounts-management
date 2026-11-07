@@ -17,6 +17,10 @@ import {
 import { nextTableSort } from '@/lib/table-sort';
 import type { BankTransactionListItem } from '@/lib/bank/queries';
 import { RowLabels } from '@/components/labels/row-labels';
+import {
+    RowSelectCheckbox,
+    SelectAllCheckbox,
+} from '@/components/bank/bank-selection';
 import { RowNote } from '@/components/labels/row-note';
 import type { RowLabel } from '@/lib/labels/queries';
 import { cn } from '@/lib/utils';
@@ -179,6 +183,7 @@ export function BankTransactionTable({
     canWrite,
     canRaiseQuery = false,
     showAccount = false,
+    selectable = false,
 }: {
     params: BankListParams;
     rows: BankTransactionListItem[];
@@ -188,6 +193,8 @@ export function BankTransactionTable({
     canWrite: boolean;
     canRaiseQuery?: boolean;
     showAccount?: boolean;
+    /** Inside a BankSelectionProvider: show a checkbox on each row. */
+    selectable?: boolean;
 }) {
     const sortHeader = (
         label: string,
@@ -209,6 +216,11 @@ export function BankTransactionTable({
         <Table>
             <THead>
                 <TR>
+                    {selectable ? (
+                        <TH className="w-8 pr-0">
+                            <SelectAllCheckbox />
+                        </TH>
+                    ) : null}
                     <TH className="w-8 pr-0">
                         <span className="sr-only">Notes and queries</span>
                     </TH>
@@ -224,6 +236,14 @@ export function BankTransactionTable({
             <TBody>
                 {rows.map((r) => (
                     <TR key={r.id}>
+                        {selectable ? (
+                            <TD className="w-8 pr-0">
+                                <RowSelectCheckbox
+                                    id={r.id}
+                                    label={`${r.counterparty ?? r.description ?? 'transaction'} ${r.amountFormatted}`}
+                                />
+                            </TD>
+                        ) : null}
                         <TD className="w-8 pr-0">
                             <RowNote
                                 kind="bank"

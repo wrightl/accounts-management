@@ -233,6 +233,12 @@ export const NAV_GROUPS: NavGroup[] = [
                 feature: 'bookkeeper',
                 requiresAi: true,
             },
+            {
+                href: '/queries',
+                label: 'Queries',
+                icon: 'queries',
+                permission: 'queries:read',
+            },
         ],
     },
     {
@@ -383,12 +389,6 @@ export const NAV_GROUPS: NavGroup[] = [
                 label: 'Deadlines',
                 icon: 'deadlines',
                 permission: 'filing:read',
-            },
-            {
-                href: '/queries',
-                label: 'Queries',
-                icon: 'queries',
-                permission: 'queries:read',
             },
         ],
     },

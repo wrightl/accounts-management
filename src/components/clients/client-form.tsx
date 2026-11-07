@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { useAlert } from "@/components/ui/alert-dialog";
-import { FieldError, Input, Label, Textarea } from "@/components/ui/form";
+import { ClientFields } from "@/components/clients/client-fields";
 import { FormStickyActions } from "@/components/ui/form-sticky-actions";
 import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
 import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
@@ -102,81 +102,12 @@ export function ClientForm({
 
   return (
     <form ref={formRef} noValidate onSubmit={preventResetSubmit(onSubmit)} className={`${PAGE_WIDTH.reading} space-y-4`}>
-      <div>
-        <Label htmlFor="companyName">Company name (optional)</Label>
-        <Input
-          id="companyName"
-          name="companyName"
-          defaultValue={client?.companyName ?? ""}
-          disabled={!canWrite || pending}
-          aria-invalid={Boolean(fieldErrors.companyName)}
-          aria-describedby={
-            fieldErrors.companyName ? "companyName-error" : undefined
-          }
-          onChange={() => clearField("companyName")}
-        />
-        <FieldError id="companyName-error">{fieldErrors.companyName}</FieldError>
-      </div>
-      <div>
-        <Label htmlFor="name" required>
-          Contact name
-        </Label>
-        <Input
-          id="name"
-          name="name"
-          required
-          defaultValue={client?.name ?? ""}
-          disabled={!canWrite || pending}
-          aria-invalid={Boolean(fieldErrors.name)}
-          aria-describedby={fieldErrors.name ? "name-error" : undefined}
-          onChange={() => clearField("name")}
-        />
-        <FieldError id="name-error">{fieldErrors.name}</FieldError>
-      </div>
-      <div>
-        <Label htmlFor="email">Email (optional)</Label>
-        <Input
-          id="email"
-          name="email"
-          type="email"
-          defaultValue={client?.email ?? ""}
-          disabled={!canWrite || pending}
-          aria-invalid={Boolean(fieldErrors.email)}
-          aria-describedby={fieldErrors.email ? "email-error" : undefined}
-          onChange={() => clearField("email")}
-        />
-        <FieldError id="email-error">{fieldErrors.email}</FieldError>
-      </div>
-      <div>
-        <Label htmlFor="addressLines">Address (optional)</Label>
-        <Textarea
-          id="addressLines"
-          name="addressLines"
-          rows={3}
-          defaultValue={client?.addressLines ?? ""}
-          disabled={!canWrite || pending}
-          aria-invalid={Boolean(fieldErrors.addressLines)}
-          aria-describedby={
-            fieldErrors.addressLines ? "addressLines-error" : undefined
-          }
-          onChange={() => clearField("addressLines")}
-        />
-        <FieldError id="addressLines-error">{fieldErrors.addressLines}</FieldError>
-      </div>
-      <div>
-        <Label htmlFor="notes">Notes (optional)</Label>
-        <Textarea
-          id="notes"
-          name="notes"
-          rows={3}
-          defaultValue={client?.notes ?? ""}
-          disabled={!canWrite || pending}
-          aria-invalid={Boolean(fieldErrors.notes)}
-          aria-describedby={fieldErrors.notes ? "notes-error" : undefined}
-          onChange={() => clearField("notes")}
-        />
-        <FieldError id="notes-error">{fieldErrors.notes}</FieldError>
-      </div>
+      <ClientFields
+        client={client}
+        disabled={!canWrite || pending}
+        fieldErrors={fieldErrors}
+        clearField={clearField}
+      />
       {canWrite && (
         <FormStickyActions error={error}>
           <Button type="submit" disabled={pending}>

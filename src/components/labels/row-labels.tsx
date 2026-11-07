@@ -3,6 +3,7 @@
 import { Tag } from "lucide-react";
 import { useId, useState, useTransition } from "react";
 import { createLabelAction, setRowLabelsAction } from "@/actions/labels";
+import type { ActionResult } from "@/actions/result";
 import { LabelChip, LabelColorPicker } from "@/components/labels/label-chip";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogActions } from "@/components/ui/dialog";
@@ -10,18 +11,21 @@ import { FieldError, Input, Label } from "@/components/ui/form";
 import { DEFAULT_LABEL_COLOR, type LabelColor } from "@/lib/labels/colors";
 import type { RowKind, RowLabel } from "@/lib/labels/queries";
 
-function LabelPickerDialog({
-  kind,
-  rowId,
+/** Pick labels, creating new ones inline. `onSave` gets the ticked label ids. */
+export function LabelPickerDialog({
   current,
   allLabels,
+  onSave,
   onClose,
+  title = "Labels",
+  saveLabel = "Save",
 }: {
-  kind: RowKind;
-  rowId: string;
-  current: RowLabel[];
+  current: readonly { id: string }[];
   allLabels: readonly RowLabel[];
+  onSave: (labelIds: string[]) => Promise<ActionResult>;
   onClose: () => void;
+  title?: string;
+  saveLabel?: string;
 }) {
   const nameId = useId();
   const [selected, setSelected] = useState(() => new Set(current.map((l) => l.id)));
@@ -57,7 +61,7 @@ function LabelPickerDialog({
   const save = () => {
     setError(null);
     startTransition(async () => {
-      const result = await setRowLabelsAction(kind, rowId, [...selected]);
+      const result = await onSave([...selected]);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -67,7 +71,7 @@ function LabelPickerDialog({
   };
 
   return (
-    <Dialog open onClose={() => !pending && onClose()} title="Labels">
+    <Dialog open onClose={() => !pending && onClose()} title={title}>
       {allLabels.length > 0 ? (
         <ul className="max-h-[40vh] space-y-2 overflow-y-auto pr-1">
           {allLabels.map((label) => (
@@ -118,7 +122,7 @@ function LabelPickerDialog({
           Cancel
         </Button>
         <Button type="button" disabled={pending} onClick={save}>
-          {pending ? "Saving…" : "Save"}
+          {pending ? "Saving…" : saveLabel}
         </Button>
       </DialogActions>
     </Dialog>
@@ -161,10 +165,9 @@ export function RowLabels({
       ) : null}
       {editing ? (
         <LabelPickerDialog
-          kind={kind}
-          rowId={rowId}
           current={labels}
           allLabels={allLabels}
+          onSave={(labelIds) => setRowLabelsAction(kind, rowId, labelIds)}
           onClose={() => setEditing(false)}
         />
       ) : null}

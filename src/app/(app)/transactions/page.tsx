@@ -16,6 +16,10 @@ import {
 } from "@/components/bank/bank-list";
 import { BankCardsFeed } from "@/components/bank/bank-cards-feed";
 import {
+  BankBulkActions,
+  BankSelectionProvider,
+} from "@/components/bank/bank-selection";
+import {
   BankListPositionRestorer,
   NewExpenseFromBankListLink,
 } from "@/components/bank/bank-list-position";
@@ -110,6 +114,12 @@ export default async function TransactionsPage({
   }));
 
   const customCategoryNames = customCategories.map((c) => c.name);
+  // Ticking rows for bulk labels and explanations; table view only.
+  const selectable = canWrite && !inPack && params.view === "table";
+  const selectableRows = rows.map((r) => ({
+    id: r.id,
+    needsExplanation: r.amountPence > 0 && !r.reconciled,
+  }));
   const showAccount = bankAccountCount > 1;
 
   return (
@@ -153,57 +163,66 @@ export default async function TransactionsPage({
         <div>
           <BankFilters params={params} customCategories={customCategoryNames} labels={inPack ? [] : labels} />
 
-          <div className="mt-6">
-            <BankViewToggle params={params} />
-          </div>
+          <BankSelectionProvider
+            key={JSON.stringify(params)}
+            rows={selectable ? selectableRows : []}
+          >
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+              <BankViewToggle params={params} />
+              {selectable ? (
+                <BankBulkActions allLabels={labels} incomeCategories={incomeCategories} />
+              ) : null}
+            </div>
 
-          <div className="mt-4">
-            {rows.length === 0 ? (
-              hasActiveBankFilters(params) ? (
-                <p className="text-sm text-muted">
-                  No transactions match these filters.
-                </p>
-              ) : (
-                <EmptyState
-                  title="No transactions imported yet"
-                  description="Export a CSV from your bank, then use Import above to match payments to invoices."
+            <div className="mt-4">
+              {rows.length === 0 ? (
+                hasActiveBankFilters(params) ? (
+                  <p className="text-sm text-muted">
+                    No transactions match these filters.
+                  </p>
+                ) : (
+                  <EmptyState
+                    title="No transactions imported yet"
+                    description="Export a CSV from your bank, then use Import above to match payments to invoices."
+                  />
+                )
+              ) : params.view === "cards" ? (
+                <BankCardsFeed
+                  initialRows={rows}
+                  initialPage={page}
+                  pageCount={pageCount}
+                  total={total}
+                  filters={{
+                    q: params.q,
+                    type: params.type,
+                    category: params.category,
+                    reconciliation: params.reconciliation,
+                    labels: params.labels,
+                    from: dateRange.from,
+                    to: dateRange.to,
+                  }}
+                  customCategories={customCategoryNames}
+                  incomeCategories={incomeCategories}
+                  allLabels={labels}
+                  canWrite={canWrite}
+                  canRaiseQuery={canRaiseQuery}
+                  showAccount={showAccount}
                 />
-              )
-            ) : params.view === "cards" ? (
-              <BankCardsFeed
-                initialRows={rows}
-                initialPage={page}
-                pageCount={pageCount}
-                total={total}
-                filters={{
-                  q: params.q,
-                  type: params.type,
-                  category: params.category,
-                  reconciliation: params.reconciliation,
-                  labels: params.labels,
-                  from: dateRange.from,
-                  to: dateRange.to,
-                }}
-                customCategories={customCategoryNames}
-                incomeCategories={incomeCategories}
-                allLabels={labels}
-                canWrite={canWrite}
-                canRaiseQuery={canRaiseQuery}
-                showAccount={showAccount}
-              />
-            ) : (
-              <BankTransactionTable
-                params={params}
-                rows={rows}
-                customCategories={customCategoryNames}
-                incomeCategories={incomeCategories}
-                allLabels={labels}
-                canWrite={canWrite}
-                canRaiseQuery={canRaiseQuery}
-                showAccount={showAccount}
-              />
-            )}
-          </div>
+              ) : (
+                <BankTransactionTable
+                  params={params}
+                  rows={rows}
+                  customCategories={customCategoryNames}
+                  incomeCategories={incomeCategories}
+                  allLabels={labels}
+                  canWrite={canWrite}
+                  canRaiseQuery={canRaiseQuery}
+                  showAccount={showAccount}
+                  selectable={selectable}
+                />
+              )}
+            </div>
+          </BankSelectionProvider>
 
           {params.view === "table" ? (
             <BankPagination

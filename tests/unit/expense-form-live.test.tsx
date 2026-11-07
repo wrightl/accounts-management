@@ -13,6 +13,7 @@ import { fetchExpenseExchangeRate } from "@/actions/expenses";
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
 }));
+vi.mock("@/actions/clients", () => ({ createClient: vi.fn() }));
 vi.mock("@/actions/expenses", () => ({
   createExpense: vi.fn(),
   updateExpense: vi.fn(),

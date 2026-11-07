@@ -1,5 +1,6 @@
 "use client";
 
+import { ClientSelect } from "@/components/clients/client-select";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
@@ -25,7 +26,6 @@ import {
 } from "@/actions/expenses";
 import { expenseCurrencySymbol, formatGBP, penceToPounds, poundsToPence } from "@/lib/money";
 import { useReportExpenseSummary } from "@/components/expenses/expense-summary";
-import { clientDisplayName } from "@/lib/clients/display";
 import { ReceiptUploadField } from "@/components/expenses/receipt-upload-field";
 import { RECEIPT_UPLOAD_FAILED_MESSAGE } from "@/lib/expenses/receipt-file";
 import { isForeignCurrency, type ReceiptExtraction } from "@/lib/expenses/receipt-parse";
@@ -997,27 +997,23 @@ export function ExpenseForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <Label htmlFor="clientId">Client</Label>
-          <Select
+          <ClientSelect
             id="clientId"
             name="clientId"
+            clients={clients}
             value={projectClientId}
+            leadingOptions={[{ value: "", label: "No client" }]}
+            canCreate={canWrite}
             disabled={!canWrite || pending}
             aria-invalid={Boolean(fieldErrors.clientId)}
             aria-describedby={fieldErrors.clientId ? "clientId-error" : undefined}
-            onChange={(e) => {
+            onChange={(id) => {
               clearField("clientId");
-              setProjectClientId(e.target.value);
+              setProjectClientId(id);
               const order = orders.find((o) => o.id === projectOrderId);
-              if (order && order.clientId !== e.target.value) setProjectOrderId("");
+              if (order && order.clientId !== id) setProjectOrderId("");
             }}
-          >
-            <option value="">No client</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {clientDisplayName(c)}
-              </option>
-            ))}
-          </Select>
+          />
           <FieldError id="clientId-error">{fieldErrors.clientId}</FieldError>
         </div>
         <div>

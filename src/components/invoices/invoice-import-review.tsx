@@ -13,10 +13,11 @@ import {
 } from "@/actions/invoice-import";
 import { approveImportDrafts } from "@/actions/invoice-import-pdf";
 import { DisplayDate } from "@/components/date-format-provider";
+import { ClientSelect } from "@/components/clients/client-select";
 import { InvoiceDraftEditor } from "@/components/invoices/invoice-draft-editor";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { useAlert } from "@/components/ui/alert-dialog";
-import { FieldError, Input, Label, Select } from "@/components/ui/form";
+import { FieldError, Input, Label } from "@/components/ui/form";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import type { ImportBatchReview } from "@/lib/invoices/import/queries";
 import { formatGBP } from "@/lib/money";
@@ -116,6 +117,16 @@ export function InvoiceImportReview({
   }
 
   const hasCommitted = counts.committed > 0;
+
+  /** The client an invoice will be saved against, as chosen in the Clients section. */
+  function clientLabelFor(key: string, fallback: string): string {
+    const row = review.clients.find((c) => c.key === key);
+    if (!row) return fallback;
+    const existing = row.resolution
+      ? review.existingClients.find((c) => c.id === row.resolution)
+      : null;
+    return existing ? existing.label : `${row.label} (new client)`;
+  }
 
   return (
     <div className="mt-6 space-y-8">
@@ -226,7 +237,7 @@ export function InvoiceImportReview({
       ) : null}
 
       {isOpen && review.clients.length > 0 ? (
-        <section>
+        <section id="import-clients" className="scroll-mt-20">
           <h2 className="font-display text-lg font-semibold">Clients</h2>
           <p className="mt-1 text-sm text-muted">
             Link to a client you already have, or create a new one. Existing client details
@@ -255,30 +266,28 @@ export function InvoiceImportReview({
                       {client.invoiceCount} ({formatGBP(client.grossPence)})
                     </TD>
                     <TD>
-                      <Select
+                      <ClientSelect
                         aria-label={`Client in Alfa for ${client.label}`}
                         value={client.resolution ?? ""}
                         disabled={pending}
-                        onChange={(e) =>
-                          run(() =>
-                            setImportClientResolution(batch.id, client.key, e.target.value || null),
-                          )
+                        onChange={(id) =>
+                          run(() => setImportClientResolution(batch.id, client.key, id || null))
                         }
-                      >
-                        <option value="">Create a new client</option>
-                        {client.suggestion.clientId && !client.suggestion.preselect ? (
-                          <option value={client.suggestion.clientId}>
-                            {review.existingClients.find((c) => c.id === client.suggestion.clientId)?.label} (suggested)
-                          </option>
-                        ) : null}
-                        {review.existingClients
+                        leadingOptions={[
+                          { value: "", label: "Create a new client from the file" },
+                          ...(client.suggestion.clientId && !client.suggestion.preselect
+                            ? [
+                                {
+                                  value: client.suggestion.clientId,
+                                  label: `${review.existingClients.find((c) => c.id === client.suggestion.clientId)?.label} (suggested)`,
+                                },
+                              ]
+                            : []),
+                        ]}
+                        clients={review.existingClients
                           .filter((c) => client.suggestion.preselect || c.id !== client.suggestion.clientId)
-                          .map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.label}
-                            </option>
-                          ))}
-                      </Select>
+                          .map((c) => ({ id: c.id, name: c.label }))}
+                      />
                     </TD>
                   </TR>
                 ))}
@@ -344,9 +353,21 @@ export function InvoiceImportReview({
                         <div className="text-xs text-muted">{draft.documentFilename}</div>
                       ) : null}
                     </TD>
-                    <TD>{parsed.client.companyName || parsed.client.name || parsed.client.email}</TD>
+                    <TD>
+                      {isOpen
+                        ? clientLabelFor(
+                            parsed.client.key,
+                            parsed.client.companyName || parsed.client.name || parsed.client.email || "Client",
+                          )
+                        : parsed.client.companyName || parsed.client.name || parsed.client.email}
+                    </TD>
                     <TD>{parsed.issueDate ? <DisplayDate value={parsed.issueDate} /> : "—"}</TD>
-                    <TD>{draft.status === "skipped" ? "Left out" : parsed.status === "paid" ? "Paid" : "Unpaid"}</TD>
+                    <TD>
+                      {draft.status === "skipped" ? "Left out" : parsed.status === "paid" ? "Paid" : "Unpaid"}
+                      {draft.bankTransactionId && draft.status !== "skipped" ? (
+                        <div className="text-xs text-muted">Linked to a bank payment</div>
+                      ) : null}
+                    </TD>
                     <TD className="text-right">{formatGBP(parsed.grossPence)}</TD>
                     <TD className="text-xs">
                       {draft.errors.map((e) => (
@@ -395,6 +416,11 @@ export function InvoiceImportReview({
                           batchId={batch.id}
                           draftId={draft.id}
                           invoice={parsed}
+                          clientLabel={clientLabelFor(
+                            parsed.client.key,
+                            parsed.client.companyName || parsed.client.name || parsed.client.email || "Client",
+                          )}
+                          bankTransactionId={draft.bankTransactionId}
                           errors={draft.errors}
                           warnings={draft.warnings}
                           approved={draft.status === "ready"}

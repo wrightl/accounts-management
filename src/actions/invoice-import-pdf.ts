@@ -14,6 +14,13 @@ import {
 } from "@/db/schema";
 import type { ActionResult } from "@/actions/result";
 import { aiGatewayConfigured } from "@/lib/ai/models";
+import { requireActionPermission } from "@/lib/auth";
+import {
+  findBankTransactionsForImportDraft,
+  getBankTransactionById,
+  isBankTransactionAvailable,
+  type InvoiceBankMatch,
+} from "@/lib/bank/queries";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { todayIsoDate } from "@/lib/dates";
 import { MAX_RECEIPT_BYTES, sniffReceiptContentType } from "@/lib/expenses/receipt-file";
@@ -249,7 +256,9 @@ export async function uploadInvoicePdf(
         return { ok: false, error: "This import is no longer open" };
       }
 
-      // Before any AI spend: the same file can't be read twice.
+      // The same file can't be added twice to one import, or again once it's
+      // on an invoice. An import left open elsewhere doesn't block it: saving
+      // checks the invoices again.
       const sha256 = createHash("sha256").update(bytes).digest("hex");
       const [seenDraft] = await db
         .select({ id: invoiceImportDrafts.id })
@@ -257,6 +266,7 @@ export async function uploadInvoicePdf(
         .where(
           and(
             eq(invoiceImportDrafts.companyId, companyId),
+            eq(invoiceImportDrafts.batchId, batchId),
             eq(invoiceImportDrafts.documentSha256, sha256),
             ne(invoiceImportDrafts.status, "skipped"),
           ),
@@ -277,7 +287,7 @@ export async function uploadInvoicePdf(
           ok: false,
           error: seenInvoice
             ? `${file.name} is already attached to invoice ${seenInvoice.number}`
-            : `${file.name} has already been uploaded`,
+            : `${file.name} is already in this import`,
         };
       }
 
@@ -389,12 +399,6 @@ const optionalText = z.string().trim().max(500).nullable();
 
 const editedInvoiceSchema = z.object({
   number: optionalText,
-  client: z.object({
-    name: optionalText,
-    companyName: optionalText,
-    email: optionalText,
-    address: z.string().trim().max(2000).nullable(),
-  }),
   issueDate: z.string().max(10),
   dueDate: z.string().max(10).nullable(),
   netPence: pence,
@@ -417,11 +421,54 @@ const editedInvoiceSchema = z.object({
     .max(500),
 });
 
-/** Save the user's corrections to a draft and re-check it. It still needs approving. */
+/**
+ * The bank payment a draft can be linked to: this company's, incoming, unmatched,
+ * for the whole invoice, and not chosen by another draft in the import.
+ */
+async function bankLinkProblem(
+  companyId: string,
+  batchId: string,
+  draftId: string,
+  bankTransactionId: string,
+  invoice: ParsedInvoice,
+): Promise<{ error: string } | { bookedAt: string }> {
+  const tx = await getBankTransactionById(companyId, bankTransactionId);
+  if (!tx || tx.amountPence <= 0) return { error: "Bank payment not found" };
+  if (invoice.status !== "paid" || invoice.amountPaidPence !== invoice.grossPence) {
+    return { error: "Only an invoice paid in full can be linked to a bank payment" };
+  }
+  if (tx.amountPence !== invoice.grossPence) {
+    return { error: "The bank payment must be for the invoice's gross total" };
+  }
+  if (!(await isBankTransactionAvailable(bankTransactionId))) {
+    return { error: "That bank payment is already reconciled" };
+  }
+  const [taken] = await getDb()
+    .select({ id: invoiceImportDrafts.id })
+    .from(invoiceImportDrafts)
+    .where(
+      and(
+        eq(invoiceImportDrafts.companyId, companyId),
+        eq(invoiceImportDrafts.batchId, batchId),
+        eq(invoiceImportDrafts.bankTransactionId, bankTransactionId),
+        ne(invoiceImportDrafts.id, draftId),
+        ne(invoiceImportDrafts.status, "skipped"),
+      ),
+    )
+    .limit(1);
+  if (taken) return { error: "Another invoice in this import uses that bank payment" };
+  return { bookedAt: tx.bookedAt };
+}
+
+/**
+ * Save the user's corrections to a draft and re-check it. It still needs approving.
+ * The client isn't edited here: it is chosen in the import's Clients section.
+ */
 export async function updateImportDraft(
   batchId: string,
   draftId: string,
-  invoice: ParsedInvoice,
+  invoice: Omit<ParsedInvoice, "client"> & { client?: unknown },
+  bankTransactionId: string | null = null,
 ): Promise<ActionResult> {
   return mutate(
     "accounts:write",
@@ -433,8 +480,10 @@ export async function updateImportDraft(
       if (!parsed.success) {
         return { ok: false, error: "Check the invoice details: something isn't valid" };
       }
+      if (bankTransactionId !== null && !z.string().uuid().safeParse(bankTransactionId).success) {
+        return { ok: false, error: "Bank payment not found" };
+      }
       const edited = parsed.data;
-      const email = edited.client.email?.toLowerCase() || null;
       // Worked out here, not taken from the browser, so status and amounts agree.
       const next: ParsedInvoice = {
         ...edited,
@@ -442,33 +491,74 @@ export async function updateImportDraft(
           edited.grossPence > 0 && edited.amountPaidPence >= edited.grossPence
             ? "paid"
             : "sent",
-        client: {
-          ...edited.client,
-          email,
-          key: normalizeClientKey(email, edited.client.name, edited.client.companyName),
-        },
+        client: draft.parsed.client,
         sourceRows: [],
       };
+      if (bankTransactionId) {
+        const link = await bankLinkProblem(companyId, batchId, draftId, bankTransactionId, next);
+        if ("error" in link) return { ok: false, error: link.error };
+        // Paid on the day the money arrived.
+        next.paidDate = link.bookedAt;
+      }
       const errors = validateParsedInvoice(next);
       const problem = await numberProblem(companyId, next);
       if (problem) errors.push(problem);
 
       await getDb()
         .update(invoiceImportDrafts)
-        .set({ parsed: next, errors, status: "needs_review" })
+        .set({ parsed: next, errors, status: "needs_review", bankTransactionId })
         .where(
           and(
             eq(invoiceImportDrafts.id, draftId),
             eq(invoiceImportDrafts.companyId, companyId),
           ),
         );
-      if (next.client.name || next.client.companyName || next.client.email) {
-        await ensureClientResolution(companyId, batchId, next);
-      }
       return { ok: true, id: draftId };
     },
     { paths: [`/invoices/import/${batchId}`] },
   );
+}
+
+/** Bank payments a draft could be linked to, best first. */
+export async function findImportDraftBankMatches(
+  batchId: string,
+  draftId: string,
+): Promise<{ ok: true; matches: InvoiceBankMatch[] } | { ok: false; error: string }> {
+  const authz = await requireActionPermission("accounts:read");
+  if (!authz.ok) return authz;
+  if (!authz.user.companyId) {
+    return { ok: false, error: "Complete onboarding before using the dashboard." };
+  }
+  const companyId = authz.user.companyId;
+  const draft = await loadOpenDraft(companyId, batchId, draftId);
+  if (!draft) return { ok: false, error: "Draft not found" };
+
+  const chosen = await getDb()
+    .select({ id: invoiceImportDrafts.bankTransactionId })
+    .from(invoiceImportDrafts)
+    .where(
+      and(
+        eq(invoiceImportDrafts.companyId, companyId),
+        eq(invoiceImportDrafts.batchId, batchId),
+        ne(invoiceImportDrafts.id, draftId),
+        ne(invoiceImportDrafts.status, "skipped"),
+      ),
+    );
+  const exclude = new Set(chosen.flatMap((c) => (c.id ? [c.id] : [])));
+  const { parsed } = draft;
+  const matches = await findBankTransactionsForImportDraft(
+    companyId,
+    {
+      number: parsed.number,
+      clientName: parsed.client.name,
+      clientCompanyName: parsed.client.companyName,
+      grossPence: parsed.grossPence,
+      issueDate: parsed.issueDate,
+      dueDate: parsed.dueDate,
+    },
+    exclude,
+  );
+  return { ok: true, matches };
 }
 
 /** Approve one draft, or every draft with no problems. Nothing is ever auto-approved. */

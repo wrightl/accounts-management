@@ -5,11 +5,13 @@ import { setTestDb, type Database } from "@/db";
 import {
   bankAccounts,
   bankTransactions,
+  companies,
   reconciliationMatches,
 } from "@/db/schema";
 import {
   clearBankCreditExplanation,
   explainBankCredit,
+  explainBankCredits,
   listBankTransactions,
   ReconciliationError,
 } from "@/lib/bank/queries";
@@ -206,6 +208,62 @@ describe("income category catalog", () => {
         matchType: "other_income",
         incomeCategory: "Not A Real Category",
       }),
+    ).rejects.toBeInstanceOf(ReconciliationError);
+  });
+});
+
+describe("explainBankCredits", () => {
+  it("gives every row the same explanation", async () => {
+    const a = await insertCredit(1_000);
+    const b = await insertCredit(2_000);
+    const { matchIds } = await explainBankCredits(companyId, [a.id, b.id], {
+      matchType: "other_income",
+      incomeCategory: "Interest",
+      note: "Monthly interest",
+    });
+    expect(matchIds).toHaveLength(2);
+
+    const list = await listBankTransactions(companyId, {});
+    for (const row of list.rows) {
+      expect(row.reconciled).toBe(true);
+      expect(row.matchLabel).toContain("Interest");
+    }
+  });
+
+  it("explains none when any row can't be explained", async () => {
+    const open = await insertCredit(1_000);
+    const done = await insertCredit(2_000);
+    const outgoing = await insertCredit(-500);
+    await explainBankCredit(companyId, done.id, { matchType: "transfer" });
+
+    await expect(
+      explainBankCredits(companyId, [open.id, done.id], { matchType: "transfer" }),
+    ).rejects.toThrow("1 of the selected transactions are already reconciled");
+    await expect(
+      explainBankCredits(companyId, [open.id, outgoing.id], { matchType: "transfer" }),
+    ).rejects.toThrow("not incoming credits");
+
+    const matches = await db
+      .select()
+      .from(reconciliationMatches)
+      .where(eq(reconciliationMatches.bankTransactionId, open.id));
+    expect(matches).toEqual([]);
+  });
+
+  it("refuses rows in a locked period, and another company's rows", async () => {
+    const a = await insertCredit(1_000);
+    const b = await insertCredit(2_000);
+    const other = await seedCompany(db, { name: "Other Co", slug: "other-co" });
+    await expect(
+      explainBankCredits(other.id, [a.id, b.id], { matchType: "transfer" }),
+    ).rejects.toThrow("Bank transaction not found");
+
+    await db
+      .update(companies)
+      .set({ booksLockedThrough: "2026-03-31" })
+      .where(eq(companies.id, companyId));
+    await expect(
+      explainBankCredits(companyId, [a.id, b.id], { matchType: "transfer" }),
     ).rejects.toBeInstanceOf(ReconciliationError);
   });
 });

@@ -1,9 +1,10 @@
 "use client";
 
+import { ClientSelect } from "@/components/clients/client-select";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { FieldError, Input, Label, Select, Textarea } from "@/components/ui/form";
+import { FieldError, Input, Label, Textarea } from "@/components/ui/form";
 import { FormStickyActions } from "@/components/ui/form-sticky-actions";
 import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
 import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
@@ -14,7 +15,6 @@ import {
   invoiceRawFromFormData,
   parseInvoiceInput,
 } from "@/lib/invoices/schema";
-import { clientDisplayName } from "@/lib/clients/display";
 import {
   VatRateField,
   choiceFromVatRate,
@@ -216,27 +216,20 @@ export function InvoiceForm({
           <Label htmlFor="clientId" required>
             Client
           </Label>
-          <Select
+          <ClientSelect
             id="clientId"
             name="clientId"
+            clients={clients}
             defaultValue={clientId}
+            placeholder="Select a client…"
             disabled={pending}
             aria-invalid={Boolean(fieldErrors.clientId)}
             aria-describedby={fieldErrors.clientId ? "clientId-error" : undefined}
-            onChange={(e) => {
+            onChange={(id) => {
               clearField("clientId");
-              changeClient(e.target.value);
+              changeClient(id);
             }}
-          >
-            <option value="" disabled>
-              Select a client…
-            </option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {clientDisplayName(c)}
-              </option>
-            ))}
-          </Select>
+          />
           <FieldError id="clientId-error">{fieldErrors.clientId}</FieldError>
         </div>
         <div>

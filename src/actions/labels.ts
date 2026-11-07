@@ -5,6 +5,7 @@ import type { ActionResult } from "@/actions/result";
 import { isLabelColor } from "@/lib/labels/colors";
 import { isUuid } from "@/lib/labels/params";
 import {
+  addLabelsToBankRows,
   createLabel,
   deleteLabel,
   setRowLabels,
@@ -72,6 +73,27 @@ export async function setRowLabelsAction(
         meta: { labelIds },
       },
       paths: [names.path],
+    },
+  );
+}
+
+/** Add labels to several bank transactions at once, keeping their existing labels. */
+export async function addBankLabelsAction(
+  rowIds: string[],
+  labelIds: string[],
+): Promise<ActionResult> {
+  if (!rowIds.every(isUuid)) return { ok: false, error: "Row not found" };
+  if (!labelIds.every(isUuid)) return { ok: false, error: "Label not found" };
+  return mutate(
+    "accounts:write",
+    async ({ companyId }) => addLabelsToBankRows(companyId, rowIds, labelIds),
+    {
+      audit: {
+        action: "bank.add_labels",
+        entityType: "bank_transaction",
+        meta: { count: new Set(rowIds).size, labelIds },
+      },
+      paths: ["/transactions"],
     },
   );
 }

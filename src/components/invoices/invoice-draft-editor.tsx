@@ -1,13 +1,16 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import {
   approveImportDrafts,
+  findImportDraftBankMatches,
   updateImportDraft,
 } from "@/actions/invoice-import-pdf";
+import { DisplayDate } from "@/components/date-format-provider";
 import { Button } from "@/components/ui/button";
-import { FieldError, Input, Label } from "@/components/ui/form";
+import { FieldError, Input, Label, Select } from "@/components/ui/form";
+import type { InvoiceBankMatch } from "@/lib/bank/queries";
 import type { ParsedInvoice } from "@/lib/invoices/import/parse";
 import { penceToPounds, poundsToPence } from "@/lib/money";
 
@@ -28,6 +31,8 @@ export function InvoiceDraftEditor({
   batchId,
   draftId,
   invoice,
+  clientLabel,
+  bankTransactionId,
   errors,
   warnings,
   approved,
@@ -35,6 +40,9 @@ export function InvoiceDraftEditor({
   batchId: string;
   draftId: string;
   invoice: ParsedInvoice;
+  /** The client chosen for this invoice in the import's Clients section. */
+  clientLabel: string;
+  bankTransactionId: string | null;
   errors: string[];
   warnings: string[];
   approved: boolean;
@@ -45,9 +53,6 @@ export function InvoiceDraftEditor({
   const [dirty, setDirty] = useState(false);
   const [form, setForm] = useState({
     number: invoice.number ?? "",
-    clientName: invoice.client.name ?? "",
-    clientCompany: invoice.client.companyName ?? "",
-    clientEmail: invoice.client.email ?? "",
     issueDate: invoice.issueDate,
     dueDate: invoice.dueDate ?? "",
     paidDate: invoice.paidDate ?? "",
@@ -65,10 +70,48 @@ export function InvoiceDraftEditor({
     })),
   );
 
+  const [bankTx, setBankTx] = useState<string | null>(bankTransactionId);
+  const [matches, setMatches] = useState<InvoiceBankMatch[] | null>(null);
+
+  // Candidates follow the saved gross, so they refresh after each save.
+  useEffect(() => {
+    let live = true;
+    findImportDraftBankMatches(batchId, draftId).then((result) => {
+      if (live) setMatches(result.ok ? result.matches : []);
+    });
+    return () => {
+      live = false;
+    };
+  }, [batchId, draftId, invoice.grossPence]);
+
   const set = (field: keyof typeof form, value: string) => {
     setDirty(true);
     setForm((f) => ({ ...f, [field]: value }));
   };
+
+  const grossPence = toPence(form.gross);
+  const paidInFull = grossPence > 0 && toPence(form.paid) >= grossPence;
+
+  function markPaid(paid: boolean) {
+    setDirty(true);
+    if (paid) {
+      setForm((f) => ({
+        ...f,
+        paid: f.gross,
+        paidDate: f.paidDate || f.dueDate || f.issueDate,
+      }));
+    } else {
+      setForm((f) => ({ ...f, paid: "0.00", paidDate: "" }));
+      setBankTx(null);
+    }
+  }
+
+  function linkBankTx(id: string) {
+    setDirty(true);
+    setBankTx(id || null);
+    const match = matches?.find((m) => m.bankTransactionId === id);
+    if (match) setForm((f) => ({ ...f, paidDate: match.bookedAt }));
+  }
 
   function save() {
     setError(null);
@@ -77,12 +120,6 @@ export function InvoiceDraftEditor({
     const next: ParsedInvoice = {
       ...invoice,
       number: form.number.trim() || null,
-      client: {
-        ...invoice.client,
-        name: form.clientName.trim() || null,
-        companyName: form.clientCompany.trim() || null,
-        email: form.clientEmail.trim() || null,
-      },
       issueDate: form.issueDate,
       dueDate: form.dueDate || null,
       paidDate: form.paidDate || null,
@@ -99,7 +136,12 @@ export function InvoiceDraftEditor({
       })),
     };
     startTransition(async () => {
-      const result = await updateImportDraft(batchId, draftId, next);
+      const result = await updateImportDraft(
+        batchId,
+        draftId,
+        next,
+        gross > 0 && paid >= gross ? bankTx : null,
+      );
       if (!result.ok) {
         setError(result.error);
         return;
@@ -145,60 +187,128 @@ export function InvoiceDraftEditor({
         {warnings.map((w) => (
           <p key={w} className="text-muted">{w}</p>
         ))}
+        <p>
+          <span className="text-muted">Client: </span>
+          <span className="font-medium">{clientLabel}</span>{" "}
+          <a href="#import-clients" className="text-xs underline">
+            Change in Clients
+          </a>
+        </p>
         <div className="grid gap-3 sm:grid-cols-2">
           {field("number", "Invoice number")}
-          {field("clientName", "Client name")}
-          {field("clientCompany", "Client company")}
-          {field("clientEmail", "Client email")}
           {field("issueDate", "Issue date", "date")}
           {field("dueDate", "Due date", "date")}
           {field("net", "Net")}
           {field("vat", "VAT")}
           {field("gross", "Gross")}
-          {field("paid", "Amount paid")}
-          {field("paidDate", "Paid date", "date")}
         </div>
-        <div className="space-y-2">
+        <fieldset className="space-y-3">
+          <legend className="font-medium">Payment</legend>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={paidInFull}
+              disabled={pending}
+              onChange={(e) => markPaid(e.target.checked)}
+            />
+            Mark as paid
+          </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {field("paid", "Amount paid")}
+            {field("paidDate", "Paid date", "date")}
+          </div>
+          {paidInFull ? (
+            <div>
+              <Label htmlFor={`${draftId}-bank`}>Bank payment</Label>
+              <Select
+                id={`${draftId}-bank`}
+                value={bankTx ?? ""}
+                disabled={pending || matches === null}
+                onChange={(e) => linkBankTx(e.target.value)}
+                options={[
+                  {
+                    value: "",
+                    label:
+                      matches === null
+                        ? "Looking for bank payments…"
+                        : matches.length === 0
+                          ? "No unreconciled bank payment for this amount"
+                          : "Don't link a bank payment",
+                  },
+                  ...(matches ?? []).map((m) => ({
+                    value: m.bankTransactionId,
+                    label: (
+                      <>
+                        <DisplayDate value={m.bookedAt} /> · {m.amountFormatted} ·{" "}
+                        {m.counterparty ?? m.reference ?? "Bank payment"}
+                      </>
+                    ),
+                  })),
+                ]}
+              />
+              <p className="mt-1 text-xs text-muted">
+                Linking reconciles the bank payment to this invoice when the import is saved.
+              </p>
+            </div>
+          ) : null}
+        </fieldset>
+        <div className="space-y-3">
           <p className="font-medium">Lines</p>
           {lines.map((line, i) => (
-            <div key={i} className="grid grid-cols-4 gap-2">
-              <Input
-                aria-label={`Line ${i + 1} description`}
-                className="col-span-4"
-                value={line.description}
-                disabled={pending}
-                onChange={(e) => {
-                  setDirty(true);
-                  setLines((all) => all.map((l, j) => (j === i ? { ...l, description: e.target.value } : l)));
-                }}
-              />
-              <Input
-                aria-label={`Line ${i + 1} quantity`}
-                value={line.quantity}
-                disabled={pending}
-                onChange={(e) => {
-                  setDirty(true);
-                  setLines((all) => all.map((l, j) => (j === i ? { ...l, quantity: e.target.value } : l)));
-                }}
-              />
-              <Input
-                aria-label={`Line ${i + 1} unit price`}
-                value={line.unit}
-                disabled={pending}
-                onChange={(e) => {
-                  setDirty(true);
-                  setLines((all) => all.map((l, j) => (j === i ? { ...l, unit: e.target.value } : l)));
-                }}
-              />
-              <Input
-                aria-label={`Line ${i + 1} VAT rate`}
-                value={line.vatRate}
-                disabled={pending}
-                onChange={(e) => {
-                  setDirty(true);
-                  setLines((all) => all.map((l, j) => (j === i ? { ...l, vatRate: e.target.value } : l)));
-                }}
-              />
+            <div key={i} className="space-y-2 rounded-lg border border-border p-3">
+              <div>
+                <Label htmlFor={`${draftId}-line-${i}-description`}>Line {i + 1} description</Label>
+                <Input
+                  id={`${draftId}-line-${i}-description`}
+                  value={line.description}
+                  disabled={pending}
+                  onChange={(e) => {
+                    setDirty(true);
+                    setLines((all) => all.map((l, j) => (j === i ? { ...l, description: e.target.value } : l)));
+                  }}
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <Label htmlFor={`${draftId}-line-${i}-quantity`}>Quantity</Label>
+                  <Input
+                    id={`${draftId}-line-${i}-quantity`}
+                    inputMode="decimal"
+                    value={line.quantity}
+                    disabled={pending}
+                    onChange={(e) => {
+                      setDirty(true);
+                      setLines((all) => all.map((l, j) => (j === i ? { ...l, quantity: e.target.value } : l)));
+                    }}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor={`${draftId}-line-${i}-unit`}>Unit price (£)</Label>
+                  <Input
+                    id={`${draftId}-line-${i}-unit`}
+                    inputMode="decimal"
+                    value={line.unit}
+                    disabled={pending}
+                    onChange={(e) => {
+                      setDirty(true);
+                      setLines((all) => all.map((l, j) => (j === i ? { ...l, unit: e.target.value } : l)));
+                    }}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor={`${draftId}-line-${i}-vat`}>VAT rate (%)</Label>
+                  <Input
+                    id={`${draftId}-line-${i}-vat`}
+                    inputMode="numeric"
+                    value={line.vatRate}
+                    disabled={pending}
+                    onChange={(e) => {
+                      setDirty(true);
+                      setLines((all) => all.map((l, j) => (j === i ? { ...l, vatRate: e.target.value } : l)));
+                    }}
+                  />
+                </div>
+              </div>
             </div>
           ))}
         </div>
