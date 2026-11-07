@@ -7,7 +7,7 @@ import { UnchasedImportsBanner } from "@/components/invoices/imported-invoice-ch
 import { OpenImportsBanner } from "@/components/invoices/open-imports-banner";
 import { getOpenImports } from "@/lib/invoices/import/queries";
 import { recordScopeFor } from "@/lib/accountant/record-scope";
-import { getUnchasedImports, listInvoices } from "@/lib/invoices/queries";
+import { getUnchasedImports, listInvoicePage } from "@/lib/invoices/queries";
 import { buttonClasses } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -15,17 +15,20 @@ import { InvoiceDueDate } from "@/components/invoices/invoice-due-date";
 import { Table, THead, TBody, TR, TD } from "@/components/ui/table";
 import { sortHeaders } from "@/components/ui/sortable-th";
 import type { InvoiceStatus } from "@/lib/invoices/status";
-import { defineTableSort, parseTableSort, rankIn, sortRows } from "@/lib/table-sort";
+import {
+  INVOICE_SORT,
+  hasActiveInvoiceFilters,
+  invoiceListHref,
+  invoiceListSearchParams,
+  parseInvoiceListParams,
+  resolveInvoiceListDateRange,
+} from "@/lib/invoices/list-params";
+import { InvoiceFilters } from "@/components/invoices/invoice-filters";
+import { ListPagination } from "@/components/ui/list-pagination";
+import { getOrCreateCompanySettings } from "@/lib/settings/queries";
+import { listClients } from "@/lib/clients/queries";
 import { DisplayDate } from "@/components/date-format-provider";
 import { PageHeader } from "@/components/ui/page-header";
-
-/** "created" is the loaded order (newest first) and has no header. */
-const SORT = defineTableSort({
-  columns: ["created", "number", "client", "order", "status", "issued", "due", "total"],
-  fallback: { sort: "created", dir: "desc" },
-  descFirst: ["created", "issued", "total"],
-});
-const STATUS_ORDER: InvoiceStatus[] = ["draft", "sent", "overdue", "paid", "void"];
 
 export default async function InvoicesPage({
   searchParams,
@@ -37,23 +40,39 @@ export default async function InvoicesPage({
   const canWrite = await hasPermission("accounts:write");
   const canRaiseQuery = can(role, "queries:raise");
   const sp = await searchParams;
+  const params = parseInvoiceListParams(sp);
   const showImports = scope === "all";
-  const [unchased, openImports] = await Promise.all([
+  const [unchased, openImports, settings, clientRows] = await Promise.all([
     showImports ? getUnchasedImports(companyId) : null,
     showImports && canWrite ? getOpenImports(companyId) : [],
+    getOrCreateCompanySettings(companyId),
+    listClients(companyId),
   ]);
-  const sort = parseTableSort(sp, SORT);
-  const th = sortHeaders("/invoices", sp, SORT, sort);
+  const dateRange = resolveInvoiceListDateRange(params, settings.financialYearEndMonth);
+  const filtered = hasActiveInvoiceFilters(params);
 
-  const rows = sortRows(await listInvoices(companyId, scope), sort, {
-    number: (r) => r.number,
-    client: (r) => r.clientName,
-    order: (r) => r.orderNumber,
-    status: (r) => rankIn(STATUS_ORDER, r.status),
-    issued: (r) => r.issueDate,
-    due: (r) => r.dueDate,
-    total: (r) => r.grossPence,
+  const { rows, total, page, pageSize, pageCount } = await listInvoicePage(companyId, {
+    q: params.q,
+    status: params.status,
+    client: params.client,
+    from: dateRange.from,
+    to: dateRange.to,
+    page: params.page,
+    pageSize: params.pageSize,
+    sort: params.sort,
+    dir: params.dir,
+    scope,
   });
+  // Sorting goes back to the first page.
+  const th = sortHeaders(
+    "/invoices",
+    Object.fromEntries(invoiceListSearchParams(params, { page: 1 })),
+    INVOICE_SORT,
+    { sort: params.sort, dir: params.dir },
+  );
+  const clientOptions = clientRows
+    .map((c) => ({ id: c.id, label: c.companyName || c.name }))
+    .sort((a, b) => a.label.localeCompare(b.label, "en-GB", { sensitivity: "base" }));
   const queries = await recordQueriesFor(role, companyId, "invoice", rows.map((r) => r.id));
   const showQueries = canRaiseQuery || queries.size > 0;
 
@@ -92,14 +111,26 @@ export default async function InvoicesPage({
         />
       ) : null}
 
+      <div className="mt-4">
+        <InvoiceFilters
+          params={params}
+          clients={clientOptions}
+          showDraftAndVoid={scope === "all"}
+        />
+      </div>
+
       <div className="mt-6">
         {rows.length === 0 ? (
-          <EmptyState
-            title="No invoices yet"
-            description="Create an invoice to bill a client, or convert an accepted quote into an order first."
-            actionHref={canWrite ? "/invoices/new" : undefined}
-            actionLabel={canWrite ? "Create an invoice" : undefined}
-          />
+          filtered ? (
+            <p className="text-sm text-muted">No invoices match these filters.</p>
+          ) : (
+            <EmptyState
+              title="No invoices yet"
+              description="Create an invoice to bill a client, or convert an accepted quote into an order first."
+              actionHref={canWrite ? "/invoices/new" : undefined}
+              actionLabel={canWrite ? "Create an invoice" : undefined}
+            />
+          )
         ) : (
           <Table>
             <THead>
@@ -157,6 +188,13 @@ export default async function InvoicesPage({
             </TBody>
           </Table>
         )}
+        <ListPagination
+          total={total}
+          page={page}
+          pageSize={pageSize}
+          pageCount={pageCount}
+          href={(to) => invoiceListHref(params, to as Partial<typeof params>)}
+        />
       </div>
     </div>
   );

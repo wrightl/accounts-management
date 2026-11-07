@@ -1,6 +1,22 @@
 import "server-only";
 import { invoiceCountsInAccounts } from "@/lib/invoices/accounts-scope";
-import { and, desc, eq, gte, inArray, lte, ne, sum } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  lte,
+  ne,
+  or,
+  sql,
+  sum,
+  type AnyColumn,
+  type SQL,
+} from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   clients,
@@ -24,6 +40,10 @@ import {
   todayIsoDate,
   type InvoiceStatus,
 } from "@/lib/invoices/status";
+import { bankSearchPattern } from "@/lib/bank/list-params";
+import { LIST_PAGE_SIZE } from "@/lib/list-paging";
+import type { InvoiceListParams, InvoiceSortColumn } from "@/lib/invoices/list-params";
+import type { SortDir } from "@/lib/table-sort";
 
 export async function listInvoices(companyId: string, scope: RecordScope = "all") {
   const db = getDb();
@@ -54,6 +74,153 @@ export async function listInvoices(companyId: string, scope: RecordScope = "all"
     status: effectiveStatus(r.status as InvoiceStatus, r.dueDate, today),
     grossFormatted: formatGBP(r.grossPence),
   }));
+}
+
+export type InvoiceListFilters = Partial<
+  Pick<InvoiceListParams, "q" | "status" | "client" | "from" | "to" | "page">
+> & {
+  pageSize?: number;
+  sort?: InvoiceSortColumn;
+  dir?: SortDir;
+  scope?: RecordScope;
+};
+
+/** Stored "overdue" is legacy and means sent; either is overdue once past due. */
+function sentOrOverdue(): SQL {
+  return inArray(invoices.status, ["sent", "overdue"]);
+}
+
+function invoiceListWhere(companyId: string, filters: InvoiceListFilters, today: string) {
+  const conditions: (SQL | undefined)[] = [
+    eq(invoices.companyId, companyId),
+    filters.scope === "pack" ? invoiceInPack : undefined,
+  ];
+  const pattern = filters.q ? bankSearchPattern(filters.q) : null;
+  if (pattern) {
+    conditions.push(
+      or(
+        ilike(invoices.number, pattern),
+        ilike(clientDisplayNameSql, pattern),
+        ilike(orders.number, pattern),
+      ),
+    );
+  }
+  switch (filters.status) {
+    case "overdue":
+      conditions.push(sentOrOverdue(), sql`${invoices.dueDate} < ${today}`);
+      break;
+    case "sent":
+      conditions.push(
+        sentOrOverdue(),
+        sql`(${invoices.dueDate} is null or ${invoices.dueDate} >= ${today})`,
+      );
+      break;
+    case "draft":
+    case "paid":
+    case "void":
+      conditions.push(eq(invoices.status, filters.status));
+      break;
+  }
+  if (filters.client) conditions.push(eq(invoices.clientId, filters.client));
+  // A list filter, not a figure: brought-forward invoices still show, so no invoiceCountsInAccounts.
+  if (filters.from) conditions.push(gte(invoices.issueDate, filters.from));
+  if (filters.to) conditions.push(lte(invoices.issueDate, filters.to));
+  return and(...conditions);
+}
+
+function invoiceListOrderBy(
+  column: InvoiceSortColumn = "created",
+  dir: SortDir = "desc",
+  today: string,
+): SQL[] {
+  const by = (expr: SQL | AnyColumn) =>
+    dir === "asc" ? sql`${expr} asc nulls last` : sql`${expr} desc nulls last`;
+  const tiebreak = [desc(invoices.createdAt), desc(invoices.id)];
+  switch (column) {
+    case "number":
+      // Prefix, then trailing digits as a number, so INV-9 comes before INV-10.
+      return [
+        by(sql`lower(regexp_replace(${invoices.number}, '[0-9]+$', ''))`),
+        by(sql`substring(${invoices.number} from '([0-9]+)$')::numeric`),
+        by(sql`lower(${invoices.number})`),
+        ...tiebreak,
+      ];
+    case "client":
+      return [by(sql`lower(${clientDisplayNameSql})`), ...tiebreak];
+    case "order":
+      return [by(sql`lower(${orders.number})`), ...tiebreak];
+    case "status":
+      return [
+        by(sql`case
+          when ${invoices.status} = 'draft' then 0
+          when ${invoices.status} in ('sent', 'overdue') and ${invoices.dueDate} < ${today} then 2
+          when ${invoices.status} in ('sent', 'overdue') then 1
+          when ${invoices.status} = 'paid' then 3
+          when ${invoices.status} = 'void' then 4 end`),
+        ...tiebreak,
+      ];
+    case "issued":
+      return [by(invoices.issueDate), ...tiebreak];
+    case "due":
+      return [by(invoices.dueDate), ...tiebreak];
+    case "total":
+      return [by(invoices.grossPence), ...tiebreak];
+    case "created":
+      return dir === "asc" ? [asc(invoices.createdAt), asc(invoices.id)] : tiebreak;
+  }
+}
+
+/** One page of the invoices list, filtered and sorted in the database. */
+export async function listInvoicePage(companyId: string, filters: InvoiceListFilters = {}) {
+  const db = getDb();
+  const today = todayIsoDate();
+  const pageSize = filters.pageSize ?? LIST_PAGE_SIZE;
+  const where = invoiceListWhere(companyId, filters, today);
+  const clientJoin = and(eq(invoices.clientId, clients.id), eq(clients.companyId, companyId));
+  const orderJoin = and(eq(invoices.orderId, orders.id), eq(orders.companyId, companyId));
+
+  const [countRow] = await db
+    .select({ total: count() })
+    .from(invoices)
+    .innerJoin(clients, clientJoin)
+    .leftJoin(orders, orderJoin)
+    .where(where);
+  const total = countRow?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const page = Math.min(Math.max(1, filters.page ?? 1), pageCount);
+
+  const rows = await db
+    .select({
+      id: invoices.id,
+      number: invoices.number,
+      status: invoices.status,
+      issueDate: invoices.issueDate,
+      dueDate: invoices.dueDate,
+      grossPence: invoices.grossPence,
+      clientId: invoices.clientId,
+      clientName: clientDisplayNameSql.as("client_name"),
+      orderId: invoices.orderId,
+      orderNumber: orders.number,
+    })
+    .from(invoices)
+    .innerJoin(clients, clientJoin)
+    .leftJoin(orders, orderJoin)
+    .where(where)
+    .orderBy(...invoiceListOrderBy(filters.sort, filters.dir, today))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize);
+
+  return {
+    rows: rows.map((r) => ({
+      ...r,
+      status: effectiveStatus(r.status as InvoiceStatus, r.dueDate, today),
+      grossFormatted: formatGBP(r.grossPence),
+    })),
+    total,
+    page,
+    pageSize,
+    pageCount,
+  };
 }
 
 /**

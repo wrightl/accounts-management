@@ -2,9 +2,8 @@ import Link from 'next/link';
 import { RecordQueryIcon } from '@/components/queries/record-query-icon';
 import { CategoryCell, ReconciliationCell } from '@/components/bank/bank-ui';
 import { SortableTH } from '@/components/ui/sortable-th';
-import { BankPageSizeSelect } from '@/components/bank/bank-page-size-select';
+import { ListPagination } from '@/components/ui/list-pagination';
 import { Card } from '@/components/ui/card';
-import { buttonClasses } from '@/components/ui/button';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
 import { formatBankCategory } from '@/lib/bank/categories';
 import {
@@ -102,68 +101,14 @@ export function BankPagination({
     pageSize: number;
     pageCount: number;
 }) {
-    if (total === 0) return null;
-    const from = (page - 1) * pageSize + 1;
-    const to = Math.min(page * pageSize, total);
-    const hasPrev = page > 1;
-    const hasNext = page < pageCount;
-
     return (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
-            <div className="flex flex-wrap items-center gap-4">
-                <p>
-                    Showing {from}–{to} of {total}
-                </p>
-                <BankPageSizeSelect params={params} />
-            </div>
-            <div className="flex items-center gap-2">
-                <PageLink href={hasPrev ? bankListHref(params, { page: 1 }) : null}>
-                    First
-                </PageLink>
-                <PageLink
-                    href={hasPrev ? bankListHref(params, { page: page - 1 }) : null}
-                >
-                    Previous
-                </PageLink>
-                <span>
-                    Page {page} of {pageCount}
-                </span>
-                <PageLink
-                    href={hasNext ? bankListHref(params, { page: page + 1 }) : null}
-                >
-                    Next
-                </PageLink>
-                <PageLink
-                    href={hasNext ? bankListHref(params, { page: pageCount }) : null}
-                >
-                    Last
-                </PageLink>
-            </div>
-        </div>
-    );
-}
-
-/** A pager button, shown dimmed when there's no page to go to. */
-function PageLink({
-    href,
-    children,
-}: {
-    href: string | null;
-    children: React.ReactNode;
-}) {
-    if (href) {
-        return (
-            <Link href={href} className={buttonClasses('ghost')}>
-                {children}
-            </Link>
-        );
-    }
-    return (
-        <span
-            className={cn(buttonClasses('ghost'), 'pointer-events-none opacity-40')}
-        >
-            {children}
-        </span>
+        <ListPagination
+            total={total}
+            page={page}
+            pageSize={pageSize}
+            pageCount={pageCount}
+            href={(to) => bankListHref(params, to as Partial<BankListParams>)}
+        />
     );
 }
 

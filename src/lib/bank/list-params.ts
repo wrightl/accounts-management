@@ -11,11 +11,18 @@ import {
   type SortDir,
 } from "@/lib/table-sort";
 import { parseLabelIds } from "@/lib/labels/params";
+import {
+  LIST_PAGE_SIZE,
+  LIST_PAGE_SIZE_OPTIONS,
+  parseListPage,
+  parseListPageSize,
+  type ListPageSize,
+} from "@/lib/list-paging";
 
-export const BANK_PAGE_SIZE = 25;
+export const BANK_PAGE_SIZE = LIST_PAGE_SIZE;
 
-export const BANK_PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
-export type BankPageSize = (typeof BANK_PAGE_SIZE_OPTIONS)[number];
+export const BANK_PAGE_SIZE_OPTIONS = LIST_PAGE_SIZE_OPTIONS;
+export type BankPageSize = ListPageSize;
 
 export type BankTxType = "incoming" | "outgoing";
 export type BankReconciliationFilter = "reconciled" | "unreconciled";
@@ -46,11 +53,7 @@ export interface BankListParams {
   dir: SortDir;
 }
 
-export function parseBankPageSize(raw: string): BankPageSize {
-  const n = Math.trunc(Number(raw));
-  if (n === 50 || n === 100) return n;
-  return BANK_PAGE_SIZE;
-}
+export const parseBankPageSize = parseListPageSize;
 
 function first(sp: Record<string, string | string[] | undefined>, key: string): string {
   const value = sp[key];
@@ -70,7 +73,7 @@ export function parseBankListParams(
       ? reconciliationRaw
       : "";
   const viewRaw = first(sp, "view");
-  const page = Math.max(1, Math.trunc(Number(first(sp, "page")) || 1));
+  const page = parseListPage(first(sp, "page"));
   const periodRaw = first(sp, "period");
   const from = first(sp, "from");
   const to = first(sp, "to");
