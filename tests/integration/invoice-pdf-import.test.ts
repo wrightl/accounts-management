@@ -4,17 +4,22 @@ import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
 import {
   auditLog,
+  bankAccounts,
+  bankTransactions,
   clients,
   companies,
   invoiceImportBatches,
   invoiceImportDrafts,
   invoicePdfReads,
   invoices,
+  payments,
+  reconciliationMatches,
   users,
 } from "@/db/schema";
 import {
   approveImportDrafts,
   createPdfImportBatch,
+  findImportDraftBankMatches,
   updateImportDraft,
   uploadInvoicePdf,
 } from "@/actions/invoice-import-pdf";
@@ -22,6 +27,7 @@ import {
   commitInvoiceImportChunk,
   discardInvoiceImport,
   setImportDraftsSkipped,
+  undoInvoiceImport,
 } from "@/actions/invoice-import";
 import { GET as draftDocument } from "@/app/api/invoice-imports/drafts/[id]/document/route";
 import { deleteCompanyById } from "@/lib/companies/delete";
@@ -293,6 +299,38 @@ describe("uploading a PDF", () => {
   });
 });
 
+describe("uploading the same file again", () => {
+  it("allows a file held by an import that was never saved", async () => {
+    await upload(await newBatch(), pdf("%PDF-1.4 abandoned"));
+    const again = await uploadInvoicePdf(await newBatch(), pdf("%PDF-1.4 abandoned"));
+    expect(again.ok).toBe(true);
+  });
+
+  it("refuses it once it's on a saved invoice", async () => {
+    const batchId = await newBatch();
+    const draft = await upload(batchId, pdf("%PDF-1.4 saved"));
+    await approveImportDrafts(batchId, { draftId: draft.id });
+    await commitAll(batchId);
+    const again = await uploadInvoicePdf(await newBatch(), pdf("%PDF-1.4 saved"));
+    expect(again).toMatchObject({ ok: false, error: expect.stringContaining("already attached to invoice") });
+  });
+
+  it("won't save the same file from two open imports", async () => {
+    const first = await newBatch();
+    const a = await upload(first, pdf("%PDF-1.4 twice"));
+    generateText.mockResolvedValue({ output: { ...reading, number: "PDF-2" }, usage: {} });
+    const second = await newBatch();
+    const b = await upload(second, pdf("%PDF-1.4 twice"));
+    await approveImportDrafts(first, { draftId: a.id });
+    await approveImportDrafts(second, { draftId: b.id });
+    await commitAll(first);
+
+    const result = await commitInvoiceImportChunk(second);
+    expect(result).toMatchObject({ ok: false, error: expect.stringContaining("already attached to invoice PDF-1") });
+    expect(await db.select().from(invoices)).toHaveLength(1);
+  });
+});
+
 describe("reviewing", () => {
   it("needs explicit approval before saving", async () => {
     const batchId = await newBatch();
@@ -537,6 +575,139 @@ describe("tenancy", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Security-Policy")).toBe("frame-ancestors 'self'");
     expect(res.headers.get("Content-Type")).toBe("application/pdf");
+  });
+});
+
+describe("linking a bank payment", () => {
+  async function credit(amountPence = 12_000, bookedAt = "2026-04-10") {
+    const [account] = await db
+      .insert(bankAccounts)
+      .values({ companyId, name: "Starling", provider: "starling" })
+      .returning();
+    const [tx] = await db
+      .insert(bankTransactions)
+      .values({
+        bankAccountId: account.id,
+        externalId: `tx-${Math.random()}`,
+        bookedAt,
+        amountPence,
+        counterparty: "ACME LTD",
+        reference: "PDF-1",
+      })
+      .returning();
+    return tx;
+  }
+
+  const paid = (parsed: typeof invoiceImportDrafts.$inferSelect["parsed"]) => ({
+    ...parsed,
+    amountPaidPence: parsed.grossPence,
+    paidDate: "2026-04-01",
+  });
+
+  it("offers matching payments, then reconciles on save and unlinks on undo", async () => {
+    const tx = await credit();
+    await credit(5_000);
+    const batchId = await newBatch();
+    const draft = await upload(batchId);
+
+    const found = await findImportDraftBankMatches(batchId, draft.id);
+    expect(found.ok && found.matches.map((m) => m.bankTransactionId)).toEqual([tx.id]);
+
+    expect(await updateImportDraft(batchId, draft.id, paid(draft.parsed), tx.id)).toMatchObject({ ok: true });
+    const [row] = await db.select().from(invoiceImportDrafts).where(eq(invoiceImportDrafts.id, draft.id));
+    expect(row.bankTransactionId).toBe(tx.id);
+    expect(row.parsed.paidDate).toBe("2026-04-10");
+
+    await approveImportDrafts(batchId, { draftId: draft.id });
+    await commitAll(batchId);
+    const [invoice] = await db.select().from(invoices);
+    expect(invoice.status).toBe("paid");
+    const [match] = await db.select().from(reconciliationMatches);
+    expect(match).toMatchObject({
+      bankTransactionId: tx.id,
+      matchType: "invoice_payment",
+      invoiceId: invoice.id,
+      confirmed: true,
+    });
+    const [payment] = await db.select().from(payments);
+    expect(match.paymentId).toBe(payment.id);
+
+    expect((await undoInvoiceImport(batchId)).ok).toBe(true);
+    expect(await db.select().from(invoices)).toEqual([]);
+    expect(await db.select().from(reconciliationMatches)).toEqual([]);
+  });
+
+  it("won't undo an import payment that was later reconciled by hand", async () => {
+    const tx = await credit();
+    const batchId = await newBatch();
+    const draft = await upload(batchId);
+    await updateImportDraft(batchId, draft.id, paid(draft.parsed));
+    await approveImportDrafts(batchId, { draftId: draft.id });
+    await commitAll(batchId);
+    const [invoice] = await db.select().from(invoices);
+    const [payment] = await db.select().from(payments);
+    await db.insert(reconciliationMatches).values({
+      bankTransactionId: tx.id,
+      matchType: "invoice_payment",
+      paymentId: payment.id,
+      invoiceId: invoice.id,
+      confirmed: true,
+    });
+
+    const result = await undoInvoiceImport(batchId);
+    expect(result).toMatchObject({
+      ok: true,
+      kept: [expect.objectContaining({ reason: "Matched to a bank transaction" })],
+    });
+    expect(await db.select().from(invoices)).toHaveLength(1);
+    expect(await db.select().from(reconciliationMatches)).toHaveLength(1);
+  });
+
+  it("refuses a payment for the wrong amount, one already reconciled, or an unpaid invoice", async () => {
+    const wrong = await credit(5_000);
+    const taken = await credit();
+    await db.insert(reconciliationMatches).values({
+      bankTransactionId: taken.id,
+      matchType: "transfer",
+      confirmed: true,
+    });
+    const fine = await credit();
+    const batchId = await newBatch();
+    const draft = await upload(batchId);
+
+    expect((await updateImportDraft(batchId, draft.id, paid(draft.parsed), wrong.id)).ok).toBe(false);
+    expect((await updateImportDraft(batchId, draft.id, paid(draft.parsed), taken.id)).ok).toBe(false);
+    expect((await updateImportDraft(batchId, draft.id, draft.parsed, fine.id)).ok).toBe(false);
+  });
+
+  it("won't save if the payment was reconciled elsewhere after review", async () => {
+    const tx = await credit();
+    const batchId = await newBatch();
+    const draft = await upload(batchId);
+    await updateImportDraft(batchId, draft.id, paid(draft.parsed), tx.id);
+    await approveImportDrafts(batchId, { draftId: draft.id });
+    await db.insert(reconciliationMatches).values({
+      bankTransactionId: tx.id,
+      matchType: "transfer",
+      confirmed: true,
+    });
+
+    const result = await commitInvoiceImportChunk(batchId);
+    expect(result).toMatchObject({ ok: false, error: expect.stringContaining("already reconciled") });
+    expect(await db.select().from(invoices)).toEqual([]);
+  });
+});
+
+describe("the client on a draft", () => {
+  it("can't be changed by editing the draft", async () => {
+    const batchId = await newBatch();
+    const draft = await upload(batchId);
+    await updateImportDraft(batchId, draft.id, {
+      ...draft.parsed,
+      client: { ...draft.parsed.client, name: "Someone else", key: "other" },
+    });
+    const [row] = await db.select().from(invoiceImportDrafts).where(eq(invoiceImportDrafts.id, draft.id));
+    expect(row.parsed.client).toEqual(draft.parsed.client);
   });
 });
 

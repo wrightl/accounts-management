@@ -1,9 +1,10 @@
 "use client";
 
+import { ClientSelect } from "@/components/clients/client-select";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { FieldError, Input, Label, Select, Textarea } from "@/components/ui/form";
+import { FieldError, Input, Label, Textarea } from "@/components/ui/form";
 import { FormStickyActions } from "@/components/ui/form-sticky-actions";
 import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
 import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
@@ -12,7 +13,6 @@ import { formatGBP, invoiceTotals, lineNetPence, poundsToPence } from "@/lib/mon
 import { PaymentScheduleEditor } from "@/components/quotes/payment-schedule-editor";
 import { createQuote, updateQuote } from "@/actions/quotes";
 import { parseQuoteInput, quoteRawFromFormData } from "@/lib/quotes/schema";
-import { clientDisplayName } from "@/lib/clients/display";
 import {
   VatRateField,
   choiceFromVatRate,
@@ -187,22 +187,17 @@ export function QuoteForm({
         <Label htmlFor="clientId" required>
           Client
         </Label>
-        <Select
+        <ClientSelect
           id="clientId"
           name="clientId"
+          clients={clients}
           defaultValue={quote?.clientId ?? ""}
+          placeholder="Select…"
           disabled={pending}
           aria-invalid={Boolean(fieldErrors.clientId)}
           aria-describedby={fieldErrors.clientId ? "clientId-error" : undefined}
           onChange={() => clearField("clientId")}
-        >
-          <option value="">Select…</option>
-          {clients.map((c) => (
-            <option key={c.id} value={c.id}>
-              {clientDisplayName(c)}
-            </option>
-          ))}
-        </Select>
+        />
         <FieldError id="clientId-error">{fieldErrors.clientId}</FieldError>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">

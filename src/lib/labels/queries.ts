@@ -194,6 +194,48 @@ export async function setRowLabels(
   return { ok: true };
 }
 
+/** Most bank rows one bulk change can touch: the largest page of transactions. */
+export const MAX_BULK_ROWS = 200;
+
+/**
+ * Add labels to several bank transactions, keeping the labels they already
+ * have. Not a financial change, so period locks don't apply.
+ */
+export async function addLabelsToBankRows(
+  companyId: string,
+  rowIds: string[],
+  labelIds: string[],
+): Promise<RowResult> {
+  const uniqueRows = [...new Set(rowIds)];
+  const uniqueLabels = [...new Set(labelIds)];
+  if (uniqueRows.length === 0) return { ok: false, error: "Select some transactions" };
+  if (uniqueRows.length > MAX_BULK_ROWS) {
+    return { ok: false, error: `Select up to ${MAX_BULK_ROWS} transactions at a time` };
+  }
+  if (uniqueLabels.length === 0) return { ok: false, error: "Choose at least one label" };
+  const db = getDb();
+  const ownedRows = await db
+    .select({ id: bankTransactions.id })
+    .from(bankTransactions)
+    .innerJoin(bankAccounts, eq(bankTransactions.bankAccountId, bankAccounts.id))
+    .where(and(inArray(bankTransactions.id, uniqueRows), eq(bankAccounts.companyId, companyId)));
+  if (ownedRows.length !== uniqueRows.length) return { ok: false, error: "Row not found" };
+  const ownedLabels = await db
+    .select({ id: labels.id })
+    .from(labels)
+    .where(and(eq(labels.companyId, companyId), inArray(labels.id, uniqueLabels)));
+  if (ownedLabels.length !== uniqueLabels.length) return { ok: false, error: "Label not found" };
+  await db
+    .insert(bankTransactionLabels)
+    .values(
+      uniqueRows.flatMap((bankTransactionId) =>
+        uniqueLabels.map((labelId) => ({ bankTransactionId, labelId })),
+      ),
+    )
+    .onConflictDoNothing();
+  return { ok: true };
+}
+
 /** Save a row's note; an empty one removes it. Not a financial change, so period locks don't apply. */
 export async function setRowNote(
   companyId: string,

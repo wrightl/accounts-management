@@ -17,13 +17,13 @@ const forRole = (role: Role) => (p: Parameters<typeof can>[1]) => can(role, p);
 
 const CORE_LABELS = [
   "Overview",
+  "Queries",
   "Transactions",
   "Expenses",
   "Clients",
   "Invoices",
   "Reports",
   "Deadlines",
-  "Queries",
   "Settings",
 ];
 

@@ -4,6 +4,7 @@ import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
 import { auditLog, bankAccounts, bankTransactions, companies, expenses, users } from "@/db/schema";
 import {
+  addBankLabelsAction,
   createLabelAction,
   deleteLabelAction,
   setRowLabelsAction,
@@ -166,6 +167,43 @@ describe("row labels", () => {
     await setRowLabelsAction("expense", expA.id, [a]);
     const expenseRows = await listExpenses(companyId, { labels: [a, c] });
     expect(expenseRows.map((r) => r.id)).toEqual([expA.id]);
+  });
+});
+
+describe("adding labels to several transactions", () => {
+  it("adds to each row's labels without removing any", async () => {
+    const a = await label("A", "red");
+    const b = await label("B", "green");
+    const first = await bankTx();
+    const second = await bankTx();
+    await setRowLabelsAction("bank", first.id, [a]);
+
+    expect(await addBankLabelsAction([first.id, second.id], [a, b])).toMatchObject({ ok: true });
+
+    const { rows } = await listBankTransactions(companyId);
+    for (const row of rows) {
+      expect(row.labels.map((l) => l.id).sort()).toEqual([a, b].sort());
+    }
+    const [audit] = await db.select().from(auditLog).where(eq(auditLog.action, "bank.add_labels"));
+    expect(audit.meta).toMatchObject({ count: 2 });
+  });
+
+  it("changes nothing when one row or label isn't the company's", async () => {
+    const other = await seedCompany(db, { name: "Other Co", slug: "other-co" });
+    const [otherAccount] = await db
+      .insert(bankAccounts)
+      .values({ companyId: other.id, name: "Other", provider: "starling" })
+      .returning();
+    const mine = await bankTx();
+    const theirs = await bankTx(-1000, otherAccount.id);
+    const a = await label("A");
+
+    expect(await addBankLabelsAction([mine.id, theirs.id], [a])).toMatchObject({ ok: false });
+    expect(await addBankLabelsAction([mine.id], [crypto.randomUUID()])).toMatchObject({ ok: false });
+    expect(await addBankLabelsAction(["not-a-uuid"], [a])).toMatchObject({ ok: false });
+    expect(await addBankLabelsAction([mine.id], [])).toMatchObject({ ok: false });
+    const { rows } = await listBankTransactions(companyId);
+    expect(rows[0].labels).toEqual([]);
   });
 });
 

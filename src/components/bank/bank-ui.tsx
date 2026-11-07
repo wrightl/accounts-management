@@ -19,6 +19,7 @@ import {
   dismissBankMatch,
   dismissBankMatchesBatch,
   explainBankCreditAction,
+  explainBankCreditsAction,
   renameBankSpendingCategoryAction,
   runSuggestMatches,
   unlinkExpenseAction,
@@ -682,14 +683,18 @@ function CustomCategoriesDialog({
 export function ExplainCreditDialog({
   open,
   onClose,
-  transactionId,
+  onSaved,
+  transactionIds,
   incomeCategories,
 }: {
   open: boolean;
   onClose: () => void;
-  transactionId: string;
+  /** Called after a successful save, before the dialog closes. */
+  onSaved?: () => void;
+  transactionIds: readonly string[];
   incomeCategories: readonly string[];
 }) {
+  const count = transactionIds.length;
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -703,11 +708,16 @@ export function ExplainCreditDialog({
   };
 
   return (
-    <Dialog open={open} onClose={handleClose} title="Explain credit">
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      title={count === 1 ? "Explain credit" : `Explain ${count} credits`}
+    >
       <p className="text-sm text-muted">
-        Mark this incoming payment as other income, a transfer, or tax or loan
-        so it leaves the unreconciled list. Client payments should be matched to
-        an invoice instead.
+        {count === 1
+          ? "Mark this incoming payment as other income, a transfer, or tax or loan so it leaves the unreconciled list."
+          : `Give all ${count} incoming payments the same explanation so they leave the unreconciled list.`}{" "}
+        Client payments should be matched to an invoice instead.
       </p>
       <div className="mt-4 space-y-3">
         <div>
@@ -765,17 +775,27 @@ export function ExplainCreditDialog({
           onClick={() => {
             setError(null);
             startTransition(async () => {
-              const result = await explainBankCreditAction({
-                transactionId,
+              const explanation = {
                 matchType,
                 incomeCategory:
                   matchType === "other_income" ? incomeCategory : null,
                 note: note.trim() || null,
-              });
+              };
+              const result =
+                count === 1
+                  ? await explainBankCreditAction({
+                      transactionId: transactionIds[0],
+                      ...explanation,
+                    })
+                  : await explainBankCreditsAction({
+                      transactionIds: [...transactionIds],
+                      ...explanation,
+                    });
               if (!result.ok) {
                 setError(result.error ?? "Could not explain credit");
                 return;
               }
+              onSaved?.();
               router.refresh();
               onClose();
             });
@@ -1147,7 +1167,7 @@ export function ReconciliationCell({
         <ExplainCreditDialog
           open={explainOpen}
           onClose={() => setExplainOpen(false)}
-          transactionId={row.id}
+          transactionIds={[row.id]}
           incomeCategories={incomeCategories}
         />
       ) : null}

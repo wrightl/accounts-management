@@ -4,7 +4,8 @@ import { eq } from "drizzle-orm";
 import { requireActionPermission } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { recordScopeFor, withoutTeamAnnotations } from "@/lib/accountant/record-scope";
-import { parseLabelIds } from "@/lib/labels/params";
+import { isUuid, parseLabelIds } from "@/lib/labels/params";
+import { MAX_BULK_ROWS } from "@/lib/labels/queries";
 import { recordQueriesFor } from "@/lib/queries/queries";
 import { mutate, mutateWide } from "@/lib/mutate";
 import { getDb } from "@/db";
@@ -42,6 +43,7 @@ import {
   dismissMatch,
   dismissMatchesBatch,
   explainBankCredit,
+  explainBankCredits,
   findBankTransactionsForInvoice,
   findReimbursementBankMatches,
   getOrCreateBankAccount,
@@ -622,6 +624,54 @@ export async function explainBankCreditAction(input: {
         entityType: "bank_transaction",
         entityId: input.transactionId,
         meta: {
+          matchType,
+          incomeCategory: input.incomeCategory ?? null,
+        },
+      },
+      paths: ["/transactions", "/reports", "/dashboard"],
+    },
+  );
+}
+
+/** Give several incoming credits the same explanation, all or nothing. */
+export async function explainBankCreditsAction(input: {
+  transactionIds: string[];
+  matchType: string;
+  incomeCategory?: string | null;
+  note?: string | null;
+}): Promise<ActionResult> {
+  if (!isCreditExplainType(input.matchType)) {
+    return { ok: false, error: "Choose how to explain these credits" };
+  }
+  const matchType: CreditExplainType = input.matchType;
+  const ids = [...new Set(input.transactionIds)];
+  if (ids.length === 0) return { ok: false, error: "Select some transactions" };
+  if (ids.length > MAX_BULK_ROWS) {
+    return { ok: false, error: `Select up to ${MAX_BULK_ROWS} transactions at a time` };
+  }
+  if (!ids.every(isUuid)) return { ok: false, error: "Bank transaction not found" };
+
+  return mutate(
+    "accounts:write",
+    async ({ companyId }) => {
+      try {
+        await explainBankCredits(companyId, ids, {
+          matchType,
+          incomeCategory: input.incomeCategory,
+          note: input.note,
+        });
+        return { ok: true };
+      } catch (e) {
+        if (e instanceof ReconciliationError) return { ok: false, error: e.message };
+        throw e;
+      }
+    },
+    {
+      audit: {
+        action: "bank.explain_credit",
+        entityType: "bank_transaction",
+        meta: {
+          count: ids.length,
           matchType,
           incomeCategory: input.incomeCategory ?? null,
         },

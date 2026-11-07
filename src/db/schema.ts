@@ -520,6 +520,11 @@ export const invoiceImportDrafts = pgTable(
     invoiceId: uuid("invoice_id").references((): AnyPgColumn => invoices.id, {
       onDelete: "set null",
     }),
+    /** The bank payment chosen on review. Saving records the payment against it. */
+    bankTransactionId: uuid("bank_transaction_id").references(
+      (): AnyPgColumn => bankTransactions.id,
+      { onDelete: "set null" },
+    ),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
