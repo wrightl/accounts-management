@@ -18,6 +18,7 @@ const ok: Result = { error: null };
 
 const signIn = {
   status: "needs_identifier" as string,
+  supportedFirstFactors: [] as { strategy: string }[],
   create: vi.fn<(p: unknown) => Promise<Result>>(),
   reset: vi.fn(async () => ok),
   finalize: vi.fn<(p: unknown) => Promise<Result>>(),
@@ -34,6 +35,7 @@ vi.mock("@clerk/nextjs", () => ({
 
 beforeEach(() => {
   signIn.status = "needs_identifier";
+  signIn.supportedFirstFactors = [{ strategy: "reset_password_email_code" }];
   signIn.create.mockResolvedValue(ok);
   signIn.resetPasswordEmailCode.sendCode.mockResolvedValue(ok);
   signIn.resetPasswordEmailCode.verifyCode.mockImplementation(async () => {
@@ -108,12 +110,10 @@ describe("ForgotPasswordForm", () => {
   });
 
   it("treats an account that cannot reset by email like an unknown one", async () => {
-    signIn.resetPasswordEmailCode.sendCode.mockResolvedValue({
-      error: { code: "strategy_for_user_invalid", message: "Use Google to sign in" },
-    });
+    signIn.supportedFirstFactors = [{ strategy: "oauth_google" }];
     render(<ForgotPasswordForm />);
     await requestCode("google-only@example.com");
-    expect(screen.queryByText("Use Google to sign in")).toBeNull();
+    expect(signIn.resetPasswordEmailCode.sendCode).not.toHaveBeenCalled();
 
     submitReset();
     expect(
@@ -132,6 +132,19 @@ describe("ForgotPasswordForm", () => {
 
     await screen.findByText("Too many requests");
     expect(screen.queryByLabelText(/^Reset code/)).toBeNull();
+  });
+
+  it("reports other failures instead of pretending a code was sent", async () => {
+    signIn.resetPasswordEmailCode.sendCode.mockResolvedValue({
+      error: { status: 503, message: "Service unavailable" },
+    });
+    render(<ForgotPasswordForm />);
+    fill("Email", "a@example.com");
+    fireEvent.click(screen.getByRole("button", { name: "Send reset code" }));
+
+    await screen.findByText("Something went wrong. Try again in a moment");
+    expect(screen.queryByLabelText(/^Reset code/)).toBeNull();
+    expect(screen.queryByText("Service unavailable")).toBeNull();
   });
 
   it("shows the same message for a wrong code on a real account", async () => {

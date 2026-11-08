@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   clerkErrorMessage,
+  isIdentifierNotFound,
   isRateLimited,
   parsePasswordChange,
   parsePasswordReset,
@@ -131,5 +132,19 @@ describe("isRateLimited", () => {
     expect(isRateLimited({ code: "form_identifier_not_found" })).toBe(false);
     expect(isRateLimited({ status: 422, errors: [{ code: "strategy_for_user_invalid" }] })).toBe(false);
     expect(isRateLimited(null)).toBe(false);
+  });
+});
+
+describe("isIdentifierNotFound", () => {
+  it("spots the not-found code on a ClerkError or in an API error list", () => {
+    expect(isIdentifierNotFound({ code: "form_identifier_not_found" })).toBe(true);
+    expect(
+      isIdentifierNotFound({ errors: [{ code: "form_identifier_not_found" }] }),
+    ).toBe(true);
+  });
+
+  it("ignores other errors", () => {
+    expect(isIdentifierNotFound({ code: "too_many_requests" })).toBe(false);
+    expect(isIdentifierNotFound(null)).toBe(false);
   });
 });

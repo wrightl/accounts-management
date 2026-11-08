@@ -12,6 +12,7 @@ import { useFieldErrors } from "@/components/ui/use-field-errors";
 import { PasswordField } from "@/components/users/password-section";
 import {
   clerkErrorMessage,
+  isIdentifierNotFound,
   isRateLimited,
   parsePasswordReset,
   parseResetEmail,
@@ -22,6 +23,7 @@ type Step = "email" | "reset" | "sign-in";
 
 /** Same message for a wrong code and an unknown email, so neither leaks. */
 const BAD_CODE = "That code is not right or has expired";
+const TRY_AGAIN = "Something went wrong. Try again in a moment";
 
 /**
  * Forgot password flow: email a reset code, then take the code and a new
@@ -37,26 +39,43 @@ export function ForgotPasswordForm() {
   const [email, setEmail] = useState("");
   const [pending, setPending] = useState(false);
   const [resent, setResent] = useState(false);
-  // False when no code went out: no account uses the email, or the account
-  // cannot reset by email code (for example Google only). The page acts as if
-  // a code was sent anyway, so it cannot be used to find out who has an account.
+  // False when no code went out because no account uses the email, or the
+  // account cannot reset by email code (for example Google only). The page
+  // acts as if a code was sent, so it cannot reveal who has an account.
   const [accountFound, setAccountFound] = useState(false);
+
+  // Pretend a code went out, for an unknown email or one that cannot reset.
+  function silentlySkip(): true {
+    setAccountFound(false);
+    return true;
+  }
+
+  // Errors that are not about the account. Same for every email, so they
+  // leak nothing, and the user knows to try again.
+  function showFailure(err: unknown): false {
+    setError(
+      isRateLimited(err)
+        ? clerkErrorMessage(err, "Too many attempts. Try again later")
+        : TRY_AGAIN,
+    );
+    return false;
+  }
 
   async function sendCode(address: string): Promise<boolean> {
     const created = await signIn.create({ identifier: address });
-    const sent = created.error
-      ? created
-      : await signIn.resetPasswordEmailCode.sendCode();
-    if (!sent.error) {
-      setAccountFound(true);
-      return true;
+    if (created.error) {
+      return isIdentifierNotFound(created.error)
+        ? silentlySkip()
+        : showFailure(created.error);
     }
-    // Only a rate limit is shown, since it says nothing about the account.
-    if (isRateLimited(sent.error)) {
-      setError(clerkErrorMessage(sent.error, "Too many attempts. Try again later"));
-      return false;
-    }
-    setAccountFound(false);
+    const canReset = signIn.supportedFirstFactors.some(
+      (f) => f.strategy === "reset_password_email_code",
+    );
+    if (!canReset) return silentlySkip();
+
+    const sent = await signIn.resetPasswordEmailCode.sendCode();
+    if (sent.error) return showFailure(sent.error);
+    setAccountFound(true);
     return true;
   }
 
