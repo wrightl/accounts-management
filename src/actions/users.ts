@@ -6,7 +6,7 @@ import { z } from "zod";
 import { clerkClient } from "@clerk/nextjs/server";
 import { getDb } from "@/db";
 import { users } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
+import { requireActionUser } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { mutate } from "@/lib/mutate";
 import { isPlatformAdminRole, isTenantRole, type TenantRole } from "@/lib/roles";
@@ -410,7 +410,11 @@ export async function updateOwnProfile(formData: FormData): Promise<ActionResult
     };
   }
 
-  const session = await requireUser();
+  const authz = await requireActionUser();
+
+  if (!authz.ok) return authz;
+
+  const session = authz.user;
   const localUserId = await ensureLocalUser(session);
   const name = parsed.data.name?.trim() || null;
 
@@ -473,7 +477,11 @@ export async function updateOwnUiPrefs(formData: FormData): Promise<ActionResult
     };
   }
 
-  const session = await requireUser();
+  const authz = await requireActionUser();
+
+  if (!authz.ok) return authz;
+
+  const session = authz.user;
   const localUserId = await ensureLocalUser(session);
   const prefs = parseUiPrefs(parsed.data);
 
@@ -542,7 +550,11 @@ export async function uploadProfilePicture(formData: FormData): Promise<ActionRe
     };
   }
 
-  const session = await requireUser();
+  const authz = await requireActionUser();
+
+  if (!authz.ok) return authz;
+
+  const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
   try {
@@ -570,7 +582,9 @@ export async function uploadProfilePicture(formData: FormData): Promise<ActionRe
 }
 
 export async function removeProfilePicture(): Promise<ActionResult> {
-  const session = await requireUser();
+  const authz = await requireActionUser();
+  if (!authz.ok) return authz;
+  const session = authz.user;
   const localUserId = await ensureLocalUser(session);
 
   try {
@@ -605,7 +619,11 @@ export async function switchCompany(companyId: string): Promise<ActionResult> {
     return { ok: false, error: "Invalid company" };
   }
 
-  const session = await requireUser();
+  const authz = await requireActionUser();
+
+  if (!authz.ok) return authz;
+
+  const session = authz.user;
   const localUserId = await ensureLocalUser(session);
   const membership = await getMembership(localUserId, parsed.data);
   if (!membership) {

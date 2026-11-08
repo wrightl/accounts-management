@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getDb } from "@/db";
 import { companies } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
+import { requireActionUser } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { storeCompanyLogo } from "@/lib/company-logo";
 import { uniquifyCompanySlug } from "@/lib/expenses/inbound-mailbox";
@@ -39,7 +39,9 @@ async function readSignupPlanChoice(): Promise<SignupPlanChoice | null> {
 export async function completeOnboarding(
   formData: FormData,
 ): Promise<ActionResult> {
-  let session = await requireUser();
+  const authz = await requireActionUser();
+  if (!authz.ok) return authz;
+  let session = authz.user;
   const localUserId = await ensureLocalUser(session);
   const local = await findLocalUser(session.userId);
   if (local) {

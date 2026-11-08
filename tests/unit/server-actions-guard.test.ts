@@ -13,6 +13,7 @@ const GUARDS = [
   "mutate",
   "mutateWide",
   "requireActionPermission",
+  "requireActionUser",
   "requirePermission",
   "requireUser",
   "platformMutate",

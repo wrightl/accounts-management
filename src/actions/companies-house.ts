@@ -3,7 +3,7 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { companies } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
+import { requireActionUser } from "@/lib/auth";
 import { mutate } from "@/lib/mutate";
 import { lookupCompany } from "@/lib/companies-house/client";
 import type { CompaniesHouseCompany } from "@/lib/companies-house/parse";
@@ -21,7 +21,8 @@ export type CompaniesHouseLookupResult =
 export async function lookupCompaniesHouse(
   companyNumber: string,
 ): Promise<CompaniesHouseLookupResult> {
-  await requireUser();
+  const authz = await requireActionUser();
+  if (!authz.ok) return authz;
   return lookupCompany(companyNumber);
 }
 
