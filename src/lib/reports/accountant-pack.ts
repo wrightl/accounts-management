@@ -250,6 +250,7 @@ export async function streamAccountantPack({
     .select({
       id: dividendPayouts.id,
       declaredAt: dividendDeclarations.declaredAt,
+      shareholderId: dividendPayouts.shareholderId,
       shareholderName: dividendPayouts.shareholderName,
       shareCount: dividendPayouts.shareCount,
       amountPence: dividendPayouts.amountPence,
@@ -432,6 +433,99 @@ export async function streamAccountantPack({
   const online = (path: string | null): Cell[] =>
     !webLinks ? [] : [path ? { text: "Open in Alfa", link: { url: `${webBase}${path}` } } : ""];
 
+  // Workbook only: columns linking each record to the records tied to it, in both directions.
+  const xl = <T,>(...items: T[]): T[] => (format === "xlsx" ? items : []);
+  const paymentsByInvoice = Map.groupBy(payRows, (p) => p.invoiceId);
+  const linesByInvoice = Map.groupBy(lineRows, (l) => l.invoiceId);
+  const creditNotesByInvoice = Map.groupBy(creditNoteRows, (c) => c.invoiceId);
+  const linesByCreditNote = Map.groupBy(creditNoteLineRows, (l) => l.creditNoteId);
+  const itemsByReimbursement = Map.groupBy(allReimbItems, (i) => i.reimbursementId);
+  const reimbursementByExpense = new Map(allReimbItems.map((i) => [i.expenseId, i.reimbursementId]));
+  const invoicesBySchedule = Map.groupBy(invRows, (r) => r.recurringInvoiceId);
+  const dividendsByShareholder = Map.groupBy(dividendRows, (d) => d.shareholderId);
+  const matchesByBankTx = Map.groupBy(reconRows, (m) => m.bankTransactionId);
+  const bankTxFor = (recordId: (m: (typeof reconRows)[number]) => string | null) =>
+    new Map(
+      reconRows.flatMap((m) => {
+        const id = recordId(m);
+        return id ? [[id, m.bankTransactionId] as const] : [];
+      }),
+    );
+  const bankTxByExpense = bankTxFor((m) => m.expenseId);
+  const bankTxByPayment = bankTxFor((m) => m.paymentId);
+  const bankTxByReimbursement = bankTxFor((m) => m.reimbursementId);
+  const bankTxById = new Map(bankTxRows.map((t) => [t.id, t]));
+  const expenseById = new Map(expRows.map((r) => [r.expense.id, r.expense]));
+  const paymentById = new Map(payRows.map((p) => [p.id, p]));
+  const reimbursementById = new Map(reimbRows.map((r) => [r.id, r]));
+
+  /** "3 payments", linking to the first of them; blank when there are none. */
+  const countLink = (
+    count: number | undefined,
+    singular: string,
+    plural: string,
+    table: string,
+    firstKey: string | undefined,
+  ): Cell =>
+    count && firstKey
+      ? rowLink(`${count} ${count === 1 ? singular : plural}`, table, firstKey)
+      : "";
+
+  const bankTxCell = (bankTxId: string | undefined): Cell => {
+    if (!bankTxId) return "";
+    const t = bankTxById.get(bankTxId);
+    const label = t ? `${t.bookedAt} ${t.counterparty ?? t.description ?? ""}`.trim() : bankTxId;
+    return rowLink(label, "bank-transactions.csv", bankTxId);
+  };
+
+  const reimbursementCell = (reimbursementId: string | undefined): Cell => {
+    if (!reimbursementId) return "";
+    const r = reimbursementById.get(reimbursementId);
+    const label = r ? `${r.payeeName || r.payeeEmail}${r.reference ? ` (${r.reference})` : ""}` : reimbursementId;
+    return rowLink(label, "reimbursements.csv", reimbursementId);
+  };
+
+  /** What a bank transaction was reconciled to, linking to that record. */
+  const matchedToCell = (bankTxId: string): Cell => {
+    const matches = matchesByBankTx.get(bankTxId) ?? [];
+    if (matches.length === 0) return "";
+    if (matches.length > 1) {
+      return rowLink(`${matches.length} matches`, "reconciliation-matches.csv", matches[0].id);
+    }
+    const [m] = matches;
+    if (m.matchType === "expense" && m.expenseId) {
+      const expense = expenseById.get(m.expenseId);
+      return rowLink(`Expense: ${expense?.description ?? "not in this pack"}`, "expenses.csv", m.expenseId);
+    }
+    if (m.matchType === "invoice_payment" && m.paymentId) {
+      const payment = paymentById.get(m.paymentId);
+      return rowLink(
+        `Payment for ${payment?.invoiceNumber ?? "an invoice"}`,
+        "payments.csv",
+        m.paymentId,
+      );
+    }
+    if (m.matchType === "invoice_payment" && m.invoiceId) {
+      return rowLink(
+        `Invoice ${invNumberById.get(m.invoiceId) ?? ""}`.trim(),
+        invoiceTable(m.invoiceId),
+        m.invoiceId,
+      );
+    }
+    if (m.matchType === "reimbursement" && m.reimbursementId) {
+      const label = reimbursementCell(m.reimbursementId);
+      return rowLink(`Reimbursement: ${cellText(label)}`, "reimbursements.csv", m.reimbursementId);
+    }
+    if (m.matchType === "other_income") {
+      return rowLink(
+        `Other income${m.incomeCategory ? `: ${m.incomeCategory}` : ""}`,
+        "other-income.csv",
+        bankTxId,
+      );
+    }
+    return rowLink(MATCH_LABELS[m.matchType], "reconciliation-matches.csv", m.id);
+  };
+
   const broughtForwardTable = (path: string, rows: typeof broughtForwardTableRows): PackTable => ({
     path,
     key: 0,
@@ -446,6 +540,7 @@ export async function streamAccountantPack({
       "vat_gbp",
       "gross_gbp",
       "balance_gbp",
+      ...xl("payments", "credit_notes"),
       ...onlineHeader,
     ],
     rows: rows.map((r) => [
@@ -459,9 +554,20 @@ export async function streamAccountantPack({
       money(r.vatPence),
       money(r.grossPence),
       money(r.balancePence),
+      ...xl(invoicePaymentsCell(r.id), invoiceCreditNotesCell(r.id)),
       ...online(`/api/invoices/${r.id}/pdf`),
     ]),
   });
+
+  function invoicePaymentsCell(invoiceId: string) {
+    const rows = paymentsByInvoice.get(invoiceId);
+    return countLink(rows?.length, "payment", "payments", "payments.csv", rows?.[0].id);
+  }
+
+  function invoiceCreditNotesCell(invoiceId: string) {
+    const rows = creditNotesByInvoice.get(invoiceId);
+    return countLink(rows?.length, "credit note", "credit notes", "credit-notes.csv", rows?.[0].id);
+  }
 
   // Built after the files are fetched: links and the receipt index depend on the results.
   const buildTables = (): PackTable[] => [
@@ -568,6 +674,7 @@ export async function streamAccountantPack({
         "net_gbp",
         "vat_gbp",
         "gross_gbp",
+        ...xl("line_items", "payments", "credit_notes"),
         ...onlineHeader,
       ],
       rows: invRows.map((r) => [
@@ -586,11 +693,18 @@ export async function streamAccountantPack({
         money(r.netPence),
         money(r.vatPence),
         money(r.grossPence),
+        ...xl(
+          countLink(linesByInvoice.get(r.id)?.length, "line", "lines", "invoice-line-items.csv", r.id),
+          invoicePaymentsCell(r.id),
+          invoiceCreditNotesCell(r.id),
+        ),
         ...online(`/api/invoices/${r.id}/pdf`),
       ]),
     },
     {
       path: "invoice-line-items.csv",
+      // Links to an invoice's lines land on its first one.
+      key: 0,
       headers: [
         "invoice_id",
         "invoice_number",
@@ -630,6 +744,7 @@ export async function streamAccountantPack({
         "refunded_at",
         "refund_reference",
         "on_brought_forward_invoice",
+        ...xl("line_items"),
         ...onlineHeader,
       ],
       rows: creditNoteRows.map((r) => [
@@ -647,11 +762,21 @@ export async function streamAccountantPack({
         r.refundedAt ?? "",
         r.refundReference ?? "",
         r.broughtForward ? "yes" : "no",
+        ...xl(
+          countLink(
+            linesByCreditNote.get(r.id)?.length,
+            "line",
+            "lines",
+            "credit-note-line-items.csv",
+            r.id,
+          ),
+        ),
         ...online(r.status === "issued" ? `/api/credit-notes/${r.id}/pdf` : null),
       ]),
     },
     {
       path: "credit-note-line-items.csv",
+      key: 0,
       headers: [
         "credit_note_id",
         "credit_note_number",
@@ -685,6 +810,7 @@ export async function streamAccountantPack({
         "reference",
         "received_at",
         "on_brought_forward_invoice",
+        ...xl("bank_transaction"),
       ],
       rows: payRows.map((r) => [
         r.id,
@@ -695,6 +821,7 @@ export async function streamAccountantPack({
         r.reference ?? "",
         r.receivedAt.toISOString(),
         r.broughtForward ? "yes" : "no",
+        ...xl(bankTxCell(bankTxByPayment.get(r.id))),
       ]),
     },
     {
@@ -716,7 +843,7 @@ export async function streamAccountantPack({
         "mileage_rate_pence",
         "notes",
         // The CSV has receipts-index.csv for this; the workbook links straight to the file.
-        ...(format === "xlsx" ? ["receipt"] : []),
+        ...xl("receipt", "bank_transaction", "reimbursement"),
         ...onlineHeader,
       ],
       rows: expRows.map((r) => [
@@ -734,7 +861,11 @@ export async function streamAccountantPack({
         r.expense.mileageMiles != null ? num(r.expense.mileageMiles) : "",
         r.expense.mileageRatePence != null ? num(r.expense.mileageRatePence) : "",
         sharedNote(r.expense) ?? "",
-        ...(format === "xlsx" ? [receiptCell(receiptFilesByExpense.get(r.expense.id))] : []),
+        ...xl(
+          receiptCell(receiptFilesByExpense.get(r.expense.id)),
+          bankTxCell(bankTxByExpense.get(r.expense.id)),
+          reimbursementCell(reimbursementByExpense.get(r.expense.id)),
+        ),
         // Several receipts are each linked on the Receipts tab.
         ...online(onlyReceiptPath(receiptFilesByExpense.get(r.expense.id))),
       ]),
@@ -778,6 +909,7 @@ export async function streamAccountantPack({
         "total_gbp",
         "created_at",
         "paid_at",
+        ...xl("items", "bank_transaction"),
       ],
       rows: reimbRows.map((r) => [
         r.id,
@@ -787,10 +919,21 @@ export async function streamAccountantPack({
         money(r.totalPence),
         r.createdAt.toISOString(),
         r.paidAt?.toISOString() ?? "",
+        ...xl(
+          countLink(
+            itemsByReimbursement.get(r.id)?.length,
+            "item",
+            "items",
+            "reimbursement-items.csv",
+            r.id,
+          ),
+          bankTxCell(bankTxByReimbursement.get(r.id)),
+        ),
       ]),
     },
     {
       path: "reimbursement-items.csv",
+      key: 0,
       headers: ["reimbursement_id", "expense_id", "description", "amount_gbp"],
       rows: allReimbItems.map((r) => [
         rowLink(r.reimbursementId, "reimbursements.csv", r.reimbursementId),
@@ -813,6 +956,7 @@ export async function streamAccountantPack({
         "spending_category",
         "tags",
         "notes",
+        ...xl("matched_to"),
       ],
       rows: bankTxRows.map((t) => [
         t.id,
@@ -825,10 +969,12 @@ export async function streamAccountantPack({
         t.spendingCategory ?? "",
         (t.tags ?? []).join("; "),
         sharedNote(t) ?? "",
+        ...xl(matchedToCell(t.id)),
       ]),
     },
     {
       path: "reconciliation-matches.csv",
+      key: 0,
       headers: [
         "id",
         "bank_transaction_id",
@@ -860,6 +1006,7 @@ export async function streamAccountantPack({
     },
     {
       path: "other-income.csv",
+      key: 0,
       headers: [
         "bank_transaction_id",
         "bank_account",
@@ -881,6 +1028,7 @@ export async function streamAccountantPack({
     },
     {
       path: "dividends.csv",
+      key: 0,
       headers: [
         "id",
         "declared_at",
@@ -892,7 +1040,9 @@ export async function streamAccountantPack({
       rows: dividendRows.map((d) => [
         d.id,
         d.declaredAt,
-        d.shareholderName,
+        d.shareholderId
+          ? rowLink(d.shareholderName, "shareholders.csv", d.shareholderId)
+          : d.shareholderName,
         d.shareCount != null ? num(d.shareCount) : "",
         money(d.amountPence),
         d.notes ?? "",
@@ -900,6 +1050,7 @@ export async function streamAccountantPack({
     },
     {
       path: "shareholders.csv",
+      key: 0,
       headers: [
         "id",
         "name",
@@ -907,6 +1058,7 @@ export async function streamAccountantPack({
         "percent",
         "status",
         "linked_user_email",
+        ...xl("dividends"),
       ],
       rows: shareRegister.shareholders.map((s) => [
         s.id,
@@ -915,6 +1067,15 @@ export async function streamAccountantPack({
         s.percent != null ? num(Number(s.percent.toFixed(2)), s.percent.toFixed(2)) : "",
         s.archivedAt ? "archived" : "active",
         s.userEmail ?? "",
+        ...xl(
+          countLink(
+            dividendsByShareholder.get(s.id)?.length,
+            "dividend",
+            "dividends",
+            "dividends.csv",
+            dividendsByShareholder.get(s.id)?.[0].id,
+          ),
+        ),
       ]),
     },
     {
@@ -932,6 +1093,7 @@ export async function streamAccountantPack({
         "max_occurrences",
         "next_run_on",
         "gross_gbp",
+        ...xl("invoices"),
       ],
       rows: recurringRows.map((r) => [
         r.id,
@@ -945,6 +1107,15 @@ export async function streamAccountantPack({
         r.maxOccurrences != null ? num(r.maxOccurrences) : "",
         r.nextRunOn ?? "",
         money(r.grossPence),
+        ...xl(
+          countLink(
+            invoicesBySchedule.get(r.id)?.length,
+            "invoice",
+            "invoices",
+            "invoices.csv",
+            invoicesBySchedule.get(r.id)?.[0].id,
+          ),
+        ),
       ]),
     },
     broughtForwardTable("reference/brought-forward-invoices.csv", broughtForwardTableRows),
@@ -1119,6 +1290,15 @@ function creditNotePdfPath(number: string) {
 
 const WORKBOOK_PATH = "accountant-pack.xlsx";
 
+const MATCH_LABELS: Record<(typeof reconciliationMatches.$inferSelect)["matchType"], string> = {
+  invoice_payment: "Invoice payment",
+  expense: "Expense",
+  reimbursement: "Reimbursement",
+  other_income: "Other income",
+  transfer: "Transfer",
+  tax_or_loan: "Tax or loan",
+};
+
 /** Tab name for each table, keyed by its CSV path. */
 const SHEETS: Record<string, string> = {
   "summary/company.csv": "Company",
@@ -1215,9 +1395,55 @@ function toSheets(tables: PackTable[]): XlsxSheet[] {
 
   return tables.map((t) => ({
     name: SHEETS[t.path],
-    headers: t.headers,
+    headers: t.headers.map(headerLabel),
     rows: t.rows.map((r) => r.map(toCell)),
   }));
+}
+
+/** Workbook headers where the CSV column name doesn't read well as plain English. */
+const HEADER_LABELS: Record<string, string> = {
+  metric: "Item",
+  bucket: "Age",
+  sent_at: "Sent",
+  paid_at: "Paid",
+  refunded_at: "Refunded",
+  received_at: "Received",
+  spent_at: "Spent on",
+  uploaded_at: "Uploaded",
+  created_at: "Created",
+  booked_at: "Date",
+  declared_at: "Declared on",
+  ends_on: "Ends on",
+  next_run_on: "Next run on",
+  vat_rate: "VAT rate (%)",
+  discount_percent: "Discount (%)",
+  percent: "Shareholding (%)",
+  share_count: "Shares",
+  size_bytes: "Size (bytes)",
+  content_type: "File type",
+  zip_path: "File in zip",
+  paid_by_email: "Paid by",
+  linked_user_email: "Linked user",
+  mileage_miles: "Mileage (miles)",
+  mileage_rate_pence: "Mileage rate (pence)",
+  on_generate: "When generated",
+  occurrence_count: "Invoices so far",
+  max_occurrences: "Invoice limit",
+  open_in_alfa: "Open in Alfa",
+  on_brought_forward_invoice: "On brought forward invoice",
+};
+
+const ACRONYMS: Record<string, string> = { id: "ID", vat: "VAT" };
+
+/** `unit_price_gbp` → "Unit price (£)", `invoice_id` → "Invoice ID". */
+export function headerLabel(column: string): string {
+  const label = HEADER_LABELS[column];
+  if (label) return label;
+  const words = column.split("_");
+  const money = words.at(-1) === "gbp";
+  if (money) words.pop();
+  const text = words.map((w) => ACRONYMS[w] ?? w).join(" ");
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)}${money ? " (£)" : ""}`;
 }
 
 /** Suffix a repeated path (`a.jpg`, `a-2.jpg`). Ignores case, as unzipping on macOS and Windows does. */
@@ -1292,8 +1518,11 @@ function buildReadme({
           "    Shareholders — share register at export time (not period-filtered)",
           "    Recurring invoices — current schedules (not period-filtered)",
           "    Brought forward invoices + Open brought forward — imported invoices from before cutover (all dates)",
-          "  Linked ids and numbers jump to the related row. Invoice, credit note and receipt links",
-          "  open the file, once this zip is extracted with the workbook left beside its folders.",
+          "  Each tab is an Excel table you can sort and filter. Linked ids, numbers and counts jump to the",
+          "  related row: a bank transaction to what it was reconciled to, an expense to its bank transaction",
+          "  and reimbursement, an invoice to its lines, payments and credit notes, and back again.",
+          "  Invoice, credit note and receipt links open the file, once this zip is extracted with the",
+          "  workbook left beside its folders.",
           "  invoices/         — invoice PDFs",
           "  credit-notes/     — PDFs for issued credit notes",
           "  receipts/         — expense attachments",
@@ -1319,6 +1548,7 @@ function buildReadme({
           "  reference/        — imported invoices brought forward from before cutover (all dates), with any originals",
         ];
   const name = (path: string) => (format === "xlsx" ? SHEETS[path] : path);
+  const column = (header: string) => (format === "xlsx" ? `"${headerLabel(header)}"` : header);
   const lines = [
     "Alfa accountant pack",
     `Period: ${from} to ${to}`,
@@ -1331,9 +1561,9 @@ function buildReadme({
     "  Invoiced income is accrual (by issue date), less credit notes by their issue date.",
     "  Other income is cash on the bank date.",
     `  ${name("payments.csv")} is cash received. Expenses exclude pending email submissions.`,
-    "  Invoices link to recurring schedules via recurring_schedule when generated from one.",
+    `  Invoices link to recurring schedules via ${column("recurring_schedule")} when generated from one.`,
     `  Imported invoices dated before the cutover are brought forward: excluded from P&L, VAT and ${name("invoices.csv")}, but still in aged receivables.`,
-    "  Payments and credit notes on them count from the cutover date onwards, and are flagged on_brought_forward_invoice.",
+    `  Payments and credit notes on them count from the cutover date onwards, and are flagged ${column("on_brought_forward_invoice")}.`,
     `  The notes column in ${name("expenses.csv")} and ${name("bank-transactions.csv")} only has notes the team chose to share with you.`,
   ];
   if (format === "xlsx") {
@@ -1345,7 +1575,7 @@ function buildReadme({
       "  folder rather than the single file, so every file in it opens without asking again.",
       ...(webLinks
         ? [
-            "  Or use the open_in_alfa column, which opens the same document in Alfa in your browser (sign in to Alfa first).",
+            `  Or use the ${headerLabel("open_in_alfa")} column, which opens the same document in Alfa in your browser (sign in to Alfa first).`,
           ]
         : []),
     );

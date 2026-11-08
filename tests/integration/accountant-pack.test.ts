@@ -569,6 +569,22 @@ describe("accountant pack integration", () => {
       invoiceId: invoice.id,
       confirmed: true,
     });
+    const [expenseTx] = await db
+      .insert(bankTransactions)
+      .values({
+        bankAccountId: account.id,
+        externalId: "tx-excel-expense",
+        bookedAt: "2026-04-16",
+        amountPence: -4500,
+        counterparty: "Trainline",
+      })
+      .returning();
+    await db.insert(reconciliationMatches).values({
+      bankTransactionId: expenseTx.id,
+      matchType: "expense",
+      expenseId: expense.id,
+      confirmed: true,
+    });
 
     const { stream, filename } = await streamAccountantPack({
       companyId,
@@ -588,19 +604,42 @@ describe("accountant pack integration", () => {
     const readme = extractZipText(zip, "README.txt");
     expect(readme).toContain("accountant-pack.xlsx — one tab per table");
     expect(readme).toContain("Excel for Mac asks for permission");
-    expect(readme).toContain("open_in_alfa column");
+    expect(readme).toContain("Open in Alfa column");
 
     const book = readWorkbook(zip);
     expect([...book.keys()]).toEqual(
       expect.arrayContaining(["Company", "P&L", "VAT", "Invoices", "Payments", "Expenses", "Receipts", "Reconciliation"]),
     );
 
+    // Each tab is an Excel table, with plain-English headers matching its columns.
+    const invoicesTab = book.get("Invoices")!;
+    expect(invoicesTab.xml).toContain('<tableParts count="1">');
+    expect(invoicesTab.table).toContain('name="Table_Invoices"');
+    expect(invoicesTab.table).toContain('<tableColumn id="5" name="Issue date"/>');
+    expect(invoicesTab.table).toContain('name="Net (£)"');
+    expect(invoicesTab.xml).toContain(">Issue date<");
+    expect(invoicesTab.xml).not.toContain(">issue_date<");
+    expect(book.get("P&L")!.table).toContain('name="Table_PandL"');
+
     const paymentsSheet = book.get("Payments")!;
     expect(paymentsSheet.xml).toContain(`<hyperlink ref="B2" location="'Invoices'!A2"/>`);
-    expect(paymentsSheet.xml).toContain('<c r="D2" s="2"><v>100</v></c>');
+    expect(paymentsSheet.xml).toContain('<c r="D2" s="1"><v>100</v></c>');
+    // Back to the bank transaction it was reconciled with.
+    expect(paymentsSheet.xml).toContain(`location="'Bank transactions'!A2"`);
+
+    // Bank transactions link to what they were reconciled to, and the records link back.
+    const bankTab = book.get("Bank transactions")!.xml;
+    expect(bankTab).toContain(">Matched to<");
+    expect(bankTab).toContain(">Payment for DD-2026-0200<");
+    expect(bankTab).toContain(`location="'Payments'!A2"`);
+    expect(bankTab).toContain(">Expense: Receipts test<");
+    expect(bankTab).toContain(`location="'Expenses'!A2"`);
+    expect(book.get("Expenses")!.xml).toContain(">2026-04-16 Trainline<");
+    expect(book.get("Expenses")!.xml).toContain(`location="'Bank transactions'!A3"`);
+    expect(invoicesTab.xml).toContain(">1 payment<");
 
     expect(book.get("Invoices")!.rels).toContain('Target="invoices/DD-2026-0200.pdf"');
-    expect(book.get("Invoices")!.xml).toContain(">open_in_alfa<");
+    expect(book.get("Invoices")!.xml).toContain(">Open in Alfa<");
     expect(book.get("Invoices")!.rels).toContain(
       `Target="https://alfa.test/api/invoices/${invoice.id}/pdf" TargetMode="External"`,
     );
@@ -639,8 +678,8 @@ describe("accountant pack integration", () => {
     expect(book.has("P&L")).toBe(true);
     expect(book.has("VAT")).toBe(false);
     // Without Alfa's address there's nothing to link to online.
-    expect(book.get("Invoices")!.xml).not.toContain("open_in_alfa");
-    expect(extractZipText(zip, "README.txt")).not.toContain("open_in_alfa");
+    expect(book.get("Invoices")!.xml).not.toContain("Open in Alfa");
+    expect(extractZipText(zip, "README.txt")).not.toContain("Open in Alfa");
   });
 
   it("leaves out the VAT summary when the plan has no VAT export", async () => {
@@ -814,7 +853,7 @@ function readCentralDirectory(zip: Uint8Array): string[] {
   return names;
 }
 
-/** Each tab of the pack's workbook by name: its sheet XML and its file links. */
+/** Each tab of the pack's workbook by name: its sheet XML, its links and its table. */
 function readWorkbook(zip: Uint8Array) {
   const parts = new Map(
     readStoreZipEntries(extractZipEntry(zip, "accountant-pack.xlsx")).map(
@@ -828,6 +867,7 @@ function readWorkbook(zip: Uint8Array) {
       {
         xml: parts.get(`xl/worksheets/sheet${id}.xml`)!,
         rels: parts.get(`xl/worksheets/_rels/sheet${id}.xml.rels`) ?? "",
+        table: parts.get(`xl/tables/table${id}.xml`) ?? "",
       },
     ]),
   );
