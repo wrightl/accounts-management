@@ -98,13 +98,16 @@ export function clerkErrorMessage(err: unknown, fallback: string): string {
   return fallback;
 }
 
-/** Whether Clerk rejected the identifier because no account uses it. */
-export function isIdentifierNotFound(err: unknown): boolean {
+/** Whether Clerk refused the request for being too frequent. */
+export function isRateLimited(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
-  const e = err as { code?: unknown; errors?: { code?: unknown }[] };
-  if (e.code === "form_identifier_not_found") return true;
+  const e = err as {
+    status?: unknown;
+    code?: unknown;
+    errors?: { code?: unknown }[];
+  };
+  if (e.status === 429 || e.code === "too_many_requests") return true;
   return (
-    Array.isArray(e.errors) &&
-    e.errors.some((x) => x?.code === "form_identifier_not_found")
+    Array.isArray(e.errors) && e.errors.some((x) => x?.code === "too_many_requests")
   );
 }

@@ -107,6 +107,33 @@ describe("ForgotPasswordForm", () => {
     expect(signIn.resetPasswordEmailCode.verifyCode).not.toHaveBeenCalled();
   });
 
+  it("treats an account that cannot reset by email like an unknown one", async () => {
+    signIn.resetPasswordEmailCode.sendCode.mockResolvedValue({
+      error: { code: "strategy_for_user_invalid", message: "Use Google to sign in" },
+    });
+    render(<ForgotPasswordForm />);
+    await requestCode("google-only@example.com");
+    expect(screen.queryByText("Use Google to sign in")).toBeNull();
+
+    submitReset();
+    expect(
+      (await screen.findAllByText("That code is not right or has expired")).length,
+    ).toBeGreaterThan(0);
+    expect(signIn.resetPasswordEmailCode.verifyCode).not.toHaveBeenCalled();
+  });
+
+  it("shows a rate limit and stays on the email step", async () => {
+    signIn.create.mockResolvedValue({
+      error: { status: 429, code: "too_many_requests", message: "Too many requests" },
+    });
+    render(<ForgotPasswordForm />);
+    fill("Email", "a@example.com");
+    fireEvent.click(screen.getByRole("button", { name: "Send reset code" }));
+
+    await screen.findByText("Too many requests");
+    expect(screen.queryByLabelText(/^Reset code/)).toBeNull();
+  });
+
   it("shows the same message for a wrong code on a real account", async () => {
     signIn.resetPasswordEmailCode.verifyCode.mockResolvedValue({
       error: { code: "form_code_incorrect", message: "Incorrect code" },

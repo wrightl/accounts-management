@@ -12,7 +12,7 @@ import { useFieldErrors } from "@/components/ui/use-field-errors";
 import { PasswordField } from "@/components/users/password-section";
 import {
   clerkErrorMessage,
-  isIdentifierNotFound,
+  isRateLimited,
   parsePasswordReset,
   parseResetEmail,
   PASSWORD_MIN_LENGTH,
@@ -37,26 +37,26 @@ export function ForgotPasswordForm() {
   const [email, setEmail] = useState("");
   const [pending, setPending] = useState(false);
   const [resent, setResent] = useState(false);
-  // False when no account uses the email. The page acts as if a code was
-  // sent anyway, so it cannot be used to find out who has an account.
+  // False when no code went out: no account uses the email, or the account
+  // cannot reset by email code (for example Google only). The page acts as if
+  // a code was sent anyway, so it cannot be used to find out who has an account.
   const [accountFound, setAccountFound] = useState(false);
 
   async function sendCode(address: string): Promise<boolean> {
     const created = await signIn.create({ identifier: address });
-    if (created.error) {
-      if (isIdentifierNotFound(created.error)) {
-        setAccountFound(false);
-        return true;
-      }
-      setError(clerkErrorMessage(created.error, "We could not send a reset code"));
+    const sent = created.error
+      ? created
+      : await signIn.resetPasswordEmailCode.sendCode();
+    if (!sent.error) {
+      setAccountFound(true);
+      return true;
+    }
+    // Only a rate limit is shown, since it says nothing about the account.
+    if (isRateLimited(sent.error)) {
+      setError(clerkErrorMessage(sent.error, "Too many attempts. Try again later"));
       return false;
     }
-    const sent = await signIn.resetPasswordEmailCode.sendCode();
-    if (sent.error) {
-      setError(clerkErrorMessage(sent.error, "We could not send a reset code"));
-      return false;
-    }
-    setAccountFound(true);
+    setAccountFound(false);
     return true;
   }
 
@@ -137,6 +137,8 @@ export function ForgotPasswordForm() {
       }
       const finalized = await signIn.finalize({
         navigate: ({ decorateUrl }) => {
+          // Platform operators have no company, so the (app) layout sends
+          // them on from /dashboard to /platform.
           const url = decorateUrl("/dashboard");
           if (url.startsWith("http")) window.location.href = url;
           else router.push(url);

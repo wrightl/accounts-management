@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   clerkErrorMessage,
-  isIdentifierNotFound,
+  isRateLimited,
   parsePasswordChange,
   parsePasswordReset,
   parseResetEmail,
@@ -120,17 +120,16 @@ describe("clerkErrorMessage", () => {
   });
 });
 
-describe("isIdentifierNotFound", () => {
-  it("spots the not-found code on a ClerkError or in an API error list", () => {
-    expect(isIdentifierNotFound({ code: "form_identifier_not_found" })).toBe(true);
-    expect(
-      isIdentifierNotFound({ errors: [{ code: "form_identifier_not_found" }] }),
-    ).toBe(true);
+describe("isRateLimited", () => {
+  it("spots a 429 or the too_many_requests code", () => {
+    expect(isRateLimited({ status: 429 })).toBe(true);
+    expect(isRateLimited({ code: "too_many_requests" })).toBe(true);
+    expect(isRateLimited({ errors: [{ code: "too_many_requests" }] })).toBe(true);
   });
 
   it("ignores other errors", () => {
-    expect(isIdentifierNotFound({ code: "too_many_requests" })).toBe(false);
-    expect(isIdentifierNotFound({ errors: [{ code: "form_param_format_invalid" }] })).toBe(false);
-    expect(isIdentifierNotFound(null)).toBe(false);
+    expect(isRateLimited({ code: "form_identifier_not_found" })).toBe(false);
+    expect(isRateLimited({ status: 422, errors: [{ code: "strategy_for_user_invalid" }] })).toBe(false);
+    expect(isRateLimited(null)).toBe(false);
   });
 });
