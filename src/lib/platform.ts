@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import {
   ForbiddenError,
   getCurrentUser,
+  requireActionUser,
   requireUser,
   type SessionUser,
 } from "@/lib/auth";
@@ -57,8 +58,9 @@ export async function platformMutate(
     paths?: string[];
   },
 ): Promise<ActionResult> {
-  const session = await getCurrentUser();
-  if (!session) redirect("/sign-in");
+  const authz = await requireActionUser();
+  if (!authz.ok) return authz;
+  const session = authz.user;
   if (!isPlatformAdmin(session)) {
     return { ok: false, error: "You do not have platform admin access." };
   }

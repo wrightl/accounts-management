@@ -156,14 +156,35 @@ export async function requirePermission(permission: Permission): Promise<Session
 }
 
 /**
+ * Shown when an action arrives without a valid session. Usually the browser
+ * sent an expired session token (a background tab can miss Clerk's renewal);
+ * Clerk renews it moments later, so trying again works.
+ */
+export const SESSION_EXPIRED_ERROR =
+  "Your session timed out. Try again. If this keeps happening, reload the page and sign in.";
+
+/**
+ * Server-action guard for a signed-in user. Returns a failure instead of
+ * redirecting to sign-in: a redirect unmounts the form and loses what the
+ * user typed, when all they need is to try again.
+ */
+export async function requireActionUser(): Promise<ActionAuth> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: SESSION_EXPIRED_ERROR };
+  return { ok: true, user };
+}
+
+/**
  * Server-action guard: same checks as {@link requirePermission}, but returns
- * a failure object instead of throwing so the client can show a 403 message.
+ * a failure object instead of redirecting or throwing, so the form keeps its
+ * input and shows the message.
  */
 export async function requireActionPermission(
   permission: Permission,
 ): Promise<ActionAuth> {
-  const user = await getCurrentUser();
-  if (!user) redirect("/sign-in");
+  const authz = await requireActionUser();
+  if (!authz.ok) return authz;
+  const { user } = authz;
   if (!can(user.role, permission)) {
     return { ok: false, error: "You do not have permission to do that." };
   }

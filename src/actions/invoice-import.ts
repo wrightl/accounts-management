@@ -36,12 +36,14 @@ import {
   parseInvoiceImport,
   type ParsedDraft,
   type ParsedInvoice,
+  withoutVat,
 } from "@/lib/invoices/import/parse";
 import { parseCsv } from "@/lib/csv/parse";
 import { formatInvoiceNumber, highestSeqByYear } from "@/lib/invoices/numbering";
 import { mutate, mutateWide } from "@/lib/mutate";
 import { periodLockError } from "@/lib/period-lock";
 import { getStorage } from "@/lib/storage";
+import { companyChargesVat } from "@/lib/vat";
 
 const MAX_CSV_BYTES = 4 * 1024 * 1024;
 const INSERT_CHUNK = 500;
@@ -572,7 +574,8 @@ export async function commitInvoiceImportChunk(
         /** Clients created in this chunk, by their key in the file. */
         const createdByKey = new Map<string, string>();
         for (const draft of drafts) {
-          const { parsed } = draft;
+          // The source may show VAT a company that isn't registered can't have charged.
+          const parsed = companyChargesVat(company) ? draft.parsed : withoutVat(draft.parsed);
           let clientId = draft.clientId;
           let clientCreated = draft.clientCreated;
           if (!clientId) {

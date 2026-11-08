@@ -2,6 +2,7 @@ import { guardTenantPage, hasPermission } from '@/lib/auth';
 import { financialYearStartDate, monthName, todayIsoDate } from '@/lib/dates';
 import { InvoiceCutoverCard } from '@/components/reports/invoice-cutover-card';
 import { PeriodLockCard } from '@/components/reports/period-lock-card';
+import { ReportPeriodForm } from '@/components/reports/report-period-form';
 import Link from 'next/link';
 import { getBankReconciledThrough, getLastWeeklyClose } from '@/lib/close/checklist';
 import {
@@ -14,9 +15,7 @@ import {
 } from '@/lib/reports/queries';
 import { getCompanySettings } from '@/lib/settings/queries';
 import { getEntitlements } from '@/lib/billing/entitlements';
-import { buttonClasses } from '@/components/ui/button';
 import { Card, CardTitle, CardValue } from '@/components/ui/card';
-import { Input, Label } from '@/components/ui/form';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
 import { DisplayDate } from "@/components/date-format-provider";
 import { PageHeader } from '@/components/ui/page-header';
@@ -121,24 +120,7 @@ export default async function ReportsPage({
                 }
             />
 
-            <form className="mt-6 flex flex-wrap items-end gap-3">
-                <div>
-                    <Label htmlFor="from">From</Label>
-                    <Input
-                        id="from"
-                        name="from"
-                        type="date"
-                        defaultValue={from}
-                    />
-                </div>
-                <div>
-                    <Label htmlFor="to">To</Label>
-                    <Input id="to" name="to" type="date" defaultValue={to} />
-                </div>
-                <button type="submit" className={buttonClasses('secondary')}>
-                    Update period
-                </button>
-            </form>
+            <ReportPeriodForm from={from} to={to} />
             <p className="mt-2 text-sm text-muted">
                 Financial year ends in {yearEndLabel}.
             </p>
@@ -217,6 +199,7 @@ export default async function ReportsPage({
                 cutover={company.invoiceCutoverDate}
                 maxDate={today}
                 canEdit={canLock}
+                vatRegistered={company.vatRegistered}
             />
 
             <section className="mt-10">

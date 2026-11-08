@@ -5,6 +5,9 @@ import { suggestMapping, type ColumnMapping } from "@/lib/invoices/import/fields
 import {
   parseImportDate,
   parseInvoiceImport,
+  UNREGISTERED_VAT_LINE,
+  validateParsedInvoice,
+  withoutVat,
 } from "@/lib/invoices/import/parse";
 
 function parse(csv: string, mapping?: ColumnMapping, dateFormat: "dmy" | "mdy" = "dmy") {
@@ -247,5 +250,21 @@ describe("suggestClient", () => {
 
   it("creates when nothing is close", () => {
     expect(suggestClient(client({ name: "Zed" }), existing).clientId).toBeNull();
+  });
+});
+
+describe("withoutVat", () => {
+  it("moves VAT into the net total as its own line, keeping the gross", () => {
+    const [draft] = parse(`${HEAD}\nA-1,Acme,01/05/2026,Design,100.00,20.00,sent`).drafts;
+    const invoice = withoutVat(draft.invoice);
+    expect(invoice).toMatchObject({ netPence: 12_000, vatPence: 0, grossPence: 12_000 });
+    expect(invoice.lines.every((l) => l.vatRate === 0)).toBe(true);
+    expect(invoice.lines.at(-1)).toMatchObject({ description: UNREGISTERED_VAT_LINE, unitPricePence: 2_000 });
+    expect(validateParsedInvoice(invoice)).toEqual([]);
+  });
+
+  it("leaves an invoice without VAT alone", () => {
+    const [draft] = parse(`${HEAD}\nA-1,Acme,01/05/2026,Design,100.00,0,sent`).drafts;
+    expect(withoutVat(draft.invoice)).toBe(draft.invoice);
   });
 });

@@ -99,3 +99,20 @@ describe("getCurrentUser Clerk fetch failures", () => {
     });
   });
 });
+
+describe("action guards without a session", () => {
+  it("return a message instead of redirecting to sign-in", async () => {
+    clerkMocks.auth.mockResolvedValueOnce({ userId: null, sessionClaims: {} } as never);
+    clerkMocks.auth.mockResolvedValueOnce({ userId: null, sessionClaims: {} } as never);
+    const { redirect } = await import("next/navigation");
+    const { requireActionUser, requireActionPermission, SESSION_EXPIRED_ERROR } =
+      await import("@/lib/auth");
+
+    expect(await requireActionUser()).toEqual({ ok: false, error: SESSION_EXPIRED_ERROR });
+    expect(await requireActionPermission("accounts:read")).toEqual({
+      ok: false,
+      error: SESSION_EXPIRED_ERROR,
+    });
+    expect(redirect).not.toHaveBeenCalled();
+  });
+});

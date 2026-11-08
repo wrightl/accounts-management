@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { eq } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
 import {
   bankAccounts,
   bankTransactions,
   clients,
+  companies,
   dividendDeclarations,
   dividendPayouts,
   expenseReceipts,
@@ -291,6 +293,16 @@ describe("accountant pack integration", () => {
       confirmed: true,
     });
 
+    await db
+      .update(companies)
+      .set({
+        bankName: "Starling Bank",
+        bankAccountName: "Pack Test Ltd",
+        sortCode: "60-83-71",
+        accountNumber: "91405512",
+      })
+      .where(eq(companies.id, companyId));
+
     const { zip } = await buildPack({ companyId, ...PERIOD });
     const entries = listStoreZipEntries(zip);
 
@@ -320,6 +332,10 @@ describe("accountant pack integration", () => {
     const companyCsv = extractZipText(zip, "summary/company.csv");
     expect(companyCsv).toContain("trading_name");
     expect(companyCsv).toContain("financial_year_end_month");
+    expect(companyCsv).not.toContain("sort_code");
+    expect(companyCsv).not.toContain("60-83-71");
+    expect(companyCsv).not.toContain("91405512");
+    expect(companyCsv).not.toContain("Pack Test Ltd");
 
     const bankCsv = extractZipText(zip, "bank-transactions.csv");
     expect(bankCsv.split("\n")[0]).toContain("bank_account");
@@ -610,6 +626,9 @@ describe("accountant pack integration", () => {
     expect([...book.keys()]).toEqual(
       expect.arrayContaining(["Company", "P&L", "VAT", "Invoices", "Payments", "Expenses", "Receipts", "Reconciliation"]),
     );
+    // Most-used tabs first; reference and setup tabs at the end.
+    expect([...book.keys()].slice(0, 6)).toEqual(["P&L", "VAT", "Aged receivables", "Invoices", "Expenses", "Bank transactions"]);
+    expect([...book.keys()].slice(-4)).toEqual(["Company", "Cutover", "Brought forward invoices", "Open brought forward"]);
 
     // Each tab is an Excel table, with plain-English headers matching its columns.
     const invoicesTab = book.get("Invoices")!;
@@ -632,6 +651,10 @@ describe("accountant pack integration", () => {
     expect(bankTab).toContain(">Matched to<");
     expect(bankTab).toContain(">Payment for DD-2026-0200<");
     expect(bankTab).toContain(`location="'Payments'!A2"`);
+    // A bank credit that paid an invoice names it and links to its row.
+    expect(bankTab).toContain(">Invoice<");
+    expect(bankTab).toMatch(/<hyperlink ref="K\d+" location="'Invoices'!A2"\/>/);
+    expect(bankTab).toContain(">DD-2026-0200<");
     expect(bankTab).toContain(">Expense: Receipts test<");
     expect(bankTab).toContain(`location="'Expenses'!A2"`);
     expect(book.get("Expenses")!.xml).toContain(">2026-04-16 Trainline<");
@@ -663,6 +686,78 @@ describe("accountant pack integration", () => {
     expect(recon).toContain(`location="'Bank transactions'!A2"`);
     expect(recon).toContain(`location="'Payments'!A2"`);
     expect(recon).toContain(`location="'Invoices'!A2"`);
+  });
+
+  it("names the invoice a match points at directly, and never another company's", async () => {
+    const [client] = await db
+      .insert(clients)
+      .values({ companyId, name: "Acme", companyName: "Acme Ltd" })
+      .returning();
+    const [invoice] = await db
+      .insert(invoices)
+      .values({
+        companyId,
+        number: "DD-2026-0300",
+        clientId: client.id,
+        status: "paid",
+        issueDate: "2026-04-10",
+        netPence: 10_000,
+        vatPence: 0,
+        grossPence: 10_000,
+      })
+      .returning();
+
+    const other = await seedCompany(db, { name: "Other Co" });
+    const [otherClient] = await db
+      .insert(clients)
+      .values({ companyId: other.id, name: "Other client" })
+      .returning();
+    const [otherInvoice] = await db
+      .insert(invoices)
+      .values({
+        companyId: other.id,
+        number: "OTHER-0001",
+        clientId: otherClient.id,
+        status: "paid",
+        issueDate: "2026-04-10",
+        netPence: 5_000,
+        vatPence: 0,
+        grossPence: 5_000,
+      })
+      .returning();
+    const [otherPayment] = await db
+      .insert(payments)
+      .values({
+        invoiceId: otherInvoice.id,
+        amountPence: 5_000,
+        receivedAt: new Date("2026-04-15T10:00:00Z"),
+      })
+      .returning();
+
+    const [account] = await db
+      .insert(bankAccounts)
+      .values({ companyId, name: "Starling", provider: "starling" })
+      .returning();
+    const [direct, crossed] = await db
+      .insert(bankTransactions)
+      .values([
+        { bankAccountId: account.id, externalId: "tx-direct", bookedAt: "2026-04-15", amountPence: 10_000 },
+        { bankAccountId: account.id, externalId: "tx-crossed", bookedAt: "2026-04-16", amountPence: 5_000 },
+      ])
+      .returning();
+    await db.insert(reconciliationMatches).values([
+      // Names the invoice itself, with no payment to go through.
+      { bankTransactionId: direct.id, matchType: "invoice_payment", invoiceId: invoice.id, confirmed: true },
+      // A payment that belongs to another company's invoice must not surface it.
+      { bankTransactionId: crossed.id, matchType: "invoice_payment", paymentId: otherPayment.id, confirmed: true },
+    ]);
+
+    const { zip } = await buildPack({ companyId, ...PERIOD, format: "xlsx" });
+    const bankTab = readWorkbook(zip).get("Bank transactions")!.xml;
+
+    expect(bankTab).toContain(">DD-2026-0300<");
+    expect(bankTab).toMatch(/<hyperlink ref="K\d+" location="'Invoices'!A2"\/>/);
+    expect(bankTab).not.toContain("OTHER-0001");
   });
 
   it("leaves the VAT tab out of the workbook when the plan has no VAT export", async () => {
