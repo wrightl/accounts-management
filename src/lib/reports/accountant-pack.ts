@@ -297,24 +297,37 @@ export async function streamAccountantPack({
     );
 
   const bankTxIds = bankTxRows.map((t) => t.id);
-  const reconRows =
+  // Each match with the invoice it settles: named on the match, or through its payment.
+  const reconResults =
     bankTxIds.length === 0
       ? []
       : await db
-          .select({ match: reconciliationMatches })
+          .select({
+            match: reconciliationMatches,
+            invoiceId: invoices.id,
+            invoiceNumber: invoices.number,
+          })
           .from(reconciliationMatches)
           .innerJoin(
             bankTransactions,
             eq(reconciliationMatches.bankTransactionId, bankTransactions.id),
           )
           .innerJoin(bankAccounts, eq(bankTransactions.bankAccountId, bankAccounts.id))
+          .leftJoin(payments, eq(reconciliationMatches.paymentId, payments.id))
+          .leftJoin(
+            invoices,
+            and(
+              eq(invoices.companyId, companyId),
+              eq(invoices.id, sql`coalesce(${reconciliationMatches.invoiceId}, ${payments.invoiceId})`),
+            ),
+          )
           .where(
             and(
               eq(bankAccounts.companyId, companyId),
               inArray(reconciliationMatches.bankTransactionId, bankTxIds),
             ),
-          )
-          .then((rows) => rows.map((r) => r.match));
+          );
+  const reconRows = reconResults.map((r) => r.match);
 
   const creditNoteRows = await db
     .select({
@@ -444,6 +457,14 @@ export async function streamAccountantPack({
   const invoicesBySchedule = Map.groupBy(invRows, (r) => r.recurringInvoiceId);
   const dividendsByShareholder = Map.groupBy(dividendRows, (d) => d.shareholderId);
   const matchesByBankTx = Map.groupBy(reconRows, (m) => m.bankTransactionId);
+  const invoicesByBankTx = Map.groupBy(
+    reconResults.flatMap((r) =>
+      r.invoiceId && r.invoiceNumber
+        ? [{ bankTxId: r.match.bankTransactionId, id: r.invoiceId, number: r.invoiceNumber }]
+        : [],
+    ),
+    (i) => i.bankTxId,
+  );
   const bankTxFor = (recordId: (m: (typeof reconRows)[number]) => string | null) =>
     new Map(
       reconRows.flatMap((m) => {
@@ -483,6 +504,14 @@ export async function streamAccountantPack({
     const r = reimbursementById.get(reimbursementId);
     const label = r ? `${r.payeeName || r.payeeEmail}${r.reference ? ` (${r.reference})` : ""}` : reimbursementId;
     return rowLink(label, "reimbursements.csv", reimbursementId);
+  };
+
+  /** The invoice(s) a bank transaction paid, linking to the first; blank when none. */
+  const bankTxInvoiceCell = (bankTxId: string): Cell => {
+    const linked = invoicesByBankTx.get(bankTxId);
+    if (!linked) return "";
+    const numbers = [...new Set(linked.map((i) => i.number))];
+    return rowLink(numbers.join(", "), invoiceTable(linked[0].id), linked[0].id);
   };
 
   /** What a bank transaction was reconciled to, linking to that record. */
@@ -956,7 +985,7 @@ export async function streamAccountantPack({
         "spending_category",
         "tags",
         "notes",
-        ...xl("matched_to"),
+        ...xl("invoice", "matched_to"),
       ],
       rows: bankTxRows.map((t) => [
         t.id,
@@ -969,7 +998,7 @@ export async function streamAccountantPack({
         t.spendingCategory ?? "",
         (t.tags ?? []).join("; "),
         sharedNote(t) ?? "",
-        ...xl(matchedToCell(t.id)),
+        ...xl(bankTxInvoiceCell(t.id), matchedToCell(t.id)),
       ]),
     },
     {
@@ -1299,31 +1328,36 @@ const MATCH_LABELS: Record<(typeof reconciliationMatches.$inferSelect)["matchTyp
   tax_or_loan: "Tax or loan",
 };
 
-/** Tab name for each table, keyed by its CSV path. */
+/**
+ * Tab name for each table, keyed by its CSV path. The workbook's tabs follow this
+ * order: summaries first, then the main records, then detail lines and reference.
+ */
 const SHEETS: Record<string, string> = {
-  "summary/company.csv": "Company",
   "summary/pnl.csv": "P&L",
   "summary/vat.csv": "VAT",
   "summary/aged-receivables.csv": "Aged receivables",
-  "summary/cutover.csv": "Cutover",
   "invoices.csv": "Invoices",
-  "invoice-line-items.csv": "Invoice lines",
-  "credit-notes.csv": "Credit notes",
-  "credit-note-line-items.csv": "Credit note lines",
-  "payments.csv": "Payments",
   "expenses.csv": "Expenses",
+  "bank-transactions.csv": "Bank transactions",
+  "payments.csv": "Payments",
+  "other-income.csv": "Other income",
+  "credit-notes.csv": "Credit notes",
+  "reconciliation-matches.csv": "Reconciliation",
   "receipts-index.csv": "Receipts",
   "reimbursements.csv": "Reimbursements",
-  "reimbursement-items.csv": "Reimbursement items",
-  "bank-transactions.csv": "Bank transactions",
-  "reconciliation-matches.csv": "Reconciliation",
-  "other-income.csv": "Other income",
   "dividends.csv": "Dividends",
+  "invoice-line-items.csv": "Invoice lines",
+  "credit-note-line-items.csv": "Credit note lines",
+  "reimbursement-items.csv": "Reimbursement items",
   "shareholders.csv": "Shareholders",
   "recurring-invoices.csv": "Recurring invoices",
+  "summary/company.csv": "Company",
+  "summary/cutover.csv": "Cutover",
   "reference/brought-forward-invoices.csv": "Brought forward invoices",
   "reference/open-brought-forward.csv": "Open brought forward",
 };
+
+const SHEET_ORDER = Object.keys(SHEETS);
 
 /**
  * A link to the row whose key column holds `key` in another table (its header
@@ -1393,7 +1427,8 @@ function toSheets(tables: PackTable[]): XlsxSheet[] {
     return { value, money: cell.money, link: { sheet: SHEETS[link.table], row } };
   };
 
-  return tables.map((t) => ({
+  const ordered = [...tables].sort((a, b) => SHEET_ORDER.indexOf(a.path) - SHEET_ORDER.indexOf(b.path));
+  return ordered.map((t) => ({
     name: SHEETS[t.path],
     headers: t.headers.map(headerLabel),
     rows: t.rows.map((r) => r.map(toCell)),
@@ -1472,10 +1507,6 @@ function buildCompanyCsvRows(company: Awaited<ReturnType<typeof getOrCreateCompa
     ["email", company.email ?? ""],
     ["address", company.addressLines ?? ""],
     ["financial_year_end_month", monthName(company.financialYearEndMonth)],
-    ["invoice_bank_name", company.bankName ?? ""],
-    ["invoice_bank_account_name", company.bankAccountName ?? ""],
-    ["invoice_sort_code", company.sortCode ?? ""],
-    ["invoice_account_number", company.accountNumber ?? ""],
   ];
   if (company.entityType === "limited_company") {
     rows.push([
@@ -1506,21 +1537,23 @@ function buildReadme({
     format === "xlsx"
       ? [
           `  ${WORKBOOK_PATH} — one tab per table:`,
-          `    Company, P&L, ${includeVat ? "VAT, " : ""}Aged receivables, Cutover${vatNote}`,
+          `    P&L, ${includeVat ? "VAT, " : ""}Aged receivables${vatNote}`,
           "    Invoices + Invoice lines — excl. draft & void, by issue date",
-          "    Credit notes + Credit note lines — by credit note issue date (incl. void)",
-          "    Payments — cash received (by received_at in period)",
           "    Expenses + Receipts — spend (excl. pending, by spent_at) and its attachments",
-          "    Reimbursements + Reimbursement items — runs paid in period (by paid_at, excl. unpaid)",
           "    Bank transactions + Reconciliation",
+          "    Payments — cash received (by received_at in period)",
           "    Other income — explained bank credits (cash, by bank date)",
+          "    Credit notes + Credit note lines — by credit note issue date (incl. void)",
+          "    Reimbursements + Reimbursement items — runs paid in period (by paid_at, excl. unpaid)",
           "    Dividends — dividend declarations in period",
           "    Shareholders — share register at export time (not period-filtered)",
           "    Recurring invoices — current schedules (not period-filtered)",
+          "    Company, Cutover — company details and invoice cutover date",
           "    Brought forward invoices + Open brought forward — imported invoices from before cutover (all dates)",
           "  Each tab is an Excel table you can sort and filter. Linked ids, numbers and counts jump to the",
-          "  related row: a bank transaction to what it was reconciled to, an expense to its bank transaction",
-          "  and reimbursement, an invoice to its lines, payments and credit notes, and back again.",
+          "  related row: a bank transaction to the invoice it paid and to what it was reconciled to, an expense",
+          "  to its bank transaction and reimbursement, an invoice to its lines, payments and credit notes, and",
+          "  back again.",
           "  Invoice, credit note and receipt links open the file, once this zip is extracted with the",
           "  workbook left beside its folders.",
           "  invoices/         — invoice PDFs",
