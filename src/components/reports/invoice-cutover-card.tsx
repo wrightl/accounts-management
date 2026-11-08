@@ -25,11 +25,14 @@ export function InvoiceCutoverCard({
   cutover,
   maxDate,
   canEdit,
+  vatRegistered,
 }: {
   cutover: string | null;
   /** Latest date allowed (today). */
   maxDate: string;
   canEdit: boolean;
+  /** Without registration there's no VAT to move. */
+  vatRegistered: boolean;
 }) {
   const router = useRouter();
   const { fieldErrors, error, clearAll, clearField, applyActionResult } = useFieldErrors();
@@ -115,7 +118,9 @@ export function InvoiceCutoverCard({
                 <li>{preview.impact.invoicesBroughtForward} invoices leave the accounts</li>
                 <li>{preview.impact.invoicesCounted} invoices join the accounts</li>
                 <li>Income changes by {signedGBP(preview.impact.incomeChangePence)}</li>
-                <li>VAT changes by {signedGBP(preview.impact.vatChangePence)}</li>
+                {vatRegistered ? (
+                  <li>VAT changes by {signedGBP(preview.impact.vatChangePence)}</li>
+                ) : null}
                 <li>{preview.impact.activityChanged} payments, credit notes and refunds change</li>
               </ul>
               {preview.warnings.length > 0 ? (

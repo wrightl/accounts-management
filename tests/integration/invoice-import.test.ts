@@ -28,6 +28,7 @@ import {
 } from "@/actions/invoice-import";
 import { sendEmail } from "@/lib/email";
 import { allocateInvoiceNumber } from "@/lib/invoices/allocate";
+import { UNREGISTERED_VAT_LINE } from "@/lib/invoices/import/parse";
 import {
   getImportBatchReview,
   getOpenImports,
@@ -177,6 +178,24 @@ describe("importing invoices", () => {
       .where(eq(invoiceLineItems.invoiceId, inv.id));
     expect(lines.map((l) => l.vatRate).sort()).toEqual([0, 20]);
     expect(inv.vatPence).toBe(2_000);
+  });
+
+  it("counts the whole total as income when the company isn't VAT registered", async () => {
+    await db.update(companies).set({ vatRegistered: false }).where(eq(companies.id, companyId));
+    await importCsv(SAMPLE);
+    const inv = await byNumber("NEW-1");
+    expect(inv).toMatchObject({ netPence: 36_000, vatPence: 0, grossPence: 36_000 });
+    const lines = await db
+      .select()
+      .from(invoiceLineItems)
+      .where(eq(invoiceLineItems.invoiceId, inv.id))
+      .orderBy(invoiceLineItems.position);
+    expect(lines.map((l) => [l.description, l.unitPricePence, l.vatRate])).toEqual([
+      ["This year", 30_000, 0],
+      [UNREGISTERED_VAT_LINE, 6_000, 0],
+    ]);
+    const pnl = await getProfitAndLoss(companyId, "2020-01-01", "2026-12-31");
+    expect(pnl.incomePence).toBe(36_000);
   });
 
   it("doesn't email or queue anything", async () => {

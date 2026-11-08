@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { eq } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
 import {
   bankAccounts,
   bankTransactions,
   clients,
+  companies,
   dividendDeclarations,
   dividendPayouts,
   expenseReceipts,
@@ -291,6 +293,16 @@ describe("accountant pack integration", () => {
       confirmed: true,
     });
 
+    await db
+      .update(companies)
+      .set({
+        bankName: "Starling Bank",
+        bankAccountName: "Pack Test Ltd",
+        sortCode: "60-83-71",
+        accountNumber: "91405512",
+      })
+      .where(eq(companies.id, companyId));
+
     const { zip } = await buildPack({ companyId, ...PERIOD });
     const entries = listStoreZipEntries(zip);
 
@@ -320,6 +332,10 @@ describe("accountant pack integration", () => {
     const companyCsv = extractZipText(zip, "summary/company.csv");
     expect(companyCsv).toContain("trading_name");
     expect(companyCsv).toContain("financial_year_end_month");
+    expect(companyCsv).not.toContain("sort_code");
+    expect(companyCsv).not.toContain("60-83-71");
+    expect(companyCsv).not.toContain("91405512");
+    expect(companyCsv).not.toContain("Pack Test Ltd");
 
     const bankCsv = extractZipText(zip, "bank-transactions.csv");
     expect(bankCsv.split("\n")[0]).toContain("bank_account");
@@ -610,6 +626,9 @@ describe("accountant pack integration", () => {
     expect([...book.keys()]).toEqual(
       expect.arrayContaining(["Company", "P&L", "VAT", "Invoices", "Payments", "Expenses", "Receipts", "Reconciliation"]),
     );
+    // Most-used tabs first; reference and setup tabs at the end.
+    expect([...book.keys()].slice(0, 6)).toEqual(["P&L", "VAT", "Aged receivables", "Invoices", "Expenses", "Bank transactions"]);
+    expect([...book.keys()].slice(-4)).toEqual(["Company", "Cutover", "Brought forward invoices", "Open brought forward"]);
 
     // Each tab is an Excel table, with plain-English headers matching its columns.
     const invoicesTab = book.get("Invoices")!;
@@ -632,6 +651,10 @@ describe("accountant pack integration", () => {
     expect(bankTab).toContain(">Matched to<");
     expect(bankTab).toContain(">Payment for DD-2026-0200<");
     expect(bankTab).toContain(`location="'Payments'!A2"`);
+    // A bank credit that paid an invoice names it and links to its row.
+    expect(bankTab).toContain(">Invoice<");
+    expect(bankTab).toMatch(/<hyperlink ref="K\d+" location="'Invoices'!A2"\/>/);
+    expect(bankTab).toContain(">DD-2026-0200<");
     expect(bankTab).toContain(">Expense: Receipts test<");
     expect(bankTab).toContain(`location="'Expenses'!A2"`);
     expect(book.get("Expenses")!.xml).toContain(">2026-04-16 Trainline<");
