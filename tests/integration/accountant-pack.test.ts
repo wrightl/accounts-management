@@ -29,6 +29,7 @@ import {
 } from "@/lib/reports/accountant-pack";
 import { renderVatSummaryPdf } from "@/lib/reports/vat-pdf";
 import { getStorage } from "@/lib/storage";
+import { readStoreZipEntries } from "@/lib/zip/store";
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/reports/vat-pdf", async (importOriginal) => {
@@ -518,6 +519,169 @@ describe("accountant pack integration", () => {
     expect(itemsCsv).not.toContain("Out-of-period run item");
   });
 
+  it("puts every table in one linked workbook in Excel format", async () => {
+    const [client] = await db
+      .insert(clients)
+      .values({ companyId, name: "Acme", companyName: "Acme Ltd" })
+      .returning();
+    const [invoice] = await db
+      .insert(invoices)
+      .values({
+        companyId,
+        number: "DD-2026-0200",
+        clientId: client.id,
+        status: "paid",
+        issueDate: "2026-04-10",
+        netPence: 10_000,
+        vatPence: 0,
+        grossPence: 10_000,
+        pdfBlobPath: await storePdf("invoices/inv-200.pdf", "excel-invoice"),
+      })
+      .returning();
+    const [payment] = await db
+      .insert(payments)
+      .values({
+        invoiceId: invoice.id,
+        amountPence: 10_000,
+        receivedAt: new Date("2026-04-15T10:00:00Z"),
+      })
+      .returning();
+    const expense = await insertExpense();
+    await insertReceipt(expense.id, "receipts/e/ok.jpg", "ok.jpg", new Uint8Array([1, 2, 3]));
+    await insertReceipt(expense.id, "receipts/e/gone.jpg", "gone.jpg");
+    const [account] = await db
+      .insert(bankAccounts)
+      .values({ companyId, name: "Starling", provider: "starling" })
+      .returning();
+    const [bankTx] = await db
+      .insert(bankTransactions)
+      .values({
+        bankAccountId: account.id,
+        externalId: "tx-excel",
+        bookedAt: "2026-04-15",
+        amountPence: 10_000,
+      })
+      .returning();
+    await db.insert(reconciliationMatches).values({
+      bankTransactionId: bankTx.id,
+      matchType: "invoice_payment",
+      paymentId: payment.id,
+      invoiceId: invoice.id,
+      confirmed: true,
+    });
+    const [expenseTx] = await db
+      .insert(bankTransactions)
+      .values({
+        bankAccountId: account.id,
+        externalId: "tx-excel-expense",
+        bookedAt: "2026-04-16",
+        amountPence: -4500,
+        counterparty: "Trainline",
+      })
+      .returning();
+    await db.insert(reconciliationMatches).values({
+      bankTransactionId: expenseTx.id,
+      matchType: "expense",
+      expenseId: expense.id,
+      confirmed: true,
+    });
+
+    const { stream, filename } = await streamAccountantPack({
+      companyId,
+      ...PERIOD,
+      format: "xlsx",
+      webBase: "https://alfa.test",
+    });
+    const zip = await collect(stream);
+    const entries = listStoreZipEntries(zip);
+
+    expect(filename).toBe("accountant-pack-2026-04-01_2026-04-30-excel.zip");
+    expect(entries).toContain("accountant-pack.xlsx");
+    expect(entries).toContain("invoices/DD-2026-0200.pdf");
+    expect(entries).toContain(`receipts/${expense.id}/ok.jpg`);
+    expect(entries).toContain("README.txt");
+    expect(entries.filter((e) => e.endsWith(".csv"))).toEqual([]);
+    const readme = extractZipText(zip, "README.txt");
+    expect(readme).toContain("accountant-pack.xlsx — one tab per table");
+    expect(readme).toContain("Excel for Mac asks for permission");
+    expect(readme).toContain("Open in Alfa column");
+
+    const book = readWorkbook(zip);
+    expect([...book.keys()]).toEqual(
+      expect.arrayContaining(["Company", "P&L", "VAT", "Invoices", "Payments", "Expenses", "Receipts", "Reconciliation"]),
+    );
+
+    // Each tab is an Excel table, with plain-English headers matching its columns.
+    const invoicesTab = book.get("Invoices")!;
+    expect(invoicesTab.xml).toContain('<tableParts count="1">');
+    expect(invoicesTab.table).toContain('name="Table_Invoices"');
+    expect(invoicesTab.table).toContain('<tableColumn id="5" name="Issue date"/>');
+    expect(invoicesTab.table).toContain('name="Net (£)"');
+    expect(invoicesTab.xml).toContain(">Issue date<");
+    expect(invoicesTab.xml).not.toContain(">issue_date<");
+    expect(book.get("P&L")!.table).toContain('name="Table_PandL"');
+
+    const paymentsSheet = book.get("Payments")!;
+    expect(paymentsSheet.xml).toContain(`<hyperlink ref="B2" location="'Invoices'!A2"/>`);
+    expect(paymentsSheet.xml).toContain('<c r="D2" s="1"><v>100</v></c>');
+    // Back to the bank transaction it was reconciled with.
+    expect(paymentsSheet.xml).toContain(`location="'Bank transactions'!A2"`);
+
+    // Bank transactions link to what they were reconciled to, and the records link back.
+    const bankTab = book.get("Bank transactions")!.xml;
+    expect(bankTab).toContain(">Matched to<");
+    expect(bankTab).toContain(">Payment for DD-2026-0200<");
+    expect(bankTab).toContain(`location="'Payments'!A2"`);
+    expect(bankTab).toContain(">Expense: Receipts test<");
+    expect(bankTab).toContain(`location="'Expenses'!A2"`);
+    expect(book.get("Expenses")!.xml).toContain(">2026-04-16 Trainline<");
+    expect(book.get("Expenses")!.xml).toContain(`location="'Bank transactions'!A3"`);
+    expect(invoicesTab.xml).toContain(">1 payment<");
+
+    expect(book.get("Invoices")!.rels).toContain('Target="invoices/DD-2026-0200.pdf"');
+    expect(book.get("Invoices")!.xml).toContain(">Open in Alfa<");
+    expect(book.get("Invoices")!.rels).toContain(
+      `Target="https://alfa.test/api/invoices/${invoice.id}/pdf" TargetMode="External"`,
+    );
+
+    const receiptsSheet = book.get("Receipts")!;
+    expect(receiptsSheet.xml).toContain(`location="'Expenses'!A2"`);
+    expect(receiptsSheet.rels).toContain(`Target="receipts/${expense.id}/ok.jpg"`);
+    expect(receiptsSheet.rels).not.toContain("gone.jpg");
+    expect(receiptsSheet.xml).toContain(">MISSING<");
+    const receiptIds = (await db.select().from(expenseReceipts)).map((r) => r.id);
+    expect(receiptIds).toHaveLength(2);
+    for (const id of receiptIds) {
+      expect(receiptsSheet.rels).toContain(`Target="https://alfa.test/api/receipts/${id}?inline=1"`);
+    }
+
+    // Two receipts, so the expense links to its rows on the Receipts tab.
+    expect(book.get("Expenses")!.xml).toContain(">2 receipts<");
+    expect(book.get("Expenses")!.xml).toContain(`location="'Receipts'!A`);
+
+    const recon = book.get("Reconciliation")!.xml;
+    expect(recon).toContain(`location="'Bank transactions'!A2"`);
+    expect(recon).toContain(`location="'Payments'!A2"`);
+    expect(recon).toContain(`location="'Invoices'!A2"`);
+  });
+
+  it("leaves the VAT tab out of the workbook when the plan has no VAT export", async () => {
+    const { stream } = await streamAccountantPack({
+      companyId,
+      ...PERIOD,
+      includeVat: false,
+      format: "xlsx",
+    });
+    const zip = await collect(stream);
+    const book = readWorkbook(zip);
+
+    expect(book.has("P&L")).toBe(true);
+    expect(book.has("VAT")).toBe(false);
+    // Without Alfa's address there's nothing to link to online.
+    expect(book.get("Invoices")!.xml).not.toContain("Open in Alfa");
+    expect(extractZipText(zip, "README.txt")).not.toContain("Open in Alfa");
+  });
+
   it("leaves out the VAT summary when the plan has no VAT export", async () => {
     const { zip } = await buildPack({ companyId, ...PERIOD, includeVat: false });
     const entries = listStoreZipEntries(zip);
@@ -617,6 +781,24 @@ describe("zipStoreStream", () => {
     expect(view.getUint32(centralStart + 16, true)).toBe(0x3610a686);
   });
 
+  it("writes the version and a real date Excel's package check needs", async () => {
+    vi.useFakeTimers({ now: new Date("2026-11-08T12:34:56Z"), toFake: ["Date"] });
+    const zip = await collect(zipStoreStream(zipEntries({ "hello.txt": "hello" })));
+    vi.useRealTimers();
+    const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+    const centralStart = 30 + "hello.txt".length + "hello".length;
+    const dosTime = (12 << 11) | (34 << 5) | 28;
+    const dosDate = ((2026 - 1980) << 9) | (11 << 5) | 8;
+
+    expect(view.getUint16(4, true)).toBe(20);
+    expect(view.getUint16(10, true)).toBe(dosTime);
+    expect(view.getUint16(12, true)).toBe(dosDate);
+    expect(view.getUint16(centralStart + 4, true)).toBe(20);
+    expect(view.getUint16(centralStart + 6, true)).toBe(20);
+    expect(view.getUint16(centralStart + 12, true)).toBe(dosTime);
+    expect(view.getUint16(centralStart + 14, true)).toBe(dosDate);
+  });
+
   it("fails the stream when an entry fails, rather than ending as a valid zip", async () => {
     async function* failing(): AsyncGenerator<[string, ZipEntry]> {
       yield ["first.txt", "first"];
@@ -669,6 +851,26 @@ function readCentralDirectory(zip: Uint8Array): string[] {
     offset += 46 + nameLen;
   }
   return names;
+}
+
+/** Each tab of the pack's workbook by name: its sheet XML, its links and its table. */
+function readWorkbook(zip: Uint8Array) {
+  const parts = new Map(
+    readStoreZipEntries(extractZipEntry(zip, "accountant-pack.xlsx")).map(
+      ([name, data]) => [name, new TextDecoder().decode(data)],
+    ),
+  );
+  const sheets = [...parts.get("xl/workbook.xml")!.matchAll(/<sheet name="([^"]+)" sheetId="(\d+)"/g)];
+  return new Map(
+    sheets.map(([, name, id]) => [
+      name.replace(/&amp;/g, "&"),
+      {
+        xml: parts.get(`xl/worksheets/sheet${id}.xml`)!,
+        rels: parts.get(`xl/worksheets/_rels/sheet${id}.xml.rels`) ?? "",
+        table: parts.get(`xl/tables/table${id}.xml`) ?? "",
+      },
+    ]),
+  );
 }
 
 /** Read a text entry from a store-only ZIP by scanning local headers. */

@@ -20,6 +20,7 @@ import { Input, Label } from '@/components/ui/form';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
 import { DisplayDate } from "@/components/date-format-provider";
 import { PageHeader } from '@/components/ui/page-header';
+import { LinkMenuButton } from '@/components/ui/link-menu-button';
 
 export default async function ReportsPage({
     searchParams,
@@ -92,22 +93,30 @@ export default async function ReportsPage({
                 }
                 actions={
                     canExport ? (
-                        <>
-                            {entitlements.vatExport && (
-                                <a
-                                    href={`/api/reports/vat?from=${from}&to=${to}`}
-                                    className={buttonClasses('secondary')}
-                                >
-                                    Download VAT CSV
-                                </a>
-                            )}
-                            <a
-                                href={`/api/reports/accountant-pack?from=${from}&to=${to}`}
-                                className={buttonClasses('primary')}
-                            >
-                                Download accountant pack
-                            </a>
-                        </>
+                        <LinkMenuButton
+                            label="Download"
+                            items={[
+                                {
+                                    key: 'pack-csv',
+                                    label: 'Accountant pack (CSV)',
+                                    href: `/api/reports/accountant-pack?from=${from}&to=${to}`,
+                                },
+                                {
+                                    key: 'pack-xlsx',
+                                    label: 'Accountant pack (Excel)',
+                                    href: `/api/reports/accountant-pack?from=${from}&to=${to}&format=xlsx`,
+                                },
+                                ...(entitlements.vatExport
+                                    ? [
+                                          {
+                                              key: 'vat-csv',
+                                              label: 'VAT summary (CSV)',
+                                              href: `/api/reports/vat?from=${from}&to=${to}`,
+                                          },
+                                      ]
+                                    : []),
+                            ]}
+                        />
                     ) : null
                 }
             />

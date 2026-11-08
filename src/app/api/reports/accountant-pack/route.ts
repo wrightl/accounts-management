@@ -8,8 +8,8 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 /**
- * Accountant pack: zip of CSVs, summary reports, invoice PDFs, and receipt files.
- * Streamed, because Vercel caps buffered responses at 4.5 MB.
+ * Accountant pack: zip of CSVs (or one Excel workbook with `format=xlsx`), summary
+ * reports, invoice PDFs, and receipt files. Streamed, because Vercel caps buffered responses at 4.5 MB.
  */
 export async function GET(request: Request) {
   let user;
@@ -33,12 +33,16 @@ export async function GET(request: Request) {
   const defaults = await defaultReportPeriod(user.companyId);
   const from = url.searchParams.get("from") ?? defaults.from;
   const to = url.searchParams.get("to") ?? defaults.to;
+  const format = url.searchParams.get("format") === "xlsx" ? "xlsx" : "csv";
 
   const { filename, stream } = await streamAccountantPack({
     companyId: user.companyId,
     from,
     to,
     includeVat: entitlements.vatExport,
+    format,
+    // The site this was downloaded from, so the workbook's links come back here.
+    webBase: url.origin,
   });
 
   return new NextResponse(stream, {
