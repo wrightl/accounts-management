@@ -456,7 +456,7 @@ describe("billing operations", () => {
     expect(await billing(company.id)).toMatchObject({ plan: "premium", status: "active" });
   });
 
-  it("refuses complimentary access for a company with a subscription", async () => {
+  it("refuses complimentary access for a company with a paid subscription", async () => {
     const company = await seedCompany(db, { slug: "acme" });
     await db.insert(companyBilling).values({
       companyId: company.id,
@@ -469,9 +469,22 @@ describe("billing operations", () => {
 
     const result = await grantComplimentaryAccess(form);
 
-    expect(result).toMatchObject({ ok: false, error: expect.stringMatching(/trial/) });
+    expect(result).toMatchObject({ ok: false, error: expect.stringMatching(/paid subscription/) });
     expect(await billing(company.id)).toMatchObject({ access: "standard" });
   });
+
+  it.each(["canceled", "unpaid"] as const)(
+    "grants complimentary access to a %s company",
+    async (status) => {
+      const company = await seedCompany(db, { slug: "acme" });
+      await db.insert(companyBilling).values({ companyId: company.id, status });
+      const form = new FormData();
+      form.set("companyId", company.id);
+
+      expect((await grantComplimentaryAccess(form)).ok).toBe(true);
+      expect(await billing(company.id)).toMatchObject({ access: "complimentary_unlimited" });
+    },
+  );
 
   it("grants complimentary access after the trial has ended", async () => {
     const company = await seedCompany(db, { slug: "acme" });

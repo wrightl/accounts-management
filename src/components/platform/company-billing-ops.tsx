@@ -78,8 +78,6 @@ export function CompanyBillingOpsForm({
   const [pending, start] = useTransition();
   const grantRef = useRef<HTMLFormElement>(null);
   const paid = status === "active" || status === "past_due";
-  // Matches grantComplimentaryAccess: only while trialing, running or ended.
-  const canGrant = status === "trialing";
 
   function run(action: () => Promise<ActionResult>, success: string, after?: () => void) {
     start(async () => {
@@ -169,10 +167,10 @@ export function CompanyBillingOpsForm({
               Revoke complimentary
             </button>
           </div>
-        ) : !canGrant ? (
+        ) : paid ? (
           <p className="text-sm text-muted">
-            Complimentary access can only be granted while the company is on its
-            trial, or after the trial has ended. This company has a subscription.
+            Complimentary access can&apos;t be granted while the company has a
+            paid subscription. Cancel the subscription first.
           </p>
         ) : (
           <form

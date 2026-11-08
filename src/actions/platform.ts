@@ -713,13 +713,13 @@ export async function grantComplimentaryAccess(
         .from(companyBilling)
         .where(eq(companyBilling.companyId, parsed.data.companyId))
         .limit(1);
-      // Only during a trial, running or ended: a grant on a subscription would
-      // leave Stripe billing a company that is meant to be free.
-      if (row?.status !== "trialing") {
+      // Not on a paid subscription: Stripe would keep billing a company that
+      // is meant to be free. Trials (running or ended), cancelled and unpaid are fine.
+      if (row?.status === "active" || row?.status === "past_due") {
         return {
           ok: false,
           error:
-            "Complimentary access can only be granted while the company is on its trial, or after the trial has ended. This company has a subscription.",
+            "This company has a paid subscription. Complimentary access can't be granted until it is cancelled.",
         };
       }
       const expiresAt = parsed.data.expiresAt

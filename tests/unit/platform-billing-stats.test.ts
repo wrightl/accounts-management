@@ -97,8 +97,8 @@ describe("getPlatformBillingStats", () => {
   });
 
   it("leaves an active complimentary company out of plan counts and MRR", async () => {
-    // New grants need a trialing company, but grants made before that rule
-    // can sit on an active subscription.
+    // New grants are refused on a paid subscription, but grants made before
+    // that rule can sit on an active one.
     await addBilling("comp-active", {
       plan: "premium",
       status: "active",
