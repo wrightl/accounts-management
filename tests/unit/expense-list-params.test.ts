@@ -24,6 +24,8 @@ describe("parseExpenseListParams", () => {
       mine: false,
       sort: "date",
       dir: "desc",
+      page: 1,
+      pageSize: 25,
     });
   });
 

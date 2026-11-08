@@ -2,7 +2,7 @@ import Link from "next/link";
 import { guardTenantPage } from "@/lib/auth";
 import {
   countInboundEmailIssues,
-  listInboundEmailJobs,
+  listInboundEmailJobPage,
   type InboundEmailJobListFilter,
 } from "@/lib/expenses/inbound-email";
 import {
@@ -19,6 +19,8 @@ import { buttonClasses } from "@/components/ui/button";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { SettingsPageHeader } from "@/components/settings/settings-page-header";
 import { DisplayDate } from "@/components/date-format-provider";
+import { ListPagination } from "@/components/ui/list-pagination";
+import { listPageHref, parseListPaging } from "@/lib/list-paging";
 
 const FILTERS: { value: InboundEmailJobListFilter; label: string }[] = [
   { value: "attention", label: "Needs attention" },
@@ -38,8 +40,8 @@ export default async function InboundEmailPage({
   const sp = await searchParams;
   const filter = (sp.filter as InboundEmailJobListFilter | undefined) ?? "attention";
 
-  const [rows, issueCount] = await Promise.all([
-    listInboundEmailJobs({ companyId,  filter, limit: 100 }),
+  const [{ rows, ...paging }, issueCount] = await Promise.all([
+    listInboundEmailJobPage({ companyId, filter, ...parseListPaging(sp) }),
     countInboundEmailIssues(companyId),
   ]);
 
@@ -151,6 +153,7 @@ export default async function InboundEmailPage({
             </TBody>
           </Table>
         )}
+        <ListPagination {...paging} href={(to) => listPageHref("/inbound-email", sp, to)} />
       </div>
     </div>
   );

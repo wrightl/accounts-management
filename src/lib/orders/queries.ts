@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, count, desc, eq, type SQL } from "drizzle-orm";
 import { getDb } from "@/db";
 import { clientDisplayNameSql } from "@/lib/clients/sql";
 import {
@@ -11,7 +11,10 @@ import {
   quotePaymentMilestones,
   quotes,
 } from "@/db/schema";
+import { type ListPaging, fetchPage } from "@/lib/list-paging";
 import { formatGBP } from "@/lib/money";
+import { sortExpr, sortNumbered, sortRank, sortText } from "@/lib/sql-paging";
+import type { TableSort } from "@/lib/table-sort";
 import {
   effectiveStatus,
   todayIsoDate,
@@ -24,28 +27,62 @@ import {
 } from "@/lib/orders/invoice-from-order";
 import type { PaymentMilestoneInput } from "@/lib/quotes/payment-schedule";
 
-export async function listOrders(companyId: string) {
-  const db = getDb();
-  const rows = await db
-    .select({
-      id: orders.id,
-      number: orders.number,
-      status: orders.status,
-      issueDate: orders.issueDate,
-      grossPence: orders.grossPence,
-      clientName: clientDisplayNameSql.as("client_name"),
-      quoteNumber: quotes.number,
-    })
-    .from(orders)
-    .innerJoin(clients, eq(orders.clientId, clients.id))
-    .leftJoin(quotes, eq(orders.quoteId, quotes.id))
-    .where(eq(orders.companyId, companyId))
-    .orderBy(desc(orders.createdAt));
+export type OrderSortColumn = "created" | "number" | "client" | "quote" | "status" | "total";
+const ORDER_STATUS_ORDER = ["draft", "active", "completed", "cancelled"] as const;
 
-  return rows.map((r) => ({
-    ...r,
-    grossFormatted: formatGBP(r.grossPence),
-  }));
+function orderListOrderBy({ sort, dir }: TableSort<OrderSortColumn>): SQL[] {
+  const by = sortExpr(dir);
+  const tiebreak = [desc(orders.createdAt), desc(orders.id)];
+  switch (sort) {
+    case "number":
+      return [...sortNumbered(dir, orders.number), ...tiebreak];
+    case "client":
+      return [by(sortText(clientDisplayNameSql)), ...tiebreak];
+    case "quote":
+      return [...sortNumbered(dir, quotes.number), ...tiebreak];
+    case "status":
+      return [by(sortRank(orders.status, ORDER_STATUS_ORDER)), ...tiebreak];
+    case "total":
+      return [by(orders.grossPence), ...tiebreak];
+    case "created":
+      return dir === "asc" ? [asc(orders.createdAt), asc(orders.id)] : tiebreak;
+  }
+}
+
+/** One page of the orders list, sorted in the database. */
+export async function listOrderPage(
+  companyId: string,
+  options: TableSort<OrderSortColumn> & ListPaging,
+) {
+  const db = getDb();
+  const where = eq(orders.companyId, companyId);
+  const clientJoin = and(eq(orders.clientId, clients.id), eq(clients.companyId, companyId));
+  const quoteJoin = and(eq(orders.quoteId, quotes.id), eq(quotes.companyId, companyId));
+  const page = await fetchPage(
+    options,
+    async () =>
+      (await db.select({ n: count() }).from(orders).innerJoin(clients, clientJoin).where(where))[0]
+        ?.n ?? 0,
+    ({ limit, offset }) =>
+      db
+        .select({
+          id: orders.id,
+          number: orders.number,
+          status: orders.status,
+          issueDate: orders.issueDate,
+          grossPence: orders.grossPence,
+          clientName: clientDisplayNameSql.as("client_name"),
+          quoteNumber: quotes.number,
+        })
+        .from(orders)
+        .innerJoin(clients, clientJoin)
+        .leftJoin(quotes, quoteJoin)
+        .where(where)
+        .orderBy(...orderListOrderBy(options))
+        .limit(limit)
+        .offset(offset),
+  );
+  return { ...page, rows: page.rows.map((r) => ({ ...r, grossFormatted: formatGBP(r.grossPence) })) };
 }
 
 export async function getOrderDetail(companyId: string, id: string) {

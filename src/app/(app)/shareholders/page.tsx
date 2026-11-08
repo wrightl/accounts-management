@@ -4,7 +4,9 @@ import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { can } from "@/lib/roles";
 import { QueryCell, QueryHeaderCell } from "@/components/queries/query-cells";
 import { recordQueriesFor } from "@/lib/queries/queries";
-import { listShareholders } from "@/lib/shareholders/queries";
+import { getShareRegisterSummary, listShareholderPage } from "@/lib/shareholders/queries";
+import { ListPagination } from "@/components/ui/list-pagination";
+import { listPageHref, parseListPaging } from "@/lib/list-paging";
 import { TotalSharesForm } from "@/components/shareholders/total-shares-form";
 import { buttonClasses } from "@/components/ui/button";
 import { SetupStepBanner } from "@/components/data-onboarding/setup-step-banner";
@@ -25,11 +27,23 @@ export default async function ShareholdersPage({
   }
   const canWrite = await hasPermission("accounts:write");
 
-  const { shareholders, totalShares, activeShareSum, registerBalanced } =
-    await listShareholders(companyId, { includeArchived: true });
-  const active = shareholders.filter((s) => !s.archivedAt);
-  const archived = shareholders.filter((s) => s.archivedAt);
-  const queries = await recordQueriesFor(role, companyId, "shareholder", shareholders.map((s) => s.id));
+  const { totalShares, activeShareSum, registerBalanced } =
+    await getShareRegisterSummary(companyId);
+  const [{ rows: active, ...activePaging }, { rows: archived, ...archivedPaging }] =
+    await Promise.all([
+      listShareholderPage(companyId, { archived: false, totalShares, ...parseListPaging(sp) }),
+      listShareholderPage(companyId, {
+        archived: true,
+        totalShares,
+        ...parseListPaging(sp, "archived"),
+      }),
+    ]);
+  const queries = await recordQueriesFor(
+    role,
+    companyId,
+    "shareholder",
+    [...active, ...archived].map((s) => s.id),
+  );
   const showQueries = canRaiseQuery || queries.size > 0;
 
   return (
@@ -111,10 +125,14 @@ export default async function ShareholdersPage({
               </TBody>
             </Table>
           )}
+          <ListPagination
+            {...activePaging}
+            href={(to) => listPageHref("/shareholders", sp, to)}
+          />
         </div>
       </section>
 
-      {archived.length > 0 && (
+      {archivedPaging.total > 0 && (
         <section className="mt-10">
           <h2 className="font-display text-lg font-semibold">Archived</h2>
           <div className="mt-4">
@@ -147,6 +165,10 @@ export default async function ShareholdersPage({
                 ))}
               </TBody>
             </Table>
+            <ListPagination
+              {...archivedPaging}
+              href={(to) => listPageHref("/shareholders", sp, to, "archived")}
+            />
           </div>
         </section>
       )}

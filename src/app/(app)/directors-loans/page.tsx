@@ -9,7 +9,9 @@ import {
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { todayIsoDate } from "@/lib/dates";
 import type { DirectorLoanWarning } from "@/lib/ledger/director-loan";
-import { getDirectorLoanAccounts, listDirectorLoanEntries } from "@/lib/ledger/queries";
+import { getDirectorLoanAccounts, listDirectorLoanEntryPage } from "@/lib/ledger/queries";
+import { ListPagination } from "@/components/ui/list-pagination";
+import { listPageHref, parseListPaging } from "@/lib/list-paging";
 import { formatGBP } from "@/lib/money";
 import { DisplayDate } from "@/components/date-format-provider";
 
@@ -52,15 +54,20 @@ function WarningText({ warning }: { warning: DirectorLoanWarning }) {
 
 const KIND_LABEL = { drawing: "Took out", paid_in: "Paid in", opening: "Opening" } as const;
 
-export default async function DirectorsLoansPage() {
+export default async function DirectorsLoansPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   const { companyId, entityType } = await guardTenantPage("filing:read");
+  const sp = await searchParams;
   if (entityType !== "limited_company") redirect("/dashboard");
   const canWrite = await hasPermission("accounts:write");
   const today = todayIsoDate();
 
-  const [accounts, entries] = await Promise.all([
+  const [accounts, { rows: entries, ...paging }] = await Promise.all([
     getDirectorLoanAccounts(companyId, today),
-    listDirectorLoanEntries(companyId),
+    listDirectorLoanEntryPage(companyId, parseListPaging(sp)),
   ]);
 
   return (
@@ -170,6 +177,7 @@ export default async function DirectorsLoansPage() {
                 ))}
               </TBody>
             </Table>
+            <ListPagination {...paging} href={(to) => listPageHref("/directors-loans", sp, to)} />
           </div>
         )}
         {accounts.settings.openingBalancesAsAt ? (

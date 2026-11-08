@@ -7,16 +7,10 @@ import {
   listPlatformSendJobs,
 } from "@/lib/platform/queries";
 import { InboundJobsTable, SendJobsTable } from "@/components/platform/job-actions";
-import { Pager, parseOffset } from "@/components/platform/pager";
+import { ListPagination } from "@/components/ui/list-pagination";
+import { listPageHref, parseListPaging, fetchPage } from "@/lib/list-paging";
 
-const PAGE_SIZE = 50;
-
-type Params = {
-  inboundStatus?: string;
-  sendStatus?: string;
-  inboundOffset?: string;
-  sendOffset?: string;
-};
+type Params = Record<string, string | undefined>;
 
 function StatusFilter({
   name,
@@ -60,8 +54,6 @@ export default async function PlatformJobsPage({
 }) {
   await requirePlatformAdmin();
   const params = await searchParams;
-  const inboundOffset = parseOffset(params.inboundOffset);
-  const sendOffset = parseOffset(params.sendOffset);
 
   if (!hasDatabaseClient()) {
     return (
@@ -72,27 +64,19 @@ export default async function PlatformJobsPage({
     );
   }
 
-  const [inbound, inboundTotal, send, sendTotal] = await Promise.all([
-    listPlatformInboundJobs({
-      status: params.inboundStatus,
-      limit: PAGE_SIZE,
-      offset: inboundOffset,
-    }),
-    countPlatformInboundJobs({ status: params.inboundStatus }),
-    listPlatformSendJobs({
-      status: params.sendStatus,
-      limit: PAGE_SIZE,
-      offset: sendOffset,
-    }),
-    countPlatformSendJobs({ status: params.sendStatus }),
+  // Each table pages on its own: ?inboundPage= and ?sendPage=.
+  const [inbound, send] = await Promise.all([
+    fetchPage(
+      parseListPaging(params, "inbound"),
+      () => countPlatformInboundJobs({ status: params.inboundStatus }),
+      (window) => listPlatformInboundJobs({ status: params.inboundStatus, ...window }),
+    ),
+    fetchPage(
+      parseListPaging(params, "send"),
+      () => countPlatformSendJobs({ status: params.sendStatus }),
+      (window) => listPlatformSendJobs({ status: params.sendStatus, ...window }),
+    ),
   ]);
-  // Paging one table keeps the other table's filter and page.
-  const keep = {
-    inboundStatus: params.inboundStatus,
-    sendStatus: params.sendStatus,
-    inboundOffset: params.inboundOffset,
-    sendOffset: params.sendOffset,
-  };
 
   return (
     <div>
@@ -107,7 +91,11 @@ export default async function PlatformJobsPage({
           <StatusFilter
             name="inboundStatus"
             value={params.inboundStatus}
-            keep={{ sendStatus: params.sendStatus, sendOffset: params.sendOffset }}
+            keep={{
+              sendStatus: params.sendStatus,
+              sendPage: params.sendPage,
+              sendPageSize: params.sendPageSize,
+            }}
             options={[
               { value: "all", label: "Needs attention" },
               { value: "failed", label: "Failed" },
@@ -117,15 +105,10 @@ export default async function PlatformJobsPage({
             ]}
           />
         </div>
-        <InboundJobsTable jobs={inbound} />
-        <Pager
-          path="/platform/jobs"
-          params={keep}
-          offset={inboundOffset}
-          offsetKey="inboundOffset"
-          pageSize={PAGE_SIZE}
-          shown={inbound.length}
-          total={inboundTotal}
+        <InboundJobsTable jobs={inbound.rows} />
+        <ListPagination
+          {...inbound}
+          href={(to) => listPageHref("/platform/jobs", params, to, "inbound")}
         />
       </section>
 
@@ -135,7 +118,11 @@ export default async function PlatformJobsPage({
           <StatusFilter
             name="sendStatus"
             value={params.sendStatus}
-            keep={{ inboundStatus: params.inboundStatus, inboundOffset: params.inboundOffset }}
+            keep={{
+              inboundStatus: params.inboundStatus,
+              inboundPage: params.inboundPage,
+              inboundPageSize: params.inboundPageSize,
+            }}
             options={[
               { value: "all", label: "Pending + failed" },
               { value: "failed", label: "Failed" },
@@ -144,15 +131,10 @@ export default async function PlatformJobsPage({
             ]}
           />
         </div>
-        <SendJobsTable jobs={send} />
-        <Pager
-          path="/platform/jobs"
-          params={keep}
-          offset={sendOffset}
-          offsetKey="sendOffset"
-          pageSize={PAGE_SIZE}
-          shown={send.length}
-          total={sendTotal}
+        <SendJobsTable jobs={send.rows} />
+        <ListPagination
+          {...send}
+          href={(to) => listPageHref("/platform/jobs", params, to, "send")}
         />
       </section>
     </div>

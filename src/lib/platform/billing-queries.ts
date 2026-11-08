@@ -1,5 +1,5 @@
 import "server-only";
-import { desc, eq } from "drizzle-orm";
+import { count, desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   companies,
@@ -132,9 +132,17 @@ export type PlatformBillingListItem = {
   readOnly: boolean;
 };
 
-export async function listPlatformBillingCompanies(): Promise<
-  PlatformBillingListItem[]
-> {
+export async function countPlatformBillingCompanies(): Promise<number> {
+  const [row] = await getDb()
+    .select({ count: count() })
+    .from(companyBilling)
+    .innerJoin(companies, eq(companies.id, companyBilling.companyId));
+  return Number(row?.count ?? 0);
+}
+
+export async function listPlatformBillingCompanies(
+  opts?: { limit?: number; offset?: number },
+): Promise<PlatformBillingListItem[]> {
   const db = getDb();
   const rows = await db
     .select({
@@ -148,8 +156,9 @@ export async function listPlatformBillingCompanies(): Promise<
     })
     .from(companyBilling)
     .innerJoin(companies, eq(companies.id, companyBilling.companyId))
-    .orderBy(desc(companyBilling.updatedAt))
-    .limit(200);
+    .orderBy(desc(companyBilling.updatedAt), desc(companyBilling.companyId))
+    .limit(Math.min(opts?.limit ?? 200, 200))
+    .offset(opts?.offset ?? 0);
 
   const out: PlatformBillingListItem[] = [];
   for (const row of rows) {

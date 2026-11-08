@@ -5,26 +5,20 @@ import { countPlatformLogs, listPlatformLogs } from "@/lib/platform/queries";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { ExpandableText } from "@/components/platform/expandable-text";
 import { StatusPill } from "@/components/platform/status-pill";
-import { ClearFilters, Pager, parseOffset } from "@/components/platform/pager";
+import { ClearFilters } from "@/components/platform/pager";
+import { ListPagination } from "@/components/ui/list-pagination";
+import { listPageHref, parseListPaging, fetchPage } from "@/lib/list-paging";
 import { DisplayDate } from "@/components/date-format-provider";
 
-const PAGE_SIZE = 100;
 
 export default async function PlatformLogsPage({
   searchParams,
 }: {
-  searchParams: Promise<{
-    level?: string;
-    source?: string;
-    q?: string;
-    hours?: string;
-    offset?: string;
-  }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
   await requirePlatformAdmin();
   const params = await searchParams;
   const hours = Math.min(168, Math.max(1, Number(params.hours ?? 24) || 24));
-  const offset = parseOffset(params.offset);
 
   if (!hasDatabaseClient()) {
     return (
@@ -41,10 +35,11 @@ export default async function PlatformLogsPage({
     q: params.q,
     sinceHours: hours,
   };
-  const [rows, total] = await Promise.all([
-    listPlatformLogs({ ...filters, limit: PAGE_SIZE, offset }),
-    countPlatformLogs(filters),
-  ]);
+  const { rows, ...paging } = await fetchPage(
+    parseListPaging(params),
+    () => countPlatformLogs(filters),
+    (window) => listPlatformLogs({ ...filters, ...window }),
+  );
 
   return (
     <div>
@@ -164,22 +159,9 @@ export default async function PlatformLogsPage({
             </TBody>
           </Table>
         )}
-        <Pager
-          path="/platform/logs"
-          params={{
-            level: params.level,
-            source: params.source,
-            q: params.q,
-            hours: params.hours,
-          }}
-          offset={offset}
-          pageSize={PAGE_SIZE}
-          shown={rows.length}
-          total={total}
-          firstLabel="« Newest"
-          newerLabel="← Newer"
-          olderLabel="Older →"
-          lastLabel="Oldest »"
+        <ListPagination
+          {...paging}
+          href={(to) => listPageHref("/platform/logs", params, to)}
         />
       </div>
     </div>

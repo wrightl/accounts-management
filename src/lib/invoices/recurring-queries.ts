@@ -10,10 +10,10 @@ import {
   type InvoiceStatus,
 } from "@/lib/invoices/status";
 import type { RecurringLineTemplate } from "@/lib/invoices/recurring";
+import { type ListPaging, fetchPage } from "@/lib/list-paging";
 
-export async function listRecurringInvoices(companyId: string) {
-  const db = getDb();
-  const rows = await db
+function recurringListQuery(companyId: string) {
+  return getDb()
     .select({
       id: recurringInvoices.id,
       name: recurringInvoices.name,
@@ -31,34 +31,56 @@ export async function listRecurringInvoices(companyId: string) {
       createdAt: recurringInvoices.createdAt,
     })
     .from(recurringInvoices)
-    .innerJoin(clients, eq(recurringInvoices.clientId, clients.id))
+    .innerJoin(
+      clients,
+      and(eq(recurringInvoices.clientId, clients.id), eq(clients.companyId, companyId)),
+    )
     .where(eq(recurringInvoices.companyId, companyId))
-    .orderBy(desc(recurringInvoices.createdAt));
+    .orderBy(desc(recurringInvoices.createdAt), desc(recurringInvoices.id));
+}
 
-  return rows.map((r) => {
-    const lines = (r.lineTemplate as RecurringLineTemplate[]) ?? [];
-    const grossPence = lines.reduce(
-      (acc, l) => acc + lineNetPence(l),
-      0,
-    );
-    return {
-      id: r.id,
-      name: r.name,
-      clientId: r.clientId,
-      clientName: r.clientName,
-      dayOfMonth: r.dayOfMonth,
-      onGenerate: r.onGenerate as "draft" | "send",
-      endsOn: r.endsOn,
-      maxOccurrences: r.maxOccurrences,
-      occurrenceCount: r.occurrenceCount,
-      nextRunOn: r.nextRunOn,
-      enabled: r.enabled,
-      lastGeneratedAt: r.lastGeneratedAt,
-      createdAt: r.createdAt,
-      grossPence,
-      grossFormatted: formatGBP(grossPence),
-    };
-  });
+type RecurringListRow = Awaited<ReturnType<typeof recurringListQuery>>[number];
+
+function toRecurringListItem(r: RecurringListRow) {
+  const lines = (r.lineTemplate as RecurringLineTemplate[]) ?? [];
+  const grossPence = lines.reduce((acc, l) => acc + lineNetPence(l), 0);
+  return {
+    id: r.id,
+    name: r.name,
+    clientId: r.clientId,
+    clientName: r.clientName,
+    dayOfMonth: r.dayOfMonth,
+    onGenerate: r.onGenerate as "draft" | "send",
+    endsOn: r.endsOn,
+    maxOccurrences: r.maxOccurrences,
+    occurrenceCount: r.occurrenceCount,
+    nextRunOn: r.nextRunOn,
+    enabled: r.enabled,
+    lastGeneratedAt: r.lastGeneratedAt,
+    createdAt: r.createdAt,
+    grossPence,
+    grossFormatted: formatGBP(grossPence),
+  };
+}
+
+export async function listRecurringInvoices(companyId: string) {
+  return (await recurringListQuery(companyId)).map(toRecurringListItem);
+}
+
+/** One page of recurring schedules, newest first. */
+export async function listRecurringInvoicePage(companyId: string, paging: ListPaging) {
+  const page = await fetchPage(
+    paging,
+    async () =>
+      (
+        await getDb()
+          .select({ n: count() })
+          .from(recurringInvoices)
+          .where(eq(recurringInvoices.companyId, companyId))
+      )[0]?.n ?? 0,
+    ({ limit, offset }) => recurringListQuery(companyId).limit(limit).offset(offset),
+  );
+  return { ...page, rows: page.rows.map(toRecurringListItem) };
 }
 
 export async function getRecurringInvoiceDetail(

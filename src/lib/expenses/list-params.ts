@@ -8,6 +8,11 @@ import { parseTableSort, setTableSortParams, type SortDir } from "@/lib/table-so
 import type { ExpenseStatus } from "@/lib/expenses/categories";
 import { EXPENSE_SORT, type ExpenseSortColumn } from "@/lib/expenses/list-sort";
 import { parseLabelIds } from "@/lib/labels/params";
+import {
+  parseListPaging,
+  setListPagingParams,
+  type ListPageSize,
+} from "@/lib/list-paging";
 
 /**
  * Session cookie holding the last expenses list query, so "← Expenses" and the
@@ -38,6 +43,8 @@ export interface ExpenseListParams {
   mine: boolean;
   sort: ExpenseSortColumn;
   dir: SortDir;
+  page: number;
+  pageSize: ListPageSize;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -75,10 +82,11 @@ export function parseExpenseListParams(
     labels: parseLabelIds(sp.labels),
     mine: first(sp, "mine") === "1",
     ...parseTableSort(sp, EXPENSE_SORT),
+    ...parseListPaging(sp),
   };
 }
 
-/** Filters that narrow the list; sort and the My reimbursable toggle don't count. */
+/** Filters that narrow the list; sort, paging and the My reimbursable toggle don't count. */
 export function hasActiveExpenseFilters(params: ExpenseListParams): boolean {
   return Boolean(
     params.q ||
@@ -103,7 +111,10 @@ export function resolveExpenseListDateRange(
   return { from: resolved.from, to: resolved.to };
 }
 
-/** Build `/expenses?...`, omitting defaults so URLs stay short. */
+/**
+ * Build `/expenses?...`, omitting defaults so URLs stay short. Changing
+ * anything other than the page goes back to the first page.
+ */
 export function expenseListHref(
   params: ExpenseListParams,
   overrides: Partial<ExpenseListParams> = {},
@@ -116,7 +127,8 @@ export function expenseListSearchParams(
   params: ExpenseListParams,
   overrides: Partial<ExpenseListParams> = {},
 ): URLSearchParams {
-  const next = { ...params, ...overrides };
+  const changed = Object.keys(overrides).some((key) => key !== "page" && key !== "pageSize");
+  const next = { ...params, ...(changed ? { page: 1 } : {}), ...overrides };
   const qs = new URLSearchParams();
   if (next.mine) qs.set("mine", "1");
   if (next.q) qs.set("q", next.q);
@@ -133,6 +145,7 @@ export function expenseListSearchParams(
   if (next.billable) qs.set("billable", next.billable);
   if (next.labels.length > 0) qs.set("labels", next.labels.join(","));
   setTableSortParams(qs, EXPENSE_SORT, { sort: next.sort, dir: next.dir });
+  setListPagingParams(qs, next);
   return qs;
 }
 

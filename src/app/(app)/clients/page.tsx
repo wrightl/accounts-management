@@ -1,13 +1,15 @@
 import Link from "next/link";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
-import { listClients } from "@/lib/clients/queries";
+import { listClientPage } from "@/lib/clients/queries";
 import { ClientImportButton } from "@/components/clients/client-import-panel";
 import { SetupStepBanner } from "@/components/data-onboarding/setup-step-banner";
 import { buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { sortHeaders } from "@/components/ui/sortable-th";
-import { defineTableSort, parseTableSort, sortRows } from "@/lib/table-sort";
+import { ListPagination } from "@/components/ui/list-pagination";
+import { listPageHref, parseListPaging } from "@/lib/list-paging";
+import { defineTableSort, parseTableSort } from "@/lib/table-sort";
 import { PageHeader } from "@/components/ui/page-header";
 
 const SORT = defineTableSort({
@@ -27,12 +29,7 @@ export default async function ClientsPage({
   const sort = parseTableSort(sp, SORT);
   const th = sortHeaders("/clients", sp, SORT, sort);
 
-  // Sorted here too, so name order is case-insensitive like the other columns.
-  const rows = sortRows(await listClients(companyId), sort, {
-    name: (r) => r.name,
-    company: (r) => r.companyName,
-    email: (r) => r.email,
-  });
+  const { rows, ...paging } = await listClientPage(companyId, { ...sort, ...parseListPaging(sp) });
 
   return (
     <div>
@@ -89,6 +86,7 @@ export default async function ClientsPage({
             </TBody>
           </Table>
         )}
+        <ListPagination {...paging} href={(to) => listPageHref("/clients", sp, to)} />
       </div>
     </div>
   );

@@ -1,9 +1,10 @@
 import "server-only";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, count, eq, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { companies, companyMemberships, users } from "@/db/schema";
 import { DEFAULT_ROLE, isRole, isTenantRole, PLATFORM_ADMIN_ROLE, type Role, type TenantRole } from "@/lib/roles";
 import { isPlatformAdminEmail, resolvePlatformAdmin } from "@/lib/bootstrap";
+import { type ListPaging, type Paged, fetchPage } from "@/lib/list-paging";
 
 export class PlatformAdminCompanyError extends Error {
   constructor(message = "Platform operators cannot join a company.") {
@@ -257,9 +258,8 @@ export async function removeMembership(
 }
 
 /** List users who are members of a company (membership role, not selected). */
-export async function listUsers(companyId: string): Promise<LocalUser[]> {
-  const db = getDb();
-  const rows = await db
+function companyUsersQuery(companyId: string) {
+  return getDb()
     .select({
       id: users.id,
       clerkUserId: users.clerkUserId,
@@ -273,8 +273,11 @@ export async function listUsers(companyId: string): Promise<LocalUser[]> {
     .from(companyMemberships)
     .innerJoin(users, eq(users.id, companyMemberships.userId))
     .where(eq(companyMemberships.companyId, companyId))
-    .orderBy(asc(users.email));
-  return rows.map((row) => ({
+    .orderBy(asc(users.email), asc(users.id));
+}
+
+function toLocalUser(row: Awaited<ReturnType<typeof companyUsersQuery>>[number]): LocalUser {
+  return {
     id: row.id,
     clerkUserId: row.clerkUserId,
     email: row.email,
@@ -283,7 +286,27 @@ export async function listUsers(companyId: string): Promise<LocalUser[]> {
     companyId: row.companyId,
     expenseInboundSlug: row.expenseInboundSlug ?? null,
     uiPrefs: (row.uiPrefs as Record<string, unknown> | null) ?? {},
-  }));
+  };
+}
+
+export async function listUsers(companyId: string): Promise<LocalUser[]> {
+  return (await companyUsersQuery(companyId)).map(toLocalUser);
+}
+
+/** One page of the company's members, by email. */
+export async function listUserPage(companyId: string, paging: ListPaging): Promise<Paged<LocalUser>> {
+  const page = await fetchPage(
+    paging,
+    async () =>
+      (
+        await getDb()
+          .select({ n: count() })
+          .from(companyMemberships)
+          .where(eq(companyMemberships.companyId, companyId))
+      )[0]?.n ?? 0,
+    ({ limit, offset }) => companyUsersQuery(companyId).limit(limit).offset(offset),
+  );
+  return { ...page, rows: page.rows.map(toLocalUser) };
 }
 
 export async function countAdminUsers(companyId: string): Promise<number> {

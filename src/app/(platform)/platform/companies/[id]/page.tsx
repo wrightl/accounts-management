@@ -3,7 +3,13 @@ import { notFound } from "next/navigation";
 import { BackLink } from "@/components/ui/back-link";
 import { requirePlatformAdmin } from "@/lib/platform";
 import { hasDatabaseClient } from "@/db";
-import { getPlatformCompanyDetail } from "@/lib/platform/queries";
+import {
+  countCompanySupportNotes,
+  getPlatformCompanyDetail,
+  listCompanySupportNotes,
+} from "@/lib/platform/queries";
+import { ListPagination } from "@/components/ui/list-pagination";
+import { listPageHref, parseListPaging, fetchPage } from "@/lib/list-paging";
 import { getCompanyBillingDetail } from "@/lib/platform/billing-queries";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import {
@@ -20,11 +26,14 @@ import { DisplayDate } from "@/components/date-format-provider";
 
 export default async function PlatformCompanyDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
   await requirePlatformAdmin();
   const { id } = await params;
+  const sp = await searchParams;
 
   if (!hasDatabaseClient()) {
     return (
@@ -38,9 +47,15 @@ export default async function PlatformCompanyDetailPage({
   const detail = await getPlatformCompanyDetail(id);
   if (!detail) notFound();
 
-  const { company, members, recentAudit, notes, inboundCounts, sendCounts } =
-    detail;
-  const { billing, entitlements } = await getCompanyBillingDetail(id);
+  const { company, members, recentAudit, inboundCounts, sendCounts } = detail;
+  const [{ billing, entitlements }, { rows: notes, ...notesPaging }] = await Promise.all([
+    getCompanyBillingDetail(id),
+    fetchPage(
+      parseListPaging(sp, "notes"),
+      () => countCompanySupportNotes(id),
+      (window) => listCompanySupportNotes(id, window),
+    ),
+  ]);
 
   return (
     <div>
@@ -214,6 +229,10 @@ export default async function PlatformCompanyDetailPage({
             ))
           )}
         </ul>
+        <ListPagination
+          {...notesPaging}
+          href={(to) => listPageHref(`/platform/companies/${company.id}`, sp, to, "notes")}
+        />
       </section>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">

@@ -1,6 +1,7 @@
 import { and, count, desc, eq, isNull } from "drizzle-orm";
 import { getDb } from "@/db";
 import { notifications, type Notification } from "@/db/schema";
+import { type ListPaging, type Paged, fetchPage } from "@/lib/list-paging";
 
 export type NotificationListFilter = "all" | "unread";
 
@@ -14,22 +15,46 @@ export async function listNotifications(opts: {
   const db = getDb();
   const limit = Math.min(Math.max(opts.limit ?? 50, 1), 100);
   const offset = Math.max(opts.offset ?? 0, 0);
-  const conditions = [
-    eq(notifications.userId, opts.userId),
-    eq(notifications.companyId, opts.companyId),
-    isNull(notifications.deletedAt),
-  ];
-  if (opts.filter === "unread") {
-    conditions.push(isNull(notifications.readAt));
-  }
-
   return db
     .select()
     .from(notifications)
-    .where(and(...conditions))
-    .orderBy(desc(notifications.createdAt))
+    .where(notificationListWhere(opts))
+    .orderBy(desc(notifications.createdAt), desc(notifications.id))
     .limit(limit)
     .offset(offset);
+}
+
+function notificationListWhere(opts: {
+  userId: string;
+  companyId: string;
+  filter?: NotificationListFilter;
+}) {
+  return and(
+    eq(notifications.userId, opts.userId),
+    eq(notifications.companyId, opts.companyId),
+    isNull(notifications.deletedAt),
+    opts.filter === "unread" ? isNull(notifications.readAt) : undefined,
+  );
+}
+
+/** One page of someone's inbox, newest first, with the total across pages. */
+export async function listNotificationPage(
+  opts: { userId: string; companyId: string; filter?: NotificationListFilter } & ListPaging,
+): Promise<Paged<Notification>> {
+  const db = getDb();
+  const where = notificationListWhere(opts);
+  return fetchPage(
+    opts,
+    async () => (await db.select({ n: count() }).from(notifications).where(where))[0]?.n ?? 0,
+    ({ limit, offset }) =>
+      db
+        .select()
+        .from(notifications)
+        .where(where)
+        .orderBy(desc(notifications.createdAt), desc(notifications.id))
+        .limit(limit)
+        .offset(offset),
+  );
 }
 
 export async function countUnreadNotifications(

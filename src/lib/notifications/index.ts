@@ -26,6 +26,7 @@ export { notify, notifyUsers, type NotifyResult } from "./create";
 
 export {
   listNotifications,
+  listNotificationPage,
   countUnreadNotifications,
   getNotificationForUser,
   markNotificationRead,

@@ -3,19 +3,26 @@ import { guardTenantPage, hasPermission } from '@/lib/auth';
 import { can } from '@/lib/roles';
 import { QueryCell, QueryHeaderCell } from '@/components/queries/query-cells';
 import { recordQueriesFor } from '@/lib/queries/queries';
-import { listRecurringInvoices } from '@/lib/invoices/recurring-queries';
+import { listRecurringInvoicePage } from '@/lib/invoices/recurring-queries';
+import { ListPagination } from '@/components/ui/list-pagination';
+import { listPageHref, parseListPaging } from '@/lib/list-paging';
 import { buttonClasses } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
 import { DisplayDate } from '@/components/date-format-provider';
 import { PageHeader } from '@/components/ui/page-header';
 
-export default async function RecurringInvoicesPage() {
+export default async function RecurringInvoicesPage({
+    searchParams,
+}: {
+    searchParams: Promise<Record<string, string | undefined>>;
+}) {
     const { companyId, role } = await guardTenantPage('records:read');
     const canWrite = await hasPermission('accounts:write');
     const canRaiseQuery = can(role, 'queries:raise');
+    const sp = await searchParams;
 
-    const rows = await listRecurringInvoices(companyId);
+    const { rows, ...paging } = await listRecurringInvoicePage(companyId, parseListPaging(sp));
     const queries = await recordQueriesFor(
         role,
         companyId,
@@ -116,6 +123,10 @@ export default async function RecurringInvoicesPage() {
                         </TBody>
                     </Table>
                 )}
+                <ListPagination
+                    {...paging}
+                    href={(to) => listPageHref('/recurring-invoices', sp, to)}
+                />
             </div>
         </div>
     );

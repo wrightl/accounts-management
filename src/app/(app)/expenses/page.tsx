@@ -7,7 +7,7 @@ import {
   findPossibleDuplicates,
   getEmailExpensesFingerprint,
   getReimbursableSummary,
-  listExpenses,
+  listExpensePage,
   listFounders,
 } from "@/lib/expenses/queries";
 import {
@@ -46,6 +46,7 @@ import { DisplayDate } from "@/components/date-format-provider";
 import { ManageLabelsButton } from "@/components/labels/manage-labels";
 import { RowLabels } from "@/components/labels/row-labels";
 import { RowNote } from "@/components/labels/row-note";
+import { ListPagination } from "@/components/ui/list-pagination";
 import { RecordQueryIcon } from "@/components/queries/record-query-icon";
 import { recordQueriesFor } from "@/lib/queries/queries";
 import { listLabels } from "@/lib/labels/queries";
@@ -81,8 +82,8 @@ export default async function ExpensesPage({
   const dateRange = resolveExpenseListDateRange(params, settings.financialYearEndMonth);
   const filtered = hasActiveExpenseFilters(params);
 
-  const [listed, founders, reimbSummary, company, emailFingerprint] = await Promise.all([
-    listExpenses(companyId, {
+  const [{ rows: listed, ...paging }, founders, reimbSummary, company, emailFingerprint] = await Promise.all([
+    listExpensePage(companyId, {
       q: params.q,
       from: dateRange.from,
       to: dateRange.to,
@@ -93,6 +94,8 @@ export default async function ExpensesPage({
       labels: params.labels,
       sort: { sort: params.sort, dir: params.dir },
       scope,
+      page: params.page,
+      pageSize: params.pageSize,
     }),
     listFounders(companyId),
     getReimbursableSummary(companyId),
@@ -328,6 +331,10 @@ export default async function ExpensesPage({
           </Table>
           </>
         )}
+        <ListPagination
+          {...paging}
+          href={(to) => expenseListHref(params, to as Partial<typeof params>)}
+        />
       </div>
     </div>
   );

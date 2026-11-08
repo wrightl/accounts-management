@@ -746,7 +746,14 @@ describe("credit notes in pack scope", () => {
       issueDate: "2026-03-05",
       reason: "Mistake",
     });
-    const { listCreditNotes } = await import("@/lib/credit-notes/queries");
-    expect((await listCreditNotes(companyId, "pack")).map((r) => r.number)).toEqual(["CN-1"]);
+    const { listCreditNotePage } = await import("@/lib/credit-notes/queries");
+    const page = await listCreditNotePage(companyId, {
+      scope: "pack",
+      sort: "created",
+      dir: "desc",
+      page: 1,
+      pageSize: 25,
+    });
+    expect(page.rows.map((r) => r.number)).toEqual(["CN-1"]);
   });
 });

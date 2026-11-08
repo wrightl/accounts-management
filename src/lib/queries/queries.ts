@@ -1,12 +1,13 @@
 import "server-only";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { accountantQueries, accountantQueryMessages, users } from "@/db/schema";
+import { type ListPaging, fetchPage } from "@/lib/list-paging";
 import { can, type Role } from "@/lib/roles";
 import type { QueryRecordKind, QueryStatus, RecordQuery } from "./status";
 
-export async function listQueries(companyId: string, status?: QueryStatus) {
-  const rows = await getDb()
+function queryListQuery(companyId: string, status?: QueryStatus) {
+  return getDb()
     .select({
       id: accountantQueries.id,
       subject: accountantQueries.subject,
@@ -18,14 +19,39 @@ export async function listQueries(companyId: string, status?: QueryStatus) {
     })
     .from(accountantQueries)
     .leftJoin(users, eq(accountantQueries.raisedByUserId, users.id))
-    .where(
-      and(
-        eq(accountantQueries.companyId, companyId),
-        status ? eq(accountantQueries.status, status) : undefined,
-      ),
-    )
-    .orderBy(desc(accountantQueries.updatedAt));
+    .where(queryListWhere(companyId, status))
+    .orderBy(desc(accountantQueries.updatedAt), desc(accountantQueries.id));
+}
+
+function queryListWhere(companyId: string, status?: QueryStatus) {
+  return and(
+    eq(accountantQueries.companyId, companyId),
+    status ? eq(accountantQueries.status, status) : undefined,
+  );
+}
+
+export async function listQueries(companyId: string, status?: QueryStatus) {
+  const rows = await queryListQuery(companyId, status);
   return rows.map((r) => ({ ...r, status: r.status as QueryStatus }));
+}
+
+/** One page of queries, most recently active first. */
+export async function listQueryPage(
+  companyId: string,
+  options: { status?: QueryStatus } & ListPaging,
+) {
+  const page = await fetchPage(
+    options,
+    async () =>
+      (
+        await getDb()
+          .select({ n: count() })
+          .from(accountantQueries)
+          .where(queryListWhere(companyId, options.status))
+      )[0]?.n ?? 0,
+    ({ limit, offset }) => queryListQuery(companyId, options.status).limit(limit).offset(offset),
+  );
+  return { ...page, rows: page.rows.map((r) => ({ ...r, status: r.status as QueryStatus })) };
 }
 
 export async function listQueriesForRecord(

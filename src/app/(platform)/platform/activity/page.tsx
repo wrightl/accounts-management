@@ -8,23 +8,19 @@ import {
 } from "@/lib/platform/queries";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { ExpandableText } from "@/components/platform/expandable-text";
-import { ClearFilters, Pager, parseOffset } from "@/components/platform/pager";
+import { ClearFilters } from "@/components/platform/pager";
+import { ListPagination } from "@/components/ui/list-pagination";
+import { listPageHref, parseListPaging, fetchPage } from "@/lib/list-paging";
 import { DisplayDate } from "@/components/date-format-provider";
 
-const PAGE_SIZE = 50;
 
 export default async function PlatformActivityPage({
   searchParams,
 }: {
-  searchParams: Promise<{
-    companyId?: string;
-    action?: string;
-    offset?: string;
-  }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
   await requirePlatformAdmin();
   const params = await searchParams;
-  const offset = parseOffset(params.offset);
 
   if (!hasDatabaseClient()) {
     return (
@@ -39,9 +35,12 @@ export default async function PlatformActivityPage({
     companyId: params.companyId || undefined,
     actionPrefix: params.action || undefined,
   };
-  const [rows, total, companyOptions] = await Promise.all([
-    listPlatformActivity({ ...filters, limit: PAGE_SIZE, offset }),
-    countPlatformActivity(filters),
+  const [{ rows, ...paging }, companyOptions] = await Promise.all([
+    fetchPage(
+      parseListPaging(params),
+      () => countPlatformActivity(filters),
+      (window) => listPlatformActivity({ ...filters, ...window }),
+    ),
     listCompanyOptions(),
   ]);
 
@@ -130,17 +129,9 @@ export default async function PlatformActivityPage({
         )}
       </div>
 
-      <Pager
-        path="/platform/activity"
-        params={{ companyId: params.companyId, action: params.action }}
-        offset={offset}
-        pageSize={PAGE_SIZE}
-        shown={rows.length}
-        total={total}
-        firstLabel="« Newest"
-        newerLabel="← Newer"
-        olderLabel="Older →"
-        lastLabel="Oldest »"
+      <ListPagination
+        {...paging}
+        href={(to) => listPageHref("/platform/activity", params, to)}
       />
     </div>
   );
