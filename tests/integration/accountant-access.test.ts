@@ -127,4 +127,17 @@ describe("accountant file access", () => {
     expect(res.headers.get("Content-Type")).toBe("application/zip");
     await res.body?.cancel();
   });
+
+  it("allows the Excel accountant pack", async () => {
+    const res = await accountantPack(
+      new Request(
+        "http://localhost/api/reports/accountant-pack?from=2026-01-01&to=2026-01-31&format=xlsx",
+      ),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Disposition")).toContain(
+      "accountant-pack-2026-01-01_2026-01-31-excel.zip",
+    );
+    await res.body?.cancel();
+  });
 });
