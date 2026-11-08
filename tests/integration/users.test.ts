@@ -975,6 +975,20 @@ describe("switchCompany", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toMatch(/do not have access/i);
   });
+
+  it("returns a session message instead of redirecting when signed out", async () => {
+    const { auth } = await import("@clerk/nextjs/server");
+    const { SESSION_EXPIRED_ERROR } = await import("@/lib/auth");
+    await seedAdmin();
+    const companyB = await seedCompany(db, { name: "Company B" });
+
+    vi.mocked(auth).mockResolvedValueOnce({ userId: null, sessionClaims: {} } as never);
+
+    await expect(switchCompany(companyB.id)).resolves.toEqual({
+      ok: false,
+      error: SESSION_EXPIRED_ERROR,
+    });
+  });
 });
 
 describe("ensureLocalUser with an invited row", () => {
