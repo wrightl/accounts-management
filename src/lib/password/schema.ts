@@ -97,3 +97,14 @@ export function clerkErrorMessage(err: unknown, fallback: string): string {
   }
   return fallback;
 }
+
+/** Whether Clerk rejected the identifier because no account uses it. */
+export function isIdentifierNotFound(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as { code?: unknown; errors?: { code?: unknown }[] };
+  if (e.code === "form_identifier_not_found") return true;
+  return (
+    Array.isArray(e.errors) &&
+    e.errors.some((x) => x?.code === "form_identifier_not_found")
+  );
+}

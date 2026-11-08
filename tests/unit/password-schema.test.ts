@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   clerkErrorMessage,
+  isIdentifierNotFound,
   parsePasswordChange,
   parsePasswordReset,
   parseResetEmail,
@@ -116,5 +117,20 @@ describe("clerkErrorMessage", () => {
   it("falls back when nothing useful is present", () => {
     expect(clerkErrorMessage(null, "fallback")).toBe("fallback");
     expect(clerkErrorMessage({ message: "  " }, "fallback")).toBe("fallback");
+  });
+});
+
+describe("isIdentifierNotFound", () => {
+  it("spots the not-found code on a ClerkError or in an API error list", () => {
+    expect(isIdentifierNotFound({ code: "form_identifier_not_found" })).toBe(true);
+    expect(
+      isIdentifierNotFound({ errors: [{ code: "form_identifier_not_found" }] }),
+    ).toBe(true);
+  });
+
+  it("ignores other errors", () => {
+    expect(isIdentifierNotFound({ code: "too_many_requests" })).toBe(false);
+    expect(isIdentifierNotFound({ errors: [{ code: "form_param_format_invalid" }] })).toBe(false);
+    expect(isIdentifierNotFound(null)).toBe(false);
   });
 });

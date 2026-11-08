@@ -12,12 +12,16 @@ import { useFieldErrors } from "@/components/ui/use-field-errors";
 import { PasswordField } from "@/components/users/password-section";
 import {
   clerkErrorMessage,
+  isIdentifierNotFound,
   parsePasswordReset,
   parseResetEmail,
   PASSWORD_MIN_LENGTH,
 } from "@/lib/password/schema";
 
 type Step = "email" | "reset" | "sign-in";
+
+/** Same message for a wrong code and an unknown email, so neither leaks. */
+const BAD_CODE = "That code is not right or has expired";
 
 /**
  * Forgot password flow: email a reset code, then take the code and a new
@@ -33,11 +37,18 @@ export function ForgotPasswordForm() {
   const [email, setEmail] = useState("");
   const [pending, setPending] = useState(false);
   const [resent, setResent] = useState(false);
+  // False when no account uses the email. The page acts as if a code was
+  // sent anyway, so it cannot be used to find out who has an account.
+  const [accountFound, setAccountFound] = useState(false);
 
   async function sendCode(address: string): Promise<boolean> {
     const created = await signIn.create({ identifier: address });
     if (created.error) {
-      setError(clerkErrorMessage(created.error, "We could not find that account"));
+      if (isIdentifierNotFound(created.error)) {
+        setAccountFound(false);
+        return true;
+      }
+      setError(clerkErrorMessage(created.error, "We could not send a reset code"));
       return false;
     }
     const sent = await signIn.resetPasswordEmailCode.sendCode();
@@ -45,6 +56,7 @@ export function ForgotPasswordForm() {
       setError(clerkErrorMessage(sent.error, "We could not send a reset code"));
       return false;
     }
+    setAccountFound(true);
     return true;
   }
 
@@ -89,15 +101,19 @@ export function ForgotPasswordForm() {
     }
     setPending(true);
     try {
+      if (!accountFound) {
+        applyFail({ error: BAD_CODE, fieldErrors: { code: BAD_CODE } });
+        scheduleFocusFirstFieldError(formRef.current, { code: BAD_CODE });
+        return;
+      }
       // A rejected password leaves the code verified, so skip it on retry.
       if (signIn.status !== "needs_new_password") {
         const verified = await signIn.resetPasswordEmailCode.verifyCode({
           code: parsed.data.code,
         });
         if (verified.error) {
-          const message = clerkErrorMessage(verified.error, "That code did not work");
-          applyFail({ error: message, fieldErrors: { code: message } });
-          scheduleFocusFirstFieldError(formRef.current, { code: message });
+          applyFail({ error: BAD_CODE, fieldErrors: { code: BAD_CODE } });
+          scheduleFocusFirstFieldError(formRef.current, { code: BAD_CODE });
           return;
         }
       }
@@ -179,8 +195,8 @@ export function ForgotPasswordForm() {
           className="mt-6 space-y-4"
         >
           <p className="text-sm text-muted">
-            We sent a 6 digit code to <strong>{email}</strong>. Enter it below
-            with your new password.
+            If <strong>{email}</strong> has an account, we have sent it a 6
+            digit code. Enter the code below with your new password.
           </p>
           <input
             type="text"
@@ -228,7 +244,7 @@ export function ForgotPasswordForm() {
           ) : null}
           {resent ? (
             <p className="text-sm" role="status">
-              We sent a new code.
+              If the email has an account, we have sent a new code.
             </p>
           ) : null}
           <Button type="submit" disabled={pending} className="w-full">
