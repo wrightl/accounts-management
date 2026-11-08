@@ -148,7 +148,7 @@ class AttentionPanelCard extends StatelessWidget {
                 ),
               if (items.recurringUpcomingFormatted != '£0.00')
                 _StatChip(
-                  label: 'Recurring next',
+                  label: 'Recurring / month',
                   value: items.recurringUpcomingFormatted,
                 ),
               if (items.winRatePercent != null)

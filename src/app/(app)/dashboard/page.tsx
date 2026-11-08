@@ -218,7 +218,10 @@ export default async function DashboardOverview({
           <section className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
             <div className="space-y-6">
               <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-                <CashVsInvoicedChart data={overview.cashSeries} />
+                <CashVsInvoicedChart
+                  data={overview.cashSeries}
+                  windowLabel={overview.chartWindowLabel}
+                />
                 <QuoteToCashFunnel
                   stages={overview.funnel}
                   periodLabel={overview.periodLabel}
@@ -236,13 +239,17 @@ export default async function DashboardOverview({
                   }}
                   overduePercent={overview.agedReceivables.overduePercent}
                 />
-                <IncomeExpenseChart data={overview.incomeExpenseSeries} />
+                <IncomeExpenseChart
+                  data={overview.incomeExpenseSeries}
+                  windowLabel={overview.chartWindowLabel}
+                />
               </div>
 
               <div className="grid gap-6 lg:grid-cols-3">
                 <TopClientsChart
                   clients={overview.topClients}
                   periodLabel={overview.periodLabel}
+                  includesPreCutover={overview.periodBeforeCutover}
                 />
                 <ExpenseMixChart
                   slices={overview.expenseMix}

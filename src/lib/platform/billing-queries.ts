@@ -7,7 +7,10 @@ import {
   subscriptionTiers,
 } from "@/db/schema";
 import { catalogAmountPence, getStripeCatalog } from "@/lib/billing/catalog";
-import { getEntitlements } from "@/lib/billing/entitlements";
+import {
+  getEntitlements,
+  isComplimentaryActive,
+} from "@/lib/billing/entitlements";
 import { ensureCompanyBilling } from "@/lib/billing/company-billing";
 
 export async function getCompanyBillingDetail(companyId: string) {
@@ -60,11 +63,13 @@ export async function getPlatformBillingStats(): Promise<PlatformBillingStats> {
   let mrrPence = 0;
 
   for (const row of rows) {
-    const complimentaryActive =
-      row.access === "complimentary_unlimited" &&
-      (!row.complimentaryExpiresAt ||
-        row.complimentaryExpiresAt.getTime() > now.getTime());
-    if (complimentaryActive) complimentary += 1;
+    // Complimentary is its own bucket: the grant leaves `status` untouched
+    // (often "trialing"), so counting status too would double-count it.
+    // Complimentary companies are never read-only and pay nothing.
+    if (isComplimentaryActive(row.access, row.complimentaryExpiresAt, now)) {
+      complimentary += 1;
+      continue;
+    }
 
     if (row.status === "trialing") {
       trialing += 1;
@@ -78,18 +83,16 @@ export async function getPlatformBillingStats(): Promise<PlatformBillingStats> {
     } else if (row.status === "active") {
       if (row.plan === "essentials") activeEssentials += 1;
       if (row.plan === "premium") activePremium += 1;
-      if (!complimentaryActive) {
-        if (row.plan === "essentials") {
-          const year = catalogAmountPence(catalog, "essentials", "year");
-          const month = catalogAmountPence(catalog, "essentials", "month");
-          mrrPence +=
-            row.billingInterval === "year" ? Math.round(year / 12) : month;
-        } else if (row.plan === "premium") {
-          const year = catalogAmountPence(catalog, "premium", "year");
-          const month = catalogAmountPence(catalog, "premium", "month");
-          mrrPence +=
-            row.billingInterval === "year" ? Math.round(year / 12) : month;
-        }
+      if (row.plan === "essentials") {
+        const year = catalogAmountPence(catalog, "essentials", "year");
+        const month = catalogAmountPence(catalog, "essentials", "month");
+        mrrPence +=
+          row.billingInterval === "year" ? Math.round(year / 12) : month;
+      } else if (row.plan === "premium") {
+        const year = catalogAmountPence(catalog, "premium", "year");
+        const month = catalogAmountPence(catalog, "premium", "month");
+        mrrPence +=
+          row.billingInterval === "year" ? Math.round(year / 12) : month;
       }
     } else if (row.status === "past_due") {
       pastDue += 1;

@@ -52,7 +52,7 @@ function addDays(from: Date, days: number): Date {
   return d;
 }
 
-function isComplimentaryActive(
+export function isComplimentaryActive(
   access: string,
   expiresAt: Date | null,
   now: Date,

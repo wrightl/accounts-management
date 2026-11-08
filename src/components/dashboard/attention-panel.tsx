@@ -268,7 +268,7 @@ export function AttentionPanel({
         ) : null}
         {items.recurringUpcomingFormatted !== "£0.00" ? (
           <Link href="/recurring-invoices" className="rounded-lg bg-wash/50 px-2.5 py-2 hover:bg-wash">
-            <span className="block text-muted">Recurring next</span>
+            <span className="block text-muted">Recurring / month</span>
             <span className="mt-0.5 block tabular-nums font-medium">
               {items.recurringUpcomingFormatted}
             </span>

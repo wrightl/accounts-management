@@ -1,10 +1,5 @@
 import "server-only";
-import { 
-  creditNoteCountsInAccounts,
-  invoiceCountsInAccounts,
-  paymentCountsInAccounts,
- } from "@/lib/invoices/accounts-scope";
-import { and, eq, gte, inArray, lte, ne, sql, sum } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, isNull, lte, min, ne, notExists, or, sql, sum } from "drizzle-orm";
 import type { SessionUser } from "@/lib/auth";
 import { getDb } from "@/db";
 import {
@@ -115,11 +110,12 @@ export type FunnelStage = {
   href: string;
 };
 
+/** Invoiced net of VAT, so it agrees with income on Reports. */
 export type ClientRevenueSlice = {
   clientId: string | null;
   name: string;
-  grossPence: number;
-  grossFormatted: string;
+  totalPence: number;
+  totalFormatted: string;
   percent: number;
 };
 
@@ -148,6 +144,12 @@ export type DashboardAttentionData = {
 
 export type DashboardOverviewData = {
   periodKey: DashboardPeriodKey;
+  /** An earlier financial year is chosen, so snapshot figures are from today, not that year. */
+  isPastYear: boolean;
+  /** The period starts before the invoice cutover, so sales and accounts figures differ. */
+  periodBeforeCutover: boolean;
+  /** What the monthly charts cover: the chosen earlier year, otherwise the last 12 months. */
+  chartWindowLabel: string;
   /** Earlier financial years the period picker offers, newest first. */
   pastYears: Array<{ value: PastFinancialYearKey; label: string }>;
   periodLabel: string;
@@ -187,6 +189,9 @@ export type DashboardOverviewData = {
   };
 };
 
+// Sales and cash figures below count brought-forward invoices: the Overview
+// shows trading history, while Profit and the charts built on P&L don't.
+
 export async function getCollectedInPeriod(
   companyId: string,
   from: string,
@@ -202,12 +207,11 @@ export async function getCollectedInPeriod(
     .where(
       and(
         eq(invoices.companyId, companyId),
-        paymentCountsInAccounts,
         gte(sql`(${payments.receivedAt} AT TIME ZONE 'Europe/London')::date`, from),
         lte(sql`(${payments.receivedAt} AT TIME ZONE 'Europe/London')::date`, to),
       ),
     );
-  const refunds = await sumRefundsInPeriod(companyId, from, to);
+  const refunds = await sumRefundsInPeriod(companyId, from, to, "sales");
   return (row?.total ?? 0) - refunds;
 }
 
@@ -227,7 +231,6 @@ export async function getCollectedByMonth(
     .where(
       and(
         eq(invoices.companyId, companyId),
-        paymentCountsInAccounts,
         gte(sql`(${payments.receivedAt} AT TIME ZONE 'Europe/London')::date`, from),
         lte(sql`(${payments.receivedAt} AT TIME ZONE 'Europe/London')::date`, to),
       ),
@@ -241,7 +244,7 @@ export async function getCollectedByMonth(
 
   return subtractByMonth(
     rows.map((r) => ({ month: r.month, totalPence: r.total ?? 0 })),
-    await refundsByMonth(companyId, from, to),
+    await refundsByMonth(companyId, from, to, "sales"),
   );
 }
 
@@ -259,12 +262,11 @@ export async function getInvoicedGrossInPeriod(
         eq(invoices.companyId, companyId),
         ne(invoices.status, "void"),
         ne(invoices.status, "draft"),
-        invoiceCountsInAccounts,
         gte(invoices.issueDate, from),
         lte(invoices.issueDate, to),
       ),
     );
-  const credits = await sumCreditNotesInPeriod(companyId, from, to);
+  const credits = await sumCreditNotesInPeriod(companyId, from, to, "sales");
   return (row?.total ?? 0) - credits.grossPence;
 }
 
@@ -285,7 +287,6 @@ export async function getInvoicedGrossByMonth(
         eq(invoices.companyId, companyId),
         ne(invoices.status, "void"),
         ne(invoices.status, "draft"),
-        invoiceCountsInAccounts,
         gte(invoices.issueDate, from),
         lte(invoices.issueDate, to),
       ),
@@ -296,7 +297,7 @@ export async function getInvoicedGrossByMonth(
   return subtractByMonth(
     rows.map((r) => ({ month: r.month, totalPence: r.total ?? 0 })),
     new Map(
-      [...(await creditNotesByMonth(companyId, from, to))].map(([month, c]) => [
+      [...(await creditNotesByMonth(companyId, from, to, "sales"))].map(([month, c]) => [
         month,
         c.grossPence,
       ]),
@@ -315,7 +316,7 @@ export async function getTopClientsByRevenue(
     .select({
       clientId: invoices.clientId,
       name: clientDisplayNameSql.as("client_name"),
-      total: sum(invoices.grossPence).mapWith(Number),
+      total: sum(invoices.netPence).mapWith(Number),
     })
     .from(invoices)
     .innerJoin(clients, eq(invoices.clientId, clients.id))
@@ -324,25 +325,23 @@ export async function getTopClientsByRevenue(
         eq(invoices.companyId, companyId),
         ne(invoices.status, "void"),
         ne(invoices.status, "draft"),
-        invoiceCountsInAccounts,
         gte(invoices.issueDate, from),
         lte(invoices.issueDate, to),
       ),
     )
     .groupBy(invoices.clientId, clientDisplayNameSql);
 
-  // Net of credit notes issued in the period (by credit note issue date).
+  // Less credit notes issued in the period (by credit note issue date).
   const creditedRows = await db
     .select({
       clientId: creditNotes.clientId,
-      total: sum(creditNotes.grossPence).mapWith(Number),
+      total: sum(creditNotes.netPence).mapWith(Number),
     })
     .from(creditNotes)
     .where(
       and(
         eq(creditNotes.companyId, companyId),
         eq(creditNotes.status, "issued"),
-        creditNoteCountsInAccounts(creditNotes.issueDate),
         gte(creditNotes.issueDate, from),
         lte(creditNotes.issueDate, to),
       ),
@@ -366,8 +365,8 @@ export async function getTopClientsByRevenue(
   const slices: ClientRevenueSlice[] = top.map((r) => ({
     clientId: r.clientId,
     name: r.name,
-    grossPence: r.total ?? 0,
-    grossFormatted: formatGBP(r.total ?? 0),
+    totalPence: r.total ?? 0,
+    totalFormatted: formatGBP(r.total ?? 0),
     percent: Math.round(((r.total ?? 0) / total) * 100),
   }));
 
@@ -375,8 +374,8 @@ export async function getTopClientsByRevenue(
     slices.push({
       clientId: null,
       name: "Other",
-      grossPence: other,
-      grossFormatted: formatGBP(other),
+      totalPence: other,
+      totalFormatted: formatGBP(other),
       percent: Math.round((other / total) * 100),
     });
   }
@@ -405,6 +404,7 @@ async function getUnbilledOnActiveOrders(companyId: string): Promise<number> {
     .from(invoices)
     .where(
       and(
+        eq(invoices.companyId, companyId),
         inArray(invoices.orderId, ids),
         ne(invoices.status, "void"),
         ne(invoices.status, "draft"),
@@ -426,7 +426,13 @@ async function getUnbilledOnActiveOrders(companyId: string): Promise<number> {
     })
     .from(creditNotes)
     .innerJoin(invoices, eq(creditNotes.invoiceId, invoices.id))
-    .where(and(inArray(invoices.orderId, ids), eq(creditNotes.status, "issued")))
+    .where(
+      and(
+        eq(creditNotes.companyId, companyId),
+        inArray(invoices.orderId, ids),
+        eq(creditNotes.status, "issued"),
+      ),
+    )
     .groupBy(invoices.orderId);
   for (const r of creditedRows) {
     if (r.orderId == null) continue;
@@ -441,7 +447,8 @@ async function getUnbilledOnActiveOrders(companyId: string): Promise<number> {
   return unbilled;
 }
 
-async function getRecurringUpcoming(companyId: string): Promise<number> {
+/** Net invoiced each month by recurring invoices that still have a run to come. */
+async function getRecurringMonthly(companyId: string): Promise<number> {
   const db = getDb();
   const rows = await db
     .select({
@@ -452,6 +459,11 @@ async function getRecurringUpcoming(companyId: string): Promise<number> {
       and(
         eq(recurringInvoices.companyId, companyId),
         eq(recurringInvoices.enabled, true),
+        isNotNull(recurringInvoices.nextRunOn),
+        or(
+          isNull(recurringInvoices.endsOn),
+          lte(recurringInvoices.nextRunOn, recurringInvoices.endsOn),
+        ),
       ),
     );
 
@@ -493,7 +505,8 @@ export async function getDaysSalesOutstanding(companyId: string): Promise<number
       lastReceived: sql<string>`max((${payments.receivedAt} AT TIME ZONE 'Europe/London')::date)`,
     })
     .from(payments)
-    .where(inArray(payments.invoiceId, ids))
+    .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
+    .where(and(eq(invoices.companyId, companyId), inArray(payments.invoiceId, ids)))
     .groupBy(payments.invoiceId);
 
   const lastMap = new Map(lastPayments.map((r) => [r.invoiceId, r.lastReceived]));
@@ -520,6 +533,7 @@ export async function getDaysSalesOutstanding(companyId: string): Promise<number
   return Math.round(totalDays / count);
 }
 
+/** Open quotes, leaving out accepted ones already turned into an order (counted there). */
 async function getQuotePipelinePence(companyId: string): Promise<number> {
   const db = getDb();
   const [row] = await db
@@ -529,18 +543,24 @@ async function getQuotePipelinePence(companyId: string): Promise<number> {
       and(
         eq(quotes.companyId, companyId),
         inArray(quotes.status, ["draft", "sent", "accepted"]),
+        notExists(
+          db
+            .select({ id: orders.id })
+            .from(orders)
+            .where(and(eq(orders.companyId, companyId), eq(orders.quoteId, quotes.id))),
+        ),
       ),
     );
   return row?.total ?? 0;
 }
 
-async function getActiveOrdersPence(companyId: string): Promise<number> {
+async function getEarliestInvoiceDate(companyId: string): Promise<string | null> {
   const db = getDb();
   const [row] = await db
-    .select({ total: sum(orders.grossPence).mapWith(Number) })
-    .from(orders)
-    .where(and(eq(orders.companyId, companyId), eq(orders.status, "active")));
-  return row?.total ?? 0;
+    .select({ earliest: min(invoices.issueDate) })
+    .from(invoices)
+    .where(and(eq(invoices.companyId, companyId), ne(invoices.status, "draft")));
+  return row?.earliest ?? null;
 }
 
 function winRatePercent(quotesSummary: QuotesSummaryData): number | null {
@@ -610,19 +630,29 @@ function todayDisplayLabel(today: string): string {
 
 /**
  * The earliest date the books could cover: incorporation, else the day after
- * the opening balances, else when the company joined.
+ * the opening balances, else when the company joined. An earlier invoice, such
+ * as imported history, reaches back further.
  */
-function earliestBooksDate(settings: {
-  incorporatedOn: string | null;
-  openingBalancesAsAt: string | null;
-  createdAt: Date;
-}): string {
-  if (settings.incorporatedOn) return settings.incorporatedOn;
-  if (settings.openingBalancesAsAt) {
+export function earliestBooksDate(
+  settings: {
+    incorporatedOn: string | null;
+    openingBalancesAsAt: string | null;
+    createdAt: Date;
+  },
+  earliestInvoiceDate: string | null = null,
+): string {
+  let earliest: string;
+  if (settings.incorporatedOn) {
+    earliest = settings.incorporatedOn;
+  } else if (settings.openingBalancesAsAt) {
     const [y, m, d] = settings.openingBalancesAsAt.split("-").map(Number);
-    return new Date(Date.UTC(y!, m! - 1, d! + 1)).toISOString().slice(0, 10);
+    earliest = new Date(Date.UTC(y!, m! - 1, d! + 1)).toISOString().slice(0, 10);
+  } else {
+    earliest = todayIsoDate(settings.createdAt);
   }
-  return todayIsoDate(settings.createdAt);
+  return earliestInvoiceDate && earliestInvoiceDate < earliest
+    ? earliestInvoiceDate
+    : earliest;
 }
 
 export async function getDashboardOverview(
@@ -630,10 +660,13 @@ export async function getDashboardOverview(
   user: SessionUser,
   periodRaw?: string | null,
 ): Promise<DashboardOverviewData> {
-  const settings = await getCompanySettings(companyId);
+  const [settings, earliestInvoiceDate] = await Promise.all([
+    getCompanySettings(companyId),
+    getEarliestInvoiceDate(companyId),
+  ]);
   const pastYears = pastFinancialYearOptions(
     settings.financialYearEndMonth,
-    earliestBooksDate(settings),
+    earliestBooksDate(settings, earliestInvoiceDate),
   );
   const parsedKey = parseDashboardPeriod(periodRaw);
   const periodKey =
@@ -649,11 +682,14 @@ export async function getDashboardOverview(
     periodKey,
     settings.financialYearEndMonth,
   );
+  const pastYear = pastYears.find((y) => y.value === periodKey) ?? null;
   // An earlier year shows that year's spending; otherwise this month's.
   const spendingPeriod =
-    pastFinancialYearStart(periodKey) === null
+    pastYear === null
       ? resolvePeriod("current-month", settings.financialYearEndMonth)
       : period;
+  const cutover = settings.invoiceCutoverDate;
+  const periodBeforeCutover = cutover !== null && period.from < cutover;
 
   const [
     invoiceKpis,
@@ -677,7 +713,7 @@ export async function getDashboardOverview(
     topClients,
     expenseByCategory,
     unbilledPence,
-    recurringUpcomingPence,
+    recurringMonthlyPence,
     dsoDays,
     spendingSummary,
     spendingSeries,
@@ -686,7 +722,6 @@ export async function getDashboardOverview(
     pendingExpenses,
     inboundEmailIssues,
     quotePipelinePence,
-    activeOrdersPence,
   ] = await Promise.all([
     getDashboardKpis(companyId),
     countOverdueInvoices(companyId),
@@ -709,7 +744,7 @@ export async function getDashboardOverview(
     getTopClientsByRevenue(companyId, period.from, period.to),
     getExpenseByCategory(companyId, period.from, period.to),
     getUnbilledOnActiveOrders(companyId),
-    getRecurringUpcoming(companyId),
+    getRecurringMonthly(companyId),
     getDaysSalesOutstanding(companyId),
     getSpendingSummary(companyId, {
       from: spendingPeriod.from,
@@ -731,7 +766,6 @@ export async function getDashboardOverview(
       ? listInboundEmailIssues(companyId, 5)
       : Promise.resolve([]),
     getQuotePipelinePence(companyId),
-    getActiveOrdersPence(companyId),
   ]);
 
   const cashSeries = mergeCashSeries(
@@ -753,7 +787,9 @@ export async function getDashboardOverview(
         )
       : null;
 
-  const totalPipelinePence = quotePipelinePence + activeOrdersPence;
+  // Orders count only what is still to invoice; the rest is in Invoiced already.
+  const totalPipelinePence = quotePipelinePence + unbilledPence;
+  const snapshotCaption = pastYear ? `today, not ${pastYear.label}` : null;
   const winRate = winRatePercent(quotesSummary);
 
   const expenseTotal = expenseByCategory.reduce((a, r) => a + r.totalPence, 0);
@@ -807,9 +843,10 @@ export async function getDashboardOverview(
         percent: null,
         label: "Open",
         direction: "flat",
-        caption: "current balance",
+        caption: snapshotCaption ?? "current balance",
       },
-      sparkline: buildSparkline(cashSeries, "invoicedPence"),
+      // A balance has no monthly history here, so no trend line.
+      sparkline: [],
       accent: overdueCount > 0 ? "destructive" : "default",
     },
     {
@@ -819,7 +856,9 @@ export async function getDashboardOverview(
       valuePence: pnl.profitPence,
       href: "/reports",
       subtitle: `${pnl.incomeFormatted} income · ${pnl.expenseFormatted} expenses`,
-      insight: "Accrual · invoiced net less expenses",
+      insight: periodBeforeCutover
+        ? "Accrual · invoiced net less expenses · leaves out invoices before cutover"
+        : "Accrual · invoiced net less expenses",
       delta: {
         ...profitDelta,
         caption: `vs ${period.compareLabel}`,
@@ -832,40 +871,44 @@ export async function getDashboardOverview(
       value: formatGBP(totalPipelinePence),
       valuePence: totalPipelinePence,
       href: "/quotes",
-      subtitle: `${quotesSummary.pipelineCount} quotes · ${ordersSummary.activeCount} orders`,
+      subtitle: `${formatGBP(quotePipelinePence)} in quotes · ${formatGBP(unbilledPence)} unbilled on orders`,
       insight:
-        unbilledPence > 0
-          ? `${formatGBP(unbilledPence)} unbilled on active orders`
-          : winRate != null
-            ? `${winRate}% quote win rate`
-            : recurringUpcomingPence > 0
-              ? `${formatGBP(recurringUpcomingPence)} recurring next run`
-              : "No open pipeline yet",
+        recurringMonthlyPence > 0
+          ? `Plus ${formatGBP(recurringMonthlyPence)}/month recurring (net)`
+          : totalPipelinePence > 0
+            ? `${quotesSummary.pipelineCount} quotes · ${ordersSummary.activeCount} orders`
+            : "No open pipeline yet",
       delta: {
         percent: null,
         label: winRate != null ? `${winRate}% win` : "Open",
         direction: "flat",
-        caption: "quote → order",
+        caption: snapshotCaption ?? "quote → order",
       },
-      sparkline: cashSeries.map(() => totalPipelinePence),
+      sparkline: [],
     },
   ];
 
+  // Open quotes and orders are today's, so an earlier year shows only its own flow.
+  const pipelineStages: FunnelStage[] = pastYear
+    ? []
+    : [
+        {
+          key: "quotes",
+          label: "Open quotes",
+          valuePence: quotePipelinePence,
+          valueFormatted: formatGBP(quotePipelinePence),
+          href: "/quotes",
+        },
+        {
+          key: "orders",
+          label: "Unbilled on orders",
+          valuePence: unbilledPence,
+          valueFormatted: formatGBP(unbilledPence),
+          href: "/orders",
+        },
+      ];
   const funnel: FunnelStage[] = [
-    {
-      key: "quotes",
-      label: "Open quotes",
-      valuePence: quotePipelinePence,
-      valueFormatted: formatGBP(quotePipelinePence),
-      href: "/quotes",
-    },
-    {
-      key: "orders",
-      label: "Active orders",
-      valuePence: activeOrdersPence,
-      valueFormatted: formatGBP(activeOrdersPence),
-      href: "/orders",
-    },
+    ...pipelineStages,
     {
       key: "invoiced",
       label: "Invoiced",
@@ -892,6 +935,9 @@ export async function getDashboardOverview(
 
   return {
     periodKey,
+    isPastYear: pastYear !== null,
+    periodBeforeCutover,
+    chartWindowLabel: pastYear ? period.label : "Last 12 months",
     pastYears,
     periodLabel: period.label,
     compareLabel: period.compareLabel,
@@ -924,7 +970,7 @@ export async function getDashboardOverview(
       owedToCofoundersFormatted: owed.owedToCofoundersFormatted,
       winRatePercent: winRate,
       unbilledFormatted: formatGBP(unbilledPence),
-      recurringUpcomingFormatted: formatGBP(recurringUpcomingPence),
+      recurringUpcomingFormatted: formatGBP(recurringMonthlyPence),
       dsoDays,
       overduePercentOfAr,
     },
@@ -935,7 +981,7 @@ export async function getDashboardOverview(
       collectedFormatted: formatGBP(collectedPence),
       winRatePercent: winRate,
       unbilledFormatted: formatGBP(unbilledPence),
-      recurringUpcomingFormatted: formatGBP(recurringUpcomingPence),
+      recurringUpcomingFormatted: formatGBP(recurringMonthlyPence),
       dsoDays,
     },
   };

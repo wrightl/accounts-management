@@ -708,6 +708,20 @@ export async function grantComplimentaryAccess(
       );
       await ensureCompanyBilling(parsed.data.companyId);
       const db = getDb();
+      const [row] = await db
+        .select({ status: companyBilling.status })
+        .from(companyBilling)
+        .where(eq(companyBilling.companyId, parsed.data.companyId))
+        .limit(1);
+      // Not on a paid subscription: Stripe would keep billing a company that
+      // is meant to be free. Trials (running or ended), cancelled and unpaid are fine.
+      if (row?.status === "active" || row?.status === "past_due") {
+        return {
+          ok: false,
+          error:
+            "This company has a paid subscription. Complimentary access can't be granted until it is cancelled.",
+        };
+      }
       const expiresAt = parsed.data.expiresAt
         ? new Date(parsed.data.expiresAt)
         : null;
@@ -818,7 +832,7 @@ export async function extendCompanyTrial(
         return {
           ok: false,
           error:
-            "This company has a paid subscription. Extending a trial would replace its plan. Grant complimentary access instead.",
+            "This company has a paid subscription. Extending a trial would replace its plan.",
         };
       }
       const base =

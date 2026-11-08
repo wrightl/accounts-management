@@ -167,6 +167,11 @@ export function CompanyBillingOpsForm({
               Revoke complimentary
             </button>
           </div>
+        ) : paid ? (
+          <p className="text-sm text-muted">
+            Complimentary access can&apos;t be granted while the company has a
+            paid subscription. Cancel the subscription first.
+          </p>
         ) : (
           <form
             ref={grantRef}
@@ -215,7 +220,7 @@ export function CompanyBillingOpsForm({
         {paid ? (
           <p className="text-sm text-muted">
             Trials can&apos;t be extended while the company has a paid
-            subscription. Grant complimentary access instead.
+            subscription.
           </p>
         ) : (
           <form

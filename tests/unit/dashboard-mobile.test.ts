@@ -64,8 +64,8 @@ function overviewFixture(): DashboardOverviewData {
       {
         clientId: "c1",
         name: "Acme Ltd",
-        grossPence: 100_000,
-        grossFormatted: "£1,000.00",
+        totalPence: 100_000,
+        totalFormatted: "£1,000.00",
         percent: 100,
       },
     ],

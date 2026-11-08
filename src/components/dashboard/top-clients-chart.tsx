@@ -27,13 +27,16 @@ const COLORS = [
 export function TopClientsChart({
   clients,
   periodLabel,
+  includesPreCutover = false,
 }: {
   clients: ClientRevenueSlice[];
   periodLabel: string;
+  /** The period starts before cutover, so brought-forward invoices are in these totals. */
+  includesPreCutover?: boolean;
 }) {
   const chartData = clients.map((c, i) => ({
     ...c,
-    pounds: penceToPounds(c.grossPence),
+    pounds: penceToPounds(c.totalPence),
     color: COLORS[i % COLORS.length]!,
   }));
 
@@ -41,7 +44,8 @@ export function TopClientsChart({
     <Card className="h-full">
       <CardTitle>Revenue by client</CardTitle>
       <p className="mt-1 text-xs text-muted">
-        Invoiced gross · {periodLabel}
+        Invoiced, excluding VAT · {periodLabel}
+        {includesPreCutover ? " · includes invoices before cutover" : ""}
       </p>
       {chartData.length === 0 ? (
         <div className="mt-6 space-y-2">
@@ -79,7 +83,7 @@ export function TopClientsChart({
               <Tooltip
                 formatter={(_v, _n, item) => {
                   const p = item.payload as (typeof chartData)[number];
-                  return [`${p.grossFormatted} (${p.percent}%)`, p.name];
+                  return [`${p.totalFormatted} (${p.percent}%)`, p.name];
                 }}
                 contentStyle={{
                   borderRadius: "12px",
