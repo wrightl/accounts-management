@@ -3,7 +3,7 @@
 import { eq } from "drizzle-orm";
 import { requireActionPermission } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
-import { recordScopeFor, withoutTeamAnnotations } from "@/lib/accountant/record-scope";
+import { recordScopeFor, forAccountant } from "@/lib/accountant/record-scope";
 import { isUuid, parseLabelIds } from "@/lib/labels/params";
 import { MAX_BULK_ROWS } from "@/lib/labels/queries";
 import { recordQueriesFor } from "@/lib/queries/queries";
@@ -163,7 +163,7 @@ export async function loadBankTransactionsPage(input: {
     result.rows.map((r) => r.id),
   );
   const rows = scope === "pack"
-    ? result.rows.map(withoutTeamAnnotations)
+    ? result.rows.map(forAccountant)
     : result.rows;
   return {
     ok: true,

@@ -23,9 +23,20 @@ export const reimbursementInPack = isNotNull(reimbursements.paidAt);
 
 export const creditNoteInPack = creditNoteCountsInAccounts(creditNotes.issueDate);
 
-/** Strip the team's own notes and labels from a row: the pack exports neither. */
-export function withoutTeamAnnotations<T extends { notes: string | null; labels: unknown[] }>(
-  row: T,
-): T {
-  return { ...row, notes: null, labels: [] };
+/** A row's note when the team chose to share it with the accountant, else null. */
+export function sharedNote(row: {
+  notes: string | null;
+  noteSharedWithAccountant: boolean;
+}): string | null {
+  return row.noteSharedWithAccountant ? row.notes : null;
+}
+
+/**
+ * A row as the accountant sees it: only notes the team shared, and none of the
+ * team's labels. The pack exports the same: shared notes, no labels.
+ */
+export function forAccountant<
+  T extends { notes: string | null; noteSharedWithAccountant: boolean; labels: unknown[] },
+>(row: T): T {
+  return { ...row, notes: sharedNote(row), labels: [] };
 }

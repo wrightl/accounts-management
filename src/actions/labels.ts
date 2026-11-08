@@ -98,22 +98,26 @@ export async function addBankLabelsAction(
   );
 }
 
-/** The audit entry records that the note changed, never what it says. */
+/** The audit entry records that the note changed and who can see it, never what it says. */
 export async function setRowNoteAction(
   kind: RowKind,
   rowId: string,
   note: string | null,
+  sharedWithAccountant = false,
 ): Promise<ActionResult> {
   if (!isUuid(rowId)) return { ok: false, error: "Row not found" };
   const names = rowAuditNames(kind);
+  const hasNote = Boolean(note?.trim());
+  const shared = hasNote && sharedWithAccountant === true;
   return mutate(
     "accounts:write",
-    async ({ companyId }) => setRowNote(companyId, kind, rowId, note),
+    async ({ companyId }) => setRowNote(companyId, kind, rowId, note, shared),
     {
       audit: {
-        action: `${names.prefix}.${note?.trim() ? "update_note" : "delete_note"}`,
+        action: `${names.prefix}.${hasNote ? "update_note" : "delete_note"}`,
         entityType: names.entityType,
         entityId: rowId,
+        ...(hasNote ? { meta: { sharedWithAccountant: shared } } : {}),
       },
       paths: [names.path],
     },

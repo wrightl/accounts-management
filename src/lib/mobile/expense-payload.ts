@@ -40,6 +40,8 @@ export type MobileExpenseInput = {
   receipts?: ReceiptInput[];
   /** The team's own notes and labels. */
   notes?: string | null;
+  /** The note is shown to the accountant and included in the accountant pack. */
+  noteSharedWithAccountant?: boolean;
   labels?: { id: string; name: string; color: string }[];
   /** How a pending expense was probably paid; omitted for reviewed ones. */
   paymentSource?: PaymentSourceSuggestion | null;
@@ -98,6 +100,7 @@ export function toMobileExpense(expense: MobileExpenseInput) {
     })),
     createdByName: expense.createdByName ?? null,
     notes: expense.notes ?? null,
+    noteSharedWithAccountant: expense.noteSharedWithAccountant ?? false,
     labels: (expense.labels ?? []).map(({ id, name, color }) => ({ id, name, color })),
     paymentSource: expense.paymentSource
       ? paymentSourceSummary(expense.paymentSource)

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Link2 } from "lucide-react";
 import { guardTenantPage, hasPermission, requireUser } from "@/lib/auth";
 import { can } from "@/lib/roles";
-import { recordScopeFor, withoutTeamAnnotations } from "@/lib/accountant/record-scope";
+import { recordScopeFor, forAccountant } from "@/lib/accountant/record-scope";
 import {
   findPossibleDuplicates,
   getEmailExpensesFingerprint,
@@ -102,7 +102,7 @@ export default async function ExpensesPage({
 
   const rows =
     scope === "pack"
-      ? listed.map((r) => ({ ...withoutTeamAnnotations(r), createdByName: null }))
+      ? listed.map((r) => ({ ...forAccountant(r), createdByName: null }))
       : listed;
 
   const queries = await recordQueriesFor(role, companyId, "expense", rows.map((r) => r.id));
@@ -254,7 +254,13 @@ export default async function ExpensesPage({
                         : "w-8 pr-0"
                     }
                   >
-                    <RowNote kind="expense" rowId={e.id} note={e.notes} canWrite={canWrite} />
+                    <RowNote
+                      kind="expense"
+                      rowId={e.id}
+                      note={e.notes}
+                      shared={e.noteSharedWithAccountant}
+                      canWrite={canWrite}
+                    />
                     <RecordQueryIcon
                       recordKind="expense"
                       recordId={e.id}

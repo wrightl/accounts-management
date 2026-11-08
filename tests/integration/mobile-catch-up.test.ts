@@ -277,6 +277,26 @@ describe("mobile labels and notes", () => {
     expect(actions).toEqual(expect.arrayContaining(["expense.set_labels", "expense.update_note"]));
   });
 
+  it("shares a note with the accountant, and keeps the choice when an edit leaves it out", async () => {
+    const company = await seedCompany(db, { name: "Sharing Co" });
+    await seedUser(company.id);
+    const expense = await seedExpense(company.id);
+    const annotate = async (body: object) =>
+      (
+        await annotateExpense(
+          postJson(`/api/mobile/expenses/${expense.id}/annotations`, body),
+          params({ id: expense.id }),
+        )
+      ).json();
+
+    expect(
+      (await annotate({ note: "For the accountant", noteSharedWithAccountant: true })).data
+        .noteSharedWithAccountant,
+    ).toBe(true);
+    expect((await annotate({ note: "Edited" })).data.noteSharedWithAccountant).toBe(true);
+    expect((await annotate({ note: null })).data.noteSharedWithAccountant).toBe(false);
+  });
+
   it("filters the list by label", async () => {
     const company = await seedCompany(db, { name: "Filter Co" });
     await seedUser(company.id);

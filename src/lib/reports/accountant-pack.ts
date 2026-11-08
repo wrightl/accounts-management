@@ -4,6 +4,7 @@ import {
   creditNoteInPack,
   expenseInPack,
   invoiceInPack,
+  sharedNote,
 } from "@/lib/accountant/record-scope";
 import { getDb } from "@/db";
 import {
@@ -269,6 +270,8 @@ export async function streamAccountantPack({
       description: bankTransactions.description,
       spendingCategory: bankTransactions.spendingCategory,
       tags: bankTransactions.tags,
+      notes: bankTransactions.notes,
+      noteSharedWithAccountant: bankTransactions.noteSharedWithAccountant,
       createdAt: bankTransactions.createdAt,
     })
     .from(bankTransactions)
@@ -286,9 +289,20 @@ export async function streamAccountantPack({
     bankTxIds.length === 0
       ? []
       : await db
-          .select()
+          .select({ match: reconciliationMatches })
           .from(reconciliationMatches)
-          .where(inArray(reconciliationMatches.bankTransactionId, bankTxIds));
+          .innerJoin(
+            bankTransactions,
+            eq(reconciliationMatches.bankTransactionId, bankTransactions.id),
+          )
+          .innerJoin(bankAccounts, eq(bankTransactions.bankAccountId, bankAccounts.id))
+          .where(
+            and(
+              eq(bankAccounts.companyId, companyId),
+              inArray(reconciliationMatches.bankTransactionId, bankTxIds),
+            ),
+          )
+          .then((rows) => rows.map((r) => r.match));
 
   const creditNoteRows = await db
     .select({
@@ -658,6 +672,7 @@ export async function streamAccountantPack({
         "paid_by_email",
         "mileage_miles",
         "mileage_rate_pence",
+        "notes",
       ],
       expRows.map((r) => [
         r.expense.id,
@@ -675,6 +690,7 @@ export async function streamAccountantPack({
         r.expense.mileageRatePence != null
           ? String(r.expense.mileageRatePence)
           : "",
+        sharedNote(r.expense) ?? "",
       ]),
     ),
     "reimbursements.csv": toCsv(
@@ -793,6 +809,7 @@ export async function streamAccountantPack({
         "description",
         "spending_category",
         "tags",
+        "notes",
       ],
       bankTxRows.map((t) => [
         t.id,
@@ -804,6 +821,7 @@ export async function streamAccountantPack({
         t.description ?? "",
         t.spendingCategory ?? "",
         (t.tags ?? []).join("; "),
+        sharedNote(t) ?? "",
       ]),
     ),
     "reconciliation-matches.csv": toCsv(
@@ -1058,6 +1076,7 @@ function buildReadme({
     "  Invoices link to recurring schedules via recurring_schedule when generated from one.",
     "  Imported invoices dated before the cutover are brought forward: excluded from P&L, VAT and invoices.csv, but still in aged receivables.",
     "  Payments and credit notes on them count from the cutover date onwards, and are flagged on_brought_forward_invoice.",
+    "  The notes column in expenses.csv and bank-transactions.csv only has notes the team chose to share with you.",
   ];
   if (warnings.length > 0) {
     lines.push("", "Warnings:", ...warnings.map((w) => `  - ${w}`));

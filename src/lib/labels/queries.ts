@@ -236,12 +236,17 @@ export async function addLabelsToBankRows(
   return { ok: true };
 }
 
-/** Save a row's note; an empty one removes it. Not a financial change, so period locks don't apply. */
+/**
+ * Save a row's note; an empty one removes it. Not a financial change, so period
+ * locks don't apply. `shared` shows the note to the accountant; leave it out to
+ * keep the current choice. Removing the note always unshares it.
+ */
 export async function setRowNote(
   companyId: string,
   kind: RowKind,
   rowId: string,
   note: string | null,
+  shared?: boolean,
 ): Promise<RowResult> {
   const value = note?.trim() || null;
   if (value && value.length > MAX_NOTE_LENGTH) {
@@ -250,17 +255,22 @@ export async function setRowNote(
   if (!(await rowBelongsToCompany(companyId, kind, rowId))) {
     return { ok: false, error: "Row not found" };
   }
+  const sharing = value === null ? false : shared;
+  const update = {
+    notes: value,
+    ...(sharing === undefined ? {} : { noteSharedWithAccountant: sharing }),
+  };
   const db = getDb();
   if (kind === "expense") {
     await db
       .update(expenses)
-      .set({ notes: value })
+      .set(update)
       .where(and(eq(expenses.id, rowId), eq(expenses.companyId, companyId)));
   } else {
     // Bank rows get their company from the account.
     await db
       .update(bankTransactions)
-      .set({ notes: value })
+      .set(update)
       .where(
         and(
           eq(bankTransactions.id, rowId),

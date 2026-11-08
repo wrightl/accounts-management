@@ -1,5 +1,5 @@
 import { guardTenantPage, hasPermission } from "@/lib/auth";
-import { recordScopeFor, withoutTeamAnnotations } from "@/lib/accountant/record-scope";
+import { recordScopeFor, forAccountant } from "@/lib/accountant/record-scope";
 import { can } from "@/lib/roles";
 import { countBankAccounts, listBankTransactions } from "@/lib/bank/queries";
 import { listBankAccountCards } from "@/lib/bank/company-cards";
@@ -108,7 +108,7 @@ export default async function TransactionsPage({
     inPack ? [] : listBankAccountCards(companyId),
   ]);
   const queries = await recordQueriesFor(role, companyId, "bank_transaction", listedRows.map((r) => r.id));
-  const rows = (inPack ? listedRows.map(withoutTeamAnnotations) : listedRows).map((r) => ({
+  const rows = (inPack ? listedRows.map(forAccountant) : listedRows).map((r) => ({
     ...r,
     queries: queries.get(r.id),
   }));
