@@ -30,7 +30,13 @@ type ChartRow = MonthlyCashPoint & {
   profit: number;
 };
 
-export function CashVsInvoicedChart({ data }: { data: MonthlyCashPoint[] }) {
+export function CashVsInvoicedChart({
+  data,
+  windowLabel,
+}: {
+  data: MonthlyCashPoint[];
+  windowLabel: string;
+}) {
   const chartData: ChartRow[] = data.map((point) => ({
     ...point,
     invoiced: penceToPounds(point.invoicedPence),
@@ -47,12 +53,12 @@ export function CashVsInvoicedChart({ data }: { data: MonthlyCashPoint[] }) {
     <Card className="h-full">
       <CardTitle>Cash vs invoiced</CardTitle>
       <p className="mt-1 text-xs text-muted">
-        Last 12 months · bars are invoices raised; line is cash collected
+        {windowLabel} · bars are invoices raised; line is cash collected
       </p>
       {!hasData ? (
         <div className="mt-6 space-y-2">
           <p className="text-sm text-muted">
-            No invoicing or payments in the last year yet.
+            No invoicing or payments in this period.
           </p>
           <Link href="/quotes/new" className="text-sm text-brand hover:underline">
             Send a quote →

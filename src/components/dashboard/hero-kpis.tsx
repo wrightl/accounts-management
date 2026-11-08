@@ -6,6 +6,7 @@ import type { HeroKpi } from "@/lib/dashboard/queries";
 import { cn } from "@/lib/utils";
 
 function Sparkline({ values, destructive }: { values: number[]; destructive?: boolean }) {
+  if (values.length === 0) return null;
   const max = Math.max(...values, 1);
   const min = Math.min(...values, 0);
   const range = Math.max(max - min, 1);

@@ -300,23 +300,43 @@ describe("cutover in the accounts", () => {
     ]);
   });
 
-  it("applies the rules to dashboard cash and invoiced figures", async () => {
+  it("counts brought-forward sales and cash on the dashboard", async () => {
     await seedScenario();
     await setCutover(CUTOVER);
 
-    // The payment after cutover only; the one before it stays out.
-    expect(await getCollectedInPeriod(companyId, FROM, TO)).toBe(7_000);
+    // Both payments: the Overview shows trading history, not the accounts.
+    expect(await getCollectedInPeriod(companyId, FROM, TO)).toBe(13_000);
     expect(await getCollectedByMonth(companyId, FROM, TO)).toEqual([
+      { month: "2026-03", totalPence: 6_000 },
       { month: "2026-05", totalPence: 7_000 },
     ]);
 
-    // 120,000 + 24,000 gross, less the 1,200 credit note after cutover.
-    expect(await getInvoicedGrossInPeriod(companyId, FROM, TO)).toBe(142_800);
+    // 120,000 + 60,000 + 24,000 gross, less both 1,200 credit notes.
+    expect(await getInvoicedGrossInPeriod(companyId, FROM, TO)).toBe(201_600);
     const months = await getInvoicedGrossByMonth(companyId, FROM, TO);
-    expect(months.reduce((acc, m) => acc + m.totalPence, 0)).toBe(142_800);
+    expect(months.reduce((acc, m) => acc + m.totalPence, 0)).toBe(201_600);
 
+    // Net: 100,000 + 50,000 + 20,000, less both 1,000 credit notes.
     const [top] = await getTopClientsByRevenue(companyId, FROM, TO);
-    expect(top.grossPence).toBe(142_800);
+    expect(top.totalPence).toBe(168_000);
+  });
+
+  it("counts refunds before cutover on the sales basis", async () => {
+    const old = await addInvoice("OLD-S", "2026-02-10", 50_000);
+    await db.insert(creditNotes).values({
+      companyId,
+      invoiceId: old.id,
+      clientId,
+      number: "CN-S1",
+      issueDate: "2026-02-20",
+      reason: "Overcharged",
+      refundedPence: 500,
+      refundedAt: "2026-03-10",
+    });
+    await setCutover(CUTOVER);
+
+    expect(await sumRefundsInPeriod(companyId, FROM, TO)).toBe(0);
+    expect(await sumRefundsInPeriod(companyId, FROM, TO, "sales")).toBe(500);
   });
 
   it("leaves brought-forward invoices out of invoiced this month", async () => {

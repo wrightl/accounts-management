@@ -31,8 +31,10 @@ type ChartRow = MonthlyCashPoint & {
 
 export function IncomeExpenseChart({
   data,
+  windowLabel,
 }: {
   data: MonthlyCashPoint[];
+  windowLabel: string;
 }) {
   const rows: ChartRow[] = data.map((point) => ({
     ...point,
@@ -49,7 +51,7 @@ export function IncomeExpenseChart({
     <Card className="h-full">
       <CardTitle>Income vs expenses</CardTitle>
       <p className="mt-1 text-xs text-muted">
-        Last 12 months · accrual income (ex VAT) with profit overlay
+        {windowLabel} · accrual income (ex VAT) with profit overlay
       </p>
       {!hasData ? (
         <div className="mt-6 space-y-2">

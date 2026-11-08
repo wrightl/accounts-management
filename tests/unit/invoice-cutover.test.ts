@@ -124,7 +124,11 @@ describe("cutoverWarnings", () => {
  * brought-forward invoices. Add a file here only if they should count in it.
  */
 describe("issue-date filters", () => {
-  const EXEMPT = new Set(["src/lib/menu/suggestions.ts"]);
+  const EXEMPT = new Set([
+    "src/lib/menu/suggestions.ts",
+    // Overview sales and cash panels count brought-forward invoices on purpose.
+    "src/lib/dashboard/queries.ts",
+  ]);
 
   function sourceFiles(dir: string): string[] {
     return readdirSync(dir).flatMap((name) => {

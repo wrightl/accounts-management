@@ -11,12 +11,15 @@ export function QuoteToCashFunnel({
 }) {
   const max = Math.max(...stages.map((s) => s.valuePence), 1);
   const hasData = stages.some((s) => s.valuePence > 0);
+  const hasPipeline = stages.some((s) => s.key === "quotes");
 
   return (
     <Card className="h-full">
       <CardTitle>Quote → cash</CardTitle>
       <p className="mt-1 text-xs text-muted">
-        Pipeline stock, then invoiced & collected for {periodLabel}
+        {hasPipeline
+          ? `Open now, then invoiced & collected for ${periodLabel}`
+          : `Invoiced & collected for ${periodLabel}`}
       </p>
       {!hasData ? (
         <div className="mt-6 space-y-2">

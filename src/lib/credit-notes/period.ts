@@ -1,8 +1,19 @@
 import "server-only";
 import { creditNoteCountsInAccounts } from "@/lib/invoices/accounts-scope";
-import { and, eq, gte, isNotNull, lte, sql, sum } from "drizzle-orm";
+import { and, eq, gte, isNotNull, lte, sql, sum, type SQL } from "drizzle-orm";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { getDb } from "@/db";
 import { creditNotes } from "@/db/schema";
+
+/**
+ * "accounts" leaves out activity before cutover on brought-forward invoices,
+ * as P&L and VAT do; "sales" counts it, for trading views like the Overview.
+ */
+export type CountBasis = "accounts" | "sales";
+
+function countsOn(basis: CountBasis, date: AnyPgColumn): SQL | undefined {
+  return basis === "accounts" ? creditNoteCountsInAccounts(date) : undefined;
+}
 
 /**
  * Period totals for issued credit notes, by credit note issue date. Reports
@@ -12,6 +23,7 @@ export async function sumCreditNotesInPeriod(
   companyId: string,
   from: string,
   to: string,
+  basis: CountBasis = "accounts",
 ): Promise<{ netPence: number; vatPence: number; grossPence: number }> {
   const db = getDb();
   const [row] = await db
@@ -25,7 +37,7 @@ export async function sumCreditNotesInPeriod(
       and(
         eq(creditNotes.companyId, companyId),
         eq(creditNotes.status, "issued"),
-        creditNoteCountsInAccounts(creditNotes.issueDate),
+        countsOn(basis, creditNotes.issueDate),
         gte(creditNotes.issueDate, from),
         lte(creditNotes.issueDate, to),
       ),
@@ -42,6 +54,7 @@ export async function creditNotesByMonth(
   companyId: string,
   from: string,
   to: string,
+  basis: CountBasis = "accounts",
 ): Promise<Map<string, { netPence: number; grossPence: number }>> {
   const db = getDb();
   const month = sql<string>`to_char(${creditNotes.issueDate}, 'YYYY-MM')`;
@@ -56,7 +69,7 @@ export async function creditNotesByMonth(
       and(
         eq(creditNotes.companyId, companyId),
         eq(creditNotes.status, "issued"),
-        creditNoteCountsInAccounts(creditNotes.issueDate),
+        countsOn(basis, creditNotes.issueDate),
         gte(creditNotes.issueDate, from),
         lte(creditNotes.issueDate, to),
       ),
@@ -72,6 +85,7 @@ export async function sumRefundsInPeriod(
   companyId: string,
   from: string,
   to: string,
+  basis: CountBasis = "accounts",
 ): Promise<number> {
   const db = getDb();
   const [row] = await db
@@ -81,7 +95,7 @@ export async function sumRefundsInPeriod(
       and(
         eq(creditNotes.companyId, companyId),
         eq(creditNotes.status, "issued"),
-        creditNoteCountsInAccounts(creditNotes.refundedAt),
+        countsOn(basis, creditNotes.refundedAt),
         isNotNull(creditNotes.refundedAt),
         gte(creditNotes.refundedAt, from),
         lte(creditNotes.refundedAt, to),
@@ -95,6 +109,7 @@ export async function refundsByMonth(
   companyId: string,
   from: string,
   to: string,
+  basis: CountBasis = "accounts",
 ): Promise<Map<string, number>> {
   const db = getDb();
   const month = sql<string>`to_char(${creditNotes.refundedAt}, 'YYYY-MM')`;
@@ -105,7 +120,7 @@ export async function refundsByMonth(
       and(
         eq(creditNotes.companyId, companyId),
         eq(creditNotes.status, "issued"),
-        creditNoteCountsInAccounts(creditNotes.refundedAt),
+        countsOn(basis, creditNotes.refundedAt),
         isNotNull(creditNotes.refundedAt),
         gte(creditNotes.refundedAt, from),
         lte(creditNotes.refundedAt, to),
