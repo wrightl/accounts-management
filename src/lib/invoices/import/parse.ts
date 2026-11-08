@@ -428,6 +428,28 @@ export function validateParsedInvoice(invoice: ParsedInvoice): string[] {
   return errors;
 }
 
+export const UNREGISTERED_VAT_LINE = "VAT shown on the original invoice (not VAT registered)";
+
+/**
+ * An invoice as a company that isn't VAT registered records it: no VAT, so the whole
+ * total is income. Any VAT the source showed becomes its own line, keeping the lines
+ * adding up to the net total and leaving the change visible.
+ */
+export function withoutVat(invoice: ParsedInvoice): ParsedInvoice {
+  if (invoice.vatPence === 0 && invoice.lines.every((l) => l.vatRate === 0)) return invoice;
+  const lines = invoice.lines.map((l) => ({ ...l, vatRate: 0 }));
+  if (invoice.vatPence !== 0) {
+    lines.push({
+      description: UNREGISTERED_VAT_LINE,
+      quantity: 1,
+      unitPricePence: invoice.vatPence,
+      vatRate: 0,
+      discountPercent: 0,
+    });
+  }
+  return { ...invoice, netPence: invoice.grossPence, vatPence: 0, lines };
+}
+
 /** Pure parse, grouping and per-invoice validation. Rows with the same number form one invoice. */
 export function parseInvoiceImport(
   csvText: string,

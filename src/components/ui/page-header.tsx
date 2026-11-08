@@ -4,7 +4,9 @@ import { cn } from "@/lib/utils";
 
 /**
  * Title row for every app page: optional way back, title and description on
- * the left, actions on the right (wrapping below the title on narrow screens).
+ * the left, actions on the right. The title text wraps to make room for the
+ * actions, which only drop below the title when the title would be squeezed
+ * narrower than 10rem.
  * Put secondary actions first and the primary action last, so it sits far right.
  */
 export function PageHeader({
@@ -32,7 +34,7 @@ export function PageHeader({
           backHref && "mt-4",
         )}
       >
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1 basis-40">
           <h1 className="font-display text-2xl font-semibold">{title}</h1>
           {description ? <div className="mt-1 text-muted">{description}</div> : null}
         </div>
