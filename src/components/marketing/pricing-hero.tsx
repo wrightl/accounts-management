@@ -33,7 +33,7 @@ export function PricingHero({
             href="/sign-in"
             className={buttonClasses(
               "ghost",
-              "border border-white/30 text-white hover:bg-white/10",
+              "border-white/30 bg-transparent text-white hover:border-white/60 hover:bg-white/10",
             )}
           >
             Sign in

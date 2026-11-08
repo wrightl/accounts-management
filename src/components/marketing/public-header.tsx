@@ -58,7 +58,7 @@ export function PublicHeader({
             className={buttonClasses(
               "ghost",
               dark
-                ? "text-white hover:bg-white/15"
+                ? "border-white/30 bg-transparent text-white hover:border-white/60 hover:bg-white/15"
                 : "text-foreground hover:bg-wash",
             )}
           >
