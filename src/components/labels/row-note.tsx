@@ -15,22 +15,26 @@ function NoteDialog({
   kind,
   rowId,
   note,
+  shared,
   onClose,
 }: {
   kind: RowKind;
   rowId: string;
   note: string | null;
+  shared: boolean;
   onClose: () => void;
 }) {
   const textareaId = useId();
+  const sharedId = useId();
   const [text, setText] = useState(note ?? "");
+  const [share, setShare] = useState(shared);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const save = (value: string | null) => {
     setError(null);
     startTransition(async () => {
-      const result = await setRowNoteAction(kind, rowId, value);
+      const result = await setRowNoteAction(kind, rowId, value, share);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -51,6 +55,22 @@ function NoteDialog({
         disabled={pending}
         onChange={(e) => setText(e.target.value)}
       />
+      <div className="mt-3 flex items-start gap-2">
+        <input
+          id={sharedId}
+          type="checkbox"
+          checked={share}
+          disabled={pending}
+          onChange={(e) => setShare(e.target.checked)}
+          className="mt-0.5 h-4 w-4"
+        />
+        <Label htmlFor={sharedId} className="mb-0">
+          Share with accountant
+          <span className="block font-normal text-muted">
+            Your accountant will see this note, and it&apos;s included in the accountant pack.
+          </span>
+        </Label>
+      </div>
       <FieldError>{error}</FieldError>
       <DialogActions>
         {note ? (
@@ -80,11 +100,14 @@ export function RowNote({
   kind,
   rowId,
   note,
+  shared,
   canWrite,
 }: {
   kind: RowKind;
   rowId: string;
   note: string | null;
+  /** The note is shown to the accountant and included in the accountant pack. */
+  shared: boolean;
   canWrite: boolean;
 }) {
   const tooltipId = useId();
@@ -111,14 +134,23 @@ export function RowNote({
   return (
     <>
       {note ? (
-        <Tooltip id={tooltipId} content={note}>
+        <Tooltip
+          id={tooltipId}
+          content={canWrite && shared ? `${note}\n\nShared with accountant` : note}
+        >
           {button}
         </Tooltip>
       ) : (
         button
       )}
       {editing ? (
-        <NoteDialog kind={kind} rowId={rowId} note={note} onClose={() => setEditing(false)} />
+        <NoteDialog
+          kind={kind}
+          rowId={rowId}
+          note={note}
+          shared={shared}
+          onClose={() => setEditing(false)}
+        />
       ) : null}
     </>
   );

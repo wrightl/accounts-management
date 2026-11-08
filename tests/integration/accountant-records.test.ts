@@ -515,6 +515,51 @@ describe("pack scope", () => {
   });
 });
 
+describe("notes in pack scope", () => {
+  it("shows the accountant only the notes the team shared, and no labels", async () => {
+    const [account] = await db
+      .insert(bankAccounts)
+      .values({ companyId, name: "Current", provider: "generic" })
+      .returning();
+    const [shared, kept] = await db
+      .insert(bankTransactions)
+      .values([
+        {
+          bankAccountId: account.id,
+          externalId: "note-1",
+          bookedAt: "2026-03-02",
+          amountPence: -500,
+          notes: "Paid twice, refund due",
+          noteSharedWithAccountant: true,
+        },
+        {
+          bankAccountId: account.id,
+          externalId: "note-2",
+          bookedAt: "2026-03-03",
+          amountPence: -700,
+          notes: "team only",
+        },
+      ])
+      .returning();
+    const loaded = await loadBankTransactionsPage({ page: 1 });
+    if (!loaded.ok) throw new Error(loaded.error);
+    const byId = new Map(loaded.result.rows.map((r) => [r.id, r]));
+    expect(byId.get(shared.id)?.notes).toBe("Paid twice, refund due");
+    expect(byId.get(kept.id)?.notes).toBeNull();
+
+    await db.insert(expenses).values([
+      { companyId, description: "A", status: "recorded", spentAt: "2026-03-02", amountPence: 500, notes: "client lunch", noteSharedWithAccountant: true },
+      { companyId, description: "B", status: "recorded", spentAt: "2026-03-02", amountPence: 500, notes: "private aside" },
+    ]);
+    const text = pageText(await ExpensesPage({ searchParams: Promise.resolve({}) }));
+    expect(text).toContain("client lunch");
+    expect(text).not.toContain("private aside");
+
+    signInAs("admin");
+    expect(pageText(await ExpensesPage({ searchParams: Promise.resolve({}) }))).toContain("private aside");
+  });
+});
+
 describe("accountants stay read-only", () => {
   it("refuses a change in each area", async () => {
     const invoice = await seedInvoice("sent", "S-1");

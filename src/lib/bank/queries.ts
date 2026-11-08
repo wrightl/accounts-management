@@ -227,6 +227,7 @@ export type BankTransactionListItem = {
     bankAccountName: string;
     tags: string[];
     notes: string | null;
+    noteSharedWithAccountant: boolean;
     labels: RowLabel[];
     amountFormatted: string;
     matchId: string | null;
@@ -763,6 +764,7 @@ export async function listBankTransactions(
             bankAccountName: accountNameById.get(tx.bankAccountId) ?? '',
             tags: tx.tags ?? [],
             notes: tx.notes,
+            noteSharedWithAccountant: tx.noteSharedWithAccountant,
             labels: labelsByTx.get(tx.id) ?? [],
             amountFormatted: formatGBP(tx.amountPence),
             matchId: match?.id ?? null,

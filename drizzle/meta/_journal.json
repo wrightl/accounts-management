@@ -617,6 +617,13 @@
       "when": 1794076032943,
       "tag": "0087_expense_receipt_sha256",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1794136408997,
+      "tag": "0088_note_shared_with_accountant",
+      "breakpoints": true
     }
   ]
 }

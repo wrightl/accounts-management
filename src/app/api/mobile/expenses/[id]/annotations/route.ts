@@ -12,12 +12,14 @@ type Params = Promise<{ id: string }>;
 const bodySchema = z.object({
   labelIds: z.array(z.string().uuid()).optional(),
   note: z.string().nullable().optional(),
+  /** Show the note to the accountant; left out keeps the current choice. */
+  noteSharedWithAccountant: z.boolean().optional(),
 });
 
 /**
  * Set an expense's labels and/or note. Same functions and audit entries as
- * the web's row labels and note; the audit records that the note changed,
- * never what it says.
+ * the web's row labels and note; the audit records that the note changed and
+ * who can see it, never what it says.
  */
 export async function POST(request: NextRequest, segmentData: { params: Params }) {
   const { id } = await segmentData.params;
@@ -29,7 +31,7 @@ export async function POST(request: NextRequest, segmentData: { params: Params }
 
     const parsed = bodySchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) return mobileError("Invalid request", 400);
-    const { labelIds, note } = parsed.data;
+    const { labelIds, note, noteSharedWithAccountant } = parsed.data;
     const localUserId = await ensureLocalUser(user);
 
     if (labelIds !== undefined) {
@@ -48,16 +50,26 @@ export async function POST(request: NextRequest, segmentData: { params: Params }
     }
 
     if (note !== undefined) {
-      const result = await setRowNote(user.companyId, "expense", id, note);
+      const hasNote = Boolean(note?.trim());
+      const result = await setRowNote(
+        user.companyId,
+        "expense",
+        id,
+        note,
+        noteSharedWithAccountant,
+      );
       if (!result.ok) {
         return mobileError(result.error, result.error === "Row not found" ? 404 : 400);
       }
       await writeAudit({
         companyId: user.companyId,
         actorUserId: localUserId,
-        action: `expense.${note?.trim() ? "update_note" : "delete_note"}`,
+        action: `expense.${hasNote ? "update_note" : "delete_note"}`,
         entityType: "expense",
         entityId: id,
+        ...(hasNote && noteSharedWithAccountant !== undefined
+          ? { meta: { sharedWithAccountant: noteSharedWithAccountant } }
+          : {}),
       });
     }
 

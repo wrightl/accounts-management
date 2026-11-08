@@ -235,6 +235,34 @@ describe("row notes", () => {
     expect(entry.entityId).toBe(tx.id);
     expect(JSON.stringify(entry)).not.toContain("private detail");
   });
+
+  it("saves whether the note is shared with the accountant, private by default", async () => {
+    const tx = await bankTx();
+    const exp = await expense();
+    await setRowNoteAction("bank", tx.id, "for the accountant", true);
+    await setRowNoteAction("expense", exp.id, "just us");
+
+    expect((await listBankTransactions(companyId)).rows[0].noteSharedWithAccountant).toBe(true);
+    expect((await listExpenses(companyId))[0].noteSharedWithAccountant).toBe(false);
+
+    await setRowNoteAction("bank", tx.id, "for the accountant", false);
+    expect((await listBankTransactions(companyId)).rows[0].noteSharedWithAccountant).toBe(false);
+
+    const entries = await db.select().from(auditLog).where(eq(auditLog.action, "bank.update_note"));
+    expect(entries.map((e) => e.meta)).toEqual([
+      { sharedWithAccountant: true },
+      { sharedWithAccountant: false },
+    ]);
+  });
+
+  it("unshares a note when it's removed", async () => {
+    const exp = await expense();
+    await setRowNoteAction("expense", exp.id, "shared", true);
+    await setRowNoteAction("expense", exp.id, null, true);
+    const [row] = await db.select().from(expenses).where(eq(expenses.id, exp.id));
+    expect(row.notes).toBeNull();
+    expect(row.noteSharedWithAccountant).toBe(false);
+  });
 });
 
 describe("annotations on locked rows", () => {

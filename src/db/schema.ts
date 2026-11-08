@@ -711,6 +711,8 @@ export const expenses = pgTable(
      */
     externalSenderEmail: text("external_sender_email"),
     notes: text("notes"),
+    /** The team chose to show this note to their accountant (screens and pack). */
+    noteSharedWithAccountant: boolean("note_shared_with_accountant").notNull().default(false),
     /** The inbound email this expense came from; one email can create several. */
     inboundEmailJobId: uuid("inbound_email_job_id").references(
       (): AnyPgColumn => inboundEmailJobs.id,
@@ -902,6 +904,8 @@ export const bankTransactions = pgTable(
       .default(false),
     tags: text("tags").array().notNull().default([]),
     notes: text("notes"),
+    /** The team chose to show this note to their accountant (screens and pack). */
+    noteSharedWithAccountant: boolean("note_shared_with_accountant").notNull().default(false),
     raw: jsonb("raw"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },

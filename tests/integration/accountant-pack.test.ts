@@ -215,8 +215,18 @@ describe("accountant pack integration", () => {
         status: "recorded",
         source: "manual",
         paidByUserId: user.id,
+        notes: "Booked for the Leeds workshop",
+        noteSharedWithAccountant: true,
       })
       .returning();
+    await db.insert(expenses).values({
+      companyId,
+      description: "Coffee",
+      spentAt: "2026-04-12",
+      amountPence: 300,
+      status: "recorded",
+      notes: "not for the accountant",
+    });
 
     const receiptPath = "receipts/exp-1/receipt.jpg";
     await getStorage().put(
@@ -260,8 +270,18 @@ describe("accountant pack integration", () => {
         amountPence: -4500,
         counterparty: "Trainline",
         description: "Train",
+        notes: "Return leg, client visit",
+        noteSharedWithAccountant: true,
       })
       .returning();
+    await db.insert(bankTransactions).values({
+      bankAccountId: account.id,
+      externalId: "tx-2",
+      bookedAt: "2026-04-17",
+      amountPence: -900,
+      counterparty: "Cafe",
+      notes: "team-only aside",
+    });
 
     await db.insert(reconciliationMatches).values({
       bankTransactionId: bankTx.id,
@@ -304,12 +324,17 @@ describe("accountant pack integration", () => {
     expect(bankCsv.split("\n")[0]).toContain("bank_account");
     expect(bankCsv.split("\n")[0]).toContain("tags");
     expect(bankCsv).toContain("Starling Business");
+    expect(bankCsv.split("\n")[0].split(",").at(-1)).toBe("notes");
+    expect(bankCsv).toContain("Return leg, client visit");
+    expect(bankCsv).not.toContain("team-only aside");
 
     const lineItemsCsv = extractZipText(zip, "invoice-line-items.csv");
     expect(lineItemsCsv).toContain("Consulting");
 
     const expensesCsv = extractZipText(zip, "expenses.csv");
     expect(expensesCsv).toContain("Train ticket");
+    expect(expensesCsv).toContain("Booked for the Leeds workshop");
+    expect(expensesCsv).not.toContain("not for the accountant");
 
     const paymentsCsv = extractZipText(zip, "payments.csv");
     expect(paymentsCsv).toContain("DD-2026-0100");

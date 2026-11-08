@@ -1,0 +1,2 @@
+ALTER TABLE "bank_transactions" ADD COLUMN "note_shared_with_accountant" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "expenses" ADD COLUMN "note_shared_with_accountant" boolean DEFAULT false NOT NULL;

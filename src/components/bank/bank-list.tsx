@@ -194,6 +194,7 @@ export function BankTransactionTable({
                                 kind="bank"
                                 rowId={r.id}
                                 note={r.notes}
+                                shared={r.noteSharedWithAccountant}
                                 canWrite={canWrite}
                             />
                             <RecordQueryIcon
@@ -269,6 +270,7 @@ function BankTransactionCard({
                             kind="bank"
                             rowId={row.id}
                             note={row.notes}
+                            shared={row.noteSharedWithAccountant}
                             canWrite={canWrite}
                         />
                         <RecordQueryIcon
