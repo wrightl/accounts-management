@@ -456,6 +456,36 @@ describe("billing operations", () => {
     expect(await billing(company.id)).toMatchObject({ plan: "premium", status: "active" });
   });
 
+  it("refuses complimentary access for a company with a subscription", async () => {
+    const company = await seedCompany(db, { slug: "acme" });
+    await db.insert(companyBilling).values({
+      companyId: company.id,
+      plan: "premium",
+      status: "active",
+      stripeSubscriptionId: "sub_123",
+    });
+    const form = new FormData();
+    form.set("companyId", company.id);
+
+    const result = await grantComplimentaryAccess(form);
+
+    expect(result).toMatchObject({ ok: false, error: expect.stringMatching(/trial/) });
+    expect(await billing(company.id)).toMatchObject({ access: "standard" });
+  });
+
+  it("grants complimentary access after the trial has ended", async () => {
+    const company = await seedCompany(db, { slug: "acme" });
+    await db.insert(companyBilling).values({
+      companyId: company.id,
+      trialEndsAt: new Date(Date.now() - 86_400_000),
+    });
+    const form = new FormData();
+    form.set("companyId", company.id);
+
+    expect((await grantComplimentaryAccess(form)).ok).toBe(true);
+    expect(await billing(company.id)).toMatchObject({ access: "complimentary_unlimited" });
+  });
+
   it("grants and revokes complimentary access", async () => {
     const company = await seedCompany(db, { slug: "acme" });
     const form = new FormData();
