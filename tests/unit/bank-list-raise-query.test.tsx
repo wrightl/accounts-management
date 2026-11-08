@@ -14,7 +14,6 @@ vi.mock("@/components/bank/bank-ui", () => ({
   CategoryCell: () => null,
   ReconciliationCell: () => null,
 }));
-vi.mock("@/components/bank/bank-page-size-select", () => ({ BankPageSizeSelect: () => null }));
 vi.mock("@/components/labels/row-labels", () => ({ RowLabels: () => null }));
 vi.mock("@/components/bank/bank-selection", () => ({
   RowSelectCheckbox: () => null,

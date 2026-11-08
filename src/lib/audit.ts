@@ -1,6 +1,8 @@
 import "server-only";
+import { count, desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { auditLog } from "@/db/schema";
+import { auditLog, users } from "@/db/schema";
+import { type ListPaging, fetchPage } from "@/lib/list-paging";
 
 export async function writeAudit(params: {
   companyId: string | null;
@@ -29,5 +31,32 @@ export async function writeAudit(params: {
       actorUserId: params.actorUserId,
       companyId: params.companyId,
     }),
+  );
+}
+
+/** One page of a company's audit log, newest first. */
+export async function listAuditPage(companyId: string, paging: ListPaging) {
+  const db = getDb();
+  const where = eq(auditLog.companyId, companyId);
+  return fetchPage(
+    paging,
+    async () => (await db.select({ n: count() }).from(auditLog).where(where))[0]?.n ?? 0,
+    ({ limit, offset }) =>
+      db
+        .select({
+          id: auditLog.id,
+          action: auditLog.action,
+          entityType: auditLog.entityType,
+          entityId: auditLog.entityId,
+          createdAt: auditLog.createdAt,
+          actorEmail: users.email,
+          actorName: users.name,
+        })
+        .from(auditLog)
+        .leftJoin(users, eq(auditLog.actorUserId, users.id))
+        .where(where)
+        .orderBy(desc(auditLog.createdAt), desc(auditLog.id))
+        .limit(limit)
+        .offset(offset),
   );
 }

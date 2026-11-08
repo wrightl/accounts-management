@@ -1,6 +1,6 @@
 import "server-only";
 import { invoiceCountsInAccounts } from "@/lib/invoices/accounts-scope";
-import { and, desc, eq, gte, inArray, lte, ne, sql, sum } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, lte, ne, sql, sum } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   bankAccounts,
@@ -15,6 +15,7 @@ import {
 } from "@/db/schema";
 import { clientDisplayNameSql } from "@/lib/clients/sql";
 import { defaultReportPeriod as fyDefaultReportPeriod } from "@/lib/dates";
+import { type ListPaging, fetchPage } from "@/lib/list-paging";
 import { formatGBP } from "@/lib/money";
 import { creditAdjustmentsByInvoice } from "@/lib/credit-notes/adjustments";
 import {
@@ -458,35 +459,35 @@ export async function getVatSummary(
   };
 }
 
-export async function listDividendDeclarations(
+function dividendPeriodWhere(companyId: string, options?: { from?: string; to?: string }) {
+  return and(
+    eq(dividendDeclarations.companyId, companyId),
+    options?.from ? gte(dividendDeclarations.declaredAt, options.from) : undefined,
+    options?.to ? lte(dividendDeclarations.declaredAt, options.to) : undefined,
+  );
+}
+
+/** Attach each declaration's payouts, by shareholder name. */
+async function withPayouts<T extends { id: string; totalPence: number }>(
   companyId: string,
-  options?: {
-    from?: string;
-    to?: string;
-  },
+  declarations: T[],
 ) {
-  const db = getDb();
-  const conditions = [eq(dividendDeclarations.companyId, companyId)];
-  if (options?.from) {
-    conditions.push(gte(dividendDeclarations.declaredAt, options.from));
-  }
-  if (options?.to) {
-    conditions.push(lte(dividendDeclarations.declaredAt, options.to));
-  }
-
-  const declarations = await db
-    .select()
-    .from(dividendDeclarations)
-    .where(and(...conditions))
-    .orderBy(desc(dividendDeclarations.declaredAt));
-
   if (declarations.length === 0) return [];
-
-  const ids = declarations.map((d) => d.id);
-  const payouts = await db
-    .select()
+  // Payouts get their company from the declaration.
+  const payouts = await getDb()
+    .select({ payout: dividendPayouts })
     .from(dividendPayouts)
-    .where(inArray(dividendPayouts.declarationId, ids));
+    .innerJoin(dividendDeclarations, eq(dividendPayouts.declarationId, dividendDeclarations.id))
+    .where(
+      and(
+        eq(dividendDeclarations.companyId, companyId),
+        inArray(
+          dividendPayouts.declarationId,
+          declarations.map((d) => d.id),
+        ),
+      ),
+    )
+    .then((rows) => rows.map((r) => r.payout));
 
   const byDecl = new Map<string, typeof payouts>();
   for (const p of payouts) {
@@ -508,6 +509,54 @@ export async function listDividendDeclarations(
       })),
     };
   });
+}
+
+export async function listDividendDeclarations(
+  companyId: string,
+  options?: {
+    from?: string;
+    to?: string;
+  },
+) {
+  const declarations = await getDb()
+    .select()
+    .from(dividendDeclarations)
+    .where(dividendPeriodWhere(companyId, options))
+    .orderBy(desc(dividendDeclarations.declaredAt), desc(dividendDeclarations.id));
+  return withPayouts(companyId, declarations);
+}
+
+/**
+ * One page of dividend declarations in a period, newest first, with the
+ * period's total across every page.
+ */
+export async function listDividendDeclarationPage(
+  companyId: string,
+  options: { from?: string; to?: string } & ListPaging,
+) {
+  const db = getDb();
+  const where = dividendPeriodWhere(companyId, options);
+  let periodTotalPence = 0;
+  const page = await fetchPage(
+    options,
+    async () => {
+      const [row] = await db
+        .select({ n: count(), total: sum(dividendDeclarations.totalPence).mapWith(Number) })
+        .from(dividendDeclarations)
+        .where(where);
+      periodTotalPence = row?.total ?? 0;
+      return row?.n ?? 0;
+    },
+    ({ limit, offset }) =>
+      db
+        .select()
+        .from(dividendDeclarations)
+        .where(where)
+        .orderBy(desc(dividendDeclarations.declaredAt), desc(dividendDeclarations.id))
+        .limit(limit)
+        .offset(offset),
+  );
+  return { ...page, rows: await withPayouts(companyId, page.rows), periodTotalPence };
 }
 
 /** @deprecated Prefer listDividendDeclarations — flat payout list for pack-style exports. */

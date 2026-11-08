@@ -1,3 +1,5 @@
+import { listPagingParamNames } from "@/lib/list-paging";
+
 /**
  * URL-driven table sorting: `?sort=<column>&dir=asc|desc`. Each table declares
  * a config; unknown values fall back to its default so hand-edited URLs can't
@@ -80,7 +82,10 @@ export function setTableSortParams<K extends string>(
   if (value.dir !== natural) qs.set(names.dir, value.dir);
 }
 
-/** Header link for `column`: the current URL with only this table's sort changed. */
+/**
+ * Header link for `column`: the current URL with only this table's sort changed,
+ * back on this table's first page.
+ */
 export function tableSortHref<K extends string>(
   path: string,
   sp: Record<string, string | string[] | undefined>,
@@ -93,6 +98,7 @@ export function tableSortHref<K extends string>(
     for (const v of Array.isArray(value) ? value : value == null ? [] : [value]) qs.append(key, v);
   }
   setTableSortParams(qs, config, nextTableSort(config, current, column));
+  qs.delete(listPagingParamNames(config.prefix).page);
   const query = qs.toString();
   return query ? `${path}?${query}` : path;
 }
@@ -130,10 +136,4 @@ export function sortRows<T, K extends string>(
       return cmp * sign || a.index - b.index;
     })
     .map((entry) => entry.row);
-}
-
-/** Rank by a fixed list (e.g. workflow order of statuses); unknown values last. */
-export function rankIn<V extends string>(order: readonly V[], value: string): number | null {
-  const i = (order as readonly string[]).indexOf(value);
-  return i === -1 ? null : i;
 }

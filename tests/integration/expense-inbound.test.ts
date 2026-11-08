@@ -14,7 +14,7 @@ import {
   adminDismissInboundEmailJob,
   adminRetryInboundEmailJob,
   enqueueInboundEmailJob,
-  listInboundEmailJobs,
+  listInboundEmailJobPage,
   processInboundEmailJob,
 } from "@/lib/expenses/inbound-email";
 import { getStorage } from "@/lib/storage";
@@ -396,7 +396,9 @@ describe("inbound email jobs", () => {
 
     const [job] = await db.select().from(inboundEmailJobs).where(eq(inboundEmailJobs.id, jobId));
     expect(job.expenseId).toBe(train.id);
-    const [listed] = await listInboundEmailJobs({ companyId });
+    const {
+      rows: [listed],
+    } = await listInboundEmailJobPage({ companyId });
     expect(listed.expenseCount).toBe(2);
 
     // Re-running a processed job reports every expense without creating more.

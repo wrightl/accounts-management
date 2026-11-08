@@ -2,16 +2,24 @@ import Link from "next/link";
 import { requirePlatformAdmin } from "@/lib/platform";
 import { hasDatabaseClient } from "@/db";
 import {
+  countPlatformBillingCompanies,
   getPlatformBillingStats,
   listPlatformBillingCompanies,
 } from "@/lib/platform/billing-queries";
+import { ListPagination } from "@/components/ui/list-pagination";
+import { listPageHref, parseListPaging, fetchPage } from "@/lib/list-paging";
 import { formatGBP } from "@/lib/money";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { StatusPill } from "@/components/platform/status-pill";
 import { DisplayDate } from "@/components/date-format-provider";
 
-export default async function PlatformBillingPage() {
+export default async function PlatformBillingPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   await requirePlatformAdmin();
+  const sp = await searchParams;
 
   if (!hasDatabaseClient()) {
     return (
@@ -22,9 +30,9 @@ export default async function PlatformBillingPage() {
     );
   }
 
-  const [stats, companies] = await Promise.all([
+  const [stats, { rows: companies, ...paging }] = await Promise.all([
     getPlatformBillingStats(),
-    listPlatformBillingCompanies(),
+    fetchPage(parseListPaging(sp), countPlatformBillingCompanies, listPlatformBillingCompanies),
   ]);
 
   const cards = [
@@ -128,6 +136,7 @@ export default async function PlatformBillingPage() {
               )}
             </TBody>
           </Table>
+          <ListPagination {...paging} href={(to) => listPageHref("/platform/billing", sp, to)} />
         </div>
       </section>
     </div>

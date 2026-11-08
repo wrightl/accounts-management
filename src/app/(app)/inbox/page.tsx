@@ -2,15 +2,17 @@ import { guardTenantPage } from "@/lib/auth";
 import { ensureLocalUser } from "@/lib/users";
 import {
   countUnreadNotifications,
-  listNotifications,
+  listNotificationPage,
 } from "@/lib/notifications";
+import { ListPagination } from "@/components/ui/list-pagination";
+import { listPageHref, parseListPaging } from "@/lib/list-paging";
 import { InboxClient } from "@/components/notifications/inbox-client";
 import { PageHeader } from "@/components/ui/page-header";
 
 export default async function InboxPage({
   searchParams,
 }: {
-  searchParams: Promise<{ filter?: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const session = await guardTenantPage("workspace:read");
   const params = await searchParams;
@@ -18,12 +20,12 @@ export default async function InboxPage({
   const userId =
     session.localUserId ?? (await ensureLocalUser(session));
 
-  const [notifications, unreadCount] = await Promise.all([
-    listNotifications({
+  const [{ rows: notifications, ...paging }, unreadCount] = await Promise.all([
+    listNotificationPage({
       userId,
       companyId: session.companyId!,
       filter,
-      limit: 100,
+      ...parseListPaging(params),
     }),
     countUnreadNotifications(userId, session.companyId!),
   ]);
@@ -39,7 +41,13 @@ export default async function InboxPage({
             : "You're all caught up"
         }
       />
-      <InboxClient initial={notifications} filter={filter} />
+      {/* A new page or filter starts the list's local state afresh. */}
+      <InboxClient
+        key={`${filter}:${paging.page}:${paging.pageSize}`}
+        initial={notifications}
+        filter={filter}
+      />
+      <ListPagination {...paging} href={(to) => listPageHref("/inbox", params, to)} />
     </div>
   );
 }

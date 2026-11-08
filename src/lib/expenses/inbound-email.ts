@@ -32,6 +32,7 @@ import {
   type ReceiptOcrProvider,
 } from "@/lib/expenses/receipt-ocr";
 import { mapWithConcurrency } from "@/lib/concurrency";
+import { type ListPaging, fetchPage } from "@/lib/list-paging";
 import {
   isForeignCurrency,
   isReceiptOcrProvider,
@@ -1045,13 +1046,11 @@ export type InboundEmailJobListFilter =
   | "rejected"
   | "processed";
 
-export async function listInboundEmailJobs(input: {
-  companyId: string;
-  filter?: InboundEmailJobListFilter;
-  limit?: number;
-}) {
+/** One page of inbound email jobs, newest first. */
+export async function listInboundEmailJobPage(
+  input: { companyId: string; filter?: InboundEmailJobListFilter } & Partial<ListPaging>,
+) {
   const db = getDb();
-  const limit = input.limit ?? 100;
   const filter = input.filter ?? "all";
 
   const conditions = [eq(inboundEmailJobs.companyId, input.companyId)];
@@ -1075,26 +1074,33 @@ export async function listInboundEmailJobs(input: {
       break;
   }
 
-  return db
-    .select({
-      id: inboundEmailJobs.id,
-      resendEmailId: inboundEmailJobs.resendEmailId,
-      fromEmail: inboundEmailJobs.fromEmail,
-      toEmail: inboundEmailJobs.toEmail,
-      subject: inboundEmailJobs.subject,
-      status: inboundEmailJobs.status,
-      attempts: inboundEmailJobs.attempts,
-      lastError: inboundEmailJobs.lastError,
-      createdAt: inboundEmailJobs.createdAt,
-      processedAt: inboundEmailJobs.processedAt,
-      expenseId: inboundEmailJobs.expenseId,
-      // Qualified by hand: Drizzle leaves columns unqualified in a one-table select.
-      expenseCount: sql<number>`(select count(*)::int from "expenses" e where e."inbound_email_job_id" = "inbound_email_jobs"."id")`,
-    })
-    .from(inboundEmailJobs)
-    .where(and(...conditions))
-    .orderBy(desc(inboundEmailJobs.createdAt))
-    .limit(limit);
+  const where = and(...conditions);
+  return fetchPage(
+    input,
+    async () => (await db.select({ n: count() }).from(inboundEmailJobs).where(where))[0]?.n ?? 0,
+    ({ limit, offset }) =>
+      db
+        .select({
+          id: inboundEmailJobs.id,
+          resendEmailId: inboundEmailJobs.resendEmailId,
+          fromEmail: inboundEmailJobs.fromEmail,
+          toEmail: inboundEmailJobs.toEmail,
+          subject: inboundEmailJobs.subject,
+          status: inboundEmailJobs.status,
+          attempts: inboundEmailJobs.attempts,
+          lastError: inboundEmailJobs.lastError,
+          createdAt: inboundEmailJobs.createdAt,
+          processedAt: inboundEmailJobs.processedAt,
+          expenseId: inboundEmailJobs.expenseId,
+          // Qualified by hand: Drizzle leaves columns unqualified in a one-table select.
+          expenseCount: sql<number>`(select count(*)::int from "expenses" e where e."inbound_email_job_id" = "inbound_email_jobs"."id" and e."company_id" = "inbound_email_jobs"."company_id")`,
+        })
+        .from(inboundEmailJobs)
+        .where(where)
+        .orderBy(desc(inboundEmailJobs.createdAt), desc(inboundEmailJobs.id))
+        .limit(limit)
+        .offset(offset),
+  );
 }
 
 /** Expenses an inbound email created, in the order of its attachments. */

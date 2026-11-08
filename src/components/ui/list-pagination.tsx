@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { buttonClasses } from "@/components/ui/button";
 import { PageSizeSelect } from "@/components/ui/page-size-select";
-import { LIST_PAGE_SIZE_OPTIONS } from "@/lib/list-paging";
+import { LIST_PAGE_SIZE, LIST_PAGE_SIZE_OPTIONS } from "@/lib/list-paging";
 import { cn } from "@/lib/utils";
 
 /**
  * "Showing 1–25 of 80", rows per page and First / Previous / Next / Last for
- * a server-paged list. `href` builds the list URL for a page and page size.
+ * a server-paged list. `href` builds the list URL for a page and page size;
+ * `listPageHref` does that for lists without their own URL builder. Hidden
+ * when everything fits on one page at the smallest size.
  */
 export function ListPagination({
   total,
@@ -21,7 +23,7 @@ export function ListPagination({
   pageCount: number;
   href: (to: { page: number; pageSize?: number }) => string;
 }) {
-  if (total === 0) return null;
+  if (total <= LIST_PAGE_SIZE && page === 1) return null;
   const from = (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);
   const hasPrev = page > 1;

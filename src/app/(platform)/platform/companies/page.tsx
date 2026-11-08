@@ -8,10 +8,11 @@ import {
 } from "@/lib/platform/queries";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { StatusPill } from "@/components/platform/status-pill";
-import { ClearFilters, Pager, parseOffset } from "@/components/platform/pager";
+import { ClearFilters } from "@/components/platform/pager";
+import { ListPagination } from "@/components/ui/list-pagination";
+import { listPageHref, parseListPaging, fetchPage } from "@/lib/list-paging";
 import { DisplayDate } from "@/components/date-format-provider";
 
-const PAGE_SIZE = 50;
 
 const FILTER_OPTIONS = [
   { value: "", label: "All companies" },
@@ -26,12 +27,12 @@ const FILTER_OPTIONS = [
 export default async function PlatformCompaniesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; filter?: string; offset?: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
   await requirePlatformAdmin();
-  const { q, filter: rawFilter, offset: rawOffset } = await searchParams;
+  const sp = await searchParams;
+  const { q, filter: rawFilter } = sp;
   const filter = isCompanyListFilter(rawFilter) ? rawFilter : undefined;
-  const offset = parseOffset(rawOffset);
 
   if (!hasDatabaseClient()) {
     return (
@@ -42,10 +43,11 @@ export default async function PlatformCompaniesPage({
     );
   }
 
-  const [rows, total] = await Promise.all([
-    listPlatformCompanies({ q, filter, limit: PAGE_SIZE, offset }),
-    countPlatformCompanies({ q, filter }),
-  ]);
+  const { rows, ...paging } = await fetchPage(
+    parseListPaging(sp),
+    () => countPlatformCompanies({ q, filter }),
+    (window) => listPlatformCompanies({ q, filter, ...window }),
+  );
 
   return (
     <div>
@@ -163,13 +165,9 @@ export default async function PlatformCompaniesPage({
             </TBody>
           </Table>
         )}
-        <Pager
-          path="/platform/companies"
-          params={{ q, filter }}
-          offset={offset}
-          pageSize={PAGE_SIZE}
-          shown={rows.length}
-          total={total}
+        <ListPagination
+          {...paging}
+          href={(to) => listPageHref("/platform/companies", sp, to)}
         />
       </div>
     </div>

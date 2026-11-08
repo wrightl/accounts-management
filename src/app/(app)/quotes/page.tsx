@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { listClients } from "@/lib/clients/queries";
-import { listQuotes } from "@/lib/quotes/queries";
+import { listQuotePage } from "@/lib/quotes/queries";
 import { getQuotesSummary } from "@/lib/quotes/summary";
 import { QUOTE_STATUSES, quoteStatusLabel, type QuoteStatus } from "@/lib/quotes/status";
 import { QuotesSummaryPanel } from "@/components/quotes/quotes-summary";
@@ -11,13 +11,9 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Label, Select } from "@/components/ui/form";
 import { Table, THead, TBody, TR, TD } from "@/components/ui/table";
 import { sortHeaders } from "@/components/ui/sortable-th";
-import {
-  defineTableSort,
-  parseTableSort,
-  rankIn,
-  setTableSortParams,
-  sortRows,
-} from "@/lib/table-sort";
+import { ListPagination } from "@/components/ui/list-pagination";
+import { listPageHref, parseListPaging } from "@/lib/list-paging";
+import { defineTableSort, parseTableSort, setTableSortParams } from "@/lib/table-sort";
 import { PageHeader } from "@/components/ui/page-header";
 
 /** "created" is the loaded order (newest first) and has no header. */
@@ -46,20 +42,13 @@ export default async function QuotesPage({
     clientId: sp.client,
   };
 
-  const [loaded, clients, summary] = await Promise.all([
-    listQuotes(companyId, filters),
+  const [{ rows, ...paging }, clients, summary] = await Promise.all([
+    listQuotePage(companyId, { ...filters, ...sort, ...parseListPaging(sp) }),
     listClients(companyId),
     getQuotesSummary(companyId, filters),
   ]);
 
   const filtersActive = Boolean(sp.status || sp.client);
-  const rows = sortRows(loaded, sort, {
-    number: (r) => r.number,
-    version: (r) => r.version,
-    client: (r) => r.clientName,
-    status: (r) => rankIn(QUOTE_STATUSES, r.status),
-    total: (r) => r.grossPence,
-  });
 
   return (
     <div>
@@ -158,6 +147,7 @@ export default async function QuotesPage({
                 </TBody>
               </Table>
             )}
+            <ListPagination {...paging} href={(to) => listPageHref("/quotes", sp, to)} />
           </div>
         </div>
 

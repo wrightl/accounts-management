@@ -16,6 +16,7 @@ import { formatExpenseAmount, formatGBP } from "@/lib/money";
 import type { ExpenseStatus } from "@/lib/expenses/categories";
 import type { ExpenseSortColumn } from "@/lib/expenses/list-sort";
 import type { TableSort } from "@/lib/table-sort";
+import { type ListPaging, type Paged, fetchPage } from "@/lib/list-paging";
 import { bankSearchPattern } from "@/lib/bank/list-params";
 import { labelsForExpenses } from "@/lib/labels/queries";
 import {
@@ -91,17 +92,9 @@ function expenseListOrderBy(
   }
 }
 
-/** Pass `page` to fetch one page (the mobile app); the web page lists them all. */
-export async function listExpenses(
-  companyId: string,
-  filters: ExpenseFilters = {},
-  page?: { limit: number; offset: number },
-) {
-  const db = getDb();
-  const paidBy = alias(users, "paid_by");
-  const createdBy = alias(users, "created_by");
-  const submittedBy = alias(users, "submitted_by");
-  const conditions = [eq(expenses.companyId, companyId)];
+/** WHERE for the expenses list. Search needs the clients join from `expenseClientJoin`. */
+function expenseListConditions(companyId: string, filters: ExpenseFilters): SQL[] {
+  const conditions: SQL[] = [eq(expenses.companyId, companyId)];
   if (filters.scope === "pack") conditions.push(expenseInPack);
   const pattern = filters.q ? bankSearchPattern(filters.q) : null;
   if (pattern) {
@@ -126,6 +119,24 @@ export async function listExpenses(
         and ${inArray(expenseLabels.labelId, filters.labels)}
     )`);
   }
+  return conditions;
+}
+
+function expenseClientJoin(companyId: string) {
+  return and(eq(expenses.clientId, clients.id), eq(clients.companyId, companyId));
+}
+
+/** Pass `page` to fetch a window of rows without a total (the mobile app). */
+export async function listExpenses(
+  companyId: string,
+  filters: ExpenseFilters = {},
+  page?: { limit: number; offset: number },
+) {
+  const db = getDb();
+  const paidBy = alias(users, "paid_by");
+  const createdBy = alias(users, "created_by");
+  const submittedBy = alias(users, "submitted_by");
+  const conditions = expenseListConditions(companyId, filters);
 
   const query = db
     .select({
@@ -158,7 +169,7 @@ export async function listExpenses(
     .leftJoin(paidBy, eq(expenses.paidByUserId, paidBy.id))
     .leftJoin(createdBy, eq(expenses.createdByUserId, createdBy.id))
     .leftJoin(submittedBy, eq(expenses.submittedByUserId, submittedBy.id))
-    .leftJoin(clients, eq(expenses.clientId, clients.id))
+    .leftJoin(clients, expenseClientJoin(companyId))
     .where(and(...conditions))
     .orderBy(
       ...expenseListOrderBy(filters.sort, {
@@ -200,6 +211,26 @@ export async function listExpenses(
       amountFormatted: formatExpenseAmount(r),
     };
   });
+}
+
+/** One page of the expenses list for the web, with the total across pages. */
+export async function listExpensePage(
+  companyId: string,
+  filters: ExpenseFilters & ListPaging,
+): Promise<Paged<Awaited<ReturnType<typeof listExpenses>>[number]>> {
+  const db = getDb();
+  return fetchPage(
+    filters,
+    async () =>
+      (
+        await db
+          .select({ n: count() })
+          .from(expenses)
+          .leftJoin(clients, expenseClientJoin(companyId))
+          .where(and(...expenseListConditions(companyId, filters)))
+      )[0]?.n ?? 0,
+    (window) => listExpenses(companyId, filters, window),
+  );
 }
 
 export async function getExpenseDetail(

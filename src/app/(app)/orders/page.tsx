@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
-import { listOrders } from "@/lib/orders/queries";
+import { listOrderPage } from "@/lib/orders/queries";
 import { buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Table, THead, TBody, TR, TD } from "@/components/ui/table";
 import { sortHeaders } from "@/components/ui/sortable-th";
-import { defineTableSort, parseTableSort, rankIn, sortRows } from "@/lib/table-sort";
+import { ListPagination } from "@/components/ui/list-pagination";
+import { listPageHref, parseListPaging } from "@/lib/list-paging";
+import { defineTableSort, parseTableSort } from "@/lib/table-sort";
 import { PageHeader } from "@/components/ui/page-header";
 
 /** "created" is the loaded order (newest first) and has no header. */
@@ -14,7 +16,6 @@ const SORT = defineTableSort({
   fallback: { sort: "created", dir: "desc" },
   descFirst: ["created", "total"],
 });
-const STATUS_ORDER = ["draft", "active", "completed", "cancelled"] as const;
 
 export default async function OrdersPage({
   searchParams,
@@ -27,13 +28,7 @@ export default async function OrdersPage({
   const sort = parseTableSort(sp, SORT);
   const th = sortHeaders("/orders", sp, SORT, sort);
 
-  const rows = sortRows(await listOrders(companyId), sort, {
-    number: (r) => r.number,
-    client: (r) => r.clientName,
-    quote: (r) => r.quoteNumber,
-    status: (r) => rankIn(STATUS_ORDER, r.status),
-    total: (r) => r.grossPence,
-  });
+  const { rows, ...paging } = await listOrderPage(companyId, { ...sort, ...parseListPaging(sp) });
 
   return (
     <div>
@@ -88,6 +83,7 @@ export default async function OrdersPage({
             </TBody>
           </Table>
         )}
+        <ListPagination {...paging} href={(to) => listPageHref("/orders", sp, to)} />
       </div>
     </div>
   );

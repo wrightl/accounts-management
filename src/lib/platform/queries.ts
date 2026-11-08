@@ -167,6 +167,35 @@ export async function listPlatformCompanies(
   }));
 }
 
+export async function countCompanySupportNotes(companyId: string): Promise<number> {
+  const [row] = await getDb()
+    .select({ count: count() })
+    .from(companySupportNotes)
+    .where(eq(companySupportNotes.companyId, companyId));
+  return Number(row?.count ?? 0);
+}
+
+/** A company's support notes, newest first. */
+export async function listCompanySupportNotes(
+  companyId: string,
+  opts: { limit: number; offset: number },
+) {
+  return getDb()
+    .select({
+      id: companySupportNotes.id,
+      body: companySupportNotes.body,
+      createdAt: companySupportNotes.createdAt,
+      authorEmail: users.email,
+      authorName: users.name,
+    })
+    .from(companySupportNotes)
+    .leftJoin(users, eq(companySupportNotes.authorUserId, users.id))
+    .where(eq(companySupportNotes.companyId, companyId))
+    .orderBy(desc(companySupportNotes.createdAt), desc(companySupportNotes.id))
+    .limit(opts.limit)
+    .offset(opts.offset);
+}
+
 export async function getPlatformCompanyDetail(companyId: string) {
   const db = getDb();
   const [company] = await db
@@ -207,20 +236,6 @@ export async function getPlatformCompanyDetail(companyId: string) {
     .orderBy(desc(auditLog.createdAt))
     .limit(50);
 
-  const notes = await db
-    .select({
-      id: companySupportNotes.id,
-      body: companySupportNotes.body,
-      createdAt: companySupportNotes.createdAt,
-      authorEmail: users.email,
-      authorName: users.name,
-    })
-    .from(companySupportNotes)
-    .leftJoin(users, eq(companySupportNotes.authorUserId, users.id))
-    .where(eq(companySupportNotes.companyId, companyId))
-    .orderBy(desc(companySupportNotes.createdAt))
-    .limit(50);
-
   const [inboundCounts] = await db
     .select({
       pending: sql<number>`count(*) filter (where ${inboundEmailJobs.status} = 'pending')::int`,
@@ -244,7 +259,6 @@ export async function getPlatformCompanyDetail(companyId: string) {
     company,
     members,
     recentAudit,
-    notes,
     inboundCounts: inboundCounts ?? {
       pending: 0,
       failed: 0,
@@ -302,9 +316,7 @@ export async function getPlatformOverviewStats() {
   };
 }
 
-/** Platform operators only (`platform_admin` role). Env break-glass emails appear once seeded. */
-export async function listPlatformUsers(opts?: { q?: string }) {
-  const db = getDb();
+function platformUserWhere(opts?: { q?: string }): SQL | undefined {
   const q = opts?.q?.trim();
   const filters: SQL[] = [eq(users.role, PLATFORM_ADMIN_ROLE)];
   if (q) {
@@ -312,7 +324,22 @@ export async function listPlatformUsers(opts?: { q?: string }) {
       or(ilike(users.email, `%${q}%`), ilike(users.name, `%${q}%`))!,
     );
   }
+  return and(...filters);
+}
 
+export async function countPlatformUsers(opts?: { q?: string }): Promise<number> {
+  const [row] = await getDb()
+    .select({ count: count() })
+    .from(users)
+    .where(platformUserWhere(opts));
+  return Number(row?.count ?? 0);
+}
+
+/** Platform operators only (`platform_admin` role). Env break-glass emails appear once seeded. */
+export async function listPlatformUsers(
+  opts?: { q?: string; limit?: number; offset?: number },
+) {
+  const db = getDb();
   return db
     .select({
       id: users.id,
@@ -322,9 +349,10 @@ export async function listPlatformUsers(opts?: { q?: string }) {
       createdAt: users.createdAt,
     })
     .from(users)
-    .where(and(...filters))
-    .orderBy(asc(users.email))
-    .limit(200);
+    .where(platformUserWhere(opts))
+    .orderBy(asc(users.email), asc(users.id))
+    .limit(Math.min(opts?.limit ?? 200, 200))
+    .offset(opts?.offset ?? 0);
 }
 
 export async function getPlatformUserMemberships(userId: string) {

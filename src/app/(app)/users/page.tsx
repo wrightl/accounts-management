@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { guardTenantPage } from "@/lib/auth";
-import { listUsers } from "@/lib/users";
+import { listUserPage } from "@/lib/users";
+import { ListPagination } from "@/components/ui/list-pagination";
+import { listPageHref, parseListPaging } from "@/lib/list-paging";
 import { userStatus, userStatusLabel } from "@/lib/users/display";
 import { countPendingReimbursementsByPayee } from "@/lib/reimbursements/queries";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
@@ -10,11 +12,16 @@ import { roleLabel } from "@/lib/roles";
 import { buttonClasses } from "@/components/ui/button";
 import { SettingsPageHeader } from "@/components/settings/settings-page-header";
 
-export default async function UsersPage() {
+export default async function UsersPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   const session = await guardTenantPage("users:manage");
+  const sp = await searchParams;
 
-  const [rows, pendingByPayee] = await Promise.all([
-    listUsers(session.companyId),
+  const [{ rows, ...paging }, pendingByPayee] = await Promise.all([
+    listUserPage(session.companyId, parseListPaging(sp)),
     countPendingReimbursementsByPayee(session.companyId),
   ]);
 
@@ -89,6 +96,7 @@ export default async function UsersPage() {
             </TBody>
           </Table>
         )}
+        <ListPagination {...paging} href={(to) => listPageHref("/users", sp, to)} />
       </div>
     </div>
   );

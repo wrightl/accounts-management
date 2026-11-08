@@ -1,5 +1,5 @@
 import "server-only";
-import { and, count, desc, eq, ne, sum } from "drizzle-orm";
+import { and, asc, count, desc, eq, ne, sql, sum, type SQL } from "drizzle-orm";
 import { getDb } from "@/db";
 import { reimbursementInPack, type RecordScope } from "@/lib/accountant/record-scope";
 import {
@@ -8,7 +8,10 @@ import {
   reimbursements,
   users,
 } from "@/db/schema";
+import { type ListPaging, fetchPage } from "@/lib/list-paging";
 import { formatExpenseAmount, formatGBP } from "@/lib/money";
+import { sortExpr, sortRank, sortText } from "@/lib/sql-paging";
+import type { TableSort } from "@/lib/table-sort";
 import { findLocalUserId } from "@/lib/users";
 import type { SessionUser } from "@/lib/auth";
 
@@ -63,6 +66,84 @@ export async function listReimbursements(companyId: string, scope: RecordScope =
     ...r,
     totalFormatted: formatGBP(r.totalPence),
   }));
+}
+
+export type ReimbursementSortColumn =
+  | "payee"
+  | "status"
+  | "reference"
+  | "date"
+  | "created"
+  | "total";
+
+function reimbursementListOrderBy({ sort, dir }: TableSort<ReimbursementSortColumn>): SQL[] {
+  const by = sortExpr(dir);
+  const tiebreak = [desc(reimbursements.createdAt), desc(reimbursements.id)];
+  switch (sort) {
+    case "payee":
+      return [by(sortText(sql`coalesce(nullif(${users.name}, ''), ${users.email})`)), ...tiebreak];
+    case "status":
+      return [by(sortRank(reimbursements.status, ["pending", "paid"])), ...tiebreak];
+    case "reference":
+      return [by(sortText(reimbursements.reference)), ...tiebreak];
+    case "date":
+      return [by(reimbursements.reimbursementDate), ...tiebreak];
+    case "total":
+      return [by(reimbursements.totalPence), ...tiebreak];
+    case "created":
+      return dir === "asc"
+        ? [asc(reimbursements.createdAt), asc(reimbursements.id)]
+        : tiebreak;
+  }
+}
+
+/** One page of reimbursement runs, filtered by status and sorted in the database. */
+export async function listReimbursementPage(
+  companyId: string,
+  options: {
+    scope?: RecordScope;
+    status?: "pending" | "paid";
+  } & TableSort<ReimbursementSortColumn> &
+    ListPaging,
+) {
+  const db = getDb();
+  const where = and(
+    eq(reimbursements.companyId, companyId),
+    options.scope === "pack" ? reimbursementInPack : undefined,
+    options.status ? eq(reimbursements.status, options.status) : undefined,
+  );
+  // Users aren't tenant rows: someone can belong to several companies.
+  const payeeJoin = eq(reimbursements.payeeUserId, users.id);
+  const page = await fetchPage(
+    options,
+    async () =>
+      (
+        await db
+          .select({ n: count() })
+          .from(reimbursements)
+          .innerJoin(users, payeeJoin)
+          .where(where)
+      )[0]?.n ?? 0,
+    ({ limit, offset }) =>
+      db
+        .select({
+          id: reimbursements.id,
+          status: reimbursements.status,
+          totalPence: reimbursements.totalPence,
+          reference: reimbursements.reference,
+          reimbursementDate: reimbursements.reimbursementDate,
+          createdAt: reimbursements.createdAt,
+          payeeName: users.name,
+          payeeEmail: users.email,
+        })
+        .from(reimbursements)
+        .innerJoin(users, payeeJoin)
+        .where(where)
+        .orderBy(...reimbursementListOrderBy(options))
+        .limit(limit)
+        .offset(offset),
+  );
+  return { ...page, rows: page.rows.map((r) => ({ ...r, totalFormatted: formatGBP(r.totalPence) })) };
 }
 
 export async function getReimbursementDetail(

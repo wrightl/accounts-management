@@ -6,7 +6,9 @@ import { DisplayDate } from "@/components/date-format-provider";
 import { buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
-import { listQueries } from "@/lib/queries/queries";
+import { listQueryPage } from "@/lib/queries/queries";
+import { ListPagination } from "@/components/ui/list-pagination";
+import { listPageHref, parseListPaging } from "@/lib/list-paging";
 import {
   QUERY_STATUSES,
   isQueryStatus,
@@ -22,9 +24,9 @@ export default async function QueriesPage({
 }) {
   const { companyId, role } = await guardTenantPage("queries:read");
   const canRaise = can(role, "queries:raise");
-  const { status: rawStatus } = await searchParams;
-  const status = isQueryStatus(rawStatus) ? rawStatus : undefined;
-  const rows = await listQueries(companyId, status);
+  const sp = await searchParams;
+  const status = isQueryStatus(sp.status) ? sp.status : undefined;
+  const { rows, ...paging } = await listQueryPage(companyId, { status, ...parseListPaging(sp) });
 
   return (
     <div>
@@ -106,6 +108,7 @@ export default async function QueriesPage({
             </TBody>
           </Table>
         )}
+        <ListPagination {...paging} href={(to) => listPageHref("/queries", sp, to)} />
       </div>
     </div>
   );

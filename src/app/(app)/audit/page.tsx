@@ -1,35 +1,24 @@
-import { desc, eq } from "drizzle-orm";
+import { listAuditPage } from "@/lib/audit";
 import { guardTenantPage } from "@/lib/auth";
-import { getDb } from "@/db";
-import { auditLog, users } from "@/db/schema";
+import { listPageHref, parseListPaging } from "@/lib/list-paging";
+import { ListPagination } from "@/components/ui/list-pagination";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { SettingsPageHeader } from "@/components/settings/settings-page-header";
 
-export default async function AuditLogPage() {
+export default async function AuditLogPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   const { companyId } = await guardTenantPage("users:manage");
-
-  const db = getDb();
-  const rows = await db
-    .select({
-      id: auditLog.id,
-      action: auditLog.action,
-      entityType: auditLog.entityType,
-      entityId: auditLog.entityId,
-      createdAt: auditLog.createdAt,
-      actorEmail: users.email,
-      actorName: users.name,
-    })
-    .from(auditLog)
-    .leftJoin(users, eq(auditLog.actorUserId, users.id))
-    .where(eq(auditLog.companyId, companyId))
-    .orderBy(desc(auditLog.createdAt))
-    .limit(200);
+  const sp = await searchParams;
+  const { rows, ...paging } = await listAuditPage(companyId, parseListPaging(sp));
 
   return (
     <div>
       <SettingsPageHeader
         title="Audit log"
-        description="Recent sensitive changes to this company and who made them. Admins only."
+        description="Sensitive changes to this company and who made them. Admins only."
       />
 
       <div>
@@ -62,6 +51,7 @@ export default async function AuditLogPage() {
             </TBody>
           </Table>
         )}
+        <ListPagination {...paging} href={(to) => listPageHref("/audit", sp, to)} />
       </div>
     </div>
   );

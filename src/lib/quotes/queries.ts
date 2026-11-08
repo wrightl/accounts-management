@@ -1,15 +1,19 @@
 import "server-only";
-import { and, desc, eq, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, type SQL } from "drizzle-orm";
 import { getDb } from "@/db";
 import { clients, quoteLineItems, quotePaymentMilestones, quoteVersions, quotes, users } from "@/db/schema";
 import { clientDisplayNameSql } from "@/lib/clients/sql";
+import { type ListPaging, fetchPage } from "@/lib/list-paging";
 import { formatGBP } from "@/lib/money";
 import {
   formatQuoteReference,
   formatQuoteVersion,
   isQuoteStatus,
+  QUOTE_STATUSES,
   type QuoteVersionLine,
 } from "@/lib/quotes/status";
+import { sortExpr, sortNumbered, sortRank, sortText } from "@/lib/sql-paging";
+import type { TableSort } from "@/lib/table-sort";
 import { insertQuoteVersion, linesToSnapshot, type QuoteSnapshot } from "@/lib/quotes/versions";
 
 export type QuoteListFilters = {
@@ -56,6 +60,68 @@ export async function listQuotes(companyId: string, filters: QuoteListFilters = 
     grossFormatted: formatGBP(r.grossPence),
     versionLabel: formatQuoteVersion(r.version),
   }));
+}
+
+export type QuoteSortColumn = "created" | "number" | "version" | "client" | "status" | "total";
+
+function quoteListOrderBy({ sort, dir }: TableSort<QuoteSortColumn>): SQL[] {
+  const by = sortExpr(dir);
+  const tiebreak = [desc(quotes.createdAt), desc(quotes.id)];
+  switch (sort) {
+    case "number":
+      return [...sortNumbered(dir, quotes.number), ...tiebreak];
+    case "version":
+      return [by(quotes.version), ...tiebreak];
+    case "client":
+      return [by(sortText(clientDisplayNameSql)), ...tiebreak];
+    case "status":
+      return [by(sortRank(quotes.status, QUOTE_STATUSES)), ...tiebreak];
+    case "total":
+      return [by(quotes.grossPence), ...tiebreak];
+    case "created":
+      return dir === "asc" ? [asc(quotes.createdAt), asc(quotes.id)] : tiebreak;
+  }
+}
+
+/** One page of the quotes list, filtered and sorted in the database. */
+export async function listQuotePage(
+  companyId: string,
+  filters: QuoteListFilters & TableSort<QuoteSortColumn> & ListPaging,
+) {
+  const db = getDb();
+  const where = and(...quoteFilterConditions(companyId, filters));
+  const clientJoin = and(eq(quotes.clientId, clients.id), eq(clients.companyId, companyId));
+  const page = await fetchPage(
+    filters,
+    async () =>
+      (await db.select({ n: count() }).from(quotes).innerJoin(clients, clientJoin).where(where))[0]
+        ?.n ?? 0,
+    ({ limit, offset }) =>
+      db
+        .select({
+          id: quotes.id,
+          number: quotes.number,
+          version: quotes.version,
+          status: quotes.status,
+          issueDate: quotes.issueDate,
+          grossPence: quotes.grossPence,
+          clientName: clientDisplayNameSql.as("client_name"),
+        })
+        .from(quotes)
+        .innerJoin(clients, clientJoin)
+        .where(where)
+        .orderBy(...quoteListOrderBy(filters))
+        .limit(limit)
+        .offset(offset),
+  );
+  return {
+    ...page,
+    rows: page.rows.map((r) => ({
+      ...r,
+      grossFormatted: formatGBP(r.grossPence),
+      versionLabel: formatQuoteVersion(r.version),
+    })),
+  };
 }
 
 export async function getQuoteDetail(companyId: string, id: string) {

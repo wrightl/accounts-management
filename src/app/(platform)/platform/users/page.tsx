@@ -1,6 +1,8 @@
 import { requirePlatformAdmin } from "@/lib/platform";
 import { hasDatabaseClient } from "@/db";
-import { listPlatformUsers } from "@/lib/platform/queries";
+import { countPlatformUsers, listPlatformUsers } from "@/lib/platform/queries";
+import { ListPagination } from "@/components/ui/list-pagination";
+import { listPageHref, parseListPaging, fetchPage } from "@/lib/list-paging";
 import { isPlatformAdminEmail } from "@/lib/bootstrap";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { InvitePlatformAdminButton } from "@/components/platform/invite-admin-form";
@@ -12,10 +14,11 @@ import { findLocalUserId } from "@/lib/users";
 export default async function PlatformUsersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const session = await requirePlatformAdmin();
-  const { q } = await searchParams;
+  const sp = await searchParams;
+  const { q } = sp;
 
   if (!hasDatabaseClient()) {
     return (
@@ -26,8 +29,12 @@ export default async function PlatformUsersPage({
     );
   }
 
-  const [rows, selfId] = await Promise.all([
-    listPlatformUsers({ q }),
+  const [{ rows, ...paging }, selfId] = await Promise.all([
+    fetchPage(
+      parseListPaging(sp),
+      () => countPlatformUsers({ q }),
+      (window) => listPlatformUsers({ q, ...window }),
+    ),
     findLocalUserId(session.userId),
   ]);
 
@@ -109,6 +116,7 @@ export default async function PlatformUsersPage({
             )}
           </TBody>
         </Table>
+        <ListPagination {...paging} href={(to) => listPageHref("/platform/users", sp, to)} />
       </div>
     </div>
   );

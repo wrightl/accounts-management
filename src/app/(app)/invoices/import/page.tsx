@@ -4,7 +4,9 @@ import { InvoicePdfImport } from "@/components/invoices/invoice-pdf-import";
 import { BackLink } from "@/components/ui/back-link";
 import { guardTenantPage } from "@/lib/auth";
 import { SetupStepBanner } from "@/components/data-onboarding/setup-step-banner";
-import { listImportBatches } from "@/lib/invoices/import/queries";
+import { listImportBatchPage } from "@/lib/invoices/import/queries";
+import { ListPagination } from "@/components/ui/list-pagination";
+import { listPageHref, parseListPaging } from "@/lib/list-paging";
 
 // Server Actions on this page stage and commit large files.
 export const maxDuration = 60;
@@ -16,7 +18,7 @@ export default async function InvoiceImportPage({
 }) {
   const { companyId, entityType } = await guardTenantPage("accounts:write");
   const sp = await searchParams;
-  const batches = await listImportBatches(companyId);
+  const { rows: batches, ...paging } = await listImportBatchPage(companyId, parseListPaging(sp));
   return (
     <div>
       <SetupStepBanner stepId="invoices" entityType={entityType} from={sp.from} />
@@ -29,7 +31,12 @@ export default async function InvoiceImportPage({
         spreadsheet, or from the invoice PDFs themselves. You&apos;ll review everything before
         it&apos;s saved, and clients aren&apos;t contacted.
       </p>
-      {batches.length > 0 ? <InvoiceImportList batches={batches} /> : null}
+      {batches.length > 0 ? (
+        <>
+          <InvoiceImportList batches={batches} />
+          <ListPagination {...paging} href={(to) => listPageHref("/invoices/import", sp, to)} />
+        </>
+      ) : null}
       <InvoiceImportStart />
       <InvoicePdfImport />
     </div>

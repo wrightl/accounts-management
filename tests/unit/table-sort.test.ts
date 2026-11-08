@@ -3,7 +3,6 @@ import {
   defineTableSort,
   nextTableSort,
   parseTableSort,
-  rankIn,
   setTableSortParams,
   sortRows,
   tableSortHref,
@@ -105,9 +104,3 @@ describe("sortRows", () => {
   });
 });
 
-describe("rankIn", () => {
-  it("ranks by a fixed order with unknowns blank", () => {
-    expect(rankIn(["draft", "sent"], "sent")).toBe(1);
-    expect(rankIn(["draft", "sent"], "nope")).toBeNull();
-  });
-});

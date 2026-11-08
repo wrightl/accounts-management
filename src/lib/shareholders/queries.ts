@@ -1,8 +1,9 @@
 import "server-only";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, count, eq, isNotNull, isNull, sql, sum } from "drizzle-orm";
 import { getDb } from "@/db";
 import { companies, shareholders, users } from "@/db/schema";
 import { getCompanySettings } from "@/lib/settings/queries";
+import { type ListPaging, fetchPage } from "@/lib/list-paging";
 
 export async function listShareholders(
   companyId: string,
@@ -43,6 +44,68 @@ export async function listShareholders(
     registerBalanced:
       totalShares != null && totalShares > 0 && activeSum === totalShares,
     shareholders: rows.map((r) => ({
+      ...r,
+      percent:
+        totalShares && totalShares > 0 && !r.archivedAt
+          ? (r.shareCount / totalShares) * 100
+          : null,
+      linkedUserLabel: r.userName || r.userEmail || null,
+    })),
+  };
+}
+
+/** Total shares against what active holders hold, without loading the register. */
+export async function getShareRegisterSummary(companyId: string) {
+  const [settings, [row]] = await Promise.all([
+    getCompanySettings(companyId),
+    getDb()
+      .select({ activeShareSum: sum(shareholders.shareCount).mapWith(Number) })
+      .from(shareholders)
+      .where(and(eq(shareholders.companyId, companyId), isNull(shareholders.archivedAt))),
+  ]);
+  const totalShares = settings.totalShares;
+  const activeShareSum = row?.activeShareSum ?? 0;
+  return {
+    totalShares,
+    activeShareSum,
+    registerBalanced: totalShares != null && totalShares > 0 && activeShareSum === totalShares,
+  };
+}
+
+/** One page of active or archived shareholders, by name. */
+export async function listShareholderPage(
+  companyId: string,
+  options: { archived: boolean; totalShares: number | null } & ListPaging,
+) {
+  const db = getDb();
+  const where = and(
+    eq(shareholders.companyId, companyId),
+    options.archived ? isNotNull(shareholders.archivedAt) : isNull(shareholders.archivedAt),
+  );
+  const page = await fetchPage(
+    options,
+    async () => (await db.select({ n: count() }).from(shareholders).where(where))[0]?.n ?? 0,
+    ({ limit, offset }) =>
+      db
+        .select({
+          id: shareholders.id,
+          name: shareholders.name,
+          shareCount: shareholders.shareCount,
+          archivedAt: shareholders.archivedAt,
+          userName: users.name,
+          userEmail: users.email,
+        })
+        .from(shareholders)
+        .leftJoin(users, eq(shareholders.userId, users.id))
+        .where(where)
+        .orderBy(asc(shareholders.name), asc(shareholders.id))
+        .limit(limit)
+        .offset(offset),
+  );
+  const { totalShares } = options;
+  return {
+    ...page,
+    rows: page.rows.map((r) => ({
       ...r,
       percent:
         totalShares && totalShares > 0 && !r.archivedAt

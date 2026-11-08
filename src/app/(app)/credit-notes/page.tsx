@@ -4,12 +4,14 @@ import { can } from "@/lib/roles";
 import { QueryCell, QueryHeaderCell } from "@/components/queries/query-cells";
 import { recordQueriesFor } from "@/lib/queries/queries";
 import { recordScopeFor } from "@/lib/accountant/record-scope";
-import { listCreditNotes } from "@/lib/credit-notes/queries";
+import { listCreditNotePage } from "@/lib/credit-notes/queries";
 import { CreditNoteStatusBadge } from "@/components/credit-notes/credit-note-status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Table, THead, TBody, TR, TD } from "@/components/ui/table";
 import { sortHeaders } from "@/components/ui/sortable-th";
-import { defineTableSort, parseTableSort, rankIn, sortRows } from "@/lib/table-sort";
+import { ListPagination } from "@/components/ui/list-pagination";
+import { listPageHref, parseListPaging } from "@/lib/list-paging";
+import { defineTableSort, parseTableSort } from "@/lib/table-sort";
 import { DisplayDate } from "@/components/date-format-provider";
 import { PageHeader } from "@/components/ui/page-header";
 
@@ -30,13 +32,10 @@ export default async function CreditNotesPage({
   const sp = await searchParams;
   const sort = parseTableSort(sp, SORT);
   const th = sortHeaders("/credit-notes", sp, SORT, sort);
-  const rows = sortRows(await listCreditNotes(companyId, recordScopeFor(role)), sort, {
-    number: (r) => r.number,
-    client: (r) => r.clientName,
-    invoice: (r) => r.invoiceNumber,
-    status: (r) => rankIn(["issued", "void"], r.status),
-    issued: (r) => r.issueDate,
-    total: (r) => r.grossPence,
+  const { rows, ...paging } = await listCreditNotePage(companyId, {
+    scope: recordScopeFor(role),
+    ...sort,
+    ...parseListPaging(sp),
   });
   const queries = await recordQueriesFor(role, companyId, "credit_note", rows.map((r) => r.id));
   const showQueries = canRaiseQuery || queries.size > 0;
@@ -96,6 +95,7 @@ export default async function CreditNotesPage({
             </TBody>
           </Table>
         )}
+        <ListPagination {...paging} href={(to) => listPageHref("/credit-notes", sp, to)} />
       </div>
     </div>
   );

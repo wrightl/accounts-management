@@ -6,7 +6,7 @@ import { recordQueriesFor } from "@/lib/queries/queries";
 import { recordScopeFor } from "@/lib/accountant/record-scope";
 import {
   getReimbursementBalances,
-  listReimbursements,
+  listReimbursementPage,
 } from "@/lib/reimbursements/queries";
 import { listFounders, listReimbursableExpenses } from "@/lib/expenses/queries";
 import { CreateReimbursementButton } from "@/components/reimbursements/create-button";
@@ -15,13 +15,9 @@ import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { buttonClasses } from "@/components/ui/button";
 import { sortHeaders } from "@/components/ui/sortable-th";
-import {
-  defineTableSort,
-  parseTableSort,
-  rankIn,
-  setTableSortParams,
-  sortRows,
-} from "@/lib/table-sort";
+import { ListPagination } from "@/components/ui/list-pagination";
+import { listPageHref, parseListPaging } from "@/lib/list-paging";
+import { defineTableSort, parseTableSort, setTableSortParams } from "@/lib/table-sort";
 import { DisplayDate } from "@/components/date-format-provider";
 import { PageHeader } from "@/components/ui/page-header";
 
@@ -61,25 +57,18 @@ export default async function ReimbursementsPage({
   };
 
   // Money still owed and runs not yet paid aren't in the pack, so don't load them.
-  const [allRuns, balances, founders, reimbursable] = await Promise.all([
-    listReimbursements(companyId, scope),
+  const [{ rows: runs, ...paging }, balances, founders, reimbursable] = await Promise.all([
+    listReimbursementPage(companyId, {
+      scope,
+      status: runFilter === "all" ? undefined : runFilter,
+      ...sort,
+      ...parseListPaging(sp),
+    }),
     inPack ? [] : getReimbursementBalances(companyId),
     inPack ? [] : listFounders(companyId),
     inPack ? [] : listReimbursableExpenses(companyId),
   ]);
 
-  const runs = sortRows(
-    runFilter === "all" ? allRuns : allRuns.filter((r) => r.status === runFilter),
-    sort,
-    {
-      payee: (r) => r.payeeName || r.payeeEmail,
-      status: (r) => rankIn(["pending", "paid"], r.status),
-      reference: (r) => r.reference,
-      date: (r) => r.reimbursementDate,
-      created: (r) => r.createdAt.getTime(),
-      total: (r) => r.totalPence,
-    },
-  );
   const queries = await recordQueriesFor(role, companyId, "reimbursement", runs.map((r) => r.id));
   const showQueries = canRaiseQuery || queries.size > 0;
 
@@ -204,6 +193,7 @@ export default async function ReimbursementsPage({
             </TBody>
           </Table>
         )}
+        <ListPagination {...paging} href={(to) => listPageHref("/reimbursements", sp, to)} />
       </div>
 
     </div>

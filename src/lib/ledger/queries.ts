@@ -1,6 +1,6 @@
 import "server-only";
 import { invoiceCountsInAccounts } from "@/lib/invoices/accounts-scope";
-import { and, asc, desc, eq, gt, gte, inArray, lte, ne, or, sql, sum } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, gte, inArray, lte, ne, or, sql, sum } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   companies,
@@ -16,6 +16,7 @@ import { addDays } from "@/lib/ledger/corporation-tax";
 import { directorLoanWarnings } from "@/lib/ledger/director-loan";
 import { buildReservesSchedule, type ReservesYearInput } from "@/lib/ledger/reserves";
 import { getProfitAndLoss } from "@/lib/reports/queries";
+import { type ListPaging, fetchPage } from "@/lib/list-paging";
 
 /** Never walk back more than this many years when there are no opening balances. */
 const MAX_YEARS = 12;
@@ -295,25 +296,38 @@ export async function getDirectorLoanAccounts(companyId: string, today: string =
   };
 }
 
-export async function listDirectorLoanEntries(companyId: string, limit = 100) {
+/** One page of director's loan entries (not opening balances), newest first. */
+export async function listDirectorLoanEntryPage(companyId: string, paging: ListPaging) {
   const db = getDb();
-  return db
-    .select({
-      id: directorLoanEntries.id,
-      directorUserId: directorLoanEntries.directorUserId,
-      directorName: sql<string>`coalesce(${users.name}, ${users.email})`,
-      kind: directorLoanEntries.kind,
-      entryDate: directorLoanEntries.entryDate,
-      amountPence: directorLoanEntries.amountPence,
-      description: directorLoanEntries.description,
-    })
-    .from(directorLoanEntries)
-    .innerJoin(users, eq(directorLoanEntries.directorUserId, users.id))
-    .where(
-      and(eq(directorLoanEntries.companyId, companyId), ne(directorLoanEntries.kind, "opening")),
-    )
-    .orderBy(desc(directorLoanEntries.entryDate), asc(directorLoanEntries.createdAt))
-    .limit(limit);
+  const where = and(
+    eq(directorLoanEntries.companyId, companyId),
+    ne(directorLoanEntries.kind, "opening"),
+  );
+  return fetchPage(
+    paging,
+    async () => (await db.select({ n: count() }).from(directorLoanEntries).where(where))[0]?.n ?? 0,
+    ({ limit, offset }) =>
+      db
+        .select({
+          id: directorLoanEntries.id,
+          directorUserId: directorLoanEntries.directorUserId,
+          directorName: sql<string>`coalesce(${users.name}, ${users.email})`,
+          kind: directorLoanEntries.kind,
+          entryDate: directorLoanEntries.entryDate,
+          amountPence: directorLoanEntries.amountPence,
+          description: directorLoanEntries.description,
+        })
+        .from(directorLoanEntries)
+        .innerJoin(users, eq(directorLoanEntries.directorUserId, users.id))
+        .where(where)
+        .orderBy(
+          desc(directorLoanEntries.entryDate),
+          asc(directorLoanEntries.createdAt),
+          asc(directorLoanEntries.id),
+        )
+        .limit(limit)
+        .offset(offset),
+  );
 }
 
 export async function listDirectorOpeningBalances(companyId: string) {

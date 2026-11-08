@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   clients,
@@ -10,6 +10,7 @@ import {
 } from "@/db/schema";
 import { clientDisplayName } from "@/lib/clients/display";
 import { todayIsoDate } from "@/lib/dates";
+import { type ListPaging, fetchPage } from "@/lib/list-paging";
 import { isBroughtForward } from "@/lib/invoices/cutover";
 import { suggestClient } from "@/lib/invoices/import/clients";
 import { LOCAL_READ_WARNING, readLocally } from "@/lib/invoices/import/pdf-local";
@@ -168,9 +169,17 @@ export type ImportBatchReview = NonNullable<
 type DraftCounts = { needs_review: number; ready: number; skipped: number; committed: number };
 
 /** The company's imports, newest first. Discarded ones have nothing left to show. */
-export async function listImportBatches(companyId: string, { openOnly = false } = {}) {
-  const db = getDb();
-  const batches = await db
+function importBatchWhere(companyId: string, openOnly: boolean) {
+  return and(
+    eq(invoiceImportBatches.companyId, companyId),
+    openOnly
+      ? eq(invoiceImportBatches.status, "draft")
+      : ne(invoiceImportBatches.status, "discarded"),
+  );
+}
+
+function importBatchQuery(companyId: string, openOnly: boolean) {
+  return getDb()
     .select({
       id: invoiceImportBatches.id,
       kind: invoiceImportBatches.kind,
@@ -181,18 +190,17 @@ export async function listImportBatches(companyId: string, { openOnly = false } 
       undoneAt: invoiceImportBatches.undoneAt,
     })
     .from(invoiceImportBatches)
-    .where(
-      and(
-        eq(invoiceImportBatches.companyId, companyId),
-        openOnly
-          ? eq(invoiceImportBatches.status, "draft")
-          : ne(invoiceImportBatches.status, "discarded"),
-      ),
-    )
-    .orderBy(desc(invoiceImportBatches.createdAt));
-  if (batches.length === 0) return [];
+    .where(importBatchWhere(companyId, openOnly))
+    .orderBy(desc(invoiceImportBatches.createdAt), desc(invoiceImportBatches.id));
+}
 
-  const rows = await db
+/** Each batch with how many of its drafts are at each status. */
+async function withDraftCounts(
+  companyId: string,
+  batches: Awaited<ReturnType<typeof importBatchQuery>>,
+) {
+  if (batches.length === 0) return [];
+  const rows = await getDb()
     .select({
       batchId: invoiceImportDrafts.batchId,
       status: invoiceImportDrafts.status,
@@ -224,6 +232,26 @@ export async function listImportBatches(companyId: string, { openOnly = false } 
       expiresAt: b.status === "draft" && c.committed === 0 ? importExpiresAt(b.createdAt) : null,
     };
   });
+}
+
+export async function listImportBatches(companyId: string, { openOnly = false } = {}) {
+  return withDraftCounts(companyId, await importBatchQuery(companyId, openOnly));
+}
+
+/** One page of past imports, newest first. */
+export async function listImportBatchPage(companyId: string, paging: ListPaging) {
+  const page = await fetchPage(
+    paging,
+    async () =>
+      (
+        await getDb()
+          .select({ n: count() })
+          .from(invoiceImportBatches)
+          .where(importBatchWhere(companyId, false))
+      )[0]?.n ?? 0,
+    ({ limit, offset }) => importBatchQuery(companyId, false).limit(limit).offset(offset),
+  );
+  return { ...page, rows: await withDraftCounts(companyId, page.rows) };
 }
 
 export type ImportBatchSummary = Awaited<ReturnType<typeof listImportBatches>>[number];

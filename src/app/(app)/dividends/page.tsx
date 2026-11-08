@@ -3,8 +3,10 @@ import { redirect } from "next/navigation";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import {
   defaultReportPeriod,
-  listDividendDeclarations,
+  listDividendDeclarationPage,
 } from "@/lib/reports/queries";
+import { ListPagination } from "@/components/ui/list-pagination";
+import { listPageHref, parseListPaging } from "@/lib/list-paging";
 import { recordScopeFor } from "@/lib/accountant/record-scope";
 import { can } from "@/lib/roles";
 import { RecordQueryIcon } from "@/components/queries/record-query-icon";
@@ -40,13 +42,12 @@ export default async function DividendsPage({
   const from = sp.from ?? defaults.from;
   const to = sp.to ?? defaults.to;
 
-  const [declarations, company] = await Promise.all([
-    listDividendDeclarations(companyId, { from, to }),
+  const [{ rows: declarations, periodTotalPence, ...paging }, company] = await Promise.all([
+    listDividendDeclarationPage(companyId, { from, to, ...parseListPaging(sp) }),
     getOrCreateCompanySettings(companyId),
   ]);
   const queries = await recordQueriesFor(role, companyId, "dividend_declaration", declarations.map((d) => d.id));
   const hasDirectors = Boolean(company.directorNames?.trim());
-  const totalPence = declarations.reduce((sum, d) => sum + d.totalPence, 0);
 
   return (
     <div>
@@ -90,11 +91,11 @@ export default async function DividendsPage({
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         <Card>
           <CardTitle>Declared in period</CardTitle>
-          <CardValue>{formatGBP(totalPence)}</CardValue>
+          <CardValue>{formatGBP(periodTotalPence)}</CardValue>
         </Card>
         <Card>
           <CardTitle>Declarations</CardTitle>
-          <CardValue>{declarations.length}</CardValue>
+          <CardValue>{paging.total}</CardValue>
         </Card>
       </div>
 
@@ -179,6 +180,7 @@ export default async function DividendsPage({
             ))
           )}
         </div>
+        <ListPagination {...paging} href={(to) => listPageHref("/dividends", sp, to)} />
       </section>
     </div>
   );
