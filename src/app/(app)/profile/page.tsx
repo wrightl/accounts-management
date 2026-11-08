@@ -2,6 +2,7 @@ import { requireUser, safeCurrentUser } from "@/lib/auth";
 import { findLocalUser } from "@/lib/users";
 import { ProfileForm } from "@/components/users/profile-form";
 import { ProfilePictureField } from "@/components/users/profile-picture-field";
+import { PasswordSection } from "@/components/users/password-section";
 import { SignOutSection } from "@/components/users/sign-out-section";
 import { UiPrefsForm } from "@/components/users/ui-prefs-form";
 import {
@@ -53,6 +54,9 @@ export default async function ProfilePage() {
               name={session.name ?? local.name}
               role={local.role}
             />
+          </section>
+          <section id="password" className="scroll-mt-8">
+            <PasswordSection />
           </section>
           <section id="display" className="scroll-mt-8">
             <UiPrefsForm prefs={local.uiPrefs} />

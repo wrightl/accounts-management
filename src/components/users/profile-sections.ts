@@ -4,6 +4,7 @@ import type { SettingsSection } from "@/components/settings/settings-section-nav
 export const PROFILE_SECTIONS: SettingsSection[] = [
   { id: "photo", label: "Profile picture" },
   { id: "details", label: "Name and email" },
+  { id: "password", label: "Password" },
   { id: "display", label: "Display and focus" },
   { id: "session", label: "Session" },
 ];
