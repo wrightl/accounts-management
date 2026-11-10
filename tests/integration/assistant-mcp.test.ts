@@ -65,6 +65,7 @@ const { setAssistantAccess, setAssistantConnected, setAssistantDrafts } = await 
   "@/actions/assistant"
 );
 const { assistantDisplayName, DAILY_TOOL_CALL_LIMIT } = await import("@/lib/assistant/mcp/access");
+const { forgetVerifiedTokens } = await import("@/lib/assistant/mcp/oauth");
 const { GET: getResourceMetadata } = await import(
   "@/app/.well-known/oauth-protected-resource/[[...path]]/route"
 );
@@ -150,6 +151,7 @@ beforeEach(async () => {
   db = ctx.db;
   setTestDb(db as unknown as Database);
   tokens.clear();
+  forgetVerifiedTokens();
   signedIn.userId = null;
   companyA = (await seedCompany(db, { name: "Alpha Ltd", slug: "alpha", aiAssistantEnabled: true })).id;
   companyB = (await seedCompany(db, { name: "Beta Ltd", slug: "beta", aiAssistantEnabled: true })).id;

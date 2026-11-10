@@ -1,4 +1,5 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import { clerkClient } from "@clerk/nextjs/server";
 import {
   OAuthError,
@@ -41,24 +42,68 @@ function toUnixSeconds(timestamp: number): number {
  * Clerk is the authorization server: assistants identify themselves (client ID
  * metadata documents), the person signs in to Alfa as usual and approves.
  */
+async function verifyWithClerk(token: string): Promise<AuthInfo> {
+  let verified;
+  try {
+    verified = await (await clerkClient()).idPOAuthAccessToken.verify(token);
+  } catch {
+    throw new OAuthError("invalid_token", "The access token is not valid.");
+  }
+  if (verified.revoked || verified.expired || verified.expiration == null) {
+    throw new OAuthError("invalid_token", "The access token has expired or been revoked.");
+  }
+  return {
+    token,
+    clientId: verified.clientId,
+    scopes: verified.scopes,
+    expiresAt: toUnixSeconds(verified.expiration),
+    extra: { clerkUserId: verified.subject },
+  };
+}
+
+/**
+ * How long a token Clerk has accepted is trusted without asking Clerk again.
+ * Assistants send many calls in a burst on the same token, so this saves a
+ * round trip to Clerk on each. A token revoked at Clerk stops working within
+ * this time; disconnecting an assistant in Alfa still takes effect at once.
+ */
+export const TOKEN_CACHE_MS = 60_000;
+const TOKEN_CACHE_MAX = 500;
+
+type CachedVerification = { result: Promise<AuthInfo>; until: number };
+
+/** Per instance, keyed by a hash of the token. Only accepted tokens stay. */
+const verifiedTokens = new Map<string, CachedVerification>();
+
+/** For tests: start each one with no remembered tokens. */
+export function forgetVerifiedTokens(): void {
+  verifiedTokens.clear();
+}
+
 const verifier: OAuthTokenVerifier = {
-  async verifyAccessToken(token: string): Promise<AuthInfo> {
-    let verified;
-    try {
-      verified = await (await clerkClient()).idPOAuthAccessToken.verify(token);
-    } catch {
-      throw new OAuthError("invalid_token", "The access token is not valid.");
+  verifyAccessToken(token: string): Promise<AuthInfo> {
+    const key = createHash("sha256").update(token).digest("hex");
+    const now = Date.now();
+    const cached = verifiedTokens.get(key);
+    if (cached && cached.until > now) return cached.result;
+    verifiedTokens.delete(key);
+
+    // Cached while in flight too, so calls arriving together share one check.
+    const entry: CachedVerification = { result: verifyWithClerk(token), until: now + TOKEN_CACHE_MS };
+    if (verifiedTokens.size >= TOKEN_CACHE_MAX) {
+      const oldest = verifiedTokens.keys().next().value;
+      if (oldest !== undefined) verifiedTokens.delete(oldest);
     }
-    if (verified.revoked || verified.expired || verified.expiration == null) {
-      throw new OAuthError("invalid_token", "The access token has expired or been revoked.");
-    }
-    return {
-      token,
-      clientId: verified.clientId,
-      scopes: verified.scopes,
-      expiresAt: toUnixSeconds(verified.expiration),
-      extra: { clerkUserId: verified.subject },
-    };
+    verifiedTokens.set(key, entry);
+    entry.result.then(
+      (auth) => {
+        if (auth.expiresAt != null) entry.until = Math.min(entry.until, auth.expiresAt * 1000);
+      },
+      () => {
+        if (verifiedTokens.get(key) === entry) verifiedTokens.delete(key);
+      },
+    );
+    return entry.result;
   },
 };
 

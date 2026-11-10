@@ -9,8 +9,11 @@ export default clerkMiddleware();
 export const config = {
   matcher: [
     // Skip Next.js internals and static files unless referenced in search params.
-    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
-    // Always run for API routes.
-    "/(api|trpc)(.*)",
+    // Skip /api/mcp: assistants send an OAuth bearer token that the route
+    // checks itself, never a Clerk session, so running Clerk here only adds
+    // a second billed invocation to every assistant call.
+    "/((?!_next|api/mcp|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    // Always run for other API routes.
+    "/(api(?!/mcp)|trpc)(.*)",
   ],
 };
