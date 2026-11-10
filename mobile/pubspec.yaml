@@ -96,6 +96,9 @@ dev_dependencies:
   integration_test:
     sdk: flutter
 
+  # App icons for iOS and Android from one image (see flutter_launcher_icons below)
+  flutter_launcher_icons: ^0.14.4
+
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
@@ -136,3 +139,15 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# App icons: replace assets/images/logo.png (1024x1024, square corners), then run
+#   dart run flutter_launcher_icons
+#   git checkout -- ios/Runner.xcodeproj/project.pbxproj
+# and commit the generated icons. The tool wrongly sets
+# ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS to AppIcon; the
+# checkout undoes that.
+flutter_launcher_icons:
+  image_path: assets/images/logo.png
+  ios: true
+  remove_alpha_ios: true # App Store rejects an icon with an alpha channel
+  android: true
