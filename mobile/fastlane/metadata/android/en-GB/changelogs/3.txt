@@ -1,0 +1,3 @@
+What's new in this version:
+
+• Fixes to the app icon

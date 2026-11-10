@@ -175,9 +175,12 @@ Change devices with `IOS_PHONE`, `IOS_TABLET`, `ANDROID_PHONE` and
    draft releases, the only kind Play accepts before the app is first
    published; roll each one out in the console. After that, export
    `PLAY_RELEASE_STATUS=completed` so testers get builds straight away.
-5. **App Review sign-in**: put a demo account in
-   `fastlane/metadata/ios/review_information/demo_user.txt` and
-   `demo_password.txt` (not committed).
+5. **App Review**: in `fastlane/metadata/ios/review_information/`, put the
+   contact Apple calls in `first_name.txt`, `last_name.txt`,
+   `email_address.txt` and `phone_number.txt` (with country code, e.g.
+   `+44 20 7946 0000`), and a demo account in `demo_user.txt` and
+   `demo_password.txt`. None are committed. Without the contact, the upload
+   stops after the build reaches TestFlight.
 6. **Push**: add `ios/Runner/GoogleService-Info.plist` and
    `android/app/google-services.json`, or the build ships with push off (the
    release script warns).
