@@ -64,7 +64,7 @@ next-env.d.ts
 /public/marketing/product-tour.mp4
 
 # secrets
-/.secrets
+**/.secrets
 # clerk configuration (can include secrets)
 /.clerk/
 
