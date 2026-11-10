@@ -47,6 +47,10 @@ class MyApp extends StatelessWidget {
       config: ClerkAuthConfig(
         publishableKey: publishableKey,
         redirectionGenerator: ClerkOAuth.redirectFor,
+        // No background client refresh. One that lands while Google sign-in is
+        // in the browser replaces the sign-in the callback link has to finish,
+        // so the app came back still signed out. Session tokens still refresh.
+        clientRefreshPeriod: Duration.zero,
         // iOS Simulator has no hardware security keys; passkeys fail there.
         supportsHardwareSecurityKeys: !kDebugMode,
       ),
