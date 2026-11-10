@@ -1,4 +1,4 @@
-package com.dotanddash.ddapp_mobile
+package com.dotanddash.alfa
 
 import android.appwidget.AppWidgetManager
 import android.content.Context

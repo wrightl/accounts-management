@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
-import 'package:ddapp_mobile/core/share/share_intake.dart';
+import 'package:alfa/core/share/share_intake.dart';
 
 SharedMediaFile _file(String path, SharedMediaType type, [String? mimeType]) =>
     SharedMediaFile(path: path, type: type, mimeType: mimeType);

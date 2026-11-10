@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:ddapp_mobile/data/models/expense.dart';
+import 'package:alfa/data/models/expense.dart';
 
 void main() {
   test('parses expenses when category and date are null', () {

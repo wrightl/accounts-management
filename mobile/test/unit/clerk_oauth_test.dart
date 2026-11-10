@@ -1,5 +1,5 @@
 import 'package:clerk_auth/clerk_auth.dart';
-import 'package:ddapp_mobile/core/config/clerk_oauth.dart';
+import 'package:alfa/core/config/clerk_oauth.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';

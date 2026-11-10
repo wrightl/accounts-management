@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:ddapp_mobile/features/expenses/widgets/expense_labels.dart';
+import 'package:alfa/features/expenses/widgets/expense_labels.dart';
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 

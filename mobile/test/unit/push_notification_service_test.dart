@@ -1,9 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:ddapp_mobile/core/push/push_notification_service.dart';
-import 'package:ddapp_mobile/data/models/api_response.dart';
-import 'package:ddapp_mobile/data/repositories/notification_repository.dart';
+import 'package:alfa/core/push/push_notification_service.dart';
+import 'package:alfa/data/models/api_response.dart';
+import 'package:alfa/data/repositories/notification_repository.dart';
 
 class _FakeSource implements PushTokenSource {
   _FakeSource(this.initialToken);

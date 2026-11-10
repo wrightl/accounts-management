@@ -1,2 +1,2 @@
-app_identifier("com.dotanddash.ddappMobile") # iOS bundle id
-package_name("com.dotanddash.ddapp_mobile")  # Android application id
+app_identifier("com.dotanddash.alfa") # iOS bundle id
+package_name("com.dotanddash.alfa")  # Android application id

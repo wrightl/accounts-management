@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
-import 'package:ddapp_mobile/features/auth/auth_provider.dart';
-import 'package:ddapp_mobile/features/books/screens/more_screen.dart';
+import 'package:alfa/features/auth/auth_provider.dart';
+import 'package:alfa/features/books/screens/more_screen.dart';
 import '../support/signed_in.dart';
 
 Future<void> _pump(WidgetTester tester, AuthProvider auth) async {

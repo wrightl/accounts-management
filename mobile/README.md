@@ -66,7 +66,7 @@ needs its own bundle id, an App Group and signing:
 
 1. In Xcode, File → New → Target → Share Extension, named `Share Extension`,
    with the same deployment target as Runner.
-2. Add an App Group (e.g. `group.com.dotanddash.ddappMobile`) to both Runner
+2. Add an App Group (e.g. `group.com.dotanddash.alfa`) to both Runner
    and the extension under Signing & Capabilities.
 3. Follow the iOS steps in the `receive_sharing_intent` README: replace the
    extension's `Info.plist` (allow images and one file), set its
@@ -158,8 +158,8 @@ Change devices with `IOS_PHONE`, `IOS_TABLET`, `ANDROID_PHONE` and
 
 ### One-off setup
 
-1. **Apps**: create the app in App Store Connect (`com.dotanddash.ddappMobile`)
-   and the Play Console (`com.dotanddash.ddapp_mobile`). Fill in the privacy
+1. **Apps**: create the app in App Store Connect (`com.dotanddash.alfa`)
+   and the Play Console (`com.dotanddash.alfa`). Fill in the privacy
    details, content rating and data safety forms there.
 2. **iOS signing**: in Xcode, Runner → Signing & Capabilities, choose the team.
    Create an App Store Connect API key (Users and Access → Integrations) and

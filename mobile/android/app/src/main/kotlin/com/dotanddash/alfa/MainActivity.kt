@@ -1,4 +1,4 @@
-package com.dotanddash.ddapp_mobile
+package com.dotanddash.alfa
 
 import io.flutter.embedding.android.FlutterFragmentActivity
 

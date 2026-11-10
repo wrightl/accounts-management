@@ -1,7 +1,7 @@
-import 'package:ddapp_mobile/data/models/api_response.dart';
-import 'package:ddapp_mobile/data/models/user.dart';
-import 'package:ddapp_mobile/data/repositories/auth_service.dart';
-import 'package:ddapp_mobile/features/auth/auth_provider.dart';
+import 'package:alfa/data/models/api_response.dart';
+import 'package:alfa/data/models/user.dart';
+import 'package:alfa/data/repositories/auth_service.dart';
+import 'package:alfa/features/auth/auth_provider.dart';
 
 class _FakeAuthService extends AuthService {
   _FakeAuthService(this.json);

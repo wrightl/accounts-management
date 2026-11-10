@@ -1,10 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
-import 'package:ddapp_mobile/data/models/api_response.dart';
-import 'package:ddapp_mobile/data/models/dashboard.dart';
-import 'package:ddapp_mobile/data/repositories/dashboard_repository.dart';
-import 'package:ddapp_mobile/features/dashboard/dashboard_provider.dart';
+import 'package:alfa/data/models/api_response.dart';
+import 'package:alfa/data/models/dashboard.dart';
+import 'package:alfa/data/repositories/dashboard_repository.dart';
+import 'package:alfa/features/dashboard/dashboard_provider.dart';
 
 @GenerateMocks([DashboardRepository])
 import 'dashboard_provider_test.mocks.dart';

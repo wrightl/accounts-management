@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:ddapp_mobile/core/security/app_lock.dart';
+import 'package:alfa/core/security/app_lock.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

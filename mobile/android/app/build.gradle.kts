@@ -16,7 +16,7 @@ val keystoreProperties = Properties().apply {
 val hasUploadKey = keystoreProperties.getProperty("storeFile") != null
 
 android {
-    namespace = "com.dotanddash.ddapp_mobile"
+    namespace = "com.dotanddash.alfa"
     // receive_sharing_intent 1.9 needs 37; targetSdk stays on Flutter's default.
     compileSdk = 37
     ndkVersion = flutter.ndkVersion
@@ -28,7 +28,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.dotanddash.ddapp_mobile"
+        applicationId = "com.dotanddash.alfa"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

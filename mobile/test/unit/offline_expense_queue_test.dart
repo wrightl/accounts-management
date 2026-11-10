@@ -2,10 +2,10 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:ddapp_mobile/data/models/api_response.dart';
-import 'package:ddapp_mobile/data/models/expense.dart';
-import 'package:ddapp_mobile/data/repositories/expense_repository.dart';
-import 'package:ddapp_mobile/features/expenses/offline_expense_queue.dart';
+import 'package:alfa/data/models/api_response.dart';
+import 'package:alfa/data/models/expense.dart';
+import 'package:alfa/data/repositories/expense_repository.dart';
+import 'package:alfa/features/expenses/offline_expense_queue.dart';
 
 Expense _saved(String id) => Expense.fromJson({
       'id': id,

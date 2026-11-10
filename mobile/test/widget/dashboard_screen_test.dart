@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
 import 'package:provider/provider.dart';
-import 'package:ddapp_mobile/core/theme/app_theme.dart';
-import 'package:ddapp_mobile/data/models/api_response.dart';
-import 'package:ddapp_mobile/data/models/dashboard.dart';
-import 'package:ddapp_mobile/features/auth/auth_provider.dart';
-import 'package:ddapp_mobile/features/dashboard/dashboard_provider.dart';
-import 'package:ddapp_mobile/features/dashboard/screens/dashboard_screen.dart';
+import 'package:alfa/core/theme/app_theme.dart';
+import 'package:alfa/data/models/api_response.dart';
+import 'package:alfa/data/models/dashboard.dart';
+import 'package:alfa/features/auth/auth_provider.dart';
+import 'package:alfa/features/dashboard/dashboard_provider.dart';
+import 'package:alfa/features/dashboard/screens/dashboard_screen.dart';
 import '../unit/dashboard_provider_test.mocks.dart';
 
 void main() {

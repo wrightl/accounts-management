@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
-import 'package:ddapp_mobile/data/models/api_response.dart';
-import 'package:ddapp_mobile/data/models/work.dart';
-import 'package:ddapp_mobile/data/repositories/work_repository.dart';
-import 'package:ddapp_mobile/features/auth/auth_provider.dart';
-import 'package:ddapp_mobile/features/work/deadlines_screen.dart';
+import 'package:alfa/data/models/api_response.dart';
+import 'package:alfa/data/models/work.dart';
+import 'package:alfa/data/repositories/work_repository.dart';
+import 'package:alfa/features/auth/auth_provider.dart';
+import 'package:alfa/features/work/deadlines_screen.dart';
 import '../support/signed_in.dart';
 
 class _FakeWorkRepository extends WorkRepository {

@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:ddapp_mobile/data/models/dashboard.dart';
-import 'package:ddapp_mobile/data/models/expense.dart';
-import 'package:ddapp_mobile/data/models/work.dart';
+import 'package:alfa/data/models/dashboard.dart';
+import 'package:alfa/data/models/expense.dart';
+import 'package:alfa/data/models/work.dart';
 
 Deadline _deadline(String status, int daysLeft, {String? filedOn}) => Deadline.fromJson({
       'kind': 'vat_return',
