@@ -25,6 +25,7 @@
         "mobile:narrative": "tsx scripts/app-store-narrative.ts",
         "mobile:screenshots": "mobile/scripts/screenshots.sh",
         "mobile:release": "mobile/scripts/release.sh",
+        "mobile:release:ios": "mobile/scripts/release.sh ios",
         "db:push": "drizzle-kit push",
         "db:studio": "drizzle-kit studio",
         "tunnel": "ngrok http 3001 --log=stdout"

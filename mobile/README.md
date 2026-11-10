@@ -134,13 +134,14 @@ review the copy). Upload changed copy or screenshots without a new build with
 
 ### Store copy
 
-`npm run mobile:narrative` asks Claude (through the AI Gateway) to draft the
-listing from this README, `MOBILE_IMPLEMENTATION.md` and the commits since the
-last `mobile-v*` tag, into `fastlane/metadata/`. Only docs and commit subjects
-go into the prompt. Fields over the store limits are shortened; any still too
-long are listed for you to trim. The release script stops for you to review and
-edit the diff. `--dry-run` prints the copy instead. Set `NARRATIVE_MODEL` to use
-another gateway model (Anthropic models need paid gateway credits).
+`npm run mobile:narrative` asks Claude, through your local `claude` CLI and its
+sign-in, to draft the listing from this README, `MOBILE_IMPLEMENTATION.md` and
+the commits since the last `mobile-v*` tag, into `fastlane/metadata/`. Only
+docs and commit subjects go into the prompt. Fields over the store limits are
+shortened; any still too long are listed for you to trim. The release script
+stops for you to review and edit the diff. `--dry-run` prints the copy instead.
+It uses Opus; set `NARRATIVE_MODEL` to another `claude --model` value (e.g.
+`sonnet`) to change it.
 
 `support_url`, `privacy_url`, `marketing_url`, `copyright`, the categories and
 the review notes are kept by hand; the script never touches them.

@@ -9,25 +9,22 @@
  * The prompt gets the mobile docs, the current copy and commit subjects since
  * the last `mobile-v*` tag. Never customer data.
  *
- * Needs AI_GATEWAY_API_KEY (or Vercel OIDC from `vercel env pull`).
- * NARRATIVE_MODEL overrides the model.
+ * Runs the local Claude Code CLI (`claude -p`), so it uses your Claude sign-in
+ * rather than an API key. NARRATIVE_MODEL overrides the model (a `claude
+ * --model` value, e.g. sonnet).
  */
-import { config } from "dotenv";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { generateText, Output } from "ai";
 import { z } from "zod";
-
-config({ path: ".env.local" });
-config({ path: ".env" });
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const MOBILE = join(ROOT, "mobile");
 const IOS_DIR = join(MOBILE, "fastlane/metadata/ios/en-GB");
 const ANDROID_DIR = join(MOBILE, "fastlane/metadata/android/en-GB");
-const MODEL = process.env.NARRATIVE_MODEL?.trim() || "anthropic/claude-opus-5.5";
+const MODEL = process.env.NARRATIVE_MODEL?.trim() || "opus";
 
 const dryRun = process.argv.includes("--dry-run");
 
@@ -153,27 +150,51 @@ ${readFileSync(join(MOBILE, "README.md"), "utf8")}
 ${readFileSync(join(ROOT, "MOBILE_IMPLEMENTATION.md"), "utf8")}`;
 }
 
-async function draft(): Promise<Narrative> {
-  const { output } = await generateText({
-    model: MODEL,
-    output: Output.object({ schema }),
-    prompt: prompt(),
-  });
-  return output;
+type ClaudeResult = { is_error: boolean; result: string; structured_output?: unknown };
+
+/**
+ * One headless `claude -p` turn with no tools or MCP servers. Runs from the temp
+ * folder so this repo's CLAUDE.md and hooks stay out of it; the prompt goes on
+ * stdin because the docs make it too long for an argument.
+ */
+function claude(input: string, jsonSchema?: object): ClaudeResult {
+  const args = ["-p", "--output-format", "json", "--model", MODEL, "--tools", "", "--strict-mcp-config", "--no-session-persistence"];
+  if (jsonSchema) args.push("--json-schema", JSON.stringify(jsonSchema));
+  const run = spawnSync("claude", args, { cwd: tmpdir(), input, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
+  if (run.error) {
+    throw new Error(
+      (run.error as NodeJS.ErrnoException).code === "ENOENT"
+        ? "the claude CLI is not on PATH. Install Claude Code and sign in with `claude`."
+        : run.error.message,
+    );
+  }
+  let parsed: ClaudeResult;
+  try {
+    parsed = JSON.parse(run.stdout);
+  } catch {
+    throw new Error(run.stderr.trim() || run.stdout.trim() || `claude exited with ${run.status}`);
+  }
+  if (parsed.is_error) throw new Error(parsed.result);
+  return parsed;
+}
+
+function draft(): Narrative {
+  // The CLI's validator doesn't know Zod's draft 2020-12 $schema URI.
+  const { $schema: _, ...jsonSchema } = z.toJSONSchema(schema);
+  return schema.parse(claude(prompt(), jsonSchema).structured_output);
 }
 
 /** Shorten each over-long field on its own, a few tries at most. */
-async function fitToLimits(narrative: Narrative): Promise<Narrative> {
+function fitToLimits(narrative: Narrative): Narrative {
   for (let round = 0; round < 3; round++) {
     const over = overLimit(narrative);
     if (over.length === 0) break;
     for (const { store, key, max } of over) {
       const fields = narrative[store] as Record<string, string>;
-      const { text } = await generateText({
-        model: MODEL,
-        prompt: `Shorten this ${store === "ios" ? "App Store" : "Google Play"} ${key.replaceAll("_", " ")} to at most ${max} characters including spaces (it is ${fields[key].length}). Keep the meaning, UK English and sentence case.${key === "keywords" ? " Keep it comma-separated with no spaces after commas." : ""} Reply with the text only.\n\n${fields[key]}`,
-      });
-      fields[key] = text.trim().replace(/^"|"$/g, "");
+      const { result } = claude(
+        `Shorten this ${store === "ios" ? "App Store" : "Google Play"} ${key.replaceAll("_", " ")} to at most ${max} characters including spaces (it is ${fields[key].length}). Keep the meaning, UK English and sentence case.${key === "keywords" ? " Keep it comma-separated with no spaces after commas." : ""} Reply with the text only.\n\n${fields[key]}`,
+      );
+      fields[key] = result.trim().replace(/^"|"$/g, "");
     }
   }
   return narrative;
@@ -184,8 +205,8 @@ function write(path: string, text: string) {
   writeFileSync(path, `${text.trim()}\n`);
 }
 
-async function main() {
-  const narrative = await fitToLimits(await draft());
+function main() {
+  const narrative = fitToLimits(draft());
   const over = overLimit(narrative);
 
   if (dryRun) {
@@ -215,8 +236,10 @@ function writeNarrative(narrative: Narrative) {
   write(join(ANDROID_DIR, `changelogs/${versionCode()}.txt`), narrative.android.changelog);
 }
 
-main().catch((error) => {
-  console.error(`Could not draft the store copy with ${MODEL}: ${error instanceof Error ? error.message : error}`);
-  console.error("Set NARRATIVE_MODEL to another AI Gateway model if this one is not on your plan.");
+try {
+  main();
+} catch (error) {
+  console.error(`Could not draft the store copy with claude --model ${MODEL}: ${error instanceof Error ? error.message : error}`);
+  console.error("Set NARRATIVE_MODEL to another claude --model value (e.g. sonnet) if this one is not on your plan.");
   process.exit(1);
-});
+}

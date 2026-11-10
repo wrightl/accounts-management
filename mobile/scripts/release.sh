@@ -15,7 +15,7 @@
 #   mobile/.env.production                        API_BASE_URL, CLERK_PUBLISHABLE_KEY
 #   iOS:     DEVELOPMENT_TEAM set in Xcode; ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_PATH
 #   Android: android/key.properties; PLAY_JSON_KEY_PATH
-#   Store copy: AI_GATEWAY_API_KEY (or Vercel OIDC) for npm run mobile:narrative
+#   Store copy: the claude CLI, signed in, for npm run mobile:narrative
 set -euo pipefail
 
 MOBILE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -56,6 +56,7 @@ need() { command -v "$1" >/dev/null || fail "$1 is not on PATH"; }
 step "Checking setup"
 need flutter
 need git
+$narrative && need claude
 [[ -z "$(git status --porcelain -- .)" ]] || fail "mobile/ has uncommitted changes. Commit or stash them first."
 [[ -f .env.production ]] || fail "mobile/.env.production is missing (API_BASE_URL and CLERK_PUBLISHABLE_KEY)."
 if [[ -n "$new_version" && ! "$new_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
