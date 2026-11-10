@@ -1,0 +1,46 @@
+Alfa on your phone is the companion to the Alfa web app, for founders of small UK consultancies. It does three jobs: capture expenses, review what's waiting, and show what needs attention today. Everything else, such as bank reconciliation, reports, orders and settings, stays on the web, and the app opens it there for you.
+
+You need an Alfa account to sign in. Use Google or any other sign-in your team uses on the web.
+
+Overview
+
+• Needs attention, so you see what's waiting first
+• Headline figures for the period you choose
+• Safe to pay yourself, for limited companies
+• Your next deadline
+• More insights, with the charts from the web
+
+Expenses
+
+• Take a photo of a receipt, or choose a photo or PDF, and Alfa reads it for you
+• Share a photo or PDF into Alfa from another app
+• Add mileage and foreign currency, converted at the Bank of England rate
+• Answer the same questions as the web form: status, payer, client or order, and VAT
+• No connection? The expense waits on your phone and sends later
+• Open receipts, and add labels and a note
+• Review emailed receipts with the same approve choices as the web, or reject them
+• Filter by status and label
+
+Sales
+
+• Invoices, with Record payment for a sent invoice that's still owed
+• Quotes, if they're in your menu
+• Clients
+
+More
+
+• Weekly close
+• AI bookkeeper: accept or dismiss suggestions, and ask it questions
+• Queries: reply to your accountant
+• Deadlines: mark them done
+• Spending, Reimbursements (Mark as paid) and Dividends
+• Notifications, with the option to hide details on the lock screen
+• Lock the app with your fingerprint
+• Open Alfa on the web
+
+Home-screen widget
+
+• See what clients owe and, for limited companies, Safe to pay yourself
+• Figures update when you open the app, and hide while the app lock is on or after you sign out
+
+The app follows the same rules, menu and permissions as the web app, so what you see and can do matches your role.
