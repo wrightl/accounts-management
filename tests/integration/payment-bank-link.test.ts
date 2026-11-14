@@ -18,6 +18,7 @@ import {
   linkPaymentToBankTransaction,
   listReceiptsForPayment,
 } from "@/lib/payments/link-bank";
+import { recordInvoicePayment } from "@/lib/payments/record";
 
 vi.mock("server-only", () => ({}));
 
@@ -162,5 +163,85 @@ describe("linking an existing payment to a bank receipt", () => {
     const tx = await bankCredit(25_000);
     expect((await link(tx.id)).ok).toBe(false);
     expect(await listReceiptsForPayment(companyId, paymentId)).toHaveLength(0);
+  });
+
+  describe("one bank receipt claimed twice at once", () => {
+    async function secondImportedInvoice() {
+      const [client] = await db.insert(clients).values({ companyId, name: "Beta" }).returning();
+      const [inv] = await db
+        .insert(invoices)
+        .values({
+          companyId,
+          number: "OLD-0043",
+          clientId: client.id,
+          status: "paid",
+          source: "import",
+          issueDate: "2026-02-01",
+          netPence: 25_000,
+          grossPence: 25_000,
+          paidAt: new Date("2026-02-20T12:00:00Z"),
+        })
+        .returning();
+      const [payment] = await db
+        .insert(payments)
+        .values({
+          invoiceId: inv.id,
+          amountPence: 25_000,
+          method: "import",
+          receivedAt: new Date("2026-02-20T12:00:00Z"),
+        })
+        .returning();
+      return { inv, payment };
+    }
+
+    async function confirmedMatchesFor(txId: string) {
+      return db
+        .select()
+        .from(reconciliationMatches)
+        .where(eq(reconciliationMatches.bankTransactionId, txId));
+    }
+
+    it("links it to only one of two invoices' payments", async () => {
+      const tx = await bankCredit(25_000);
+      const second = await secondImportedInvoice();
+      const results = await Promise.all([
+        link(tx.id),
+        linkPaymentToBankTransaction(
+          { companyId, localUserId: actorId },
+          second.payment.id,
+          tx.id,
+        ),
+      ]);
+      expect(results.filter((r) => r.ok)).toHaveLength(1);
+      expect(await confirmedMatchesFor(tx.id)).toHaveLength(1);
+    });
+
+    it("lets only one of Record payment and Link bank receipt claim it", async () => {
+      const tx = await bankCredit(25_000);
+      const [client] = await db.insert(clients).values({ companyId, name: "Gamma" }).returning();
+      const [open] = await db
+        .insert(invoices)
+        .values({
+          companyId,
+          number: "DD-2026-0900",
+          clientId: client.id,
+          status: "sent",
+          issueDate: "2026-02-01",
+          dueDate: "2099-03-01",
+          netPence: 25_000,
+          grossPence: 25_000,
+        })
+        .returning();
+      const results = await Promise.all([
+        link(tx.id),
+        recordInvoicePayment({ companyId, localUserId: actorId }, open.id, {
+          amountPounds: "250.00",
+          method: "bank_transfer",
+          bankTransactionId: tx.id,
+        }),
+      ]);
+      expect(results.filter((r) => r.ok)).toHaveLength(1);
+      expect(await confirmedMatchesFor(tx.id)).toHaveLength(1);
+    });
   });
 });

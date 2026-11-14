@@ -7,6 +7,7 @@ import { poundsToPence } from "@/lib/money";
 import {
   getBankTransactionById,
   isBankTransactionAvailable,
+  lockBankTransaction,
   ReconciliationError,
 } from "@/lib/bank/queries";
 import { canSettleInvoiceBalance } from "@/lib/bank/match";
@@ -132,6 +133,10 @@ export async function recordInvoicePayment(
   let duplicate = false;
   try {
     paymentId = await db.transaction(async (tx) => {
+      // Bank transaction first, then invoice: the order every bank link uses.
+      if (bankTransactionId && !(await lockBankTransaction(tx, companyId, bankTransactionId))) {
+        throw new PaymentError("Bank transaction not found");
+      }
       await tx.execute(
         sql`select id from invoices where id = ${invoiceId} and company_id = ${companyId} for update`,
       );

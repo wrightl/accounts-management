@@ -8,6 +8,7 @@ import { canSettleInvoiceBalance, dateDiffDays } from "@/lib/bank/match";
 import {
   getBankTransactionById,
   listUnmatchedIncomingTransactions,
+  lockBankTransaction,
   ReconciliationError,
 } from "@/lib/bank/queries";
 import { creditAdjustmentForInvoice } from "@/lib/credit-notes/adjustments";
@@ -146,6 +147,10 @@ export async function linkPaymentToBankTransaction(
 
   try {
     await db.transaction(async (tx) => {
+      // Bank transaction first, then invoice: the order every bank link uses.
+      if (!(await lockBankTransaction(tx, companyId, bankTransactionId))) {
+        throw new LinkError("Bank transaction not found");
+      }
       await tx.execute(
         sql`select id from invoices where id = ${found.invoice.id} and company_id = ${companyId} for update`,
       );

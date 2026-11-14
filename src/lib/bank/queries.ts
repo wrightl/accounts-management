@@ -2062,6 +2062,33 @@ export async function getBankTransactionById(
     return row?.tx ?? null;
 }
 
+/**
+ * Lock the company's bank transaction row until the transaction ends, so two
+ * requests can't both claim it. Take it before any invoice lock.
+ * Returns false when the company has no such transaction.
+ */
+export async function lockBankTransaction(
+    tx: Parameters<Parameters<ReturnType<typeof getDb>['transaction']>[0]>[0],
+    companyId: string,
+    transactionId: string,
+): Promise<boolean> {
+    const rows = await tx
+        .select({ id: bankTransactions.id })
+        .from(bankTransactions)
+        .innerJoin(
+            bankAccounts,
+            eq(bankTransactions.bankAccountId, bankAccounts.id),
+        )
+        .where(
+            and(
+                eq(bankTransactions.id, transactionId),
+                eq(bankAccounts.companyId, companyId),
+            ),
+        )
+        .for('update', { of: bankTransactions });
+    return rows.length > 0;
+}
+
 export async function isBankTransactionAvailable(
     transactionId: string,
 ): Promise<boolean> {
