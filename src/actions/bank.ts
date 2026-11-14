@@ -45,6 +45,7 @@ import {
   explainBankCredit,
   explainBankCredits,
   findBankTransactionsForInvoice,
+  listLinkableReceiptsForInvoice,
   findReimbursementBankMatches,
   getOrCreateBankAccount,
   importBankRows,
@@ -494,7 +495,16 @@ export async function dismissBankMatchesBatch(matchIds: string[]): Promise<Actio
 
 export async function findInvoiceBankMatches(
   invoiceId: string,
-): Promise<{ ok: true; matches: InvoiceBankMatch[] } | { ok: false; error: string }> {
+): Promise<
+  | {
+      ok: true;
+      /** Credits that scored well enough to suggest, best first. */
+      matches: InvoiceBankMatch[];
+      /** Every other unlinked credit that could pay it, newest first. */
+      others: InvoiceBankMatch[];
+    }
+  | { ok: false; error: string }
+> {
   const authz = await requireActionPermission("accounts:read");
   if (!authz.ok) return authz;
   if (!authz.user.companyId) {
@@ -503,7 +513,12 @@ export async function findInvoiceBankMatches(
   const companyId = authz.user.companyId;
 
   const matches = await findBankTransactionsForInvoice(companyId, invoiceId);
-  return { ok: true, matches };
+  const others = await listLinkableReceiptsForInvoice(
+    companyId,
+    invoiceId,
+    new Set(matches.map((m) => m.bankTransactionId)),
+  );
+  return { ok: true, matches, others };
 }
 
 export async function updateBankCategory(

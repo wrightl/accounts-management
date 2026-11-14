@@ -7,8 +7,10 @@ import { poundsToPence } from "@/lib/money";
 import {
   getBankTransactionById,
   isBankTransactionAvailable,
+  lockBankTransaction,
   ReconciliationError,
 } from "@/lib/bank/queries";
+import { canSettleInvoiceBalance } from "@/lib/bank/match";
 import { creditAdjustmentForInvoice } from "@/lib/credit-notes/adjustments";
 import type { Tx } from "@/lib/invoices/allocate";
 import { invoiceBalancePence, isInvoiceSettled } from "@/lib/invoices/balance";
@@ -131,6 +133,10 @@ export async function recordInvoicePayment(
   let duplicate = false;
   try {
     paymentId = await db.transaction(async (tx) => {
+      // Bank transaction first, then invoice: the order every bank link uses.
+      if (bankTransactionId && !(await lockBankTransaction(tx, companyId, bankTransactionId))) {
+        throw new PaymentError("Bank transaction not found");
+      }
       await tx.execute(
         sql`select id from invoices where id = ${invoiceId} and company_id = ${companyId} for update`,
       );
@@ -165,13 +171,18 @@ export async function recordInvoicePayment(
         .from(payments)
         .where(eq(payments.invoiceId, invoiceId));
       const alreadyPaid = paidRow?.total ?? 0;
-      const credits = await creditAdjustmentForInvoice(tx, invoiceId);
+      const credits = await creditAdjustmentForInvoice(tx, companyId, invoiceId);
       const remaining = invoiceBalancePence({
         grossPence: inv.grossPence,
         paidPence: alreadyPaid,
         ...credits,
       });
-      if (amountPence > remaining) {
+      // Money already in the bank can be a little more than the balance; the
+      // extra then shows as a refund due on the invoice.
+      const overBalance = bankTransactionId
+        ? remaining <= 0 || !canSettleInvoiceBalance(amountPence, remaining)
+        : amountPence > remaining;
+      if (overBalance) {
         throw new PaymentError(
           `Payment exceeds remaining balance of ${(remaining / 100).toFixed(2)}`,
         );

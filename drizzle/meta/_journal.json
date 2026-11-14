@@ -638,6 +638,13 @@
       "when": 1794511418848,
       "tag": "0090_document_templates",
       "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1794674683863,
+      "tag": "0091_invoice_write_offs",
+      "breakpoints": true
     }
   ]
 }

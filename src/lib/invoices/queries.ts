@@ -21,6 +21,7 @@ import { getDb } from "@/db";
 import {
   clients,
   creditNotes,
+  invoiceWriteOffs,
   invoiceImportBatches,
   invoiceLineItems,
   invoices,
@@ -223,11 +224,9 @@ export async function listInvoicePage(companyId: string, filters: InvoiceListFil
   };
 }
 
-/**
- * What's still owed on each of these invoices, after payments and credit
- * notes. Callers pass invoices already scoped to the company.
- */
+/** What's still owed on each of these company invoices, after payments and credit notes. */
 export async function invoiceAmountsDue(
+  companyId: string,
   list: { id: string; grossPence: number }[],
 ): Promise<Map<string, number>> {
   const due = new Map<string, number>();
@@ -243,7 +242,7 @@ export async function invoiceAmountsDue(
     .where(inArray(payments.invoiceId, ids))
     .groupBy(payments.invoiceId);
   const paid = new Map(paidRows.map((r) => [r.invoiceId, r.total ?? 0]));
-  const credits = await creditAdjustmentsByInvoice(db, ids);
+  const credits = await creditAdjustmentsByInvoice(db, companyId, ids);
   for (const inv of list) {
     due.set(
       inv.id,
@@ -315,6 +314,12 @@ export async function getInvoiceDetail(
     .where(and(eq(creditNotes.invoiceId, id), eq(creditNotes.companyId, companyId)))
     .orderBy(desc(creditNotes.createdAt));
 
+  const [writeOffRow] = await db
+    .select({ total: sum(invoiceWriteOffs.amountPence).mapWith(Number) })
+    .from(invoiceWriteOffs)
+    .where(and(eq(invoiceWriteOffs.invoiceId, id), eq(invoiceWriteOffs.companyId, companyId)));
+  const writtenOffPence = writeOffRow?.total ?? 0;
+
   const paidPence = paymentRows.reduce((acc, p) => acc + p.amountPence, 0);
   const issuedCredits = creditNoteRows.filter((c) => c.status === "issued");
   const creditedPence = issuedCredits.reduce((acc, c) => acc + c.grossPence, 0);
@@ -325,6 +330,7 @@ export async function getInvoiceDetail(
     paidPence,
     creditedPence,
     refundedPence,
+    writtenOffPence,
   };
   const balancePence = invoiceAmountDuePence(settlement);
   const refundDuePence = invoiceRefundDuePence(settlement);
@@ -410,7 +416,7 @@ export async function getDashboardKpis(companyId: string): Promise<DashboardKpis
       .groupBy(payments.invoiceId);
 
     const paidMap = new Map(paidByInvoice.map((r) => [r.invoiceId, r.total ?? 0]));
-    const credits = await creditAdjustmentsByInvoice(db, ids);
+    const credits = await creditAdjustmentsByInvoice(db, companyId, ids);
 
     for (const inv of open) {
       const balance = invoiceAmountDuePence({
@@ -484,7 +490,7 @@ export async function getUnchasedImports(companyId: string) {
     .where(inArray(payments.invoiceId, ids))
     .groupBy(payments.invoiceId);
   const paid = new Map(paidRows.map((r) => [r.invoiceId, r.total ?? 0]));
-  const credits = await creditAdjustmentsByInvoice(db, ids);
+  const credits = await creditAdjustmentsByInvoice(db, companyId, ids);
 
   const owed = open
     .map((inv) => ({
@@ -542,7 +548,7 @@ export async function countOverdueInvoices(
     .groupBy(payments.invoiceId);
 
   const paidMap = new Map(paidByInvoice.map((r) => [r.invoiceId, r.total ?? 0]));
-  const credits = await creditAdjustmentsByInvoice(db, ids);
+  const credits = await creditAdjustmentsByInvoice(db, companyId, ids);
 
   let count = 0;
   for (const inv of open) {
@@ -611,7 +617,7 @@ export async function listOverdueInvoices(
     .groupBy(payments.invoiceId);
 
   const paidMap = new Map(paidByInvoice.map((r) => [r.invoiceId, r.total ?? 0]));
-  const credits = await creditAdjustmentsByInvoice(db, ids);
+  const credits = await creditAdjustmentsByInvoice(db, companyId, ids);
 
   return open
     .map((inv) => {

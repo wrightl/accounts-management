@@ -13,6 +13,7 @@ import {
   clients,
   creditNoteLineItems,
   creditNotes,
+  invoiceWriteOffs,
   dividendDeclarations,
   dividendPayouts,
   expenseReceipts,
@@ -363,6 +364,32 @@ export async function streamAccountantPack({
     )
     .orderBy(creditNotes.issueDate, creditNotes.number);
 
+  const writeOffRows = await db
+    .select({
+      id: invoiceWriteOffs.id,
+      writtenOffOn: invoiceWriteOffs.writtenOffOn,
+      kind: invoiceWriteOffs.kind,
+      amountPence: invoiceWriteOffs.amountPence,
+      note: invoiceWriteOffs.note,
+      invoiceId: invoiceWriteOffs.invoiceId,
+      invoiceNumber: invoices.number,
+      clientName: clientDisplayNameSql.as("client_name"),
+    })
+    .from(invoiceWriteOffs)
+    .innerJoin(
+      invoices,
+      and(eq(invoiceWriteOffs.invoiceId, invoices.id), eq(invoices.companyId, companyId)),
+    )
+    .innerJoin(clients, eq(invoices.clientId, clients.id))
+    .where(
+      and(
+        eq(invoiceWriteOffs.companyId, companyId),
+        gte(invoiceWriteOffs.writtenOffOn, from),
+        lte(invoiceWriteOffs.writtenOffOn, to),
+      ),
+    )
+    .orderBy(invoiceWriteOffs.writtenOffOn, invoices.number);
+
   // All brought-forward invoices, whatever the period: open ones explain aged debtors.
   const broughtForwardRows = await db
     .select({
@@ -379,6 +406,7 @@ export async function streamAccountantPack({
       paidPence: sql<number>`coalesce((select sum(p.amount_pence) from payments p where p.invoice_id = ${invoices.id}), 0)`.mapWith(Number),
       creditedPence: sql<number>`coalesce((select sum(c.gross_pence) from credit_notes c where c.invoice_id = ${invoices.id} and c.status = 'issued'), 0)`.mapWith(Number),
       refundedPence: sql<number>`coalesce((select sum(c.refunded_pence) from credit_notes c where c.invoice_id = ${invoices.id} and c.status = 'issued'), 0)`.mapWith(Number),
+      writtenOffPence: sql<number>`coalesce((select sum(w.amount_pence) from invoice_write_offs w where w.invoice_id = ${invoices.id} and w.company_id = ${companyId}), 0)`.mapWith(Number),
     })
     .from(invoices)
     .innerJoin(clients, eq(invoices.clientId, clients.id))
@@ -627,7 +655,16 @@ export async function streamAccountantPack({
           money(pnl.otherIncomePence),
           "cash — bank date; explained credits only",
         ],
-        ["expenses", money(pnl.expensePence), "spend date in period, excl. pending"],
+        [
+          "expenses",
+          money(pnl.expensePence),
+          "spend date in period, excl. pending; includes invoice write-offs",
+        ],
+        [
+          "invoice_write_offs",
+          money(pnl.writeOffPence),
+          "already included in expenses — bank charges and bad debts by write-off date",
+        ],
         ["profit", money(pnl.profitPence), "invoiced + other income − expenses"],
         ["basis", "", pnl.basisNote],
       ],
@@ -756,6 +793,28 @@ export async function streamAccountantPack({
         num(r.vatRate),
         num(r.discountPercent),
         money(lineNetPence(r)),
+      ]),
+    },
+    {
+      path: "write-offs.csv",
+      key: 0,
+      headers: [
+        "id",
+        "written_off_on",
+        "invoice_number",
+        "client",
+        "reason",
+        "amount_gbp",
+        "note",
+      ],
+      rows: writeOffRows.map((r) => [
+        r.id,
+        r.writtenOffOn,
+        rowLink(r.invoiceNumber, invoiceTable(r.invoiceId), r.invoiceId),
+        r.clientName,
+        r.kind === "bad_debt" ? "bad debt" : "bank charges",
+        money(r.amountPence),
+        r.note ?? "",
       ]),
     },
     {
@@ -1344,6 +1403,7 @@ const SHEETS: Record<string, string> = {
   "payments.csv": "Payments",
   "other-income.csv": "Other income",
   "credit-notes.csv": "Credit notes",
+  "write-offs.csv": "Write-offs",
   "reconciliation-matches.csv": "Reconciliation",
   "receipts-index.csv": "Receipts",
   "reimbursements.csv": "Reimbursements",
@@ -1546,6 +1606,7 @@ function buildReadme({
           "    Payments — cash received (by received_at in period)",
           "    Other income — explained bank credits (cash, by bank date)",
           "    Credit notes + Credit note lines — by credit note issue date (incl. void)",
+          "    Write-offs — invoice balances written off as bank charges or bad debt (by write-off date)",
           "    Reimbursements + Reimbursement items — runs paid in period (by paid_at, excl. unpaid)",
           "    Dividends — dividend declarations in period",
           "    Shareholders — share register at export time (not period-filtered)",
@@ -1571,6 +1632,7 @@ function buildReadme({
           "  invoices/         — invoice PDFs",
           "  credit-notes.csv + credit-note-line-items.csv — by credit note issue date (incl. void)",
           "  credit-notes/     — PDFs for issued credit notes",
+          "  write-offs.csv    — invoice balances written off as bank charges or bad debt (by write-off date)",
           "  payments.csv      — cash received (by received_at in period)",
           "  expenses.csv      — spend (excl. pending, by spent_at)",
           "  receipts-index.csv + receipts/ — expense attachments",

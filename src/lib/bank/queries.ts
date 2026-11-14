@@ -58,6 +58,8 @@ import {
 import { resolveIncomeCategory } from '@/lib/bank/income-category-catalog';
 import {
     pickBestMatch,
+    canSettleInvoiceBalance,
+    MIN_SUGGEST_SCORE,
     scoreBankTxForInvoice,
     type MatchScoreBreakdown,
 } from '@/lib/bank/match';
@@ -883,7 +885,7 @@ async function loadOpenInvoiceBalances(
             .from(payments)
             .where(inArray(payments.invoiceId, ids))
             .groupBy(payments.invoiceId),
-        creditAdjustmentsByInvoice(db, ids),
+        creditAdjustmentsByInvoice(db, companyId, ids),
     ]);
     const paid = new Map(paidRows.map((r) => [r.invoiceId, r.total ?? 0]));
     return rows.map((inv) => ({
@@ -1027,6 +1029,7 @@ async function findIncomingMatch(
             invoiceId: inv.invoiceId,
             breakdown: invoiceMatch.breakdown,
             score: invoiceMatch.breakdown.total,
+            note: null as string | null,
             target: {
                 kind: 'invoice_payment' as const,
                 invoiceNumber: inv.invoiceNumberDisplay,
@@ -1036,7 +1039,80 @@ async function findIncomingMatch(
         };
     }
 
-    return null;
+    if (paymentMatch) return null;
+    return findOverpaidInvoiceMatch(tx, openInvoices);
+}
+
+/**
+ * Strong evidence needed before suggesting an invoice whose balance isn't the
+ * exact amount: the reference names the invoice or the payer is the client.
+ */
+const NEAR_AMOUNT_EVIDENCE = 80;
+
+/**
+ * An open invoice this credit slightly overpays (see canSettleInvoiceBalance).
+ * Amount alone isn't evidence here, so the reference or payer must match too.
+ */
+function findOverpaidInvoiceMatch(
+    tx: typeof bankTransactions.$inferSelect,
+    openInvoices: Awaited<ReturnType<typeof loadOpenInvoiceBalances>>,
+) {
+    const txLike = txLikeFromRow(tx);
+    let best: {
+        inv: (typeof openInvoices)[number];
+        breakdown: MatchScoreBreakdown;
+    } | null = null;
+    for (const inv of openInvoices) {
+        if (inv.balancePence <= 0 || tx.amountPence <= inv.balancePence) continue;
+        if (!canSettleInvoiceBalance(tx.amountPence, inv.balancePence)) continue;
+        const breakdown = scoreBankTxForInvoice(
+            txLike,
+            {
+                id: inv.id,
+                number: inv.number,
+                name: inv.clientName,
+                companyName: inv.companyName,
+                balancePence: inv.balancePence,
+                dueDate: inv.dueDate,
+                issueDate: inv.issueDate,
+                oldDebt: inv.source === 'import',
+            },
+            inv.dueDate ?? inv.issueDate ?? tx.bookedAt,
+        );
+        if (breakdown.total < MIN_SUGGEST_SCORE) continue;
+        if (
+            breakdown.invoiceRefScore < NEAR_AMOUNT_EVIDENCE &&
+            breakdown.counterpartyScore < NEAR_AMOUNT_EVIDENCE
+        ) {
+            continue;
+        }
+        if (!best || breakdown.total > best.breakdown.total) {
+            best = { inv, breakdown };
+        }
+    }
+    if (!best) return null;
+    const { inv, breakdown } = best;
+    return {
+        kind: 'invoice' as const,
+        invoiceId: inv.id,
+        breakdown,
+        score: breakdown.total,
+        note: overpaymentNote(tx.amountPence, inv.balancePence),
+        target: {
+            kind: 'invoice_payment' as const,
+            invoiceNumber: inv.number,
+            clientName: clientDisplayName({
+                name: inv.clientName,
+                companyName: inv.companyName,
+            }),
+            invoiceId: inv.id,
+        },
+    };
+}
+
+/** Explains a suggestion whose bank credit is more than the invoice balance. */
+export function overpaymentNote(receivedPence: number, balancePence: number): string {
+    return `${formatGBP(receivedPence - balancePence)} more than the ${formatGBP(balancePence)} still owed. The extra will show as a refund due to the client.`;
 }
 
 /**
@@ -1128,6 +1204,7 @@ export async function suggestMatches(
                         matchType: 'invoice_payment',
                         invoiceId: incoming.invoiceId,
                         confirmed: false,
+                        note: incoming.note,
                     })
                     .returning();
 
@@ -1137,7 +1214,7 @@ export async function suggestMatches(
                     matchType: 'invoice_payment',
                     score: incoming.score,
                     breakdown: incoming.breakdown,
-                    note: null,
+                    note: incoming.note,
                     tx: toSuggestedTx(tx),
                     target: incoming.target,
                 });
@@ -1336,13 +1413,14 @@ async function createPaymentFromBankMatch(
     }
 
     const alreadyPaid = await paidTotalForInvoice(tx, inv.id);
-    const credits = await creditAdjustmentForInvoice(tx, inv.id);
+    const credits = await creditAdjustmentForInvoice(tx, companyId, inv.id);
     const remaining = invoiceBalancePence({
         grossPence: inv.grossPence,
         paidPence: alreadyPaid,
         ...credits,
     });
-    if (bankTx.amountPence > remaining) {
+    // A receipt slightly over the balance is accepted; the extra becomes a refund due.
+    if (remaining <= 0 || !canSettleInvoiceBalance(bankTx.amountPence, remaining)) {
         throw new ReconciliationError(
             `Payment exceeds remaining balance of ${formatGBP(remaining)}`,
         );
@@ -1716,6 +1794,58 @@ export async function findBankTransactionsForInvoice(
     companyId: string,
     invoiceId: string,
 ): Promise<InvoiceBankMatch[]> {
+    const found = await loadInvoiceTarget(companyId, invoiceId);
+    if (!found) return [];
+    return rankIncomingForInvoice(companyId, found.invoiceTarget, found.referenceDate, {
+        minScore: 70,
+    });
+}
+
+/**
+ * Every unlinked bank credit that could pay the invoice (up to its balance
+ * plus the overpayment allowance), newest first, for picking by hand when
+ * none scored well enough to suggest. Leaves out `excludeIds`.
+ */
+export async function listLinkableReceiptsForInvoice(
+    companyId: string,
+    invoiceId: string,
+    excludeIds: ReadonlySet<string>,
+    limit = 100,
+): Promise<InvoiceBankMatch[]> {
+    const found = await loadInvoiceTarget(companyId, invoiceId);
+    if (!found) return [];
+    const { invoiceTarget, referenceDate } = found;
+    const unmatched = await listUnmatchedIncomingTransactions(companyId);
+    return unmatched
+        .map(({ tx }) => tx)
+        .filter(
+            (tx) =>
+                !excludeIds.has(tx.id) &&
+                canSettleInvoiceBalance(tx.amountPence, invoiceTarget.balancePence),
+        )
+        .sort((a, b) => b.bookedAt.localeCompare(a.bookedAt))
+        .slice(0, limit)
+        .map((tx) => {
+            const breakdown = scoreBankTxForInvoice(
+                txLikeFromRow(tx),
+                invoiceTarget,
+                referenceDate,
+            );
+            return {
+                bankTransactionId: tx.id,
+                bookedAt: tx.bookedAt,
+                amountPence: tx.amountPence,
+                amountFormatted: formatGBP(tx.amountPence),
+                counterparty: tx.counterparty,
+                reference: tx.reference,
+                score: breakdown.total,
+                breakdown,
+            };
+        });
+}
+
+/** The invoice as a match target, with what's still owed; null when nothing is. */
+async function loadInvoiceTarget(companyId: string, invoiceId: string) {
     const db = getDb();
     const rows = await db
         .select({ invoice: invoices, client: clients })
@@ -1725,15 +1855,15 @@ export async function findBankTransactionsForInvoice(
             and(eq(invoices.id, invoiceId), eq(invoices.companyId, companyId)),
         )
         .limit(1);
-    if (!rows[0]) return [];
+    if (!rows[0]) return null;
 
     const { invoice, client } = rows[0];
     const balancePence = invoiceAmountDuePence({
         grossPence: invoice.grossPence,
         paidPence: await paidTotalForInvoice(db, invoiceId),
-        ...(await creditAdjustmentForInvoice(db, invoiceId)),
+        ...(await creditAdjustmentForInvoice(db, companyId, invoiceId)),
     });
-    if (balancePence <= 0) return [];
+    if (balancePence <= 0) return null;
 
     const referenceDate =
         invoice.dueDate ?? invoice.issueDate ?? todayIsoDate();
@@ -1747,10 +1877,7 @@ export async function findBankTransactionsForInvoice(
         issueDate: invoice.issueDate,
         oldDebt: invoice.source === 'import',
     };
-
-    return rankIncomingForInvoice(companyId, invoiceTarget, referenceDate, {
-        minScore: 70,
-    });
+    return { invoiceTarget, referenceDate };
 }
 
 /**
@@ -1805,7 +1932,7 @@ async function rankIncomingForInvoice(
     const scored: InvoiceBankMatch[] = [];
 
     for (const { tx } of unmatched) {
-        if (tx.amountPence > invoiceTarget.balancePence) continue;
+        if (!canSettleInvoiceBalance(tx.amountPence, invoiceTarget.balancePence)) continue;
         if (opts.accept && !opts.accept(tx)) continue;
         const breakdown = scoreBankTxForInvoice(
             txLikeFromRow(tx),
@@ -1933,6 +2060,33 @@ export async function getBankTransactionById(
         )
         .limit(1);
     return row?.tx ?? null;
+}
+
+/**
+ * Lock the company's bank transaction row until the transaction ends, so two
+ * requests can't both claim it. Take it before any invoice lock.
+ * Returns false when the company has no such transaction.
+ */
+export async function lockBankTransaction(
+    tx: Parameters<Parameters<ReturnType<typeof getDb>['transaction']>[0]>[0],
+    companyId: string,
+    transactionId: string,
+): Promise<boolean> {
+    const rows = await tx
+        .select({ id: bankTransactions.id })
+        .from(bankTransactions)
+        .innerJoin(
+            bankAccounts,
+            eq(bankTransactions.bankAccountId, bankAccounts.id),
+        )
+        .where(
+            and(
+                eq(bankTransactions.id, transactionId),
+                eq(bankAccounts.companyId, companyId),
+            ),
+        )
+        .for('update', { of: bankTransactions });
+    return rows.length > 0;
 }
 
 export async function isBankTransactionAvailable(

@@ -87,7 +87,7 @@ async function syncInvoiceSettlement(
   const settled = isInvoiceSettled({
     grossPence: inv.grossPence,
     paidPence: await paidTotal(tx, inv.id),
-    ...(await creditAdjustmentForInvoice(tx, inv.id)),
+    ...(await creditAdjustmentForInvoice(tx, inv.companyId, inv.id)),
   });
   const status = storedStatus(inv.status);
   if (settled && status === "sent") {
@@ -154,7 +154,7 @@ export async function createCreditNote(
             throw new CreditNoteError("The credit note total must be more than £0.00");
           }
 
-          const { creditedPence } = await creditAdjustmentForInvoice(tx, inv.id);
+          const { creditedPence } = await creditAdjustmentForInvoice(tx, companyId, inv.id);
           const creditable = inv.grossPence - creditedPence;
           if (totals.grossPence > creditable) {
             throw new CreditNoteError(
@@ -313,7 +313,7 @@ export async function recordCreditNoteRefund(
           const refundDue = invoiceRefundDuePence({
             grossPence: inv.grossPence,
             paidPence: await paidTotal(tx, inv.id),
-            ...(await creditAdjustmentForInvoice(tx, inv.id)),
+            ...(await creditAdjustmentForInvoice(tx, companyId, inv.id)),
           });
           const maxRefund = Math.min(refundDue, note.grossPence);
           if (maxRefund <= 0) {

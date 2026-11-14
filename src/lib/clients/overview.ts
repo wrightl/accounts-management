@@ -144,7 +144,7 @@ export async function getClientOverview(
       .groupBy(payments.invoiceId);
 
     const paidMap = new Map(paidByInvoice.map((r) => [r.invoiceId, r.total ?? 0]));
-    const credits = await creditAdjustmentsByInvoice(db, openIds);
+    const credits = await creditAdjustmentsByInvoice(db, companyId, openIds);
 
     for (const inv of openInvoices) {
       const balance = invoiceAmountDuePence({

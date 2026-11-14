@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
 import {
@@ -138,6 +138,48 @@ export async function updateInvoice(
 
 const CREDITED_INVOICE_VOID_ERROR =
   "This invoice has credit notes, so it can't be voided. Raise a credit note for the rest instead.";
+const WRITTEN_OFF_INVOICE_VOID_ERROR =
+  "This invoice has a write-off. Remove the write-off before voiding it.";
+
+/** Why an invoice with credit notes or write-offs can't be voided, if it can't. */
+function adjustedInvoiceVoidError(adj: {
+  creditedPence: number;
+  writtenOffPence: number;
+}): string | null {
+  if (adj.creditedPence > 0) return CREDITED_INVOICE_VOID_ERROR;
+  if (adj.writtenOffPence > 0) return WRITTEN_OFF_INVOICE_VOID_ERROR;
+  return null;
+}
+
+/**
+ * Void the invoice under its row lock, so a credit note or write-off (which
+ * take the same lock) can't land between the check and the status change.
+ * Returns why it can't be voided, or null once it is.
+ */
+async function voidUnderLock(companyId: string, id: string): Promise<string | null> {
+  return getDb().transaction(async (tx) => {
+    await tx.execute(
+      sql`select id from invoices where id = ${id} and company_id = ${companyId} for update`,
+    );
+    const [inv] = await tx
+      .select({ status: invoices.status })
+      .from(invoices)
+      .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)))
+      .limit(1);
+    if (!inv) return "Invoice not found";
+    const from = storedStatus(inv.status);
+    if (!canTransition(from, "void")) return `Cannot void an invoice in status "${from}"`;
+    const adjustedError = adjustedInvoiceVoidError(
+      await creditAdjustmentForInvoice(tx, companyId, id),
+    );
+    if (adjustedError) return adjustedError;
+    await tx
+      .update(invoices)
+      .set({ status: "void" })
+      .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)));
+    return null;
+  });
+}
 
 export async function voidInvoice(id: string): Promise<ActionResult> {
   return mutate(
@@ -155,16 +197,11 @@ export async function voidInvoice(id: string): Promise<ActionResult> {
       if (!canTransition(from, "void")) {
         return { ok: false, error: `Cannot void an invoice in status "${from}"` };
       }
-      if ((await creditAdjustmentForInvoice(db, id)).creditedPence > 0) {
-        return { ok: false, error: CREDITED_INVOICE_VOID_ERROR };
-      }
       const locked = await checkPeriodOpen(companyId, existing.issueDate);
       if (locked) return { ok: false, error: locked };
 
-      await db
-        .update(invoices)
-        .set({ status: "void" })
-        .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)));
+      const voidError = await voidUnderLock(companyId, id);
+      if (voidError) return { ok: false, error: voidError };
 
       return { ok: true, id };
     },
@@ -260,27 +297,26 @@ export async function updateInvoiceStatus(
         .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)))
         .limit(1);
       if (!existing) return { ok: false, error: "Invoice not found" };
-      if (
-        target === "void" &&
-        (await creditAdjustmentForInvoice(db, id)).creditedPence > 0
-      ) {
-        return { ok: false, error: CREDITED_INVOICE_VOID_ERROR };
-      }
       // Sending or voiding moves the invoice into or out of the books.
       if (target === "void" || (target === "sent" && storedStatus(current) === "draft")) {
         const locked = await checkPeriodOpen(companyId, existing.issueDate);
         if (locked) return { ok: false, error: locked };
       }
 
-      const now = new Date();
-      await db
-        .update(invoices)
-        .set({
-          status: target,
-          sentAt: target === "sent" ? (existing.sentAt ?? now) : existing.sentAt,
-          paidAt: target === "paid" ? now : existing.paidAt,
-        })
-        .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)));
+      if (target === "void") {
+        const voidError = await voidUnderLock(companyId, id);
+        if (voidError) return { ok: false, error: voidError };
+      } else {
+        const now = new Date();
+        await db
+          .update(invoices)
+          .set({
+            status: target,
+            sentAt: target === "sent" ? (existing.sentAt ?? now) : existing.sentAt,
+            paidAt: target === "paid" ? now : existing.paidAt,
+          })
+          .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)));
+      }
 
       await writeAudit({
         companyId,

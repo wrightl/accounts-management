@@ -1,7 +1,7 @@
 /**
  * Invoice balance after payments, credit notes and refunds.
  *
- *   balance = gross − credited − paid + refunded
+ *   balance = gross − credited − written off − paid + refunded
  *
  * Positive: the client still owes that much. Negative: the invoice was paid
  * and then credited, so a refund is due to the client.
@@ -13,10 +13,18 @@ export interface InvoiceSettlement {
   creditedPence?: number;
   /** Money returned to the client against those credit notes. */
   refundedPence?: number;
+  /** Shortfall written off as bank charges or bad debt. */
+  writtenOffPence?: number;
 }
 
 export function invoiceBalancePence(s: InvoiceSettlement): number {
-  return s.grossPence - (s.creditedPence ?? 0) - s.paidPence + (s.refundedPence ?? 0);
+  return (
+    s.grossPence -
+    (s.creditedPence ?? 0) -
+    (s.writtenOffPence ?? 0) -
+    s.paidPence +
+    (s.refundedPence ?? 0)
+  );
 }
 
 /** What the client still owes (never negative). */

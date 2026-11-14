@@ -54,7 +54,7 @@ async function invoiceEvents(companyId: string, today: string): Promise<Forecast
       .from(payments)
       .where(inArray(payments.invoiceId, ids))
       .groupBy(payments.invoiceId),
-    creditAdjustmentsByInvoice(db, ids),
+    creditAdjustmentsByInvoice(db, companyId, ids),
   ]);
   const paid = new Map(paidRows.map((r) => [r.invoiceId, r.total ?? 0]));
   return open.flatMap((inv) => {
@@ -318,7 +318,7 @@ export async function getBroughtForwardDebtsPence(companyId: string): Promise<nu
       .from(payments)
       .where(inArray(payments.invoiceId, ids))
       .groupBy(payments.invoiceId),
-    creditAdjustmentsByInvoice(db, ids),
+    creditAdjustmentsByInvoice(db, companyId, ids),
   ]);
   const paid = new Map(paidRows.map((r) => [r.invoiceId, r.total ?? 0]));
   return open.reduce(

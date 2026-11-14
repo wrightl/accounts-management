@@ -12,7 +12,10 @@ import { loadOrRenderInvoicePdf } from "@/lib/invoices/pdf-cache";
 import { storedStatus, todayIsoDate } from "@/lib/invoices/status";
 import { onlinePaymentsStatus, publicInvoiceUrl } from "@/lib/payments/online-status";
 import { invoiceAmountDuePence } from "@/lib/invoices/balance";
-import { creditAdjustmentsByInvoice } from "@/lib/credit-notes/adjustments";
+import {
+  creditAdjustmentsByInvoice,
+  type CreditAdjustment,
+} from "@/lib/credit-notes/adjustments";
 import { formatIsoDateUk } from "@/lib/dates";
 import { latePaymentCharge } from "@/lib/late-payment";
 import { dueReminderStep } from "@/lib/reminders/schedule";
@@ -189,6 +192,24 @@ export async function drainSendJobs(limit = 20): Promise<{ processed: number; se
   return { processed: jobs.length, sent, failed };
 }
 
+/** Credit and write-off totals for invoices from many companies, one query set per company. */
+async function creditAdjustmentsByCompany(
+  db: ReturnType<typeof getDb>,
+  list: { id: string; companyId: string }[],
+) {
+  const byCompany = Map.groupBy(list, (i) => i.companyId);
+  const merged = new Map<string, CreditAdjustment>();
+  for (const [companyId, rows] of byCompany) {
+    const map = await creditAdjustmentsByInvoice(
+      db,
+      companyId,
+      rows.map((r) => r.id),
+    );
+    for (const [id, adj] of map) merged.set(id, adj);
+  }
+  return merged;
+}
+
 /**
  * Queue payment reminders on each company's schedule (days before or after the
  * due date). Each step is sent at most once per invoice, and only the latest
@@ -239,7 +260,7 @@ export async function enqueueOverdueReminders(): Promise<number> {
       .from(payments)
       .where(inArray(payments.invoiceId, ids))
       .groupBy(payments.invoiceId),
-    creditAdjustmentsByInvoice(db, ids),
+    creditAdjustmentsByCompany(db, due),
     db
       .select({ invoiceId: sendJobs.invoiceId, step: sendJobs.reminderStep })
       .from(sendJobs)

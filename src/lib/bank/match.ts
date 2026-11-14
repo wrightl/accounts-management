@@ -156,13 +156,27 @@ export function pickBestMatch<T extends MatchCandidate>(
   return { candidate: best, breakdown: bestBreakdown };
 }
 
+/**
+ * How much more than the balance a bank receipt can be and still be linked to
+ * the invoice: 5% of the balance or £10, whichever is more. The extra is then
+ * owed back to the client as a refund due.
+ */
+export function overpaymentAllowancePence(balancePence: number): number {
+  return Math.max(1000, Math.round(balancePence * 0.05));
+}
+
+/** Whether a receipt of this size can be linked to an invoice with this balance. */
+export function canSettleInvoiceBalance(amountPence: number, balancePence: number): boolean {
+  return amountPence > 0 && amountPence <= balancePence + overpaymentAllowancePence(balancePence);
+}
+
 /** Score a bank transaction against an unpaid invoice (invoice page lookup). */
 export function scoreBankTxForInvoice(
   tx: BankTxLike,
   invoice: InvoiceMatchTarget,
   referenceDate: string,
 ): MatchScoreBreakdown {
-  if (tx.amountPence <= 0 || tx.amountPence > invoice.balancePence) {
+  if (!canSettleInvoiceBalance(tx.amountPence, invoice.balancePence)) {
     return {
       dateScore: 0,
       invoiceRefScore: 0,

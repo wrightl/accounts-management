@@ -695,6 +695,42 @@ export const creditNotes = pgTable(
   ],
 );
 
+export const invoiceWriteOffKindEnum = pgEnum("invoice_write_off_kind", [
+  "bank_charges",
+  "bad_debt",
+]);
+
+/**
+ * Part of an invoice's balance the company has stopped expecting: fees the
+ * client's bank kept (bank charges) or money that won't be collected (bad
+ * debt). Reduces the amount due without changing the invoice or its VAT; it
+ * counts as an expense on its date. An agreed discount is a credit note instead.
+ */
+export const invoiceWriteOffs = pgTable(
+  "invoice_write_offs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    invoiceId: uuid("invoice_id")
+      .notNull()
+      .references(() => invoices.id, { onDelete: "restrict" }),
+    kind: invoiceWriteOffKindEnum("kind").notNull(),
+    amountPence: integer("amount_pence").notNull(),
+    writtenOffOn: date("written_off_on").notNull(),
+    note: text("note"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("idx_invoice_write_offs_company").on(t.companyId),
+    index("idx_invoice_write_offs_invoice").on(t.invoiceId),
+  ],
+);
+
 export const creditNoteLineItems = pgTable(
   "credit_note_line_items",
   {

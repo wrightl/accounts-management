@@ -89,7 +89,7 @@ export async function recordOnlineInvoicePayment(params: {
     const settled = isInvoiceSettled({
       grossPence: inv.grossPence,
       paidPence: paidRow?.total ?? 0,
-      ...(await creditAdjustmentForInvoice(tx, inv.id)),
+      ...(await creditAdjustmentForInvoice(tx, params.companyId, inv.id)),
     });
     if (settled && storedStatus(inv.status) === "sent") {
       await tx

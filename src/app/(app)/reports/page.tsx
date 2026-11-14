@@ -142,6 +142,11 @@ export default async function ReportsPage({
                 <Card>
                     <CardTitle>Expenses (ex VAT)</CardTitle>
                     <CardValue>{pnl.expenseFormatted}</CardValue>
+                    {pnl.writeOffPence > 0 ? (
+                        <p className="mt-1 text-xs text-muted">
+                            Includes {pnl.writeOffFormatted} of invoices written off
+                        </p>
+                    ) : null}
                 </Card>
                 <Card>
                     <CardTitle>Profit / (loss)</CardTitle>
