@@ -6,11 +6,9 @@ import { sendEmail } from "@/lib/email";
 import { resolveClientEmailSender } from "@/lib/email/resolve-client-sender";
 import { escapeHtml } from "@/lib/html";
 import { formatGBP } from "@/lib/money";
-import { getStorage } from "@/lib/storage";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
-import { loadOriginalInvoiceDocument } from "@/lib/invoices/original-document";
 import { getCompanySettings } from "@/lib/settings/queries";
-import { renderInvoicePdfV2 } from "@/lib/invoices/pdf-v2";
+import { loadOrRenderInvoicePdf } from "@/lib/invoices/pdf-cache";
 import { storedStatus, todayIsoDate } from "@/lib/invoices/status";
 import { onlinePaymentsStatus, publicInvoiceUrl } from "@/lib/payments/online-status";
 import { invoiceAmountDuePence } from "@/lib/invoices/balance";
@@ -290,7 +288,8 @@ async function deliverInvoice(invoiceId: string, actorUserId?: string | null) {
   if (!detail.client.email) throw new Error("Client has no email address");
 
   const company = await getCompanySettings(invRow.companyId);
-  const pdfBytes = await loadOrRenderPdf(invoiceId, detail, company);
+  const { bytes: pdfBytes, storedPath } = await loadOrRenderInvoicePdf(detail, { company });
+  if (storedPath) detail.invoice.pdfBlobPath = storedPath;
   const filename = `${detail.invoice.number}.pdf`;
   const companyName = escapeHtml(company.name);
   const invoiceNumber = escapeHtml(detail.invoice.number);
@@ -407,42 +406,4 @@ async function deliverReminder(
     text: `${lead}${chargeText ? `\n\n${chargeText}` : ""}\n\n${link.text}`,
   });
   return true;
-}
-
-async function loadOrRenderPdf(
-  invoiceId: string,
-  detail: NonNullable<Awaited<ReturnType<typeof getInvoiceDetail>>>,
-  company: Awaited<ReturnType<typeof getCompanySettings>>,
-): Promise<Uint8Array> {
-  const original = await loadOriginalInvoiceDocument(detail.invoice);
-  if (original) return original;
-
-  // An import's cached PDF could predate the record marking.
-  if (detail.invoice.source !== "import" && detail.invoice.pdfBlobPath?.includes(".v2.")) {
-    try {
-      const stored = await getStorage().get(detail.invoice.pdfBlobPath);
-      return new Uint8Array(stored.body);
-    } catch {
-      // Fall through to render.
-    }
-  }
-
-  const pdfBytes = await renderInvoicePdfV2({
-    invoice: detail.invoice,
-    client: detail.client,
-    lines: detail.lines,
-    company,
-  });
-  const stored = await getStorage().put(
-    `invoices/${invoiceId}.v2.pdf`,
-    Buffer.from(pdfBytes),
-    "application/pdf",
-  );
-  const db = getDb();
-  await db
-    .update(invoices)
-    .set({ pdfBlobPath: stored.path })
-    .where(eq(invoices.id, invoiceId));
-  detail.invoice.pdfBlobPath = stored.path;
-  return pdfBytes;
 }

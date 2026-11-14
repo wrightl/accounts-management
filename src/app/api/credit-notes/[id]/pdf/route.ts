@@ -3,7 +3,7 @@ import { requirePermission, ForbiddenError } from "@/lib/auth";
 import { recordScopeFor } from "@/lib/accountant/record-scope";
 import { getCreditNoteDetail } from "@/lib/credit-notes/queries";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
-import { renderCreditNotePdf } from "@/lib/invoices/pdf-v2";
+import { renderCompanyCreditNotePdf } from "@/lib/pdf/templates/company-render";
 import { contentDispositionAttachment } from "@/lib/files";
 
 export const dynamic = "force-dynamic";
@@ -35,12 +35,11 @@ export async function GET(
   }
 
   const company = await getOrCreateCompanySettings(user.companyId);
-  const bytes = await renderCreditNotePdf({
+  const bytes = await renderCompanyCreditNotePdf(company, {
     creditNote: detail.creditNote,
     invoiceNumber: detail.invoice.number,
     client: detail.client,
     lines: detail.lines,
-    company,
   });
 
   return new NextResponse(Buffer.from(bytes), {

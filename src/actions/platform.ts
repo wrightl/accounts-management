@@ -877,6 +877,8 @@ export async function updateSubscriptionTier(
     vatExport: formData.get("vatExport") ?? "",
     liveBankFeed: formData.get("liveBankFeed") ?? "",
     prioritySupport: formData.get("prioritySupport") ?? "",
+    invoiceTemplates: formData.get("invoiceTemplates") ?? "",
+    invoiceDesigner: formData.get("invoiceDesigner") ?? "",
   });
   if (!parsed.ok) {
     return {
@@ -896,6 +898,8 @@ export async function updateSubscriptionTier(
           vatExport: parsed.data.vatExport,
           liveBankFeed: parsed.data.liveBankFeed,
           prioritySupport: parsed.data.prioritySupport,
+          invoiceTemplates: parsed.data.invoiceTemplates,
+          invoiceDesigner: parsed.data.invoiceDesigner,
           updatedAt: new Date(),
         })
         .where(eq(subscriptionTiers.slug, parsed.data.slug));

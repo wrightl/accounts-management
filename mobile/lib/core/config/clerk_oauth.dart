@@ -46,10 +46,24 @@ class ClerkOAuth {
     }
   }
 
-  static Stream<Uri?> deepLinkStream() async* {
-    final initial = await _appLinks.getInitialLink();
-    if (initial != null) yield _clerkLink(initial);
-    yield* _appLinks.uriLinkStream.map(_clerkLink);
+  /// Callback links from the platform, each one once.
+  ///
+  /// On a cold start app_links returns the launch link from
+  /// [AppLinks.getInitialLink] and sends it down [AppLinks.uriLinkStream] too.
+  /// Swapping the same single-use nonce twice fails the second swap.
+  static Stream<Uri?> deepLinkStream() =>
+      onlyOnce(_platformLinks()).map(_clerkLink);
+
+  static Stream<Uri?> _platformLinks() async* {
+    yield await _appLinks.getInitialLink();
+    yield* _appLinks.uriLinkStream;
+  }
+
+  /// Drops links already seen, and nulls.
+  @visibleForTesting
+  static Stream<Uri> onlyOnce(Stream<Uri?> links) {
+    final seen = <Uri>{};
+    return links.where((uri) => uri != null && seen.add(uri)).cast<Uri>();
   }
 
   static bool isCallback(Uri uri) {

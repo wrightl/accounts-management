@@ -42,6 +42,7 @@ export type NavIcon =
     | 'company'
     | 'payments'
     | 'reminders'
+    | 'templates'
     | 'assistant';
 
 export interface NavItem {
@@ -144,6 +145,14 @@ export const SETTINGS_PAGES: SettingsPage[] = [
         label: 'Business settings',
         description: 'Company details, Companies House, VAT, bank details, and numbering.',
         icon: 'settings',
+        permission: 'settings:manage',
+        section: 'business',
+    },
+    {
+        href: '/settings/document-templates',
+        label: 'Document Templates',
+        description: 'Choose how invoices, quotes and credit notes look, or design your own.',
+        icon: 'templates',
         permission: 'settings:manage',
         section: 'business',
     },

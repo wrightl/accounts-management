@@ -22,6 +22,10 @@ export type Entitlements = {
   vatExport: boolean;
   liveBankFeed: boolean;
   prioritySupport: boolean;
+  /** Choose a library template for invoices, credit notes and quotes. */
+  invoiceTemplates: boolean;
+  /** Design custom invoice, quote and credit note templates. */
+  invoiceDesigner: boolean;
   complimentary: boolean;
   trialEndsAt: Date | null;
   currentPeriodEnd: Date | null;
@@ -38,6 +42,8 @@ const FALLBACK_ENTITLEMENTS: Entitlements = {
   vatExport: false,
   liveBankFeed: false,
   prioritySupport: false,
+  invoiceTemplates: DEFAULT_TIER_LIMITS.trial.invoiceTemplates,
+  invoiceDesigner: DEFAULT_TIER_LIMITS.trial.invoiceDesigner,
   complimentary: false,
   trialEndsAt: null,
   currentPeriodEnd: null,
@@ -102,6 +108,8 @@ export async function getEntitlements(companyId: string): Promise<Entitlements> 
       vatExport: true,
       liveBankFeed: true,
       prioritySupport: true,
+      invoiceTemplates: true,
+      invoiceDesigner: true,
       complimentary: true,
       trialEndsAt: billing.trialEndsAt,
       currentPeriodEnd: billing.currentPeriodEnd,
@@ -122,6 +130,8 @@ export async function getEntitlements(companyId: string): Promise<Entitlements> 
   const vatExport = tierRow?.vatExport ?? defaults.vatExport;
   const liveBankFeed = tierRow?.liveBankFeed ?? defaults.liveBankFeed;
   const prioritySupport = tierRow?.prioritySupport ?? defaults.prioritySupport;
+  const invoiceTemplates = tierRow?.invoiceTemplates ?? defaults.invoiceTemplates;
+  const invoiceDesigner = tierRow?.invoiceDesigner ?? defaults.invoiceDesigner;
 
   let readOnly = false;
   let reason: Entitlements["reason"] = "ok";
@@ -153,6 +163,8 @@ export async function getEntitlements(companyId: string): Promise<Entitlements> 
     vatExport,
     liveBankFeed,
     prioritySupport,
+    invoiceTemplates,
+    invoiceDesigner,
     complimentary: false,
     trialEndsAt: billing.trialEndsAt,
     currentPeriodEnd: billing.currentPeriodEnd,

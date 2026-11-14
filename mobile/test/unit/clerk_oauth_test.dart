@@ -33,6 +33,24 @@ void main() {
     });
   });
 
+  group('ClerkOAuth.onlyOnce', () {
+    // A cold start hands the launch link over twice; its nonce is single use.
+    test('passes each link once and drops nulls', () async {
+      final a = Uri.parse(
+        'com.clerk.flutter://callback?rotating_token_nonce=a',
+      );
+      final b = Uri.parse(
+        'com.clerk.flutter://callback?rotating_token_nonce=b',
+      );
+
+      final links = await ClerkOAuth.onlyOnce(
+        Stream.fromIterable([null, a, a, b, a]),
+      ).toList();
+
+      expect(links, [a, b]);
+    });
+  });
+
   group('ClerkOAuth.complete', () {
     final callback = Uri.parse(
       'com.clerk.flutter://callback?created_session_id=sess_1&rotating_token_nonce=abc',

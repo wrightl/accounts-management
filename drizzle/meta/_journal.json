@@ -624,6 +624,20 @@
       "when": 1794136408997,
       "tag": "0088_note_shared_with_accountant",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1794422589133,
+      "tag": "0089_invoice_templates",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1794511418848,
+      "tag": "0090_document_templates",
+      "breakpoints": true
     }
   ]
 }

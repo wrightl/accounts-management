@@ -57,7 +57,7 @@ const FEATURES: FeatureSplitProps[] = [
   {
     eyebrow: "Invoicing",
     title: "Branded invoice PDFs, books stay in sync",
-    body: "Turn the order into a branded invoice. Record payments and watch receivables and the dashboard update — without a separate spreadsheet for “what’s outstanding”.",
+    body: "Turn the order into a branded invoice. Pick a look from the template library, or design your own invoice, quote and credit note templates with drag and drop on Premium. Record payments and watch receivables and the dashboard update — without a separate spreadsheet for “what’s outstanding”.",
     imageSrc: "/marketing/invoice.png",
     imageAlt: "Sent invoice with payment status and line items",
     reverse: true,

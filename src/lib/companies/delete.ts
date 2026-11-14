@@ -8,6 +8,7 @@ import {
   expenseReceipts,
   expenses,
   invoiceImportDrafts,
+  invoiceTemplateAssets,
   invoices,
   quotes,
   users,
@@ -160,6 +161,14 @@ async function collectBlobPaths(companyId: string): Promise<string[]> {
     .where(eq(quotes.companyId, companyId));
   for (const row of quotePdfs) {
     if (row.path) paths.add(row.path);
+  }
+
+  const templateAssets = await db
+    .select({ path: invoiceTemplateAssets.blobPath })
+    .from(invoiceTemplateAssets)
+    .where(eq(invoiceTemplateAssets.companyId, companyId));
+  for (const row of templateAssets) {
+    paths.add(row.path);
   }
 
   const expenseIds = await db

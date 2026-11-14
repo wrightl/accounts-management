@@ -40,6 +40,7 @@ function buildPlans(catalog: StripeCatalog | null): Plan[] {
       features: [
         "Core books — quotes, invoices, expenses, reports",
         "Recurring invoices and online card payments",
+        "Document template library — five designs for invoices, quotes and credit notes",
         "Deadlines, weekly close and Ltd paperwork",
         "Up to 5 users (founders + accountant)",
         "All multi-bank CSV providers",
@@ -78,6 +79,7 @@ function buildPlans(catalog: StripeCatalog | null): Plan[] {
         "Higher user limits and earlier access to upcoming extras.",
       features: [
         "Everything in Essentials",
+        "Document template designer — drag and drop your own invoice, quote and credit note templates",
         "Up to 15 users",
         "Priority support / early features",
         "Live bank feed — future (not included yet)",
@@ -106,6 +108,18 @@ const COMPARE_ROWS: CompareRow[] = [
     label: "Recurring invoices",
     trial: "yes",
     essentials: "yes",
+    premium: "yes",
+  },
+  {
+    label: "Document template library",
+    trial: "yes",
+    essentials: "yes",
+    premium: "yes",
+  },
+  {
+    label: "Document template designer",
+    trial: "no",
+    essentials: "no",
     premium: "yes",
   },
   {

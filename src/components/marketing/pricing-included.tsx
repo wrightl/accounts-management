@@ -10,6 +10,10 @@ const INCLUDED = [
     body: "Clients pay by card from the invoice link, quotes can take a deposit on acceptance, and reminders follow your schedule. When a business client pays late, raise an invoice for the statutory interest and compensation in one click.",
   },
   {
+    title: "Document templates",
+    body: "Choose from a library of five templates for your invoices, quotes and credit notes. On Premium, design your own for each with drag and drop: your colours, layout, pictures and icons, with document details dropped in as placeholders.",
+  },
+  {
     title: "Cash forecast and safe to pay",
     body: "A 13-week cash forecast with what-ifs. Limited companies also see what's safe to pay as dividends, director's loans and a corporation tax estimate.",
   },

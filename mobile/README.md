@@ -246,7 +246,25 @@ website. Google opens in the **system browser** (not an in-app WebView), then
 returns to the app via `com.clerk.flutter://callback`. After sign-in the app
 sends the Clerk session JWT to `/api/mobile/*` as `Authorization: Bearer`.
 
-In the Clerk Dashboard, enable **Native applications** for this instance.
+Development and production are separate Clerk instances. Debug builds use the
+key you pass in; release builds use the key in `mobile/.env.production`, so a
+store build signs in against production. In the Clerk Dashboard, do the
+following on **each** instance the app uses:
+
+1. **Native applications**: turn it on.
+2. **Redirect allowlist**: add `com.clerk.flutter://callback` to the allowed
+   redirect URLs for mobile SSO. Without it, Clerk rejects the return to the
+   app.
+3. **Registered apps**: under Native applications, register the iOS app (Team
+   ID + `com.dotanddash.alfa`) and the Android app (`com.dotanddash.alfa` and
+   the SHA-256 fingerprints of the upload and Play app signing keys). Update
+   them if the app ID or signing keys change.
+4. **Google (production only)**: production instances don't get Clerk's shared
+   Google credentials. Create an OAuth client (Web application) in Google
+   Cloud, add Clerk's redirect URI
+   (`https://clerk.<your-domain>/v1/oauth_callback`, shown on the Google SSO
+   page in Clerk) as an authorised redirect URI, and paste the Client ID and
+   Secret into Clerk's Google connection.
 
 ## Development Notes
 

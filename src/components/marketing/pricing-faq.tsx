@@ -40,6 +40,11 @@ export function PricingFaq({
       a: "No. You pay per organisation. Essentials covers up to 5 users (founders plus accountant); Premium goes up to 15. Fair-use seats, not a seat tax.",
     },
     {
+      id: "invoice_templates",
+      q: "Can I change how my invoices look?",
+      a: "Yes. Every plan includes a library of five templates, and you choose one each for your invoices, quotes and credit notes. On Premium you can also design your own templates for all three: drag document details, text, pictures, icons and shapes onto the page and set your own colours. Documents you have already sent keep the look they were sent with.",
+    },
+    {
       id: "annual_discount",
       q: "How does the annual discount work?",
       a: annualAnswer,
