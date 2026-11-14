@@ -182,4 +182,17 @@ describe("invoice write-offs", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toMatch(/write-off/);
   });
+
+  it("never leaves a voided invoice with a write-off when both happen at once", async () => {
+    await db.delete(payments).where(eq(payments.invoiceId, invoiceId));
+    const [voidResult, writeOffResult] = await Promise.all([
+      voidInvoice(invoiceId),
+      writeOff("10.00", "2026-04-20", "bad_debt"),
+    ]);
+    // Exactly one wins; whichever it is, the books stay consistent.
+    expect([voidResult.ok, writeOffResult.ok].filter(Boolean)).toHaveLength(1);
+    const [inv] = await db.select().from(invoices).where(eq(invoices.id, invoiceId));
+    const rows = await listInvoiceWriteOffs(companyId, invoiceId);
+    expect(inv.status === "void" && rows.length > 0).toBe(false);
+  });
 });
