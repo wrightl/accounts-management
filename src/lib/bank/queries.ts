@@ -885,7 +885,7 @@ async function loadOpenInvoiceBalances(
             .from(payments)
             .where(inArray(payments.invoiceId, ids))
             .groupBy(payments.invoiceId),
-        creditAdjustmentsByInvoice(db, ids),
+        creditAdjustmentsByInvoice(db, companyId, ids),
     ]);
     const paid = new Map(paidRows.map((r) => [r.invoiceId, r.total ?? 0]));
     return rows.map((inv) => ({
@@ -1413,7 +1413,7 @@ async function createPaymentFromBankMatch(
     }
 
     const alreadyPaid = await paidTotalForInvoice(tx, inv.id);
-    const credits = await creditAdjustmentForInvoice(tx, inv.id);
+    const credits = await creditAdjustmentForInvoice(tx, companyId, inv.id);
     const remaining = invoiceBalancePence({
         grossPence: inv.grossPence,
         paidPence: alreadyPaid,
@@ -1861,7 +1861,7 @@ async function loadInvoiceTarget(companyId: string, invoiceId: string) {
     const balancePence = invoiceAmountDuePence({
         grossPence: invoice.grossPence,
         paidPence: await paidTotalForInvoice(db, invoiceId),
-        ...(await creditAdjustmentForInvoice(db, invoiceId)),
+        ...(await creditAdjustmentForInvoice(db, companyId, invoiceId)),
     });
     if (balancePence <= 0) return null;
 

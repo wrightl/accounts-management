@@ -224,11 +224,9 @@ export async function listInvoicePage(companyId: string, filters: InvoiceListFil
   };
 }
 
-/**
- * What's still owed on each of these invoices, after payments and credit
- * notes. Callers pass invoices already scoped to the company.
- */
+/** What's still owed on each of these company invoices, after payments and credit notes. */
 export async function invoiceAmountsDue(
+  companyId: string,
   list: { id: string; grossPence: number }[],
 ): Promise<Map<string, number>> {
   const due = new Map<string, number>();
@@ -244,7 +242,7 @@ export async function invoiceAmountsDue(
     .where(inArray(payments.invoiceId, ids))
     .groupBy(payments.invoiceId);
   const paid = new Map(paidRows.map((r) => [r.invoiceId, r.total ?? 0]));
-  const credits = await creditAdjustmentsByInvoice(db, ids);
+  const credits = await creditAdjustmentsByInvoice(db, companyId, ids);
   for (const inv of list) {
     due.set(
       inv.id,
@@ -418,7 +416,7 @@ export async function getDashboardKpis(companyId: string): Promise<DashboardKpis
       .groupBy(payments.invoiceId);
 
     const paidMap = new Map(paidByInvoice.map((r) => [r.invoiceId, r.total ?? 0]));
-    const credits = await creditAdjustmentsByInvoice(db, ids);
+    const credits = await creditAdjustmentsByInvoice(db, companyId, ids);
 
     for (const inv of open) {
       const balance = invoiceAmountDuePence({
@@ -492,7 +490,7 @@ export async function getUnchasedImports(companyId: string) {
     .where(inArray(payments.invoiceId, ids))
     .groupBy(payments.invoiceId);
   const paid = new Map(paidRows.map((r) => [r.invoiceId, r.total ?? 0]));
-  const credits = await creditAdjustmentsByInvoice(db, ids);
+  const credits = await creditAdjustmentsByInvoice(db, companyId, ids);
 
   const owed = open
     .map((inv) => ({
@@ -550,7 +548,7 @@ export async function countOverdueInvoices(
     .groupBy(payments.invoiceId);
 
   const paidMap = new Map(paidByInvoice.map((r) => [r.invoiceId, r.total ?? 0]));
-  const credits = await creditAdjustmentsByInvoice(db, ids);
+  const credits = await creditAdjustmentsByInvoice(db, companyId, ids);
 
   let count = 0;
   for (const inv of open) {
@@ -619,7 +617,7 @@ export async function listOverdueInvoices(
     .groupBy(payments.invoiceId);
 
   const paidMap = new Map(paidByInvoice.map((r) => [r.invoiceId, r.total ?? 0]));
-  const credits = await creditAdjustmentsByInvoice(db, ids);
+  const credits = await creditAdjustmentsByInvoice(db, companyId, ids);
 
   return open
     .map((inv) => {

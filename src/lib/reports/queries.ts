@@ -281,7 +281,7 @@ export async function getAgedReceivables(companyId: string) {
   }
 
   const credits = await creditAdjustmentsByInvoice(
-    db,
+    db, companyId,
     rows.map((r) => r.id),
   );
   for (const inv of rows) {

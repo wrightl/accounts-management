@@ -66,7 +66,7 @@ async function balanceOf(tx: Tx, inv: typeof invoices.$inferSelect) {
   const settlement = {
     grossPence: inv.grossPence,
     paidPence: paid?.total ?? 0,
-    ...(await creditAdjustmentForInvoice(tx, inv.id)),
+    ...(await creditAdjustmentForInvoice(tx, inv.companyId, inv.id)),
   };
   return { balancePence: invoiceBalancePence(settlement), settled: isInvoiceSettled(settlement) };
 }

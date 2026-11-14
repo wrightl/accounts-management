@@ -51,7 +51,7 @@ async function invoiceSettlement(
   return {
     grossPence: inv.grossPence,
     paidPence: paid?.total ?? 0,
-    ...(await creditAdjustmentForInvoice(tx, inv.id)),
+    ...(await creditAdjustmentForInvoice(tx, inv.companyId, inv.id)),
   };
 }
 

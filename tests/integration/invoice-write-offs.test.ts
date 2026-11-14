@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
-import { clients, companies, invoices, payments, users } from "@/db/schema";
+import { clients, companies, invoices, invoiceWriteOffs, payments, users } from "@/db/schema";
+import { creditAdjustmentForInvoice } from "@/lib/credit-notes/adjustments";
 import { seedCompany } from "@/lib/test/seed-company";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
 import {
@@ -154,6 +155,23 @@ describe("invoice write-offs", () => {
       created.id,
     );
     expect(result.ok).toBe(false);
+  });
+
+  it("only counts write-offs belonging to the company asked about", async () => {
+    await writeOff("1.00");
+    const other = await seedCompany(db, { slug: "other-co" });
+    // A row tagged with another company must never change this invoice's balance.
+    await db.insert(invoiceWriteOffs).values({
+      companyId: other.id,
+      invoiceId,
+      kind: "bad_debt",
+      amountPence: 50,
+      writtenOffOn: "2026-04-20",
+    });
+    const adj = await creditAdjustmentForInvoice(db as unknown as Database, companyId, invoiceId);
+    expect(adj.writtenOffPence).toBe(100);
+    const otherAdj = await creditAdjustmentForInvoice(db as unknown as Database, other.id, invoiceId);
+    expect(otherAdj.writtenOffPence).toBe(50);
   });
 
   it("blocks voiding an invoice that has a write-off", async () => {

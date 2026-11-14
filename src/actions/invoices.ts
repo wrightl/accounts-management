@@ -167,7 +167,7 @@ export async function voidInvoice(id: string): Promise<ActionResult> {
       if (!canTransition(from, "void")) {
         return { ok: false, error: `Cannot void an invoice in status "${from}"` };
       }
-      const adjustedError = adjustedInvoiceVoidError(await creditAdjustmentForInvoice(db, id));
+      const adjustedError = adjustedInvoiceVoidError(await creditAdjustmentForInvoice(db, companyId, id));
       if (adjustedError) return { ok: false, error: adjustedError };
       const locked = await checkPeriodOpen(companyId, existing.issueDate);
       if (locked) return { ok: false, error: locked };
@@ -272,7 +272,7 @@ export async function updateInvoiceStatus(
         .limit(1);
       if (!existing) return { ok: false, error: "Invoice not found" };
       if (target === "void") {
-        const adjustedError = adjustedInvoiceVoidError(await creditAdjustmentForInvoice(db, id));
+        const adjustedError = adjustedInvoiceVoidError(await creditAdjustmentForInvoice(db, companyId, id));
         if (adjustedError) return { ok: false, error: adjustedError };
       }
       // Sending or voiding moves the invoice into or out of the books.

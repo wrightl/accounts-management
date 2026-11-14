@@ -166,7 +166,7 @@ export async function recordInvoicePayment(
         .from(payments)
         .where(eq(payments.invoiceId, invoiceId));
       const alreadyPaid = paidRow?.total ?? 0;
-      const credits = await creditAdjustmentForInvoice(tx, invoiceId);
+      const credits = await creditAdjustmentForInvoice(tx, companyId, invoiceId);
       const remaining = invoiceBalancePence({
         grossPence: inv.grossPence,
         paidPence: alreadyPaid,

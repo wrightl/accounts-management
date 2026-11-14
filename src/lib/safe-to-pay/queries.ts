@@ -156,7 +156,7 @@ async function invoicesDueSoonPence(companyId: string, today: string, until: str
       .from(payments)
       .where(inArray(payments.invoiceId, ids))
       .groupBy(payments.invoiceId),
-    creditAdjustmentsByInvoice(db, ids),
+    creditAdjustmentsByInvoice(db, companyId, ids),
   ]);
   const paid = new Map(paidRows.map((r) => [r.invoiceId, r.total ?? 0]));
   return open.reduce(

@@ -14,12 +14,10 @@ export type CreditAdjustment = {
 
 const NONE: CreditAdjustment = { creditedPence: 0, refundedPence: 0, writtenOffPence: 0 };
 
-/**
- * Credited, refunded and written-off totals per invoice. Callers pass invoice
- * ids they have already read for the company.
- */
+/** Credited, refunded and written-off totals per invoice of the company. */
 export async function creditAdjustmentsByInvoice(
   db: Database | Tx,
+  companyId: string,
   invoiceIds: string[],
 ): Promise<Map<string, CreditAdjustment>> {
   const map = new Map<string, CreditAdjustment>();
@@ -32,7 +30,13 @@ export async function creditAdjustmentsByInvoice(
         refunded: sum(creditNotes.refundedPence).mapWith(Number),
       })
       .from(creditNotes)
-      .where(and(inArray(creditNotes.invoiceId, invoiceIds), eq(creditNotes.status, "issued")))
+      .where(
+        and(
+          inArray(creditNotes.invoiceId, invoiceIds),
+          eq(creditNotes.companyId, companyId),
+          eq(creditNotes.status, "issued"),
+        ),
+      )
       .groupBy(creditNotes.invoiceId),
     db
       .select({
@@ -40,7 +44,12 @@ export async function creditAdjustmentsByInvoice(
         total: sum(invoiceWriteOffs.amountPence).mapWith(Number),
       })
       .from(invoiceWriteOffs)
-      .where(inArray(invoiceWriteOffs.invoiceId, invoiceIds))
+      .where(
+        and(
+          inArray(invoiceWriteOffs.invoiceId, invoiceIds),
+          eq(invoiceWriteOffs.companyId, companyId),
+        ),
+      )
       .groupBy(invoiceWriteOffs.invoiceId),
   ]);
   const entry = (id: string) => {
@@ -63,8 +72,9 @@ export async function creditAdjustmentsByInvoice(
 /** Credited, refunded and written-off totals for one invoice. */
 export async function creditAdjustmentForInvoice(
   db: Database | Tx,
+  companyId: string,
   invoiceId: string,
 ): Promise<CreditAdjustment> {
-  const map = await creditAdjustmentsByInvoice(db, [invoiceId]);
+  const map = await creditAdjustmentsByInvoice(db, companyId, [invoiceId]);
   return map.get(invoiceId) ?? NONE;
 }

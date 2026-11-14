@@ -72,7 +72,12 @@ export async function loadBooksPage(
 ): Promise<BooksPage> {
   const all = await loadAllRecords(companyId, user, resource);
   const { items, hasMore } = pageResult(all.items.slice(page.offset), page);
-  const withActions = await addActions(items, all.payable, can(user.role, "accounts:write"));
+  const withActions = await addActions(
+    companyId,
+    items,
+    all.payable,
+    can(user.role, "accounts:write"),
+  );
   return { title: all.title, emptyMessage: all.emptyMessage, stats: all.stats, items: withActions, hasMore };
 }
 
@@ -83,6 +88,7 @@ type Payable = {
 };
 
 async function addActions(
+  companyId: string,
   items: BookRecord[],
   payable: Payable | undefined,
   canWrite: boolean,
@@ -90,6 +96,7 @@ async function addActions(
   if (!canWrite || !payable) return items;
   const owed = payable.invoices
     ? await invoiceAmountsDue(
+        companyId,
         items
           .filter((i) => payable.invoices!.has(i.id))
           .map((i) => ({ id: i.id, grossPence: payable.invoices!.get(i.id)! })),
