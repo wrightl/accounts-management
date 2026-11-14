@@ -21,6 +21,7 @@ import { getDb } from "@/db";
 import {
   clients,
   creditNotes,
+  invoiceWriteOffs,
   invoiceImportBatches,
   invoiceLineItems,
   invoices,
@@ -315,6 +316,12 @@ export async function getInvoiceDetail(
     .where(and(eq(creditNotes.invoiceId, id), eq(creditNotes.companyId, companyId)))
     .orderBy(desc(creditNotes.createdAt));
 
+  const [writeOffRow] = await db
+    .select({ total: sum(invoiceWriteOffs.amountPence).mapWith(Number) })
+    .from(invoiceWriteOffs)
+    .where(and(eq(invoiceWriteOffs.invoiceId, id), eq(invoiceWriteOffs.companyId, companyId)));
+  const writtenOffPence = writeOffRow?.total ?? 0;
+
   const paidPence = paymentRows.reduce((acc, p) => acc + p.amountPence, 0);
   const issuedCredits = creditNoteRows.filter((c) => c.status === "issued");
   const creditedPence = issuedCredits.reduce((acc, c) => acc + c.grossPence, 0);
@@ -325,6 +332,7 @@ export async function getInvoiceDetail(
     paidPence,
     creditedPence,
     refundedPence,
+    writtenOffPence,
   };
   const balancePence = invoiceAmountDuePence(settlement);
   const refundDuePence = invoiceRefundDuePence(settlement);

@@ -12,6 +12,7 @@ import {
   invoices,
   payments,
   reconciliationMatches,
+  invoiceWriteOffs,
 } from "@/db/schema";
 import { clientDisplayNameSql } from "@/lib/clients/sql";
 import { defaultReportPeriod as fyDefaultReportPeriod } from "@/lib/dates";
@@ -96,26 +97,40 @@ export async function getProfitAndLoss(
       ),
     );
 
+  const [writeOffTotal] = await db
+    .select({ total: sum(invoiceWriteOffs.amountPence).mapWith(Number) })
+    .from(invoiceWriteOffs)
+    .where(
+      and(
+        eq(invoiceWriteOffs.companyId, companyId),
+        gte(invoiceWriteOffs.writtenOffOn, from),
+        lte(invoiceWriteOffs.writtenOffOn, to),
+      ),
+    );
+
   const credits = await sumCreditNotesInPeriod(companyId, from, to);
   const creditNotePence = credits.netPence;
   const incomePence = (income?.total ?? 0) - creditNotePence;
   const otherIncomePence = await sumOtherIncomePence(companyId, from, to);
-  const expensePence = expenseTotal?.total ?? 0;
+  const writeOffPence = writeOffTotal?.total ?? 0;
+  const expensePence = (expenseTotal?.total ?? 0) + writeOffPence;
   const profitPence = incomePence + otherIncomePence - expensePence;
   return {
     incomePence,
     creditNotePence,
     otherIncomePence,
     expensePence,
+    writeOffPence,
     profitPence,
     incomeFormatted: formatGBP(incomePence),
     creditNoteFormatted: formatGBP(creditNotePence),
     otherIncomeFormatted: formatGBP(otherIncomePence),
     expenseFormatted: formatGBP(expensePence),
+    writeOffFormatted: formatGBP(writeOffPence),
     profitFormatted: formatGBP(profitPence),
     basis: "accrual" as const,
     basisNote:
-      "Accrual basis: invoiced income is net (ex-VAT) by issue date, less credit notes by their issue date. Other income is cash on the bank date (no VAT). Expenses are net of VAT by spend date. See VAT summary for output/input VAT.",
+      "Accrual basis: invoiced income is net (ex-VAT) by issue date, less credit notes by their issue date. Other income is cash on the bank date (no VAT). Expenses are net of VAT by spend date, plus invoice balances written off as bank charges or bad debt by write-off date. See VAT summary for output/input VAT.",
   };
 }
 

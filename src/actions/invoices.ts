@@ -138,6 +138,18 @@ export async function updateInvoice(
 
 const CREDITED_INVOICE_VOID_ERROR =
   "This invoice has credit notes, so it can't be voided. Raise a credit note for the rest instead.";
+const WRITTEN_OFF_INVOICE_VOID_ERROR =
+  "This invoice has a write-off. Remove the write-off before voiding it.";
+
+/** Why an invoice with credit notes or write-offs can't be voided, if it can't. */
+function adjustedInvoiceVoidError(adj: {
+  creditedPence: number;
+  writtenOffPence: number;
+}): string | null {
+  if (adj.creditedPence > 0) return CREDITED_INVOICE_VOID_ERROR;
+  if (adj.writtenOffPence > 0) return WRITTEN_OFF_INVOICE_VOID_ERROR;
+  return null;
+}
 
 export async function voidInvoice(id: string): Promise<ActionResult> {
   return mutate(
@@ -155,9 +167,8 @@ export async function voidInvoice(id: string): Promise<ActionResult> {
       if (!canTransition(from, "void")) {
         return { ok: false, error: `Cannot void an invoice in status "${from}"` };
       }
-      if ((await creditAdjustmentForInvoice(db, id)).creditedPence > 0) {
-        return { ok: false, error: CREDITED_INVOICE_VOID_ERROR };
-      }
+      const adjustedError = adjustedInvoiceVoidError(await creditAdjustmentForInvoice(db, id));
+      if (adjustedError) return { ok: false, error: adjustedError };
       const locked = await checkPeriodOpen(companyId, existing.issueDate);
       if (locked) return { ok: false, error: locked };
 
@@ -260,11 +271,9 @@ export async function updateInvoiceStatus(
         .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)))
         .limit(1);
       if (!existing) return { ok: false, error: "Invoice not found" };
-      if (
-        target === "void" &&
-        (await creditAdjustmentForInvoice(db, id)).creditedPence > 0
-      ) {
-        return { ok: false, error: CREDITED_INVOICE_VOID_ERROR };
+      if (target === "void") {
+        const adjustedError = adjustedInvoiceVoidError(await creditAdjustmentForInvoice(db, id));
+        if (adjustedError) return { ok: false, error: adjustedError };
       }
       // Sending or voiding moves the invoice into or out of the books.
       if (target === "void" || (target === "sent" && storedStatus(current) === "draft")) {

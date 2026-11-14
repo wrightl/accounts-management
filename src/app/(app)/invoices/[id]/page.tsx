@@ -19,6 +19,10 @@ import { buttonClasses } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { InvoiceChaseToggle } from "@/components/invoices/imported-invoice-chase";
 import { InvoiceActions } from "@/components/invoices/invoice-actions";
+import { InvoiceWriteOffs } from "@/components/invoices/invoice-write-offs";
+import { listInvoiceWriteOffs } from "@/lib/invoices/write-offs";
+import { PaymentBankLink } from "@/components/invoices/payment-bank-link";
+import { linkedPaymentIds } from "@/lib/payments/link-bank";
 import { InvoiceOriginalDocument } from "@/components/invoices/invoice-original-document";
 import { InvoiceDueDate } from "@/components/invoices/invoice-due-date";
 import { InvoiceStatusSelect } from "@/components/invoices/invoice-status-select";
@@ -71,11 +75,14 @@ export default async function InvoiceDetailPage({
   const stored = storedStatus(invoice.status);
   const canCredit =
     canWrite && (stored === "sent" || stored === "paid") && creditablePence > 0;
-  const [recurring, settlements, latePayment] = await Promise.all([
+  const [recurring, settlements, latePayment, writeOffs, linkedPayments] = await Promise.all([
     getRecurringTemplateForInvoice(companyId, invoice.recurringInvoiceId),
     listBankSettlements(companyId, { invoiceId: invoice.id }),
     getLatePaymentClaims(companyId, invoice.id, invoice.latePaymentForInvoiceId),
+    listInvoiceWriteOffs(companyId, invoice.id),
+    linkedPaymentIds(companyId, invoice.id),
   ]);
+  const writtenOffPence = writeOffs.reduce((acc, w) => acc + w.amountPence, 0);
   const lateCharge =
     scope === "all" && stored === "sent" && invoice.dueDate && !invoice.latePaymentForInvoiceId
       ? latePaymentCharge({
@@ -177,6 +184,7 @@ export default async function InvoiceDetailPage({
             status={invoice.status}
             canWrite={canWrite}
             balanceFormatted={balanceFormatted}
+            balancePence={detail.balancePence}
             clientName={client.name}
             companyName={client.companyName}
             isImported={invoice.source === "import"}
@@ -217,6 +225,12 @@ export default async function InvoiceDetailPage({
           <Card>
             <CardTitle>Credited</CardTitle>
             <CardValue>{creditedFormatted}</CardValue>
+          </Card>
+        ) : null}
+        {writtenOffPence > 0 ? (
+          <Card>
+            <CardTitle>Written off</CardTitle>
+            <CardValue>{formatGBP(writtenOffPence)}</CardValue>
           </Card>
         ) : null}
         <Card>
@@ -285,6 +299,7 @@ export default async function InvoiceDetailPage({
                   <TH>Method</TH>
                   <TH>Reference</TH>
                   <TH className="text-right">Amount</TH>
+                  <TH>Bank</TH>
                 </TR>
               </THead>
               <TBody>
@@ -294,6 +309,21 @@ export default async function InvoiceDetailPage({
                     <TD>{p.method ?? "—"}</TD>
                     <TD className="text-muted">{p.reference ?? "—"}</TD>
                     <TD className="text-right">{p.amountFormatted}</TD>
+                    <TD>
+                      {linkedPayments.has(p.id) ? (
+                        <span className="text-sm text-muted">Linked</span>
+                      ) : p.stripeCheckoutSessionId ? (
+                        <span className="text-sm text-muted">Card (Stripe)</span>
+                      ) : canWrite && stored !== "void" ? (
+                        <PaymentBankLink
+                          invoiceId={invoice.id}
+                          paymentId={p.id}
+                          paymentPence={p.amountPence}
+                        />
+                      ) : (
+                        <span className="text-sm text-muted">Not linked</span>
+                      )}
+                    </TD>
                   </TR>
                 ))}
               </TBody>
@@ -302,6 +332,15 @@ export default async function InvoiceDetailPage({
           </>
         )}
       </section>
+
+      <InvoiceWriteOffs
+        invoiceId={invoice.id}
+        writeOffs={writeOffs}
+        balancePence={detail.balancePence}
+        canWriteOff={stored === "sent" && detail.balancePence > 0}
+        canWrite={canWrite}
+        today={todayIsoDate()}
+      />
 
       {creditNotes.length > 0 ? (
         <section className="mt-8">

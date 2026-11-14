@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
+  canSettleInvoiceBalance,
+  overpaymentAllowancePence,
   pickBestBankTxForInvoice,
   pickBestMatch,
   scoreBankTxForInvoice,
@@ -90,6 +92,13 @@ describe("scoreBankTxForInvoice", () => {
     expect(breakdown.counterpartyScore).toBeGreaterThanOrEqual(80);
   });
 
+  it("accepts a slight overpayment but not a large one", () => {
+    const over = { ...tx, amountPence: 25_500 };
+    expect(scoreBankTxForInvoice(over, invoice, "2026-04-02").total).toBeGreaterThanOrEqual(70);
+    const far = { ...tx, amountPence: 30_000 };
+    expect(scoreBankTxForInvoice(far, invoice, "2026-04-02").total).toBe(0);
+  });
+
   it("rejects outgoing transactions", () => {
     const outgoing = { ...tx, amountPence: -25000 };
     expect(scoreBankTxForInvoice(outgoing, invoice, "2026-04-02").total).toBe(0);
@@ -148,5 +157,17 @@ describe("old debts", () => {
     expect(
       scoreMatch(tx, { ...old, date: "2026-04-02" }),
     ).toBeGreaterThan(30);
+  });
+});
+
+describe("canSettleInvoiceBalance", () => {
+  it("allows 5% over the balance, or £10 on small invoices", () => {
+    expect(overpaymentAllowancePence(100_000)).toBe(5_000);
+    expect(overpaymentAllowancePence(5_000)).toBe(1_000);
+    expect(canSettleInvoiceBalance(105_000, 100_000)).toBe(true);
+    expect(canSettleInvoiceBalance(105_001, 100_000)).toBe(false);
+    expect(canSettleInvoiceBalance(6_000, 5_000)).toBe(true);
+    expect(canSettleInvoiceBalance(1, 5_000)).toBe(true);
+    expect(canSettleInvoiceBalance(0, 5_000)).toBe(false);
   });
 });

@@ -9,6 +9,7 @@ import {
   isBankTransactionAvailable,
   ReconciliationError,
 } from "@/lib/bank/queries";
+import { canSettleInvoiceBalance } from "@/lib/bank/match";
 import { creditAdjustmentForInvoice } from "@/lib/credit-notes/adjustments";
 import type { Tx } from "@/lib/invoices/allocate";
 import { invoiceBalancePence, isInvoiceSettled } from "@/lib/invoices/balance";
@@ -171,7 +172,12 @@ export async function recordInvoicePayment(
         paidPence: alreadyPaid,
         ...credits,
       });
-      if (amountPence > remaining) {
+      // Money already in the bank can be a little more than the balance; the
+      // extra then shows as a refund due on the invoice.
+      const overBalance = bankTransactionId
+        ? remaining <= 0 || !canSettleInvoiceBalance(amountPence, remaining)
+        : amountPence > remaining;
+      if (overBalance) {
         throw new PaymentError(
           `Payment exceeds remaining balance of ${(remaining / 100).toFixed(2)}`,
         );

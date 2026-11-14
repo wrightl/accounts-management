@@ -16,7 +16,7 @@ import {
   paymentRawFromFormData,
 } from "@/lib/payments/schema";
 import type { MatchScoreBreakdown } from "@/lib/bank/match";
-import { penceToPounds } from "@/lib/money";
+import { formatGBP, penceToPounds } from "@/lib/money";
 import { DisplayDate, useDateFormat } from "@/components/date-format-provider";
 import { formatIsoDate } from "@/lib/dates";
 
@@ -28,12 +28,32 @@ function MatchBreakdown({ breakdown }: { breakdown: MatchScoreBreakdown }) {
   return <p className="text-xs text-muted">Match: {parts.join(" · ")}</p>;
 }
 
+/** Explains what happens when the bank payment isn't exactly the balance due. */
+function AmountDifference({
+  receivedPence,
+  balancePence,
+}: {
+  receivedPence: number;
+  balancePence: number;
+}) {
+  const diff = receivedPence - balancePence;
+  if (diff === 0) return null;
+  return (
+    <p className="mt-2 text-sm text-amber-700">
+      {diff > 0
+        ? `${formatGBP(diff)} more than the balance due. The extra will show as a refund due to the client.`
+        : `${formatGBP(-diff)} less than the balance due. The rest will stay owed on the invoice.`}
+    </p>
+  );
+}
+
 export function InvoiceActions({
   invoiceId,
   invoiceNumber,
   status,
   canWrite,
   balanceFormatted,
+  balancePence,
   clientName,
   companyName,
   isImported = false,
@@ -44,6 +64,8 @@ export function InvoiceActions({
   status: string;
   canWrite: boolean;
   balanceFormatted: string;
+  /** What the client still owes, to explain a bank payment that differs from it. */
+  balancePence?: number;
   clientName: string;
   companyName: string | null;
   /** Sending an imported invoice emails a client about something issued elsewhere. */
@@ -67,12 +89,49 @@ export function InvoiceActions({
   const [showPayment, setShowPayment] = useState(false);
   const [loadingMatches, setLoadingMatches] = useState(false);
   const [matches, setMatches] = useState<InvoiceBankMatch[]>([]);
+  const [otherReceipts, setOtherReceipts] = useState<InvoiceBankMatch[]>([]);
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
   const [manualEntry, setManualEntry] = useState(false);
   const matchRequestId = useRef(0);
   const formRef = useRef<HTMLFormElement>(null);
 
-  const selectedMatch = matches.find((m) => m.bankTransactionId === selectedMatchId) ?? null;
+  const selectedMatch =
+    [...matches, ...otherReceipts].find((m) => m.bankTransactionId === selectedMatchId) ?? null;
+  const selectedIsSuggested = matches.some((m) => m.bankTransactionId === selectedMatchId);
+
+  function chooseReceipt(id: string) {
+    if (!id) return;
+    setSelectedMatchId(id);
+    setManualEntry(false);
+  }
+
+  /** Every receipt the user can link, suggestions first, as one dropdown. */
+  function receiptSelect(id: string, label: string, placeholder: string | null) {
+    const option = (m: InvoiceBankMatch) => (
+      <option key={m.bankTransactionId} value={m.bankTransactionId}>
+        {formatIsoDate(m.bookedAt, dateFormat)} · {m.counterparty ?? "Unknown"} · {m.amountFormatted}
+      </option>
+    );
+    return (
+      <div className="mt-3">
+        <Label htmlFor={id}>{label}</Label>
+        <select
+          id={id}
+          className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+          value={placeholder === null ? (selectedMatchId ?? "") : ""}
+          onChange={(e) => chooseReceipt(e.target.value)}
+        >
+          {placeholder !== null ? <option value="">{placeholder}</option> : null}
+          {matches.length > 0 ? (
+            <optgroup label="Suggested">{matches.map(option)}</optgroup>
+          ) : null}
+          {otherReceipts.length > 0 ? (
+            <optgroup label="Other unlinked receipts">{otherReceipts.map(option)}</optgroup>
+          ) : null}
+        </select>
+      </div>
+    );
+  }
 
   function togglePayment() {
     if (showPayment) {
@@ -93,6 +152,7 @@ export function InvoiceActions({
         return;
       }
       setMatches(result.matches);
+      setOtherReceipts(result.others);
       const best = result.matches[0];
       if (best) {
         setSelectedMatchId(best.bankTransactionId);
@@ -203,7 +263,9 @@ export function InvoiceActions({
             <p className="text-sm text-muted">Searching bank transactions…</p>
           ) : selectedMatch && !manualEntry ? (
             <div className="rounded-lg border border-border bg-wash/40 p-3">
-              <p className="text-sm font-medium">Identified bank payment</p>
+              <p className="text-sm font-medium">
+                {selectedIsSuggested ? "Identified bank payment" : "Chosen bank payment"}
+              </p>
               <p className="mt-1 text-sm">
                 {selectedMatch.counterparty ?? "Unknown"} · {selectedMatch.amountFormatted}
               </p>
@@ -212,28 +274,20 @@ export function InvoiceActions({
                 {selectedMatch.reference ? ` · ${selectedMatch.reference}` : ""}
               </p>
               <MatchBreakdown breakdown={selectedMatch.breakdown} />
+              {balancePence !== undefined ? (
+                <AmountDifference
+                  receivedPence={selectedMatch.amountPence}
+                  balancePence={balancePence}
+                />
+              ) : null}
               <input
                 type="hidden"
                 name="bankTransactionId"
                 value={selectedMatch.bankTransactionId}
               />
-              {matches.length > 1 ? (
-                <div className="mt-3">
-                  <Label htmlFor="bankMatch">Other matches</Label>
-                  <select
-                    id="bankMatch"
-                    className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
-                    value={selectedMatchId ?? ""}
-                    onChange={(e) => setSelectedMatchId(e.target.value || null)}
-                  >
-                    {matches.map((m) => (
-                      <option key={m.bankTransactionId} value={m.bankTransactionId}>
-                        {formatIsoDate(m.bookedAt, dateFormat)} · {m.counterparty ?? "Unknown"} · {m.amountFormatted}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : null}
+              {matches.length + otherReceipts.length > 1
+                ? receiptSelect("bankMatch", "Change receipt", null)
+                : null}
               <Button
                 type="button"
                 variant="ghost"
@@ -247,9 +301,18 @@ export function InvoiceActions({
               </Button>
             </div>
           ) : (
-            <p className="text-sm text-muted">
-              No matching bank transaction found. Enter payment details manually.
-            </p>
+            <div>
+              <p className="text-sm text-muted">
+                {matches.length > 0
+                  ? "Enter payment details manually, or link a bank receipt."
+                  : otherReceipts.length > 0
+                    ? "No bank transaction matched this invoice. Link a bank receipt below, or enter payment details manually."
+                    : "No matching bank transaction found. Enter payment details manually."}
+              </p>
+              {matches.length + otherReceipts.length > 0
+                ? receiptSelect("bankReceipt", "Link a bank receipt", "Choose a receipt…")
+                : null}
+            </div>
           )}
 
           <div>

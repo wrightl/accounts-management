@@ -48,6 +48,7 @@ export const ASSISTANT_TOOLS: readonly AssistantTool[] = [
         creditNotes: p.creditNoteFormatted,
         otherIncome: p.otherIncomeFormatted,
         expenses: p.expenseFormatted,
+        invoicesWrittenOff: p.writeOffFormatted,
         profit: p.profitFormatted,
         basis: p.basisNote,
       };
