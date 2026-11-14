@@ -22,6 +22,7 @@ Alfa provides day-to-day accounting and bookkeeping for UK businesses:
 - Quotes: Create, version, send branded PDFs, client acceptance workflow
 - Orders: Payment milestones, progressive invoicing
 - Invoices: Draft, send, track payments, branded PDFs, numbering
+- Document Templates: Library of five templates for invoices, quotes and credit notes on every plan; drag-and-drop designer for your own invoice, quote and credit note templates on Premium
 - Recurring Invoices: Monthly schedules, auto-generation
 - Expenses: Manual entry, CSV import, inbound email, receipt OCR
 - Reimbursements: Batch processing, payment tracking
@@ -51,11 +52,13 @@ Free Trial: 30 days, full access, no credit card required
 Essentials Plan: £19/month (ex VAT) per organisation
 - Core accounting features
 - Quotes, invoices, expenses
+- Document template library
 - Bank reconciliation
 - Basic reporting
 
 Premium Plan: £29/month (ex VAT) per organisation
 - Everything in Essentials
+- Document template designer (drag and drop)
 - Recurring invoices
 - Receipt OCR (AI or Tesseract)
 - Multi-user access

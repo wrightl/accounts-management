@@ -5,6 +5,7 @@ import {
   CalendarClock,
   MessageCircleQuestion,
   LayoutDashboard,
+  LayoutTemplate,
   CircleHelp,
   UsersRound,
   FileText,
@@ -72,5 +73,6 @@ export const NAV_ICONS: Record<NavIcon, LucideIcon> = {
   company: Building2,
   payments: CreditCard,
   reminders: BellRing,
+  templates: LayoutTemplate,
   assistant: MessagesSquare,
 };

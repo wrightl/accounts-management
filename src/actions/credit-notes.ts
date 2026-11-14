@@ -27,7 +27,7 @@ import {
   parseCreditNoteInput,
   parseCreditNoteRefundInput,
 } from "@/lib/credit-notes/schema";
-import { renderCreditNotePdf } from "@/lib/invoices/pdf-v2";
+import { renderCompanyCreditNotePdf } from "@/lib/pdf/templates/company-render";
 import { sendEmail } from "@/lib/email";
 import { resolveClientEmailSender } from "@/lib/email/resolve-client-sender";
 import { escapeHtml } from "@/lib/html";
@@ -369,12 +369,11 @@ export async function sendCreditNote(id: string): Promise<ActionResult> {
       if (!client.email) return { ok: false, error: "Client has no email address" };
 
       const company = await getCompanySettings(companyId);
-      const pdfBytes = await renderCreditNotePdf({
+      const pdfBytes = await renderCompanyCreditNotePdf(company, {
         creditNote,
         invoiceNumber: invoice.number,
         client,
         lines,
-        company,
       });
       const sender = await resolveClientEmailSender({
         companyId,

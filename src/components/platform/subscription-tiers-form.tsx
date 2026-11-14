@@ -12,6 +12,8 @@ type Tier = {
   vatExport: boolean;
   liveBankFeed: boolean;
   prioritySupport: boolean;
+  invoiceTemplates: boolean;
+  invoiceDesigner: boolean;
 };
 
 export function SubscriptionTiersForm({ tiers }: { tiers: Tier[] }) {
@@ -69,6 +71,22 @@ export function SubscriptionTiersForm({ tiers }: { tiers: Tier[] }) {
                   defaultChecked={tier.prioritySupport}
                 />
                 Priority support
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  name="invoiceTemplates"
+                  defaultChecked={tier.invoiceTemplates}
+                />
+                Document template library
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  name="invoiceDesigner"
+                  defaultChecked={tier.invoiceDesigner}
+                />
+                Document template designer
               </label>
             </div>
           </div>

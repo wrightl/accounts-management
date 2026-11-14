@@ -37,7 +37,10 @@ import {
 import { invoiceBalancePence } from "@/lib/invoices/balance";
 import { loadOriginalInvoiceDocument } from "@/lib/invoices/original-document";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
-import { renderCreditNotePdf, renderInvoicePdfV2 } from "@/lib/invoices/pdf-v2";
+import {
+  renderCompanyCreditNotePdf,
+  renderCompanyInvoicePdf,
+} from "@/lib/pdf/templates/company-render";
 import { getCreditNoteDetail } from "@/lib/credit-notes/queries";
 import { listRecurringInvoices } from "@/lib/invoices/recurring-queries";
 import { lineNetPence } from "@/lib/money";
@@ -1179,12 +1182,11 @@ export async function streamAccountantPack({
         try {
           const detail = await getCreditNoteDetail(companyId, note.id);
           if (!detail) throw new Error("not found");
-          const bytes = await renderCreditNotePdf({
+          const bytes = await renderCompanyCreditNotePdf(company, {
             creditNote: detail.creditNote,
             invoiceNumber: detail.invoice.number,
             client: detail.client,
             lines: detail.lines,
-            company,
           });
           return [pdfPath, bytes];
         } catch (err) {
@@ -1640,12 +1642,7 @@ export async function resolveInvoicePdf(
   }
 
   const company = await getOrCreateCompanySettings(companyId);
-  return renderInvoicePdfV2({
-    invoice: detail.invoice,
-    client: detail.client,
-    lines: detail.lines,
-    company,
-  });
+  return renderCompanyInvoicePdf(company, detail);
 }
 
 /** Load receipt bytes from private storage. */

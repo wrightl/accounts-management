@@ -19,6 +19,15 @@ describe("billing constants", () => {
     expect(DEFAULT_TIER_LIMITS.premium.vatExport).toBe(true);
   });
 
+  it("gives every plan the template library and Premium the designer", () => {
+    expect(DEFAULT_TIER_LIMITS.trial.invoiceTemplates).toBe(true);
+    expect(DEFAULT_TIER_LIMITS.essentials.invoiceTemplates).toBe(true);
+    expect(DEFAULT_TIER_LIMITS.premium.invoiceTemplates).toBe(true);
+    expect(DEFAULT_TIER_LIMITS.trial.invoiceDesigner).toBe(false);
+    expect(DEFAULT_TIER_LIMITS.essentials.invoiceDesigner).toBe(false);
+    expect(DEFAULT_TIER_LIMITS.premium.invoiceDesigner).toBe(true);
+  });
+
   it("keeps pricing and trial length", () => {
     expect(TRIAL_DAYS).toBe(30);
     expect(PAST_DUE_GRACE_DAYS).toBe(7);

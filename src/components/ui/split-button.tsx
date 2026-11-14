@@ -73,7 +73,9 @@ export function SplitButton({
         onClick={() => setOpen((value) => !value)}
         className={cn(
           buttonClasses(variant),
-          "rounded-l-none border-l border-white/25 px-2.5",
+          "rounded-l-none px-2.5",
+          // An outlined button already has an edge between the halves.
+          variant === "ghost" ? "-ml-px" : "border-l border-white/25",
         )}
       >
         <ChevronDown

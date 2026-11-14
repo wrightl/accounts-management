@@ -146,6 +146,16 @@ export function BillingSettingsPanel({ data }: { data: BillingPageData }) {
             <dt className="text-muted">VAT export</dt>
             <dd className="font-medium">{e.vatExport ? "Included" : "Not included"}</dd>
           </div>
+          <div>
+            <dt className="text-muted">Document template library</dt>
+            <dd className="font-medium">{e.invoiceTemplates ? "Included" : "Not included"}</dd>
+          </div>
+          <div>
+            <dt className="text-muted">Document template designer</dt>
+            <dd className="font-medium">
+              {e.invoiceDesigner ? "Included" : "Premium only"}
+            </dd>
+          </div>
           {e.trialEndsAt && e.status === "trialing" ? (
             <div>
               <dt className="text-muted">Trial ends</dt>

@@ -58,7 +58,7 @@ const FRAMEABLE_PATHS = [
 ];
 
 /** Routes that serve an uploaded file under a stricter Content-Security-Policy of their own. */
-const OWN_CSP_PATHS = ['api/company/logo'];
+const OWN_CSP_PATHS = ['api/company/logo', 'api/document-templates/assets/[^/]+'];
 
 /**
  * Next only adds a route's own header when the config hasn't already set it,

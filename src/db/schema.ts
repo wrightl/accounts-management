@@ -108,6 +108,33 @@ export const companies = pgTable("companies", {
   accountNumber: text("account_number"),
   financialYearEndMonth: integer("financial_year_end_month").notNull().default(3),
   logoUrl: text("logo_url"),
+  /**
+   * Named library template (`TEMPLATES` in lib/pdf/templates/registry) used
+   * for invoice PDFs. Quotes and credit notes have their own below.
+   */
+  invoiceTemplateKey: text("invoice_template_key").notNull().default("modern"),
+  /**
+   * A design from the template designer, used for invoices in place of the
+   * library template while the plan includes the designer.
+   */
+  invoiceCustomTemplateId: uuid("invoice_custom_template_id").references(
+    (): AnyPgColumn => invoiceTemplates.id,
+    { onDelete: "set null" },
+  ),
+  /** Library template for quotes; see invoiceTemplateKey. */
+  quoteTemplateKey: text("quote_template_key").notNull().default("modern"),
+  /** A quote design from the template designer, used in place of the library template. */
+  quoteCustomTemplateId: uuid("quote_custom_template_id").references(
+    (): AnyPgColumn => invoiceTemplates.id,
+    { onDelete: "set null" },
+  ),
+  /** Library template for credit notes; see invoiceTemplateKey. */
+  creditNoteTemplateKey: text("credit_note_template_key").notNull().default("modern"),
+  /** A credit note design from the template designer, used in place of the library template. */
+  creditNoteCustomTemplateId: uuid("credit_note_custom_template_id").references(
+    (): AnyPgColumn => invoiceTemplates.id,
+    { onDelete: "set null" },
+  ),
   /** Invoice number prefix, e.g. "DD" → DD-2026-0001. */
   invoiceNumberPrefix: text("invoice_number_prefix").notNull().default("DD"),
   /** Quote number prefix, e.g. "Q" → Q-2026-0001. */
@@ -208,6 +235,41 @@ export const companies = pgTable("companies", {
 }, (t) => [
   uniqueIndex("companies_stripe_connect_account_id_unique").on(t.stripeConnectAccountId),
 ]);
+
+/** Invoice, quote and credit note designs a company made in the template designer. */
+export const invoiceTemplates = pgTable(
+  "invoice_templates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references((): AnyPgColumn => companies.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** The document it is for: "invoice", "quote" or "credit-note" (a `DocumentKind`). */
+    kind: text("kind").notNull().default("invoice"),
+    /** A `TemplateDesign` (lib/pdf/designer/schema); validated on every read. */
+    design: jsonb("design").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("idx_invoice_templates_company").on(t.companyId)],
+);
+
+/** Images uploaded for use in a company's designs. */
+export const invoiceTemplateAssets = pgTable(
+  "invoice_template_assets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references((): AnyPgColumn => companies.id, { onDelete: "cascade" }),
+    blobPath: text("blob_path").notNull(),
+    contentType: text("content_type").notNull(),
+    filename: text("filename").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("idx_invoice_template_assets_company").on(t.companyId)],
+);
 
 export const documentSequenceKindEnum = pgEnum("document_sequence_kind", [
   "invoice",
@@ -1589,6 +1651,10 @@ export const subscriptionTiers = pgTable("subscription_tiers", {
   vatExport: boolean("vat_export").notNull().default(false),
   liveBankFeed: boolean("live_bank_feed").notNull().default(false),
   prioritySupport: boolean("priority_support").notNull().default(false),
+  /** Choose from the library of invoice, credit note and quote templates. */
+  invoiceTemplates: boolean("invoice_templates").notNull().default(true),
+  /** Design custom invoice, quote and credit note templates. */
+  invoiceDesigner: boolean("invoice_designer").notNull().default(false),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

@@ -6,7 +6,7 @@ import {
   getQuoteDetail,
   getQuoteVersionSnapshot,
 } from "@/lib/quotes/queries";
-import { renderQuotePdf } from "@/lib/quotes/pdf";
+import { renderCompanyQuotePdf } from "@/lib/pdf/templates/company-render";
 import { quotePdfFilename } from "@/lib/quotes/status";
 import { getCompanySettings } from "@/lib/settings/queries";
 import { getStorage } from "@/lib/storage";
@@ -39,7 +39,7 @@ async function renderFromSnapshot(
     // Fall through to render.
   }
 
-  const bytes = await renderQuotePdf({
+  const bytes = await renderCompanyQuotePdf(company, {
     quote: {
       number,
       version,
@@ -62,7 +62,6 @@ async function renderFromSnapshot(
       unitPricePence: l.unitPricePence,
       discountPercent: l.discountPercent ?? 0,
     })),
-    company,
   });
 
   try {
@@ -106,7 +105,7 @@ export async function loadOrRenderQuotePdf(
   }
 
   const company = await getCompanySettings(companyId);
-  const bytes = await renderQuotePdf({
+  const bytes = await renderCompanyQuotePdf(company, {
     quote: {
       number: detail.quote.number,
       version: detail.quote.version,
@@ -129,7 +128,6 @@ export async function loadOrRenderQuotePdf(
       unitPricePence: l.unitPricePence,
       discountPercent: l.discountPercent ?? 0,
     })),
-    company,
   });
 
   try {

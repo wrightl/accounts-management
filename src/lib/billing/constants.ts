@@ -25,6 +25,8 @@ export const DEFAULT_TIER_LIMITS: Record<
     vatExport: boolean;
     liveBankFeed: boolean;
     prioritySupport: boolean;
+    invoiceTemplates: boolean;
+    invoiceDesigner: boolean;
   }
 > = {
   trial: {
@@ -33,6 +35,8 @@ export const DEFAULT_TIER_LIMITS: Record<
     vatExport: false,
     liveBankFeed: false,
     prioritySupport: false,
+    invoiceTemplates: true,
+    invoiceDesigner: false,
   },
   essentials: {
     name: "Essentials",
@@ -40,6 +44,8 @@ export const DEFAULT_TIER_LIMITS: Record<
     vatExport: true,
     liveBankFeed: false,
     prioritySupport: false,
+    invoiceTemplates: true,
+    invoiceDesigner: false,
   },
   premium: {
     name: "Premium",
@@ -47,5 +53,7 @@ export const DEFAULT_TIER_LIMITS: Record<
     vatExport: true,
     liveBankFeed: false,
     prioritySupport: true,
+    invoiceTemplates: true,
+    invoiceDesigner: true,
   },
 };

@@ -249,6 +249,14 @@ export const updateTierSchema = z.object({
     .union([z.literal("on"), z.literal("true"), z.literal("1"), z.literal("")])
     .optional()
     .transform((v) => v === "on" || v === "true" || v === "1"),
+  invoiceTemplates: z
+    .union([z.literal("on"), z.literal("true"), z.literal("1"), z.literal("")])
+    .optional()
+    .transform((v) => v === "on" || v === "true" || v === "1"),
+  invoiceDesigner: z
+    .union([z.literal("on"), z.literal("true"), z.literal("1"), z.literal("")])
+    .optional()
+    .transform((v) => v === "on" || v === "true" || v === "1"),
 });
 
 export type UpdateTierParsed = z.infer<typeof updateTierSchema>;

@@ -4,37 +4,63 @@ import { Font } from "@react-pdf/renderer";
 
 export const PDF_FONT_FAMILY = "Outfit";
 
-let registered = false;
-let outfitAvailable = false;
+/** Vendored families (src/lib/pdf/fonts) and the weights each ships. */
+const VENDORED_FONTS = {
+  Outfit: [
+    { file: "Outfit-Regular.ttf", fontWeight: 400 },
+    { file: "Outfit-SemiBold.ttf", fontWeight: 600 },
+  ],
+  Poppins: [
+    { file: "Poppins-Regular.ttf", fontWeight: 400 },
+    { file: "Poppins-Medium.ttf", fontWeight: 500 },
+    { file: "Poppins-SemiBold.ttf", fontWeight: 600 },
+    { file: "Poppins-Bold.ttf", fontWeight: 700 },
+  ],
+} as const;
+
+export type VendoredPdfFont = keyof typeof VENDORED_FONTS;
+
+// Break lines between words only: hyphenating splits email addresses and
+// reference numbers mid-way.
+Font.registerHyphenationCallback((word) => [word]);
+
+const registered = new Map<VendoredPdfFont, boolean>();
 
 /**
- * Register Outfit for @react-pdf (idempotent). Falls back to Helvetica when
- * the vendored TTFs are missing or registration fails.
+ * Register a vendored family for @react-pdf (idempotent) and return the name
+ * to use. Falls back to Helvetica when the TTFs are missing or registration
+ * fails.
  */
-export function registerPdfFonts(): string {
-  if (registered) return outfitAvailable ? PDF_FONT_FAMILY : "Helvetica";
+export function pdfFont(family: VendoredPdfFont): string {
+  const known = registered.get(family);
+  if (known !== undefined) return known ? family : "Helvetica";
 
-  registered = true;
   try {
     const dir = path.join(process.cwd(), "src/lib/pdf/fonts");
     Font.register({
-      family: PDF_FONT_FAMILY,
-      fonts: [
-        { src: path.join(dir, "Outfit-Regular.ttf"), fontWeight: 400 },
-        { src: path.join(dir, "Outfit-SemiBold.ttf"), fontWeight: 600 },
-      ],
+      family,
+      fonts: VENDORED_FONTS[family].map(({ file, fontWeight }) => ({
+        src: path.join(dir, file),
+        fontWeight,
+      })),
     });
-    outfitAvailable = true;
-    return PDF_FONT_FAMILY;
+    registered.set(family, true);
+    return family;
   } catch (err) {
     console.warn(
       JSON.stringify({
         level: "warn",
         msg: "pdf_font_register_failed",
+        family,
         error: err instanceof Error ? err.message : String(err),
       }),
     );
-    outfitAvailable = false;
+    registered.set(family, false);
     return "Helvetica";
   }
+}
+
+/** Register Outfit, the default document font. */
+export function registerPdfFonts(): string {
+  return pdfFont(PDF_FONT_FAMILY);
 }
