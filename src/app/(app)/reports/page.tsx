@@ -12,8 +12,11 @@ import {
     getIncomeByMonth,
     getProfitAndLoss,
     getVatSummary,
-    profitAndLossBasisNote,
 } from '@/lib/reports/queries';
+import {
+    profitAndLossBasisNote,
+    shouldShowVat,
+} from '@/lib/reports/vat-display';
 import { getCompanySettings } from '@/lib/settings/queries';
 import { getEntitlements } from '@/lib/billing/entitlements';
 import { Card, CardTitle, CardValue } from '@/components/ui/card';
@@ -60,12 +63,10 @@ export default async function ReportsPage({
         getLastWeeklyClose(companyId),
         getEntitlements(companyId),
     ]);
-    // A company that isn't registered only sees VAT when the period still has
-    // some on its documents, such as from before it deregistered.
-    const showVat =
-        company.vatRegistered ||
-        vat.vatOnSalesPence !== 0 ||
-        vat.vatOnPurchasesPence !== 0;
+    const showVat = shouldShowVat({
+        vatRegistered: company.vatRegistered,
+        hasVatOnDocuments: vat.hasVatOnDocuments,
+    });
     const exVat = showVat ? ' (ex VAT)' : '';
 
     return (

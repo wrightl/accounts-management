@@ -1,4 +1,5 @@
 import "server-only";
+import { hasVatOnDocuments, profitAndLossBasisNote } from "@/lib/reports/vat-display";
 import { invoiceCountsInAccounts } from "@/lib/invoices/accounts-scope";
 import { and, count, desc, eq, gte, inArray, lte, ne, sql, sum } from "drizzle-orm";
 import { getDb } from "@/db";
@@ -131,13 +132,6 @@ export async function getProfitAndLoss(
     basis: "accrual" as const,
     basisNote: profitAndLossBasisNote(true),
   };
-}
-
-/** How the P&L is worked out. Leaves VAT out for a company that has none to report. */
-export function profitAndLossBasisNote(showVat: boolean): string {
-  return showVat
-    ? "Accrual basis: invoiced income is net (ex-VAT) by issue date, less credit notes by their issue date. Other income is cash on the bank date (no VAT). Expenses are net of VAT by spend date, plus invoice balances written off as bank charges or bad debt by write-off date. See VAT summary for output/input VAT."
-    : "Accrual basis: invoiced income by issue date, less credit notes by their issue date. Other income is cash on the bank date. Expenses by spend date, plus invoice balances written off as bank charges or bad debt by write-off date.";
 }
 
 /** Confirmed other-income credits grouped by calendar month (booked_at). */
@@ -459,6 +453,12 @@ export async function getVatSummary(
   const vatOnPurchasesPence = purchases?.total ?? 0;
   const netVatPence = vatOnSalesPence - vatOnPurchasesPence;
 
+  const onDocuments = hasVatOnDocuments({
+    salesVatPence: sales?.total ?? 0,
+    creditNoteVatPence,
+    purchaseVatPence: vatOnPurchasesPence,
+  });
+
   const note = company.vatRegistered
     ? "Export for your accountant — this app does not submit to HMRC."
     : "Company is not marked VAT registered in Settings, but documents in this period still record VAT. Figures reflect that VAT.";
@@ -473,6 +473,7 @@ export async function getVatSummary(
     vatOnPurchasesFormatted: formatGBP(vatOnPurchasesPence),
     netVatFormatted: formatGBP(netVatPence),
     vatRegistered: company.vatRegistered,
+    hasVatOnDocuments: onDocuments,
     vatNumber: company.vatNumber,
     note,
     from,
