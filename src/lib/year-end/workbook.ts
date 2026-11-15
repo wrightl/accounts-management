@@ -97,9 +97,14 @@ export function buildWorkbook(
       .sort()
       .find((d) => figures.invoiceBalanceAt(invoice, d) <= 0) ?? null;
 
+  const receivedBy = (invoice: PackInvoice, date: string) =>
+    invoice.payments
+      .filter((p) => p.receivedOn <= date)
+      .reduce((total, p) => total + p.amountPence, 0);
+
   const salesRows: Row[] = [
     ...data.invoices.map((inv): Row => {
-      const owed = Math.max(0, figures.invoiceBalanceAt(inv, period.to));
+      const balance = figures.invoiceBalanceAt(inv, period.to);
       const file = options.invoiceFile?.(inv.id);
       return {
         date: day(inv.issueDate),
@@ -111,12 +116,10 @@ export function buildWorkbook(
         net: money(inv.netPence),
         vat: vat ? money(inv.vatPence) : null,
         gross: vat ? money(inv.grossPence) : null,
-        received: money(
-          inv.payments
-            .filter((p) => p.receivedOn <= period.to)
-            .reduce((total, p) => total + p.amountPence, 0),
-        ),
-        owed: money(owed),
+        received: money(receivedBy(inv, period.to)),
+        owed: money(Math.max(0, balance)),
+        // Money owed back to the customer has its own column, never a negative debt.
+        overpaid: balance < 0 ? money(-balance) : null,
         paidOn: day(settledOn(inv)),
       };
     }),
@@ -138,7 +141,7 @@ export function buildWorkbook(
     TAB.sales,
     cash
       ? "Invoices and credit notes issued in the period, with what each line was for. On cash basis the profit and loss is taken from Payments received, not from this tab."
-      : "Invoices and credit notes issued in the period, with what each line was for and when each was paid.",
+      : "Invoices and credit notes issued in the period, with what each line was for and when each was paid. Where a customer has paid more than they owe, the amount owed back to them has its own column.",
     [
       { key: "date", header: "Date issued" },
       { key: "type", header: "Type", keep: true },
@@ -150,7 +153,8 @@ export function buildWorkbook(
       { key: "vat", header: "VAT (£)", total: true },
       { key: "gross", header: "Gross (£)", total: true },
       { key: "received", header: "Received by period end (£)", total: true },
-      { key: "owed", header: "Owed at period end (£)", total: true },
+      { key: "owed", header: "Owed by customer at period end (£)", total: true },
+      { key: "overpaid", header: "Owed back to customer at period end (£)", total: true },
       { key: "paidOn", header: "Date paid in full" },
     ],
     salesRows,
@@ -795,7 +799,7 @@ export function buildWorkbook(
           { key: "date", header: "Date issued" },
           { key: "customer", header: "Customer" },
           { key: "total", header: "Invoice total (£)", total: true },
-          { key: "owed", header: "Owed at period end (£)", total: true },
+          { key: "owed", header: "Owed by customer at period end (£)", total: true },
           { key: "paidOn", header: "Date later paid" },
         ],
         figures.debtors.map(({ invoice, balancePence, paidOn }): Row => ({
@@ -806,6 +810,38 @@ export function buildWorkbook(
           owed: money(balancePence),
           paidOn: paidOn ? day(paidOn) : "Not yet paid in full",
         })),
+      );
+    }
+
+    layout.gap();
+    layout.add(
+      bold("Amounts owed back to customers at the period end, on invoices issued in the period"),
+    );
+    if (figures.owedToCustomers.length === 0) {
+      none();
+    } else {
+      layout.table(
+        [
+          { key: "number", header: "Invoice" },
+          { key: "date", header: "Date issued" },
+          { key: "customer", header: "Customer" },
+          { key: "total", header: "Invoice total (£)", total: true },
+          { key: "received", header: "Received by period end (£)", total: true },
+          { key: "owed", header: "Owed back to customer (£)", total: true },
+          { key: "refundedOn", header: "Date later refunded" },
+        ],
+        figures.owedToCustomers.map(({ invoice, pence, refundedOn }): Row => ({
+          number: invoice.number,
+          date: day(invoice.issueDate),
+          customer: invoice.clientName,
+          total: money(invoice.grossPence),
+          received: money(receivedBy(invoice, period.to)),
+          owed: money(pence),
+          refundedOn: refundedOn ? day(refundedOn) : "Not yet refunded",
+        })),
+      );
+      layout.add(
+        "These customers have paid more than they owe: they overpaid, or a paid invoice was later credited. The amount is owed back to them (a creditor) and is not sales income.",
       );
     }
 
@@ -927,8 +963,8 @@ export function buildWorkbook(
     return layout.sheet(
       TAB.position,
       isLimited
-        ? "Bank balances, unpaid invoices, possible fixed assets and prepayments, amounts owed to people, and directors' pay."
-        : "Bank balances, unpaid invoices, possible fixed assets and prepayments, drawings, money put in, and mileage.",
+        ? "Bank balances, unpaid invoices, amounts owed back to customers, possible fixed assets and prepayments, amounts owed to people, and directors' pay."
+        : "Bank balances, unpaid invoices, amounts owed back to customers, possible fixed assets and prepayments, drawings, money put in, and mileage.",
     );
   })();
 

@@ -24,7 +24,16 @@ export type Debtor = {
   paidOn: string | null;
 };
 
-export type PersonAmount = { name: string; pence: number };
+/** An invoice the customer has paid more than they owe on (overpaid, or credited after payment), not refunded by the period end. */
+export type CustomerCredit = {
+  invoice: PackInvoice;
+  /** Owed back to the customer at the period end (positive). */
+  pence: number;
+  /** The date it was later refunded in full; null while any of it is still owed back. */
+  refundedOn: string | null;
+};
+
+export type PersonAmount ={ name: string; pence: number };
 
 export type Figures = {
   /** Whether amounts are shown net of VAT with VAT columns. */
@@ -47,6 +56,7 @@ export type Figures = {
   /** Balance owed on an invoice at the close of a date. */
   invoiceBalanceAt: (invoice: PackInvoice, date: string) => number;
   debtors: Debtor[];
+  owedToCustomers: CustomerCredit[];
   pnl: {
     salesPence: number;
     creditNotesPence: number;
@@ -146,6 +156,17 @@ export function deriveFigures(data: YearEndData): Figures {
       .sort();
     const paidOn = later.find((d) => invoiceBalanceAt(invoice, d) <= 0) ?? null;
     return [{ invoice, balancePence, paidOn }];
+  });
+
+  const owedToCustomers: CustomerCredit[] = data.invoices.flatMap((invoice) => {
+    const balancePence = invoiceBalanceAt(invoice, period.to);
+    if (balancePence >= 0) return [];
+    const refundedOn =
+      invoice.credits
+        .flatMap((c) => (c.refundedAt != null && c.refundedAt > period.to ? [c.refundedAt] : []))
+        .sort()
+        .find((d) => invoiceBalanceAt(invoice, d) >= 0) ?? null;
+    return [{ invoice, pence: -balancePence, refundedOn }];
   });
 
   // --- Profit and loss -------------------------------------------------------
@@ -263,6 +284,7 @@ export function deriveFigures(data: YearEndData): Figures {
     unmatched,
     invoiceBalanceAt,
     debtors,
+    owedToCustomers,
     pnl: {
       salesPence,
       creditNotesPence,

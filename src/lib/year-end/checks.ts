@@ -243,6 +243,17 @@ export function runChecks(
       })),
   );
 
+  add(
+    "owed-to-customers",
+    `Invoices with money owed back to the customer at the period end: overpaid, or credited after payment${
+      data.basis === "cash" ? " (the amount is included in money received)" : ""
+    }`,
+    figures.owedToCustomers.map(({ invoice, pence }) => ({
+      text: `${invoice.number} · ${invoice.clientName} · ${formatGBP(pence)} owed back`,
+      href: `/invoices/${invoice.id}`,
+    })),
+  );
+
   // --- Expenses -----------------------------------------------------------------
 
   const expenseItem = (e: (typeof relevantExpenses)[number], extra = ""): CheckItem => ({
