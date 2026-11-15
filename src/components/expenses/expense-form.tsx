@@ -17,6 +17,7 @@ import { mileageAmountPence } from "@/lib/expenses/mileage";
 import {
   createExpense,
   updateExpense,
+  updateExpenseCoverDates,
   deleteExpense,
   uploadReceipt,
   approveExpense,
@@ -44,11 +45,21 @@ import { vatFromInclusiveGross } from "@/lib/vat";
 import {
   expenseRawFromFormData,
   normalizeExpensePaymentFields,
+  coverDatesError,
   parseExpenseInput,
 } from "@/lib/expenses/schema";
 import { useDateFormat } from "@/components/date-format-provider";
 import { formatIsoDate } from "@/lib/dates";
 import { PAGE_WIDTH } from "@/components/ui/page-width";
+
+/** The last day of the 12 months starting on `iso`: 2026-03-10 gives 2027-03-09. */
+function dayBeforeNextYear(iso: string): string {
+  const date = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setUTCFullYear(date.getUTCFullYear() + 1);
+  date.setUTCDate(date.getUTCDate() - 1);
+  return date.toISOString().slice(0, 10);
+}
 
 type ExpenseStatusOption = "" | "recorded" | "reimbursable" | "company_paid";
 
@@ -290,7 +301,7 @@ export function ExpenseForm({
   // Everything a save sends, so the form can tell when it differs from what
   // was loaded (or last saved). The approve-as choice is excluded: it only
   // applies on Approve, which is always available.
-  const snapshot = JSON.stringify([
+  const coreSnapshot = JSON.stringify([
     description,
     spentAt,
     category,
@@ -307,11 +318,13 @@ export function ExpenseForm({
     currency,
     originalAmount,
     pendingReceipt !== null,
-    coversFrom,
-    coversTo,
   ]);
+  // The covered period is kept apart: it alone can be saved on a locked expense.
+  const snapshot = JSON.stringify([coreSnapshot, coversFrom, coversTo]);
   const [savedSnapshot, setSavedSnapshot] = useState(snapshot);
   const dirty = canWrite && snapshot !== savedSnapshot;
+  const onlyCoverDatesChanged =
+    mode === "edit" && dirty && (JSON.parse(savedSnapshot) as [string])[0] === coreSnapshot;
   useUnsavedChangesGuard(dirty);
 
   if (!canWrite && mode === "create") {
@@ -427,6 +440,30 @@ export function ExpenseForm({
   function onSubmit(formData: FormData) {
     // Enter in a field submits even while the save button is disabled.
     if (mode === "edit" && !dirty) return;
+    // The covered period alone saves through its own action, which a locked
+    // period or a reimbursed expense does not block.
+    if (onlyCoverDatesChanged && !isPending) {
+      clearAll();
+      const invalid = coverDatesError(coversFrom, coversTo);
+      if (invalid) {
+        applyFail({ error: "Fix the highlighted fields", fieldErrors: invalid });
+        scheduleFocusFirstFieldError(formRef.current, invalid);
+        return;
+      }
+      startTransition(async () => {
+        const result = await updateExpenseCoverDates(expense!.id, { coversFrom, coversTo });
+        if (!result.ok) {
+          applyFail(result);
+          scheduleFocusFirstFieldError(formRef.current, result.fieldErrors);
+          return;
+        }
+        clearAll();
+        setSavedSnapshot(snapshot);
+        router.push(`/expenses/${expense!.id}`);
+        router.refresh();
+      });
+      return;
+    }
     // The receipt is uploaded on its own once the expense exists.
     formData.delete("receipt");
     formData.set("description", description);
@@ -1072,12 +1109,30 @@ export function ExpenseForm({
       </div>
       <details open={Boolean(coversFrom || coversTo)}>
         <summary className="cursor-pointer text-sm text-muted">
-          Covers a period (optional)
+          Pays for a later date or period (optional)
         </summary>
         <p className="mt-2 text-xs text-muted">
-          For a cost that pays for more than the day it was spent, such as an annual
-          subscription or insurance. Your accountant uses this at the year end.
+          For a cost that pays for something after the day it was spent: a period, such as
+          an annual subscription or insurance, or a single later date, such as an event (put
+          the event date in both boxes). Your accountant uses this at the year end to count
+          the cost in the right year. You can change these dates even after the books are locked.
         </p>
+        {canWrite && spentAt ? (
+          <Button
+            type="button"
+            variant="ghost"
+            className="mt-1"
+            disabled={pending}
+            onClick={() => {
+              setCoversFrom(spentAt);
+              setCoversTo(dayBeforeNextYear(spentAt));
+              clearField("coversFrom");
+              clearField("coversTo");
+            }}
+          >
+            12 months from the date spent
+          </Button>
+        ) : null}
         <div className="mt-2 flex flex-wrap gap-3">
           <div>
             <Label htmlFor="coversFrom">Covers from</Label>

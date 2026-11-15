@@ -18,7 +18,12 @@ import { setBooksLock } from "@/actions/period-lock";
 import { createInvoice, updateInvoiceStatus, voidInvoice } from "@/actions/invoices";
 import { recordPayment } from "@/actions/payments";
 import { createCreditNote } from "@/actions/credit-notes";
-import { createExpense, deleteExpense, updateExpense } from "@/actions/expenses";
+import {
+  createExpense,
+  deleteExpense,
+  updateExpense,
+  updateExpenseCoverDates,
+} from "@/actions/expenses";
 import { explainBankCreditAction } from "@/actions/bank";
 import { approvePendingExpense } from "@/lib/expenses/review";
 import { todayIsoDate } from "@/lib/dates";
@@ -238,6 +243,60 @@ describe("with the books locked", () => {
       .returning();
     expect((await updateExpense(old.id, expenseForm(OPEN_DAY))).ok).toBe(false);
     expect((await deleteExpense(old.id)).ok).toBe(false);
+  });
+
+  it("lets the period an expense covers be changed in the locked period, and audits it", async () => {
+    const [old] = await db
+      .insert(expenses)
+      .values({
+        companyId,
+        description: "Web hosting",
+        spentAt: LOCKED_DAY,
+        amountPence: 12000,
+        status: "recorded",
+      })
+      .returning();
+    await lockBooks();
+
+    // A start with no end, or an end before the start, is refused.
+    expect((await updateExpenseCoverDates(old.id, { coversFrom: LOCKED_DAY, coversTo: "" })).ok).toBe(false);
+    expect(
+      (await updateExpenseCoverDates(old.id, { coversFrom: "2026-12-14", coversTo: LOCKED_DAY })).ok,
+    ).toBe(false);
+
+    const result = await updateExpenseCoverDates(old.id, { coversFrom: LOCKED_DAY, coversTo: "2026-12-14" });
+    expect(result.ok).toBe(true);
+    const [after] = await db.select().from(expenses).where(eq(expenses.id, old.id));
+    expect(after).toMatchObject({
+      coversFrom: LOCKED_DAY,
+      coversTo: "2026-12-14",
+      // Nothing else moved.
+      description: "Web hosting",
+      spentAt: LOCKED_DAY,
+      amountPence: 12000,
+      status: "recorded",
+    });
+    const [entry] = await db
+      .select()
+      .from(auditLog)
+      .where(and(eq(auditLog.companyId, companyId), eq(auditLog.action, "expense.cover_dates")));
+    expect(entry).toMatchObject({
+      entityId: old.id,
+      meta: {
+        coversFrom: LOCKED_DAY,
+        coversTo: "2026-12-14",
+        previousCoversFrom: null,
+        previousCoversTo: null,
+      },
+    });
+
+    // Another company's expense is out of reach.
+    const other = await seedCompany(db, { name: "Other Co", slug: "other-co" });
+    const [theirs] = await db
+      .insert(expenses)
+      .values({ companyId: other.id, description: "Theirs", spentAt: OPEN_DAY, amountPence: 500, status: "recorded" })
+      .returning();
+    expect((await updateExpenseCoverDates(theirs.id, { coversFrom: "", coversTo: OPEN_DAY })).ok).toBe(false);
   });
 
   it("refuses approving a pending expense dated in the locked period", async () => {

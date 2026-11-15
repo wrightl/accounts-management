@@ -7,7 +7,7 @@ import type {
   PackMatch,
   YearEndData,
 } from "@/lib/year-end/data";
-import { NO_CATEGORY, WRITE_OFF_CATEGORY, type Figures } from "@/lib/year-end/figures";
+import { NO_CATEGORY, WRITE_OFF_CATEGORY, type Figures, type Prepayment } from "@/lib/year-end/figures";
 import {
   NONE_IN_PERIOD,
   businessWord,
@@ -717,6 +717,31 @@ export function buildWorkbook(
       bold("Profit (or loss) for the period"),
       money(pnl.profitPence, { bold: true, formula: `B${totalIncome}-B${totalExpenses}` }),
     );
+
+    // Information for the accountant; the figures above are left as recorded.
+    const carriedForwardPence = figures.possiblePrepayments.reduce((t, p) => t + p.laterPence, 0);
+    const broughtForwardPence = figures.prepaymentsBroughtForward.reduce((t, p) => t + p.inPeriodPence, 0);
+    if (carriedForwardPence !== 0 || broughtForwardPence !== 0) {
+      layout.gap();
+      layout.add(bold("Possible prepayment adjustments, not made in the figures above"));
+      layout.add(
+        "Each expense above counts in full on the date it was spent. These are the parts that cover time in a different period, split by days.",
+      );
+      if (carriedForwardPence !== 0) {
+        layout.add(
+          "Included in expenses above, but covering time after the period end",
+          money(carriedForwardPence),
+          `${TAB.position} tab`,
+        );
+      }
+      if (broughtForwardPence !== 0) {
+        layout.add(
+          "Not in expenses above: spent in an earlier period, but covering time in this period",
+          money(broughtForwardPence),
+          `${TAB.position} tab`,
+        );
+      }
+    }
     return layout.sheet(
       TAB.pnl,
       "Income by type, expenses by category and the profit for the period. Each figure adds up the matching detail tab.",
@@ -871,30 +896,64 @@ export function buildWorkbook(
     }
 
     layout.gap();
-    layout.add(bold("Possible prepayments: costs that cover time after the period end"));
-    if (figures.possiblePrepayments.length === 0) {
-      none();
-    } else {
-      layout.table(
-        [
-          { key: "ref", header: "Expense ref" },
-          { key: "date", header: "Date spent" },
-          { key: "description", header: "Description" },
-          { key: "amount", header: vat ? "Net (£)" : "Amount (£)", total: true },
-          { key: "from", header: "Covers from" },
-          { key: "to", header: "Covers to" },
-          { key: "later", header: "Part after the period end, by days (£)", total: true },
-        ],
-        figures.possiblePrepayments.map(({ expense: e, laterPence }): Row => ({
-          ref: ref(e),
-          date: day(e.spentAt),
-          description: e.description,
-          amount: money(figures.expenseNetPence(e)),
-          from: day(e.coversFrom),
-          to: day(e.coversTo),
-          later: money(laterPence),
-        })),
+    if (cash) {
+      layout.add(bold("Possible prepayments"));
+      layout.add(
+        "Not listed: on the cash basis a cost counts in full on the date it was paid, whatever period it covers.",
       );
+    } else {
+      const amountHeader = vat ? "Net (£)" : "Amount (£)";
+      const prepaymentTable = (rows: Prepayment[]) =>
+        layout.table(
+          [
+            { key: "ref", header: "Expense ref" },
+            { key: "date", header: "Date spent" },
+            { key: "description", header: "Description" },
+            { key: "category", header: "Category" },
+            { key: "amount", header: amountHeader, total: true },
+            { key: "from", header: "Covers from" },
+            { key: "to", header: "Covers to" },
+            { key: "before", header: "Part before the period, by days (£)", total: true },
+            { key: "within", header: "Part in the period, by days (£)", total: true },
+            { key: "later", header: "Part after the period end, by days (£)", total: true },
+            { key: "receipt", header: "Receipt file" },
+          ],
+          rows.map(({ expense: e, beforePence, inPeriodPence, laterPence }): Row => ({
+            ref: ref(e),
+            date: day(e.spentAt),
+            description: e.description,
+            category: e.category ?? NO_CATEGORY,
+            amount: money(figures.expenseNetPence(e)),
+            from: day(e.coversFrom ?? e.spentAt),
+            to: day(e.coversTo),
+            // Left blank, not nil, so the column drops out when no row needs it.
+            before: beforePence === 0 ? null : money(beforePence),
+            within: money(inPeriodPence),
+            later: laterPence === 0 ? null : money(laterPence),
+            receipt: receiptCell(e),
+          })),
+        );
+
+      layout.add(bold("Possible prepayments: costs spent in the period that cover time after the period end"));
+      if (figures.possiblePrepayments.length === 0) {
+        none();
+      } else {
+        prepaymentTable(figures.possiblePrepayments);
+        layout.add(
+          `The whole cost is in this period's expenses on the ${TAB.pnl} tab. The part after the period end may belong to later periods.`,
+        );
+      }
+
+      layout.gap();
+      layout.add(bold("Prepayments brought forward: costs spent before the period that cover time in it"));
+      if (figures.prepaymentsBroughtForward.length === 0) {
+        none();
+      } else {
+        prepaymentTable(figures.prepaymentsBroughtForward);
+        layout.add(
+          `None of this cost is in this period's expenses on the ${TAB.pnl} tab: it was counted in full when it was spent. The part in the period may belong to this period, and any part after the period end to later ones.`,
+        );
+      }
     }
 
     const labelled = (title: string, rows: { label: string; pence: number }[], header: string) => {
@@ -964,7 +1023,7 @@ export function buildWorkbook(
       TAB.position,
       isLimited
         ? "Bank balances, unpaid invoices, amounts owed back to customers, possible fixed assets and prepayments, amounts owed to people, and directors' pay."
-        : "Bank balances, unpaid invoices, amounts owed back to customers, possible fixed assets and prepayments, drawings, money put in, and mileage.",
+        : `Bank balances, unpaid invoices, amounts owed back to customers, possible fixed assets${cash ? "" : " and prepayments"}, drawings, money put in, and mileage.`,
     );
   })();
 
@@ -1067,7 +1126,10 @@ export function buildWorkbook(
   cover.add("Matched to", "The invoice, expense or other record a bank transaction was reconciled against. Blank means nothing has been matched yet.");
   if (vat) cover.add("Net", "The amount before VAT.");
   cover.add("Possible fixed asset", `Equipment costing more than ${formatGBP(company.fixedAssetThresholdPence)}, listed for the accountant to decide how to treat.`);
-  cover.add("Possible prepayment", "A cost that covers time after the period end, such as an annual subscription.");
+  if (!cash) {
+    cover.add("Possible prepayment", "A cost spent in the period that covers time after the period end, such as an annual subscription or an event held later.");
+    cover.add("Prepayment brought forward", "A cost spent before the period that covers time in it.");
+  }
   if (!isLimited) {
     cover.add("Drawings", "Money the owner took out of the business for themselves.");
     cover.add("Money put in", "The owner's own money paid into the business, including business costs they paid personally.");

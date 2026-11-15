@@ -613,7 +613,9 @@ export async function loadYearEndData(
   // In the period by spend date, plus those an outside-period section needs:
   // items of a run paid in the period, anything paid personally up to the period
   // end (it may still have been owed then), and anything whose bank payment fell
-  // in the period (cash basis counts it then; the bank tab names it either way).
+  // in the period (cash basis counts it then; the bank tab names it either way),
+  // and anything spent earlier whose covered period runs into this one (a
+  // prepayment brought forward).
 
   const inPaidRun = sql`${expenses.id} in (
     select ri.expense_id from reimbursement_items ri
@@ -657,6 +659,10 @@ export async function loadYearEndData(
             sql`${expenses.spentAt} <= ${period.to}`,
           ),
           paidFromBankInPeriod,
+          and(
+            sql`${expenses.spentAt} < ${period.from}`,
+            sql`${expenses.coversTo} >= ${period.from}`,
+          ),
         ),
       ),
     )
