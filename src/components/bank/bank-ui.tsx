@@ -28,6 +28,7 @@ import {
 } from "@/actions/bank";
 import { BankImportForm } from "@/components/bank/bank-import-form";
 import { AttachExpenseDialog } from "@/components/bank/expense-link-dialog";
+import { OwnerExplainDialog } from "@/components/bank/owner-explain-dialog";
 import { useNewExpenseFromBankList } from "@/components/bank/bank-list-position";
 import { CompanyCardsDialog } from "@/components/bank/company-cards-dialog";
 import type { BankAccountCards } from "@/lib/bank/company-cards";
@@ -50,7 +51,10 @@ function isCreditExplainMatchType(value: string | null): boolean {
   return (
     value === "other_income" ||
     value === "transfer" ||
-    value === "tax_or_loan"
+    value === "tax_or_loan" ||
+    value === "drawings" ||
+    value === "money_put_in" ||
+    value === "salary"
   );
 }
 
@@ -985,6 +989,7 @@ export function ReconciliationCell({
   const [pending, startTransition] = useTransition();
   const [explainOpen, setExplainOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
+  const [ownerOpen, setOwnerOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { newExpenseHref, rememberPosition } = useNewExpenseFromBankList();
   const state = reconciliationState(row);
@@ -1066,20 +1071,29 @@ export function ReconciliationCell({
           items={[
             { key: "attach", label: "Link existing expense…", onSelect: () => setAttachOpen(true) },
             createExpenseItem,
+            { key: "owner", label: "Not an expense: pay or drawings…", onSelect: () => setOwnerOpen(true) },
           ]}
         />
       );
     } else if (state === "unreconciled" && isIncoming) {
       actions = (
-        <Button
-          type="button"
-          variant="ghost"
-          className="px-3 py-1"
-          disabled={pending}
-          onClick={() => setExplainOpen(true)}
-        >
-          Explain
-        </Button>
+        <>
+          <Button
+            type="button"
+            variant="ghost"
+            className="px-3 py-1"
+            disabled={pending}
+            onClick={() => setExplainOpen(true)}
+          >
+            Explain
+          </Button>
+          <RowActionsMenu
+            disabled={pending}
+            items={[
+              { key: "owner", label: "Money the owner put in…", onSelect: () => setOwnerOpen(true) },
+            ]}
+          />
+        </>
       );
     } else if (state === "matched" && row.matchType === "expense" && matchId) {
       actions = (
@@ -1176,6 +1190,14 @@ export function ReconciliationCell({
           open={attachOpen}
           onClose={() => setAttachOpen(false)}
           transactionId={row.id}
+        />
+      ) : null}
+      {ownerOpen ? (
+        <OwnerExplainDialog
+          open={ownerOpen}
+          onClose={() => setOwnerOpen(false)}
+          transactionId={row.id}
+          incoming={isIncoming}
         />
       ) : null}
     </div>

@@ -23,6 +23,7 @@ const CORE_LABELS = [
   "Clients",
   "Invoices",
   "Reports",
+  "Year end",
   "Deadlines",
   "Settings",
 ];
@@ -30,7 +31,7 @@ const CORE_LABELS = [
 describe("flattenNavItems", () => {
   it("returns all items across groups in order", () => {
     const flat = flattenNavItems(NAV_GROUPS);
-    expect(flat).toHaveLength(23);
+    expect(flat).toHaveLength(24);
     expect(flat[0]?.label).toBe("Overview");
     expect(flat[flat.length - 1]?.label).toBe("Settings");
     expect(flat.map((item) => item.href)).toContain("/deadlines");
@@ -67,7 +68,7 @@ describe("filterNavGroups", () => {
         permissionCheck: forRole(role),
         aiAvailable: true,
       });
-      expect(flattenNavItems(groups)).toHaveLength(23);
+      expect(flattenNavItems(groups)).toHaveLength(24);
     }
   });
 
@@ -91,6 +92,7 @@ describe("filterNavGroups", () => {
       "/settings",
       "/shareholders",
       "/transactions",
+      "/year-end",
     ]);
   });
 
@@ -113,7 +115,7 @@ describe("filterNavGroups", () => {
       entityType: "sole_trader",
     });
     const labels = flattenNavItems(groups).map((i) => i.label);
-    expect(labels).toHaveLength(18);
+    expect(labels).toHaveLength(19);
     expect(labels).not.toContain("Dividends");
     expect(groups.map((g) => g.id)).not.toContain("payingYourself");
   });

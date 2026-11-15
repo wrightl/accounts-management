@@ -285,6 +285,9 @@ export async function updateExpense(
                 : existing.paidByUserId,
           mileageMiles,
           mileageRatePence,
+          // Left as they are when the caller didn't send them.
+          ...(parsed.data.coversFrom !== undefined ? { coversFrom: parsed.data.coversFrom } : {}),
+          ...(parsed.data.coversTo !== undefined ? { coversTo: parsed.data.coversTo } : {}),
           detectedCurrency: parsed.data.foreignCurrency,
           originalAmountMinor: parsed.data.originalAmountMinor,
         })

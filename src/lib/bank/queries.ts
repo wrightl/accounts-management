@@ -38,6 +38,7 @@ import {
     bankTransactionLabels,
     bankTransactions,
     clients,
+    companies,
     expenses,
     invoices,
     payments,
@@ -522,7 +523,10 @@ async function buildMatchLabels(
         } else if (
             match.matchType === 'other_income' ||
             match.matchType === 'transfer' ||
-            match.matchType === 'tax_or_loan'
+            match.matchType === 'tax_or_loan' ||
+            match.matchType === 'drawings' ||
+            match.matchType === 'money_put_in' ||
+            match.matchType === 'salary'
         ) {
             matchLabels.set(match.id, creditExplainLabel(match));
         }
@@ -1748,7 +1752,125 @@ export async function explainBankCredits(
     });
 }
 
-/** Remove a credit explanation (other_income / transfer / tax_or_loan only). */
+export type OwnerExplainType = 'drawings' | 'money_put_in' | 'salary';
+
+const OWNER_EXPLAIN_TYPES: readonly string[] = ['drawings', 'money_put_in', 'salary'];
+
+export function isOwnerExplainType(value: string): value is OwnerExplainType {
+    return OWNER_EXPLAIN_TYPES.includes(value);
+}
+
+/**
+ * Mark bank transactions as money between the business and its people rather
+ * than an expense or income: a sole trader's drawings (money out) or money
+ * put in (money in), or a limited company's salary payment to one person.
+ * All or nothing, like {@link explainBankCredits}.
+ */
+export async function explainOwnerTransactions(
+    companyId: string,
+    transactionIds: string[],
+    input: { matchType: OwnerExplainType; personUserId?: string | null; note?: string | null },
+): Promise<{ matchIds: string[] }> {
+    const ids = [...new Set(transactionIds)];
+    if (ids.length === 0) throw new ReconciliationError('Select some transactions');
+
+    const db = getDb();
+    const [company] = await db
+        .select({ entityType: companies.entityType })
+        .from(companies)
+        .where(eq(companies.id, companyId))
+        .limit(1);
+    const soleTrader = company?.entityType === 'sole_trader';
+    if (input.matchType === 'salary' ? soleTrader : !soleTrader) {
+        throw new ReconciliationError(
+            input.matchType === 'salary'
+                ? 'Salary is only for limited companies. Mark money you take out as drawings.'
+                : 'Drawings and money put in are only for sole traders.',
+        );
+    }
+
+    const rows = await db
+        .select({
+            id: bankTransactions.id,
+            amountPence: bankTransactions.amountPence,
+            bookedAt: bankTransactions.bookedAt,
+        })
+        .from(bankTransactions)
+        .innerJoin(bankAccounts, eq(bankTransactions.bankAccountId, bankAccounts.id))
+        .where(and(inArray(bankTransactions.id, ids), eq(bankAccounts.companyId, companyId)));
+    if (rows.length !== ids.length) {
+        throw new ReconciliationError('Bank transaction not found');
+    }
+    const wantsIncoming = input.matchType === 'money_put_in';
+    if (rows.some((r) => (wantsIncoming ? r.amountPence <= 0 : r.amountPence >= 0))) {
+        throw new ReconciliationError(
+            wantsIncoming
+                ? 'Only money coming in can be marked as money put in'
+                : 'Only money going out can be marked this way',
+        );
+    }
+    const locked = periodLockError(
+        await getBooksLockedThrough(companyId),
+        ...rows.map((r) => r.bookedAt),
+    );
+    if (locked) throw new ReconciliationError(locked);
+
+    let personUserId: string | null = null;
+    if (input.matchType === 'salary') {
+        const [person] = input.personUserId
+            ? await db
+                  .select({ id: users.id })
+                  .from(users)
+                  .where(and(eq(users.id, input.personUserId), eq(users.companyId, companyId)))
+                  .limit(1)
+            : [];
+        if (!person) throw new ReconciliationError('Choose who the salary was paid to');
+        personUserId = person.id;
+    }
+    const note = input.note?.trim() ? input.note.trim().slice(0, 500) : null;
+
+    return db.transaction(async (dbTx) => {
+        const confirmed = await dbTx
+            .select({ id: reconciliationMatches.bankTransactionId })
+            .from(reconciliationMatches)
+            .where(
+                and(
+                    inArray(reconciliationMatches.bankTransactionId, ids),
+                    eq(reconciliationMatches.confirmed, true),
+                ),
+            );
+        if (confirmed.length > 0) {
+            throw new ReconciliationError(
+                ids.length === 1
+                    ? 'This transaction is already reconciled'
+                    : 'Some of the selected transactions are already reconciled',
+            );
+        }
+        await dbTx
+            .delete(reconciliationMatches)
+            .where(
+                and(
+                    inArray(reconciliationMatches.bankTransactionId, ids),
+                    eq(reconciliationMatches.confirmed, false),
+                ),
+            );
+        const created = await dbTx
+            .insert(reconciliationMatches)
+            .values(
+                ids.map((bankTransactionId) => ({
+                    bankTransactionId,
+                    matchType: input.matchType,
+                    personUserId,
+                    note,
+                    confirmed: true,
+                })),
+            )
+            .returning({ id: reconciliationMatches.id });
+        return { matchIds: created.map((c) => c.id) };
+    });
+}
+
+/** Remove an explanation: other income, transfer, tax or loan, drawings, money put in or salary. */
 export async function clearBankCreditExplanation(
     companyId: string,
     matchId: string,
@@ -1756,7 +1878,10 @@ export async function clearBankCreditExplanation(
     const db = getDb();
     const match = await getMatchForCompany(db, companyId, matchId);
     if (!match) throw new ReconciliationError('Match not found');
-    if (!(CREDIT_EXPLAIN_TYPES as readonly string[]).includes(match.matchType)) {
+    if (
+        !(CREDIT_EXPLAIN_TYPES as readonly string[]).includes(match.matchType) &&
+        !OWNER_EXPLAIN_TYPES.includes(match.matchType)
+    ) {
         throw new ReconciliationError(
             'Only credit explanations can be cleared this way',
         );

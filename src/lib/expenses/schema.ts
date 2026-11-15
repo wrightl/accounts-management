@@ -12,6 +12,14 @@ import {
   type ParseOk,
 } from "@/lib/validation/field-errors";
 
+/** A date field: undefined when the caller left it out, null when blank. */
+const optionalIsoDate = z
+  .string()
+  .trim()
+  .refine((v) => v === "" || /^\d{4}-\d{2}-\d{2}$/.test(v), { message: "Enter a valid date" })
+  .transform((v) => (v === "" ? null : v))
+  .optional();
+
 export const expenseFieldsSchema = z.object({
   description: z
     .string()
@@ -83,6 +91,9 @@ export const expenseFieldsSchema = z.object({
     .optional()
     .or(z.literal(""))
     .transform((v) => (v === "" || !v ? null : Number(v))),
+  /** The period the cost pays for, when longer than the day it was spent. Left out by callers that don't set it. */
+  coversFrom: optionalIsoDate,
+  coversTo: optionalIsoDate,
   vatRate: z.coerce
     .number({ error: "Enter a VAT rate between 0 and 100" })
     .int("Enter a whole-number VAT rate")
@@ -120,6 +131,8 @@ export function expenseRawFromFormData(formData: FormData): Record<string, unkno
     useMileage: formData.get("useMileage") ?? "",
     mileageMiles: formData.get("mileageMiles") ?? "",
     mileageRatePence: formData.get("mileageRatePence") ?? "",
+    coversFrom: formData.get("coversFrom") ?? undefined,
+    coversTo: formData.get("coversTo") ?? undefined,
     vatRate: formData.get("vatRate") ?? "0",
   };
 }

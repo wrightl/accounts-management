@@ -36,6 +36,7 @@ const MONTHS = [
 
 export function SettingsForm({
   settings,
+  members = [],
 }: {
   settings: {
     entityType: "limited_company" | "sole_trader";
@@ -62,8 +63,15 @@ export function SettingsForm({
     defaultMileageRatePence: number;
     openingCashPence: number | null;
     openingCashAsAt: string | null;
+    yearEndOnFifthApril: boolean;
+    accountingBasis: "cash" | "accruals" | null;
+    tradingStartedOn: string | null;
+    ownerUserId: string | null;
+    fixedAssetThresholdPence: number;
     logoUrl: string | null;
   };
+  /** People in the business, for choosing a sole trader's owner. */
+  members?: { id: string; name: string }[];
 }) {
   const router = useRouter();
   const {
@@ -191,9 +199,14 @@ export function SettingsForm({
               {fieldErrors.companyNumber}
             </FieldError>
           </div>
-        ) : (
+        ) : null}
+        {(
           <div>
-            <Label htmlFor="utr">UTR (optional)</Label>
+            <Label htmlFor="utr">
+              {settings.entityType === "limited_company"
+                ? "Company UTR (optional)"
+                : "Self Assessment UTR (optional)"}
+            </Label>
             <Input
               id="utr"
               name="utr"
@@ -203,6 +216,9 @@ export function SettingsForm({
               aria-describedby={fieldErrors.utr ? "utr-error" : undefined}
               onChange={() => clearField("utr")}
             />
+            <p className="mt-1 text-xs text-muted">
+              The 10-digit Unique Taxpayer Reference from HMRC. Your accountant needs it at the year end.
+            </p>
             <FieldError id="utr-error">{fieldErrors.utr}</FieldError>
           </div>
         )}
@@ -273,6 +289,108 @@ export function SettingsForm({
           </p>
           <FieldError id="financialYearStartMonth-error">
             {fieldErrors.financialYearStartMonth}
+          </FieldError>
+        </div>
+        <h2 id="year-end" className="scroll-mt-8 pt-4 font-display text-lg font-semibold">
+          Year end
+        </h2>
+        {settings.entityType === "sole_trader" ? (
+          <>
+            <div>
+              <Label htmlFor="yearEnd">Accounting year</Label>
+              <Select
+                id="yearEnd"
+                name="yearEnd"
+                defaultValue={settings.yearEndOnFifthApril ? "tax_year" : "month_end"}
+                disabled={pending}
+              >
+                <option value="tax_year">The tax year, 6 April to 5 April</option>
+                <option value="month_end">
+                  A year ending on the last day of {MONTHS[settings.financialYearEndMonth - 1]}
+                </option>
+              </Select>
+              <p className="mt-1 text-xs text-muted">
+                Most sole traders use the tax year. To use another year end, choose the second
+                option and set &quot;Financial year starts&quot; above.
+              </p>
+            </div>
+            <div>
+              <Label htmlFor="accountingBasis">Accounting basis</Label>
+              <Select
+                id="accountingBasis"
+                name="accountingBasis"
+                defaultValue={settings.accountingBasis ?? ""}
+                disabled={pending}
+              >
+                <option value="">Not chosen yet</option>
+                <option value="cash">Cash basis</option>
+                <option value="accruals">Traditional accruals</option>
+              </Select>
+              <p className="mt-1 text-xs text-muted">
+                Cash basis counts income when it is received and expenses when they are paid.
+                Traditional accruals counts them when they are invoiced or incurred. Needed before
+                the year-end pack can be downloaded.
+              </p>
+            </div>
+            <div>
+              <Label htmlFor="tradingStartedOn">Date trading started (optional)</Label>
+              <Input
+                id="tradingStartedOn"
+                name="tradingStartedOn"
+                type="date"
+                defaultValue={settings.tradingStartedOn ?? ""}
+                disabled={pending}
+                aria-invalid={Boolean(fieldErrors.tradingStartedOn)}
+                onChange={() => clearField("tradingStartedOn")}
+              />
+              <FieldError id="tradingStartedOn-error">{fieldErrors.tradingStartedOn}</FieldError>
+            </div>
+            {members.length > 1 ? (
+              <div>
+                <Label htmlFor="ownerUserId">Owner</Label>
+                <Select
+                  id="ownerUserId"
+                  name="ownerUserId"
+                  defaultValue={settings.ownerUserId ?? ""}
+                  disabled={pending}
+                  aria-invalid={Boolean(fieldErrors.ownerUserId)}
+                  onChange={() => clearField("ownerUserId")}
+                >
+                  <option value="">The first admin</option>
+                  {members.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </Select>
+                <p className="mt-1 text-xs text-muted">
+                  Business costs the owner pays personally count as money they put in, not as
+                  money owed to them.
+                </p>
+                <FieldError id="ownerUserId-error">{fieldErrors.ownerUserId}</FieldError>
+              </div>
+            ) : (
+              <input type="hidden" name="ownerUserId" value={settings.ownerUserId ?? ""} />
+            )}
+          </>
+        ) : null}
+        <div>
+          <Label htmlFor="fixedAssetThresholdGbp">Possible fixed assets: equipment over (£)</Label>
+          <Input
+            id="fixedAssetThresholdGbp"
+            name="fixedAssetThresholdGbp"
+            inputMode="decimal"
+            defaultValue={(settings.fixedAssetThresholdPence / 100).toFixed(2)}
+            disabled={pending}
+            aria-invalid={Boolean(fieldErrors.fixedAssetThresholdGbp)}
+            onChange={() => clearField("fixedAssetThresholdGbp")}
+          />
+          <p className="mt-1 text-xs text-muted">
+            Equipment expenses above this amount are listed in the year-end pack for your
+            accountant to decide how to treat.
+          </p>
+          <FieldError id="fixedAssetThresholdGbp-error">
+            {fieldErrors.fixedAssetThresholdGbp}
           </FieldError>
         </div>
         <div className="space-y-3 rounded-xl border border-border bg-surface/50 p-4">

@@ -82,8 +82,40 @@ export const companySettingsFieldsSchema = z
     /** Optional GBP string for spreadsheet cutover cash; empty clears. */
     openingCashGbp: z.string().optional().or(z.literal("")),
     openingCashAsAt: z.string().optional().or(z.literal("")),
+    /** Sole trader: "tax_year" (6 April to 5 April) or "month_end". */
+    yearEnd: z.enum(["tax_year", "month_end"]).optional().or(z.literal("")),
+    /** Sole trader: "cash", "accruals", or empty while not yet chosen. */
+    accountingBasis: z.enum(["cash", "accruals"]).optional().or(z.literal("")),
+    tradingStartedOn: z.string().optional().or(z.literal("")),
+    ownerUserId: z.string().optional().or(z.literal("")),
+    /** GBP string; equipment above this is listed at the year end as a possible fixed asset. */
+    fixedAssetThresholdGbp: z.string().optional().or(z.literal("")),
   })
   .superRefine((data, ctx) => {
+    const startedRaw = (data.tradingStartedOn ?? "").trim();
+    if (startedRaw && !/^\d{4}-\d{2}-\d{2}$/.test(startedRaw)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Enter a valid date",
+        path: ["tradingStartedOn"],
+      });
+    }
+    const thresholdRaw = (data.fixedAssetThresholdGbp ?? "").trim();
+    if (thresholdRaw) {
+      let pence = -1;
+      try {
+        pence = poundsToPence(thresholdRaw);
+      } catch {
+        // Reported below.
+      }
+      if (pence < 0) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Enter an amount in pounds, such as 250",
+          path: ["fixedAssetThresholdGbp"],
+        });
+      }
+    }
     if (data.vatRegistered) {
       const vat = parseUkVatNumber(String(data.vatNumber ?? ""));
       if (!vat.ok) {
@@ -139,14 +171,49 @@ export const companySettingsFieldsSchema = z
     const asAtRaw = (data.openingCashAsAt ?? "").trim();
     const openingCashPence = cashRaw ? poundsToPence(cashRaw) : null;
     const openingCashAsAt = asAtRaw || null;
-    const { openingCashGbp: _g, openingCashAsAt: _a, ...rest } = data;
-    return { ...rest, vatNumber, openingCashPence, openingCashAsAt };
+    const {
+      openingCashGbp: _g,
+      openingCashAsAt: _a,
+      yearEnd,
+      accountingBasis,
+      tradingStartedOn,
+      ownerUserId,
+      fixedAssetThresholdGbp,
+      ...rest
+    } = data;
+    const thresholdRaw = (fixedAssetThresholdGbp ?? "").trim();
+    return {
+      ...rest,
+      vatNumber,
+      openingCashPence,
+      openingCashAsAt,
+      // Unset on a form that doesn't show the choice (a limited company's): keep the default.
+      yearEndOnFifthApril: yearEnd !== "month_end",
+      accountingBasis: accountingBasis || null,
+      tradingStartedOn: (tradingStartedOn ?? "").trim() || null,
+      ownerUserId: (ownerUserId ?? "").trim() || null,
+      fixedAssetThresholdPence: thresholdRaw ? poundsToPence(thresholdRaw) : 25000,
+    };
   });
 
 export type CompanySettingsParsed = Omit<
   z.infer<typeof companySettingsFieldsSchema>,
-  "bankProvider" | "bankName" | "vatNumber" | "openingCashGbp" | "openingCashAsAt"
+  | "bankProvider"
+  | "bankName"
+  | "vatNumber"
+  | "openingCashGbp"
+  | "openingCashAsAt"
+  | "yearEnd"
+  | "accountingBasis"
+  | "tradingStartedOn"
+  | "ownerUserId"
+  | "fixedAssetThresholdGbp"
 > & {
+  yearEndOnFifthApril: boolean;
+  accountingBasis: "cash" | "accruals" | null;
+  tradingStartedOn: string | null;
+  ownerUserId: string | null;
+  fixedAssetThresholdPence: number;
   vatNumber: string | null;
   bankProvider: BankProviderId | null;
   bankName: string | null;
@@ -179,6 +246,11 @@ export function companySettingsRawFromFormData(formData: FormData): Record<strin
     bankName: formData.get("bankName") ?? "",
     openingCashGbp: formData.get("openingCashGbp") ?? "",
     openingCashAsAt: formData.get("openingCashAsAt") ?? "",
+    yearEnd: formData.get("yearEnd") ?? "",
+    accountingBasis: formData.get("accountingBasis") ?? "",
+    tradingStartedOn: formData.get("tradingStartedOn") ?? "",
+    ownerUserId: formData.get("ownerUserId") ?? "",
+    fixedAssetThresholdGbp: formData.get("fixedAssetThresholdGbp") ?? "",
   };
 }
 

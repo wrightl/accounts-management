@@ -8,15 +8,53 @@ export type XlsxLink = { sheet: string; row: number } | { file: string } | { url
 
 export type XlsxCell =
   | string
-  | { value: string | number; money?: boolean; link?: XlsxLink };
+  | {
+      /** The cell's value; for a formula, the result Excel shows before it recalculates. */
+      value: string | number;
+      money?: boolean;
+      /** `value` is a calendar date (YYYY-MM-DD), written as a real Excel date shown dd/mm/yyyy. */
+      date?: boolean;
+      /**
+       * A formula, without the leading "=". Only ever pass one this app wrote:
+       * never text from a record, which would run as a formula.
+       */
+      formula?: string;
+      bold?: boolean;
+      /** A sheet or section heading: bold and larger. */
+      heading?: boolean;
+      link?: XlsxLink;
+    };
 
-export type XlsxSheet = { name: string; headers: string[]; rows: XlsxCell[][] };
+export type XlsxSheet = {
+  name: string;
+  headers: string[];
+  rows: XlsxCell[][];
+  /**
+   * A free-form sheet (cover, summaries, several sections): no header row, no
+   * Excel table and nothing frozen. `rows` start at row 1.
+   */
+  layout?: boolean;
+  /** A row written straight after the table, for column totals. Table sheets only. */
+  totals?: XlsxCell[];
+  /** Layout sheets only: keep this many rows at the top in view when scrolling. */
+  freezeRows?: number;
+};
 
 const MAX_CELL_TEXT = 32_767;
 const MAX_LINKS_PER_SHEET = 65_530;
 const MAX_WIDTH = 60;
 
-const STYLE = { money: 1, link: 2 } as const;
+const STYLE = { money: 1, link: 2, date: 3, bold: 4, boldMoney: 5, heading: 6 } as const;
+
+const EXCEL_EPOCH = Date.UTC(1899, 11, 30);
+
+/** Excel's day number for a YYYY-MM-DD date, or null when it isn't one. */
+export function excelDateSerial(iso: string): number | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!match) return null;
+  const ms = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Number.isFinite(ms) ? Math.round((ms - EXCEL_EPOCH) / 86_400_000) : null;
+}
 const TABLE_STYLE = "TableStyleMedium2";
 
 const NS_MAIN = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
@@ -26,7 +64,8 @@ const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
 
 /**
  * A minimal .xlsx: each sheet holds one Excel table (banded, with a filter on
- * its frozen header row), money as numbers, and hyperlinks to other sheets'
+ * its frozen header row) or is a free-form layout, with money as numbers, real
+ * dates, formulas the app wrote, and hyperlinks to other sheets'
  * rows, to files beside the workbook, or to web addresses. Text is written as inline strings, which Excel never runs as a
  * formula, so outside text like `=HYPERLINK(...)` stays text.
  */
@@ -79,8 +118,9 @@ export async function buildXlsx(sheets: XlsxSheet[]): Promise<Uint8Array> {
 
 function worksheet(sheet: XlsxSheet, nameOf: Map<string, string>, sheetNumber: number) {
   const width = sheetWidth(sheet);
+  const layout = sheet.layout === true;
   // A table's header cells must be text matching its column names exactly.
-  const columns = tableColumnNames(sheet.headers, width);
+  const columns = layout ? [] : tableColumnNames(sheet.headers, width);
   const widths = columns.map((h) => h.length);
   const links: string[] = [];
   const externalLinks: string[] = [];
@@ -88,13 +128,32 @@ function worksheet(sheet: XlsxSheet, nameOf: Map<string, string>, sheetNumber: n
   const rowXml = (cells: XlsxCell[], rowNumber: number) => {
     const out = cells.map((cell, col) => {
       const ref = `${columnName(col)}${rowNumber}`;
-      const { value, money, link } =
-        typeof cell === "string" ? { value: cell } : cell;
+      const { value, money, link, date, formula, bold, heading } =
+        typeof cell === "string"
+          ? ({ value: cell } as Exclude<XlsxCell, string>)
+          : cell;
       const text = String(value);
-      widths[col] = Math.max(widths[col] ?? 0, text.length);
+      const serial = date ? excelDateSerial(text) : null;
+      // A heading or a long note runs across the sheet, so it doesn't set its column's width.
+      if (!heading && !(layout && text.length > MAX_WIDTH)) {
+        const shown = serial !== null ? 10 : money && typeof value === "number" ? value.toFixed(2).length + 2 : text.length;
+        widths[col] = Math.max(widths[col] ?? 0, shown);
+      } else {
+        widths[col] = widths[col] ?? 0;
+      }
 
       // Header cells keep the default style, so the table style's header colours show.
-      let style = money ? STYLE.money : 0;
+      let style: number = heading
+        ? STYLE.heading
+        : serial !== null
+          ? STYLE.date
+          : money
+            ? bold
+              ? STYLE.boldMoney
+              : STYLE.money
+            : bold
+              ? STYLE.bold
+              : 0;
       const target =
         link && text !== "" && links.length < MAX_LINKS_PER_SHEET
           ? linkTarget(link, nameOf)
@@ -109,6 +168,17 @@ function worksheet(sheet: XlsxSheet, nameOf: Map<string, string>, sheetNumber: n
       }
       const s = style ? ` s="${style}"` : "";
 
+      if (formula) {
+        const cached =
+          typeof value === "number"
+            ? Number.isFinite(value)
+              ? `<v>${value}</v>`
+              : ""
+            : `<v>${xmlEscape(text)}</v>`;
+        const type = typeof value === "number" ? "" : ' t="str"';
+        return `<c r="${ref}"${s}${type}><f>${xmlEscape(formula)}</f>${cached}</c>`;
+      }
+      if (serial !== null) return `<c r="${ref}"${s}><v>${serial}</v></c>`;
       if (typeof value === "number") {
         return Number.isFinite(value) ? `<c r="${ref}"${s}><v>${value}</v></c>` : "";
       }
@@ -120,7 +190,13 @@ function worksheet(sheet: XlsxSheet, nameOf: Map<string, string>, sheetNumber: n
     return `<row r="${rowNumber}">${out.join("")}</row>`;
   };
 
-  const rows = [rowXml(columns, 1), ...sheet.rows.map((r, i) => rowXml(r, i + 2))];
+  const rows = layout
+    ? sheet.rows.map((r, i) => rowXml(r, i + 1))
+    : [rowXml(columns, 1), ...sheet.rows.map((r, i) => rowXml(r, i + 2))];
+  if (!layout && sheet.totals) {
+    // A table needs a body row, so totals for an empty one sit below the blank row 2.
+    rows.push(rowXml(sheet.totals, Math.max(sheet.rows.length, 1) + 2));
+  }
   const cols = widths
     .map(
       (w, i) =>
@@ -130,14 +206,18 @@ function worksheet(sheet: XlsxSheet, nameOf: Map<string, string>, sheetNumber: n
 
   // A table needs a body row, so an empty one spans a blank row 2.
   const table =
-    width > 0
+    !layout && width > 0
       ? { ref: `A1:${columnName(width - 1)}${Math.max(sheet.rows.length, 1) + 1}`, columns }
       : null;
 
   const xml =
     XML_HEAD +
     `<worksheet xmlns="${NS_MAIN}" xmlns:r="${NS_REL}">` +
-    `<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>` +
+    (layout
+      ? sheet.freezeRows
+        ? `<sheetViews><sheetView workbookViewId="0"><pane ySplit="${sheet.freezeRows}" topLeftCell="A${sheet.freezeRows + 1}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>`
+        : `<sheetViews><sheetView workbookViewId="0"/></sheetViews>`
+      : `<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>`) +
     (cols ? `<cols>${cols}</cols>` : "") +
     `<sheetData>${rows.join("")}</sheetData>` +
     (links.length > 0 ? `<hyperlinks>${links.join("")}</hyperlinks>` : "") +
@@ -255,22 +335,28 @@ function rels(items: { type: string; target: string; external?: boolean }[]) {
   return `${XML_HEAD}<Relationships xmlns="${NS_PKG_REL}">${body}</Relationships>`;
 }
 
-// Fonts: default, link. Cell styles: default, money, link.
+// Fonts: default, link, bold, heading. Cell styles: default, money, link, date, bold, bold money, heading.
 const STYLES =
   XML_HEAD +
   `<styleSheet xmlns="${NS_MAIN}">` +
-  `<numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0.00"/></numFmts>` +
-  `<fonts count="2">` +
+  `<numFmts count="2"><numFmt numFmtId="164" formatCode="#,##0.00"/><numFmt numFmtId="165" formatCode="dd/mm/yyyy"/></numFmts>` +
+  `<fonts count="4">` +
   `<font><sz val="11"/><name val="Calibri"/></font>` +
   `<font><u/><sz val="11"/><color rgb="FF0563C1"/><name val="Calibri"/></font>` +
+  `<font><b/><sz val="11"/><name val="Calibri"/></font>` +
+  `<font><b/><sz val="14"/><name val="Calibri"/></font>` +
   `</fonts>` +
   `<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>` +
   `<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>` +
   `<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>` +
-  `<cellXfs count="3">` +
+  `<cellXfs count="7">` +
   `<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>` +
   `<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>` +
   `<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>` +
+  `<xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>` +
+  `<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>` +
+  `<xf numFmtId="164" fontId="2" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/>` +
+  `<xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1"/>` +
   `</cellXfs>` +
   `<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>` +
   `</styleSheet>`;

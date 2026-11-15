@@ -1,9 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { companies } from "@/db/schema";
+import { companies, users } from "@/db/schema";
 import { requireActionPermission } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { deleteCompanyById } from "@/lib/companies/delete";
@@ -34,7 +34,7 @@ export async function updateCompany(formData: FormData): Promise<ActionResult> {
 
   return mutate(
     "settings:manage",
-    async ({ companyId }) => {
+    async ({ companyId }): Promise<ActionResult> => {
       const { financialYearStartMonth: fyStart, ...rest } = parsed.data;
       const current = await getOrCreateCompanySettings(companyId);
       const patch = {
@@ -60,13 +60,39 @@ export async function updateCompany(formData: FormData): Promise<ActionResult> {
         openingCashAsAt: rest.openingCashAsAt,
         companyNumber:
           current.entityType === "limited_company" ? rest.companyNumber : null,
-        utr: current.entityType === "sole_trader" ? rest.utr : null,
+        // A company's UTR for Corporation Tax, or a sole trader's for Self Assessment.
+        utr: rest.utr,
+        fixedAssetThresholdPence: rest.fixedAssetThresholdPence,
       };
       const db = getDb();
+      let soleTrader = {};
+      if (current.entityType === "sole_trader") {
+        if (rest.ownerUserId) {
+          const [member] = await db
+            .select({ id: users.id })
+            .from(users)
+            .where(and(eq(users.id, rest.ownerUserId), eq(users.companyId, companyId)))
+            .limit(1);
+          if (!member) {
+            return {
+              ok: false as const,
+              error: "Choose the owner from the people in this business.",
+              fieldErrors: { ownerUserId: "Choose the owner from the people in this business." },
+            };
+          }
+        }
+        soleTrader = {
+          yearEndOnFifthApril: rest.yearEndOnFifthApril,
+          accountingBasis: rest.accountingBasis,
+          tradingStartedOn: rest.tradingStartedOn,
+          ownerUserId: rest.ownerUserId,
+        };
+      }
       await db
         .update(companies)
         .set({
           ...patch,
+          ...soleTrader,
           financialYearEndMonth: financialYearEndMonth(fyStart),
           updatedAt: new Date(),
         })
@@ -88,7 +114,7 @@ export async function updateCompany(formData: FormData): Promise<ActionResult> {
     },
     {
       audit: { action: "settings.update", entityType: "company_settings" },
-      paths: ["/settings", "/settings/business", "/dashboard", "/spending", "/reports", "/transactions"],
+      paths: ["/settings", "/settings/business", "/dashboard", "/spending", "/reports", "/transactions", "/year-end"],
     },
   );
 }

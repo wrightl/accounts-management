@@ -101,6 +101,9 @@ export async function completeOnboarding(
       companyNumber:
         data.entityType === "limited_company" ? data.companyNumber : null,
       utr: data.entityType === "sole_trader" ? data.utr : null,
+      // A sole trader who keeps the default March year end uses the tax year, 6 April to 5 April.
+      yearEndOnFifthApril:
+        data.entityType === "sole_trader" && data.financialYearEndMonth === 3,
       ...(data.entityType === "limited_company"
         ? {
             incorporatedOn: data.incorporatedOn,

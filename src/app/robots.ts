@@ -37,6 +37,7 @@ export default function robots(): MetadataRoute.Robots {
           "/audit",
           "/bank",
           "/reports",
+          "/year-end",
           "/help",
           "/inbound-email",
           "/recurring-invoices",

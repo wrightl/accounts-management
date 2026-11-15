@@ -726,10 +726,11 @@ export function HelpGuide({
                 the VAT CSV from the same page for your accountant.
               </>,
               <>
-                Download the <strong>accountant pack</strong> for a date range:
-                company profile, CSVs, invoice PDFs, receipts, bank rows,
-                dividends, share register, recurring schedules, and VAT summary
-                when registered.
+                Download the <strong>accountant pack</strong> from{" "}
+                <HelpLink href="/year-end">Year end</HelpLink>: choose the
+                year, review the checks, then download one workbook with the
+                profit and loss, year-end position and every record, plus
+                receipts and invoice PDFs.
               </>,
               <>
                 Once your accountant has filed, lock the books on{" "}
@@ -820,8 +821,10 @@ export function HelpGuide({
                 then mark paid.
               </>,
               <>
-                <strong>Year-end:</strong> download the accountant pack, then
-                lock the books once they have filed.
+                <strong>Year-end:</strong> open{" "}
+                <HelpLink href="/year-end">Year end</HelpLink>, clear the
+                checks, download the pack, then lock the books once they have
+                filed.
               </>,
             ]}
           />

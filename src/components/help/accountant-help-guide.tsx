@@ -104,7 +104,8 @@ export function AccountantHelpGuide({
                 are all matched.
               </>,
               <>
-                Download the accountant pack for the period you are working on.
+                Open <HelpLink href="/year-end">Year end</HelpLink>, choose
+                the year, review the checks, and download the pack.
               </>,
             ]}
           />
@@ -185,15 +186,16 @@ export function AccountantHelpGuide({
                 received.
               </>,
               <>
-                To download a pack, set the dates, choose{" "}
-                <strong>Update period</strong>, then choose{" "}
-                <strong>Download accountant pack</strong>. It uses the period
-                currently shown.
+                The pack is on <HelpLink href="/year-end">Year end</HelpLink>.
+                Choose the accounting year, review the items the checks picked
+                out, then download. A custom date range is there for a first
+                or final period.
               </>,
               <>
-                The pack is a zip of CSVs, summaries, invoice and credit note
-                PDFs, and receipt files. Its README.txt lists the contents and
-                any warnings, so read that first.
+                The pack is a zip of one workbook (or CSV files), invoice and
+                credit note PDFs, and receipts named by expense reference.
+                Start with the workbook&apos;s Cover tab; README.txt lists any
+                file that could not be included.
               </>,
             ]}
           />

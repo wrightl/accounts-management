@@ -1,6 +1,6 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { requireActionPermission } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { recordScopeFor, forAccountant } from "@/lib/accountant/record-scope";
@@ -9,7 +9,9 @@ import { MAX_BULK_ROWS } from "@/lib/labels/queries";
 import { recordQueriesFor } from "@/lib/queries/queries";
 import { mutate, mutateWide } from "@/lib/mutate";
 import { getDb } from "@/db";
-import { companies } from "@/db/schema";
+import { bankAccounts, companies, users } from "@/db/schema";
+import { parseIsoDate } from "@/lib/dates";
+import { poundsToPence } from "@/lib/money";
 import { getBankFeedAdapter } from "@/lib/bank/adapters";
 import { setBankAccountCards } from "@/lib/bank/company-cards";
 import { parseCsvTable } from "@/lib/bank/csv";
@@ -44,6 +46,8 @@ import {
   dismissMatchesBatch,
   explainBankCredit,
   explainBankCredits,
+  explainOwnerTransactions,
+  isOwnerExplainType,
   findBankTransactionsForInvoice,
   listLinkableReceiptsForInvoice,
   findReimbursementBankMatches,
@@ -867,6 +871,121 @@ export async function updateBankAccountCardsAction(
         entityId: accountId,
       },
       paths: ["/transactions", "/expenses"],
+    },
+  );
+}
+
+/** What the bank screen needs to offer drawings, money put in or salary. */
+export async function getOwnerExplainContextAction(): Promise<
+  | { ok: true; soleTrader: boolean; people: { id: string; name: string }[] }
+  | { ok: false; error: string }
+> {
+  const authz = await requireActionPermission("accounts:write");
+  if (!authz.ok) return authz;
+  const companyId = authz.user.companyId;
+  if (!companyId) return { ok: false, error: "Complete onboarding first." };
+  const people = await getDb()
+    .select({ id: users.id, name: users.name, email: users.email })
+    .from(users)
+    .where(eq(users.companyId, companyId));
+  return {
+    ok: true,
+    soleTrader: authz.user.entityType === "sole_trader",
+    people: people.map((p) => ({ id: p.id, name: p.name?.trim() || p.email })),
+  };
+}
+
+/**
+ * Mark bank transactions as drawings or money put in (sole trader) or as
+ * salary paid to one person (limited company).
+ */
+export async function explainOwnerTransactionsAction(input: {
+  transactionIds: string[];
+  matchType: string;
+  personUserId?: string | null;
+  note?: string | null;
+}): Promise<ActionResult> {
+  if (!isOwnerExplainType(input.matchType)) {
+    return { ok: false, error: "Choose what this transaction was" };
+  }
+  const matchType = input.matchType;
+  const ids = [...new Set(input.transactionIds)];
+  if (ids.length === 0) return { ok: false, error: "Select some transactions" };
+  if (ids.length > MAX_BULK_ROWS) {
+    return { ok: false, error: `Select up to ${MAX_BULK_ROWS} transactions at a time` };
+  }
+  if (!ids.every(isUuid)) return { ok: false, error: "Bank transaction not found" };
+
+  return mutate(
+    "accounts:write",
+    async ({ companyId }) => {
+      try {
+        await explainOwnerTransactions(companyId, ids, {
+          matchType,
+          personUserId: input.personUserId,
+          note: input.note,
+        });
+        return { ok: true };
+      } catch (e) {
+        if (e instanceof ReconciliationError) return { ok: false, error: e.message };
+        throw e;
+      }
+    },
+    {
+      audit: {
+        action: "bank.explain_owner_transaction",
+        entityType: "bank_transaction",
+        meta: { count: ids.length, matchType },
+      },
+      paths: ["/transactions", "/year-end"],
+    },
+  );
+}
+
+/**
+ * The balance of a bank account at the close of a date, from a statement. The
+ * year-end pack works out the balance at each period start and end from it.
+ * An empty amount clears it.
+ */
+export async function updateBankOpeningBalanceAction(
+  accountId: string,
+  balanceGbp: string,
+  balanceDate: string,
+): Promise<ActionResult> {
+  const amount = balanceGbp.trim();
+  const date = balanceDate.trim();
+  let pence: number | null = null;
+  if (amount) {
+    try {
+      pence = poundsToPence(amount);
+    } catch {
+      return { ok: false, error: "Enter the balance in pounds, such as 1250.00." };
+    }
+    if (!parseIsoDate(date)) {
+      return { ok: false, error: "Enter the date the balance is from." };
+    }
+  }
+  return mutate(
+    "settings:manage",
+    async ({ companyId }) => {
+      const [updated] = await getDb()
+        .update(bankAccounts)
+        .set({
+          openingBalancePence: pence,
+          openingBalanceDate: pence == null ? null : date,
+        })
+        .where(and(eq(bankAccounts.id, accountId), eq(bankAccounts.companyId, companyId)))
+        .returning({ id: bankAccounts.id });
+      if (!updated) return { ok: false, error: "Bank account not found." };
+      return { ok: true, id: updated.id };
+    },
+    {
+      audit: {
+        action: "bank.update_opening_balance",
+        entityType: "bank_account",
+        entityId: accountId,
+      },
+      paths: ["/settings/business", "/year-end"],
     },
   );
 }

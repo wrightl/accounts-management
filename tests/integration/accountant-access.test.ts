@@ -6,7 +6,8 @@ import { users } from "@/db/schema";
 import { seedCompany } from "@/lib/test/seed-company";
 import { GET as invoicePdf } from "@/app/api/invoices/[id]/pdf/route";
 import { GET as dividendPaperwork } from "@/app/api/dividends/[id]/paperwork/route";
-import { GET as accountantPack } from "@/app/api/reports/accountant-pack/route";
+import { GET as oldAccountantPack } from "@/app/api/reports/accountant-pack/route";
+import { GET as yearEndPack } from "@/app/api/year-end/pack/route";
 import ClientsPage from "@/app/(app)/clients/page";
 import DashboardPage from "@/app/(app)/dashboard/page";
 import DeadlinesPage from "@/app/(app)/deadlines/page";
@@ -59,7 +60,7 @@ beforeEach(async () => {
   ctx = await createTestDb();
   db = ctx.db;
   setTestDb(db as unknown as Database);
-  const company = await seedCompany(db, { name: "Filing Co" });
+  const company = await seedCompany(db, { name: "Filing Co", companyNumber: "01234567" });
   await db.insert(users).values({
     companyId: company.id,
     clerkUserId: "user_clerk_accountant",
@@ -119,25 +120,42 @@ describe("accountant file access", () => {
     expect(res.status).toBe(403);
   });
 
-  it("still allows the accountant pack", async () => {
-    const res = await accountantPack(
-      new Request("http://localhost/api/reports/accountant-pack?from=2026-01-01&to=2026-01-31"),
+  it("still allows the year-end pack", async () => {
+    const res = await yearEndPack(
+      new Request("http://localhost/api/year-end/pack?from=2025-04-01&to=2026-03-31"),
     );
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toBe("application/zip");
+    expect(res.headers.get("Content-Disposition")).toContain(
+      "year-end-pack-2025-04-01_2026-03-31.zip",
+    );
     await res.body?.cancel();
   });
 
-  it("allows the Excel accountant pack", async () => {
-    const res = await accountantPack(
-      new Request(
-        "http://localhost/api/reports/accountant-pack?from=2026-01-01&to=2026-01-31&format=xlsx",
-      ),
+  it("allows the CSV version of the year-end pack", async () => {
+    const res = await yearEndPack(
+      new Request("http://localhost/api/year-end/pack?from=2025-04-01&to=2026-03-31&format=csv"),
     );
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Disposition")).toContain(
-      "accountant-pack-2026-01-01_2026-01-31-excel.zip",
+      "year-end-pack-2025-04-01_2026-03-31-csv.zip",
     );
     await res.body?.cancel();
+  });
+
+  it("asks for a period rather than guessing one", async () => {
+    const res = await yearEndPack(new Request("http://localhost/api/year-end/pack"));
+    expect(res.status).toBe(400);
+  });
+
+  it("sends the old accountant pack URL to the Year end page", async () => {
+    await expect(
+      oldAccountantPack(
+        new Request("http://localhost/api/reports/accountant-pack?from=2026-01-01&to=2026-01-31&format=xlsx"),
+      ),
+    ).rejects.toThrow("REDIRECT:/year-end?from=2026-01-01&to=2026-01-31");
+    await expect(
+      oldAccountantPack(new Request("http://localhost/api/reports/accountant-pack")),
+    ).rejects.toThrow("REDIRECT:/year-end");
   });
 });

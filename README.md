@@ -78,8 +78,9 @@ trader) before they can open the books.
 
 - Dashboard KPIs, aged receivables, income vs expense.
 - **Reports** — accrual P&L (ex-VAT), VAT summary and CSV download when
-  registered, accountant pack (zip of CSVs, invoice PDFs, receipts, bank,
-  dividends, optional VAT PDF).
+  registered.
+- **Year end** — choose the accounting year, review the checks, and download
+  the accountant pack (one workbook or CSVs, plus receipts and invoice PDFs).
 - **Audit log** (admins), **inbound email** job queue, **settings** (company
   profile, bank details, numbering, logo, OCR), **users** (invite, role).
 - Command palette (`⌘K` / `Ctrl+K`) for navigation.
