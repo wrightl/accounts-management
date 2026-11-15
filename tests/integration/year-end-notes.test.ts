@@ -517,6 +517,45 @@ describe("expenses entered late", () => {
     expect(before.texts).not.toContain("Old software invoice");
   });
 
+  it("lists one an earlier export missed and sums up one with no export to compare against, in the same pack", async () => {
+    const seeded = await limited();
+    // Dated in a period whose pack was exported, and entered after that export.
+    const missed = await lateExpense(seeded, "2024-02-10", noon("2025-05-02"));
+    await db.insert(yearEndRuns).values({
+      companyId: seeded.companyId,
+      periodFrom: "2023-04-01",
+      periodTo: "2024-03-31",
+      exportedAt: noon("2024-06-01"),
+    });
+    // Dated after that pack's period, so no export could have shown it.
+    await db.insert(expenses).values({
+      companyId: seeded.companyId,
+      description: "Old hosting invoice",
+      category: "Software",
+      spentAt: "2025-02-20",
+      amountPence: 1_000,
+      status: "company_paid",
+      createdAt: noon("2025-05-02"),
+    });
+    const { notes, texts, pack } = await packFor(seeded.companyId, LTD_YEAR);
+
+    expect(late(notes).rows).toMatchObject([
+      {
+        "Expense ref": formatExpenseRef(missed.refNumber),
+        "Why it is listed": "Entered after an earlier pack was exported on 01/06/2024",
+      },
+    ]);
+    expect(texts).not.toContain("Old hosting invoice");
+    expect(
+      allItems(pack.notes)
+        .map((i) => i.key)
+        .filter((k) => k.startsWith("late")),
+    ).toEqual([`late:${missed.id}`, "late-entered"]);
+    expect(section(notes, "b")).toContain(
+      "1 expense is dated before the period start and was entered in Alfa on or after it. No earlier pack export is recorded, so Alfa cannot tell whether earlier accounts included it. It is not counted in this period's profit and loss.",
+    );
+  });
+
   it("never lists another business's expenses or uses its exports", async () => {
     const seeded = await limited();
     await lateExpense(seeded, "2025-02-10", noon("2025-05-02"));
