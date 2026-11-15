@@ -20,6 +20,7 @@ import { seedCompany } from "@/lib/test/seed-company";
 import { buildXlsx } from "@/lib/xlsx/write";
 import {
   CLAIMED_ELSEWHERE_QUESTION,
+  LATE_ENTERED_QUESTION,
   NOTHING_TO_REPORT,
   NOT_CONFIRMED,
   OPENING_QUESTION,
@@ -434,23 +435,58 @@ describe("expenses entered late", () => {
     return expense;
   }
 
-  it("with no earlier export on record, lists those dated before the period and entered after it started, and says so", async () => {
+  it("with no earlier export on record, sums up those dated before the period and entered after it started, with one question", async () => {
     const seeded = await limited();
-    const expense = await lateExpense(seeded, "2025-02-10", noon("2025-05-02"));
-    const { notes, texts } = await packFor(seeded.companyId, LTD_YEAR);
+    await lateExpense(seeded, "2025-02-10", noon("2025-05-02"));
+    await db.insert(expenses).values(
+      ["2024-11-03", "2025-03-01"].map((spentAt) => ({
+        companyId: seeded.companyId,
+        description: "Old hosting invoice",
+        category: "Software",
+        spentAt,
+        amountPence: 1_000,
+        status: "company_paid" as const,
+        createdAt: noon("2025-05-02"),
+      })),
+    );
+    const { notes, texts, pack } = await packFor(seeded.companyId, LTD_YEAR);
 
-    expect(late(notes).rows).toEqual([
-      {
-        "Expense ref": formatExpenseRef(expense.refNumber),
-        "Date spent": "2025-02-10",
-        "Date entered": "2025-05-02",
-        Description: "Old software invoice",
-        "Amount (£)": 4_200,
-        "Why it is listed": "Entered on or after the period start",
-      },
+    // No row and no explanation box for each expense: one item covers them all.
+    expect(() => late(notes)).toThrow();
+    expect(texts).not.toContain("Old software invoice");
+    const keys = allItems(pack.notes).map((i) => i.key);
+    expect(keys.filter((k) => k.startsWith("late"))).toEqual(["late-entered"]);
+
+    const b = section(notes, "b");
+    expect(b).toEqual(
+      expect.arrayContaining([
+        "3 expenses are dated before the period start and were entered in Alfa on or after it. No earlier pack export is recorded, so Alfa cannot tell whether earlier accounts included them. They are not counted in this period's profit and loss.",
+        `${LATE_ENTERED_QUESTION} The business answered: not answered.`,
+      ]),
+    );
+    const figure = (label: string) => {
+      const row = notes.rows.find((r) => value(r[0]) === label);
+      if (!row) throw new Error(`No figure "${label}"`);
+      return row.slice(1).map((c) => value(c)).find((v) => v != null && v !== "");
+    };
+    expect(figure("Number of expenses")).toBe(3);
+    expect(figure("Total of these expenses")).toBe(6_200);
+    expect(figure("Earliest date spent")).toBe("2024-11-03");
+    expect(figure("Latest date spent")).toBe("2025-03-01");
+  });
+
+  it("shows the owner's one answer about them in the workbook", async () => {
+    const seeded = await limited();
+    await lateExpense(seeded, "2025-02-10", noon("2025-05-02"));
+    await respond(seeded, LTD_YEAR, [
+      { key: "late-entered", answer: "yes", explanation: "Earlier years' records, loaded when we moved to Alfa" },
     ]);
-    expect(texts).toContain(
-      "No earlier export date is recorded, so the basis used is: expenses dated before the period start that were entered on or after it.",
+
+    expect(section((await packFor(seeded.companyId, LTD_YEAR)).notes, "b")).toEqual(
+      expect.arrayContaining([
+        `${LATE_ENTERED_QUESTION} The business answered: yes.`,
+        "Explanation from the business: Earlier years' records, loaded when we moved to Alfa",
+      ]),
     );
   });
 
@@ -492,8 +528,13 @@ describe("expenses entered late", () => {
       exportedAt: noon("2025-12-01"),
     });
 
-    expect(late((await packFor(seeded.companyId, LTD_YEAR)).notes).rows).toHaveLength(1);
-    expect((await packFor(other.id, LTD_YEAR)).texts).not.toContain("Old software invoice");
+    // The other business's export is not used: the expense stays in the summary, not the list.
+    const own = await packFor(seeded.companyId, LTD_YEAR);
+    expect(own.item("late-entered").yesNo).toBe(LATE_ENTERED_QUESTION);
+    expect(own.texts).not.toContain("Old software invoice");
+    const others = await packFor(other.id, LTD_YEAR);
+    expect(others.texts).not.toContain("Old software invoice");
+    expect(allItems(others.pack.notes).some((i) => i.key.startsWith("late"))).toBe(false);
   });
 });
 
