@@ -70,6 +70,8 @@ export const CLAIMED_ELSEWHERE_QUESTION =
   "Were any of these already claimed elsewhere, for example on a personal tax return?";
 export const OPENING_QUESTION =
   "Does this agree with the amount owed in last year's accounts? If your figure is lower, the difference has not been claimed.";
+export const LATE_ENTERED_QUESTION =
+  "Were these costs included in the accounts for the periods they are dated in?";
 export const EXPLANATION_HEADER = "Explanation from the business";
 
 export function confirmedText(confirmedOn: string | null): string {
@@ -261,36 +263,21 @@ export function buildNotes(
       items: [opening],
     });
   }
-  if (data.lateExpenses.length > 0) {
-    const items = data.lateExpenses.map((e) =>
+  // An earlier pack's export shows an expense really was missed, so each of those
+  // is listed. With no export to compare against, every earlier cost loaded into
+  // Alfa since the period started would qualify, so those are one summary.
+  const missedExpenses = data.lateExpenses.filter((e) => e.afterExportOn != null);
+  const backLoadedExpenses = data.lateExpenses.filter((e) => e.afterExportOn == null);
+  if (missedExpenses.length > 0) {
+    const items = missedExpenses.map((e) =>
       item(`late:${e.id}`, `${formatExpenseRef(e.refNumber)} · ${e.description}`, { explain: true }),
     );
-    const byExport = data.lateExpenses.some((e) => e.afterExportOn != null);
-    const byPeriodStart = data.lateExpenses.some((e) => e.afterExportOn == null);
     openingNotes.push({
       lines: [
         {
           kind: "text",
-          text: "These expenses are dated before the period start but were entered in Alfa late, so an earlier pack did not include them. They are not counted in this period's profit and loss.",
+          text: "These expenses are dated before the period start but were entered in Alfa after an earlier pack was exported, so that pack did not include them. They are not counted in this period's profit and loss.",
         },
-        ...(byExport
-          ? [
-              {
-                kind: "text",
-                text: "Where an earlier pack's export is on record, an expense is listed when it was entered after that export.",
-              } as const,
-            ]
-          : []),
-        ...(byPeriodStart
-          ? [
-              {
-                kind: "text",
-                text: byExport
-                  ? "For the others no earlier export date is recorded, so the basis used is: dated before the period start and entered on or after it."
-                  : "No earlier export date is recorded, so the basis used is: expenses dated before the period start that were entered on or after it.",
-              } as const,
-            ]
-          : []),
         {
           kind: "table",
           columns: [
@@ -302,21 +289,45 @@ export function buildNotes(
             { key: "basis", header: "Why it is listed" },
             explanationColumn,
           ],
-          rows: data.lateExpenses.map((e, i): Row => ({
+          rows: missedExpenses.map((e, i): Row => ({
             ref: formatExpenseRef(e.refNumber),
             spent: day(e.spentAt),
             entered: day(e.enteredOn),
             description: e.description,
             amount: amount(e.amountPence),
-            basis: e.afterExportOn
-              ? `Entered after an earlier pack was exported on ${formatIsoDateUk(e.afterExportOn)}`
-              : "Entered on or after the period start",
+            basis: `Entered after an earlier pack was exported on ${formatIsoDateUk(e.afterExportOn!)}`,
             explanation: items[i]!.explanation,
           })),
         },
         { kind: "question", text: "Were these costs included in the accounts for the period they are dated in?" },
       ],
       items,
+    });
+  }
+  if (backLoadedExpenses.length > 0) {
+    const n = backLoadedExpenses.length;
+    const dates = backLoadedExpenses.map((e) => e.spentAt).sort();
+    const lateEntered = item("late-entered", "Earlier costs entered after the period start", {
+      yesNo: LATE_ENTERED_QUESTION,
+      explain: true,
+    });
+    openingNotes.push({
+      lines: [
+        {
+          kind: "text",
+          text: `${n} ${plural(n, "expense is", "expenses are")} dated before the period start and ${plural(n, "was", "were")} entered in Alfa on or after it. No earlier pack export is recorded, so Alfa cannot tell whether earlier accounts included ${plural(n, "it", "them")}. ${plural(n, "It is", "They are")} not counted in this period's profit and loss.`,
+        },
+        { kind: "figure", label: "Number of expenses", value: number(n) },
+        {
+          kind: "figure",
+          label: "Total of these expenses",
+          value: amount(sum(backLoadedExpenses, (e) => e.amountPence)),
+        },
+        { kind: "figure", label: "Earliest date spent", value: day(dates[0]) },
+        { kind: "figure", label: "Latest date spent", value: day(dates[dates.length - 1]) },
+        ...responseLines(lateEntered),
+      ],
+      items: [lateEntered],
     });
   }
 
