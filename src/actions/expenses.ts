@@ -26,6 +26,8 @@ import { FORM_FIELD_ERROR_SUMMARY } from "@/lib/validation/field-errors";
 import { getEmailExpensesFingerprint, listFounders } from "@/lib/expenses/queries";
 import { requireActionPermission } from "@/lib/auth";
 import {
+  coverDatesError,
+  expenseCoverDatesSchema,
   expenseRawFromFormData,
   normalizeExpensePaymentFields,
   parseExpenseImportCsvFile,
@@ -310,6 +312,56 @@ export async function updateExpense(
     {
       audit: { action: "expense.update", entityType: "expense", entityId: id },
       paths: ["/expenses", `/expenses/${id}`, "/reimbursements", "/dashboard", "/transactions"],
+    },
+  );
+}
+
+/**
+ * Change only the period an expense covers. Unlike a full edit this is allowed
+ * on a locked period and on a reimbursed expense: the dates move no money and
+ * change no figure already reported, they only tell the accountant which
+ * periods the cost belongs to. The audit entry records the dates before and after.
+ */
+export async function updateExpenseCoverDates(
+  id: string,
+  input: { coversFrom: string; coversTo: string },
+): Promise<ActionResult> {
+  const parsed = expenseCoverDatesSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: FORM_FIELD_ERROR_SUMMARY,
+      fieldErrors: { coversTo: "Enter a valid date" },
+    };
+  }
+  const coversFrom = parsed.data.coversFrom ?? null;
+  const coversTo = parsed.data.coversTo ?? null;
+  const invalid = coverDatesError(coversFrom, coversTo);
+  if (invalid) return { ok: false, error: FORM_FIELD_ERROR_SUMMARY, fieldErrors: invalid };
+
+  // Filled in once the expense is read; the audit entry is written after the change.
+  const meta: Record<string, unknown> = { coversFrom, coversTo };
+  return mutate(
+    "accounts:write",
+    async ({ companyId }) => {
+      const db = getDb();
+      const [existing] = await db
+        .select({ coversFrom: expenses.coversFrom, coversTo: expenses.coversTo })
+        .from(expenses)
+        .where(and(eq(expenses.id, id), eq(expenses.companyId, companyId)))
+        .limit(1);
+      if (!existing) return { ok: false, error: "Expense not found" };
+      meta.previousCoversFrom = existing.coversFrom;
+      meta.previousCoversTo = existing.coversTo;
+      await db
+        .update(expenses)
+        .set({ coversFrom, coversTo })
+        .where(and(eq(expenses.id, id), eq(expenses.companyId, companyId)));
+      return { ok: true, id };
+    },
+    {
+      audit: { action: "expense.cover_dates", entityType: "expense", entityId: id, meta },
+      paths: ["/expenses", `/expenses/${id}`],
     },
   );
 }

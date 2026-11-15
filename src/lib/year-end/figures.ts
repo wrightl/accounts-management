@@ -35,6 +35,17 @@ export type CustomerCredit = {
 
 export type PersonAmount ={ name: string; pence: number };
 
+/** A cost with a covered period that runs outside the pack period, split by days. The three parts add up to the cost. */
+export type Prepayment = {
+  expense: PackExpense;
+  /** The part covering time before the period start. */
+  beforePence: number;
+  /** The part covering time in the period. */
+  inPeriodPence: number;
+  /** The part covering time after the period end. */
+  laterPence: number;
+};
+
 export type Figures = {
   /** Whether amounts are shown net of VAT with VAT columns. */
   vat: boolean;
@@ -68,7 +79,10 @@ export type Figures = {
     profitPence: number;
   };
   possibleFixedAssets: PackExpense[];
-  possiblePrepayments: { expense: PackExpense; laterPence: number }[];
+  /** Spent in the period, covering time after its end. Empty on cash basis, which counts a cost when it is paid. */
+  possiblePrepayments: Prepayment[];
+  /** Spent before the period, covering time in it (and perhaps after it). Empty on cash basis. */
+  prepaymentsBroughtForward: Prepayment[];
   /** Limited company. */
   owedToPeople: PersonAmount[];
   directorsPay: { name: string; salaryPence: number; dividendsPence: number }[];
@@ -119,12 +133,21 @@ export function deriveFigures(data: YearEndData): Figures {
   );
   const paidFromBankLater = spentInPeriod.filter((e) => e.bank && e.bank.bookedAt > period.to);
 
+  /** Spent before the period, with a covered period that runs into it: a prepayment brought forward. */
+  const coversIntoPeriod = (e: PackExpense) =>
+    e.spentAt != null &&
+    e.spentAt < period.from &&
+    e.coversTo != null &&
+    e.coversTo >= period.from &&
+    (e.coversFrom ?? e.spentAt) <= e.coversTo;
+
   const reimbursed = new Set(data.reimbursements.flatMap((r) => r.expenseIds));
   const mentioned = new Set([
     ...periodExpenses,
     ...spentInPeriod,
     ...awaitingReimbursement,
     ...all.filter((e) => reimbursed.has(e.id)),
+    ...(cash ? [] : all.filter(coversIntoPeriod)),
   ]);
   const expenseRef = new Map(
     all
@@ -193,15 +216,26 @@ export function deriveFigures(data: YearEndData): Figures {
   const possibleFixedAssets = spentInPeriod.filter(
     (e) => e.category === "Equipment" && expenseNetPence(e) > company.fixedAssetThresholdPence,
   );
-  const possiblePrepayments = spentInPeriod.flatMap((e) => {
-    if (!e.coversTo || e.coversTo <= period.to) return [];
+  const prepayment = (e: PackExpense): Prepayment => {
+    const net = expenseNetPence(e);
     const from = e.coversFrom ?? e.spentAt!;
-    const days = daysBetween(from, e.coversTo) + 1;
-    const laterFrom = from > period.to ? from : period.to;
-    const laterDays = from > period.to ? days : daysBetween(laterFrom, e.coversTo);
-    const laterPence = days > 0 ? Math.round((expenseNetPence(e) * laterDays) / days) : 0;
-    return [{ expense: e, laterPence }];
-  });
+    const to = e.coversTo!;
+    const days = daysBetween(from, to) + 1;
+    if (days <= 0) return { expense: e, beforePence: 0, inPeriodPence: net, laterPence: 0 };
+    const beforeDays = from < period.from ? Math.min(days, daysBetween(from, period.from)) : 0;
+    const laterDays = to > period.to ? Math.min(days, daysBetween(period.to, to)) : 0;
+    const beforePence = Math.round((net * beforeDays) / days);
+    const laterPence = Math.round((net * laterDays) / days);
+    // The remainder, so the three parts always add up to the cost.
+    return { expense: e, beforePence, inPeriodPence: net - beforePence - laterPence, laterPence };
+  };
+  // Cash basis counts a cost when it is paid, so there is nothing to move between periods.
+  const possiblePrepayments = cash
+    ? []
+    : spentInPeriod.filter((e) => e.coversTo != null && e.coversTo > period.to).map(prepayment);
+  const prepaymentsBroughtForward = cash
+    ? []
+    : all.filter(coversIntoPeriod).map(prepayment);
 
   const nameOf = (id: string | null, fallback: string) => data.people.get(id ?? "")?.name ?? fallback;
   const byPerson = (rows: PersonAmount[]) => {
@@ -297,6 +331,7 @@ export function deriveFigures(data: YearEndData): Figures {
     },
     possibleFixedAssets,
     possiblePrepayments,
+    prepaymentsBroughtForward,
     owedToPeople,
     directorsPay,
     drawings,

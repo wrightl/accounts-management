@@ -102,6 +102,24 @@ export const expenseFieldsSchema = z.object({
     .optional(),
 });
 
+/** The covered period on its own, for changing it without touching the rest of the expense. */
+export const expenseCoverDatesSchema = z.object({
+  coversFrom: optionalIsoDate,
+  coversTo: optionalIsoDate,
+});
+
+/** Field errors when a covered period has a start with no end, or ends before it starts. */
+export function coverDatesError(
+  coversFrom: string | null | undefined,
+  coversTo: string | null | undefined,
+): Record<string, string> | null {
+  if (coversFrom && !coversTo) return { coversTo: "Enter the date this cost covers to" };
+  if (coversFrom && coversTo && coversTo < coversFrom) {
+    return { coversTo: "Covers to must be on or after covers from" };
+  }
+  return null;
+}
+
 export type ExpenseFieldsParsed = z.infer<typeof expenseFieldsSchema>;
 
 export type ExpenseParsed = ExpenseFieldsParsed & {
@@ -267,6 +285,9 @@ export function parseExpenseInput(
 ): ParseOk<ExpenseParsed> | ParseFail {
   const parsed = parseWithFieldErrors(expenseFieldsSchema, raw);
   if (!parsed.ok) return parsed;
+
+  const covers = coverDatesError(parsed.data.coversFrom, parsed.data.coversTo);
+  if (covers) return { ok: false, fieldErrors: covers, error: FORM_FIELD_ERROR_SUMMARY };
 
   const amountResult = resolveExpenseAmount(parsed.data, {
     allowZero: opts.allowZeroAmount,

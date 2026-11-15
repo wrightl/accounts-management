@@ -366,8 +366,111 @@ describe("limited company, 1 April 2025 to 31 March 2026", () => {
     expect(descriptions).toContain("Laptop");
     expect(descriptions).not.toContain("Keyboard");
     const insurance = position.rows.find((r) => value(r[2]) === "Insurance")!;
-    // 275 of the 365 days covered fall after 31 March.
-    expect(insurance.map(value).slice(3)).toEqual([36_500, "2026-01-01", "2026-12-31", 27_500]);
+    // 275 of the 365 days covered fall after 31 March; the other 90 are in the period.
+    expect(insurance.map(value).slice(3)).toEqual([
+      "Professional fees",
+      36_500,
+      "2026-01-01",
+      "2026-12-31",
+      9_000,
+      27_500,
+    ]);
+  });
+
+  it("carries a prepayment forward at one year end and brings it forward in the next year's pack", async () => {
+    const seeded = await seedYearEnd(db, { entityType: "limited_company", period: LTD_YEAR });
+    const { expenses } = await import("@/db/schema");
+    await db.insert(expenses).values([
+      {
+        companyId: seeded.companyId,
+        description: "Web hosting",
+        category: "Software",
+        spentAt: "2026-03-10",
+        amountPence: 12_000,
+        status: "company_paid",
+        coversFrom: "2026-03-10",
+        coversTo: "2027-03-09",
+      },
+      {
+        companyId: seeded.companyId,
+        description: "Conference ticket",
+        category: "Travel",
+        spentAt: "2026-03-15",
+        amountPence: 30_000,
+        status: "company_paid",
+        coversFrom: "2026-06-12",
+        coversTo: "2026-06-12",
+      },
+    ]);
+    const rowsOf = (sheet: PackSheet) => sheet.rows.map((r) => r.map(value));
+    const tableUnder = (rows: unknown[][], title: string) => {
+      const start = rows.findIndex((r) => String(r[0]).startsWith(title));
+      expect(start, title).toBeGreaterThanOrEqual(0);
+      return rows.slice(start + 1);
+    };
+
+    // The year they were paid in: 22 of hosting's 365 days fall in it, and none of the event.
+    const paidYear = await workbookFor(seeded.companyId, LTD_YEAR);
+    const carried = tableUnder(rowsOf(findSheet(paidYear.sheets, TAB.position)), "Possible prepayments");
+    expect(carried[0]!.slice(5)).toEqual([
+      "Covers from",
+      "Covers to",
+      "Part in the period, by days (£)",
+      "Part after the period end, by days (£)",
+    ]);
+    expect(carried.find((r) => r[2] === "Web hosting")!.slice(3)).toEqual([
+      "Software", 12_000, "2026-03-10", "2027-03-09", 723, 11_277,
+    ]);
+    expect(carried.find((r) => r[2] === "Conference ticket")!.slice(3)).toEqual([
+      "Travel", 30_000, "2026-06-12", "2026-06-12", 0, 30_000,
+    ]);
+    const paidPnl = findSheet(paidYear.sheets, TAB.pnl);
+    expect(amount(paidPnl, "Included in expenses above, but covering time after the period end")).toBe(41_277);
+    expect(allText(paidPnl).join("\n")).not.toContain("Not in expenses above");
+
+    // The year after: neither is an expense of it, but both are brought forward.
+    const nextYear = { from: "2026-04-01", to: "2027-03-31" };
+    const next = await workbookFor(seeded.companyId, nextYear);
+    const brought = tableUnder(rowsOf(findSheet(next.sheets, TAB.position)), "Prepayments brought forward");
+    expect(brought[0]!.slice(5)).toEqual([
+      "Covers from",
+      "Covers to",
+      "Part before the period, by days (£)",
+      "Part in the period, by days (£)",
+    ]);
+    expect(brought.find((r) => r[2] === "Web hosting")!.slice(3)).toEqual([
+      "Software", 12_000, "2026-03-10", "2027-03-09", 723, 11_277,
+    ]);
+    expect(brought.find((r) => r[2] === "Conference ticket")!.slice(3)).toEqual([
+      "Travel", 30_000, "2026-06-12", "2026-06-12", null, 30_000,
+    ]);
+    const nextPnl = findSheet(next.sheets, TAB.pnl);
+    expect(
+      amount(nextPnl, "Not in expenses above: spent in an earlier period, but covering time in this period"),
+    ).toBe(41_277);
+    const nextExpenses = next.sheets.find((s) => s.name === TAB.expenses);
+    expect(nextExpenses ? column(nextExpenses, "Description") : []).not.toContain("Web hosting");
+  });
+
+  it("splits a cost that spans three periods into before, in and after, adding up to the cost", async () => {
+    const seeded = await seedYearEnd(db, { entityType: "limited_company", period: LTD_YEAR });
+    const { expenses } = await import("@/db/schema");
+    await db.insert(expenses).values({
+      companyId: seeded.companyId,
+      description: "Two-year licence",
+      category: "Software",
+      spentAt: "2025-01-01",
+      amountPence: 73_000,
+      status: "company_paid",
+      coversFrom: "2025-01-01",
+      coversTo: "2026-12-31",
+    });
+    const { sheets } = await workbookFor(seeded.companyId, LTD_YEAR);
+    const licence = findSheet(sheets, TAB.position).rows.find((r) => value(r[2]) === "Two-year licence")!;
+    // 730 days at £1 a day: 90 before 1 April 2025, 365 in the year, 275 after 31 March 2026.
+    expect(licence.map(value).slice(3)).toEqual([
+      "Software", 73_000, "2025-01-01", "2026-12-31", 9_000, 36_500, 27_500,
+    ]);
   });
 
   it("lists a reimbursement with its items beneath it, including one dated before the period", async () => {
@@ -596,6 +699,44 @@ describe("sole trader, 6 April 2025 to 5 April 2026", () => {
     expect(byDescription.has("Train ticket 3")).toBe(false);
     // Not yet paid back, so not yet paid by the business.
     expect(byDescription.has("Stamps")).toBe(false);
+  });
+
+  it("on cash basis, lists no prepayments and says why", async () => {
+    const seeded = await seedYearEnd(db, {
+      entityType: "sole_trader",
+      period: TAX_YEAR,
+      accountingBasis: "cash",
+    });
+    const { expenses } = await import("@/db/schema");
+    await db.insert(expenses).values([
+      {
+        companyId: seeded.companyId,
+        description: "Insurance",
+        spentAt: "2026-01-01",
+        amountPence: 36_500,
+        status: "company_paid",
+        coversFrom: "2026-01-01",
+        coversTo: "2026-12-31",
+      },
+      {
+        companyId: seeded.companyId,
+        description: "Earlier licence",
+        spentAt: "2025-01-01",
+        amountPence: 73_000,
+        status: "company_paid",
+        coversFrom: "2025-01-01",
+        coversTo: "2026-12-31",
+      },
+    ]);
+    const { sheets } = await workbookFor(seeded.companyId, TAX_YEAR);
+    const position = allText(findSheet(sheets, TAB.position)).join("\n");
+
+    expect(position).toContain("Not listed: on the cash basis");
+    expect(position).not.toContain("Insurance");
+    expect(position).not.toContain("Earlier licence");
+    expect(position).not.toContain("brought forward");
+    expect(allText(findSheet(sheets, TAB.pnl)).join("\n")).not.toContain("prepayment");
+    expect(allText(findSheet(sheets, TAB.cover)).join("\n")).not.toContain("prepayment");
   });
 
   it("totals drawings, money put in and mileage, and treats the owner's spending as money put in", async () => {
