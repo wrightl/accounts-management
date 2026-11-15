@@ -2,7 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
-import { bankAccounts, companies, expenseReceipts, yearEndRuns } from "@/db/schema";
+import {
+  bankAccounts,
+  companies,
+  creditNotes,
+  expenseReceipts,
+  payments,
+  yearEndRuns,
+} from "@/db/schema";
 import { addDays } from "@/lib/ledger/corporation-tax";
 import { getStorage } from "@/lib/storage";
 import {
@@ -66,6 +73,8 @@ function expectDatesInPeriod(sheet: PackSheet, header: string, period: PackPerio
   expect(dates.length).toBeGreaterThan(0);
   for (const date of dates) expect(inPeriod(String(date), period)).toBe(true);
 }
+
+const OWED_BACK = "Owed back to customer at period end (£)";
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
@@ -169,8 +178,93 @@ describe("limited company, 1 April 2025 to 31 March 2026", () => {
       "Credit against invoice INV-2: Agreed discount",
       "Design work 3",
     ]);
-    expect(column(sales, "Owed at period end (£)")).toEqual([10_000, null, 40_000]);
+    expect(column(sales, "Owed by customer at period end (£)")).toEqual([10_000, null, 40_000]);
     expect(column(sales, "Date paid in full")).toEqual([seeded.laterPaidOn, null, null]);
+    // Nobody is owed money back, so that column is left off.
+    expect(sales.headers).not.toContain(OWED_BACK);
+  });
+
+  it("shows an overpayment as an amount owed back to the customer, never as a negative debt", async () => {
+    const seeded = await seedYearEnd(db, { entityType: "limited_company", period: LTD_YEAR });
+    const last = LTD_YEAR.to;
+    // 410 received against the 400 invoice issued on the last day.
+    await db.insert(payments).values({
+      invoiceId: seeded.edgeInvoices[2]!.id,
+      amountPence: 41_000,
+      receivedAt: new Date(`${last}T12:00:00Z`),
+      method: "bank_transfer",
+    });
+    const { sheets } = await workbookFor(seeded.companyId, LTD_YEAR);
+    const sales = findSheet(sheets, TAB.sales);
+    const position = findSheet(sheets, TAB.position);
+
+    expect(column(sales, "Received by period end (£)")).toEqual([7_000, null, 41_000]);
+    expect(column(sales, "Owed by customer at period end (£)")).toEqual([10_000, null, 0]);
+    expect(column(sales, OWED_BACK)).toEqual([null, null, 1_000]);
+    expect(column(sales, "Date paid in full")).toEqual([seeded.laterPaidOn, null, last]);
+
+    // Off the unpaid invoices and into its own section.
+    expect(labelledRow(position, "INV-3").map(value)).toEqual([
+      "INV-3",
+      last,
+      "Acme Trading",
+      40_000,
+      41_000,
+      1_000,
+      "Not yet refunded",
+    ]);
+    // The sales income is the invoices, not the money received.
+    expect(amount(findSheet(sheets, TAB.pnl), "Sales invoices")).toBe(60_000);
+  });
+
+  it("shows a credit on a paid invoice as owed back until the refund is paid", async () => {
+    const seeded = await seedYearEnd(db, { entityType: "limited_company", period: LTD_YEAR });
+    const last = LTD_YEAR.to;
+    const invoice = seeded.edgeInvoices[2]!;
+    await db.insert(payments).values({
+      invoiceId: invoice.id,
+      amountPence: 40_000,
+      receivedAt: new Date(`${last}T12:00:00Z`),
+      method: "bank_transfer",
+    });
+    const refundedOn = addDays(last, 10);
+    const [note] = await db
+      .insert(creditNotes)
+      .values({
+        companyId: seeded.companyId,
+        invoiceId: invoice.id,
+        clientId: seeded.client.id,
+        number: "CN-9",
+        issueDate: last,
+        reason: "Work not needed",
+        netPence: 5_000,
+        vatPence: 0,
+        grossPence: 5_000,
+        refundedPence: 5_000,
+        refundedAt: refundedOn,
+      })
+      .returning();
+
+    const later = await workbookFor(seeded.companyId, LTD_YEAR);
+    expect(labelledRow(findSheet(later.sheets, TAB.position), "INV-3").map(value)).toEqual([
+      "INV-3",
+      last,
+      "Acme Trading",
+      40_000,
+      40_000,
+      5_000,
+      refundedOn,
+    ]);
+
+    // Refunded by the period end: nothing is owed back.
+    await db.update(creditNotes).set({ refundedAt: last }).where(eq(creditNotes.id, note!.id));
+    const { sheets } = await workbookFor(seeded.companyId, LTD_YEAR);
+    const position = findSheet(sheets, TAB.position);
+    const owedBack = position.rows.findIndex((r) =>
+      String(value(r[0])).startsWith("Amounts owed back to customers"),
+    );
+    expect(position.rows[owedBack + 1]!.map(value)).toEqual([NONE_IN_PERIOD, 0]);
+    expect(findSheet(sheets, TAB.sales).headers).not.toContain(OWED_BACK);
   });
 
   it("reconciles the bank: opening balance plus the period's transactions equals the closing balance", async () => {

@@ -172,6 +172,46 @@ describe("bank checks", () => {
     expect(after.check("payments-unlinked").items[0]!.href).toBe(`/invoices/${seeded.edgeInvoices[1]!.id}`);
   });
 
+  it("lists invoices with money owed back to the customer at the period end", async () => {
+    const seeded = await limited();
+    const before = await checksFor(seeded.companyId, LTD_YEAR);
+    expect(before.check("owed-to-customers")).toMatchObject({ blocking: false, items: [] });
+
+    await db.insert(payments).values({
+      invoiceId: seeded.edgeInvoices[2]!.id,
+      amountPence: 41_000,
+      receivedAt: new Date(`${LTD_YEAR.to}T12:00:00Z`),
+      method: "bank_transfer",
+    });
+    const { check, pack } = await checksFor(seeded.companyId, LTD_YEAR);
+    expect(check("owed-to-customers")).toMatchObject({
+      blocking: false,
+      items: [
+        {
+          text: "INV-3 · Acme Trading · £10.00 owed back",
+          href: `/invoices/${seeded.edgeInvoices[2]!.id}`,
+        },
+      ],
+    });
+    expect(check("owed-to-customers").title).not.toContain("money received");
+    expect(column(findSheet(pack.workbook.sheets, TAB.review), "Record")).toContain(
+      "INV-3 · Acme Trading · £10.00 owed back",
+    );
+  });
+
+  it("on cash basis, says the amount owed back is included in money received", async () => {
+    const seeded = await soleTrader("cash");
+    await db.insert(payments).values({
+      invoiceId: seeded.edgeInvoices[2]!.id,
+      amountPence: 41_000,
+      receivedAt: new Date(`${TAX_YEAR.to}T12:00:00Z`),
+      method: "bank_transfer",
+    });
+    const { check } = await checksFor(seeded.companyId, TAX_YEAR);
+    expect(check("owed-to-customers").items).toHaveLength(1);
+    expect(check("owed-to-customers").title).toContain("(the amount is included in money received)");
+  });
+
   it("lists matched pairs where the amounts differ", async () => {
     const seeded = await limited();
     const [payment] = await db.select().from(payments).where(eq(payments.amountPence, 7_000));
