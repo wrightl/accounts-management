@@ -1,6 +1,7 @@
 import "server-only";
 import { and, eq, sql, sum } from "drizzle-orm";
 import { getDb, type Database } from "@/db";
+import { matchOfCompany } from "@/lib/bank/match-scope";
 import { invoices, payments, reconciliationMatches } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
 import { poundsToPence } from "@/lib/money";
@@ -110,7 +111,7 @@ export async function recordInvoicePayment(
     if (bankTx.amountPence <= 0) {
       return { ok: false, error: "Only incoming bank transactions can be linked" };
     }
-    if (!(await isBankTransactionAvailable(bankTransactionId))) {
+    if (!(await isBankTransactionAvailable(companyId, bankTransactionId))) {
       return { ok: false, error: "Bank transaction is already reconciled" };
     }
     if (bankTx.amountPence !== amountPence) {
@@ -192,7 +193,12 @@ export async function recordInvoicePayment(
         const available = await tx
           .select({ id: reconciliationMatches.id })
           .from(reconciliationMatches)
-          .where(eq(reconciliationMatches.bankTransactionId, bankTransactionId))
+          .where(
+            and(
+              eq(reconciliationMatches.bankTransactionId, bankTransactionId),
+              matchOfCompany(companyId),
+            ),
+          )
           .limit(1);
         if (available[0]) {
           throw new PaymentError("Bank transaction is already reconciled");

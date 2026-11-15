@@ -216,7 +216,7 @@ export async function updateExpense(
         (existing.amountPence !== amountPence ||
           existing.spentAt !== (parsed.data.spentAt || null) ||
           existing.status !== status) &&
-        (await isExpenseLinkedToBank(id))
+        (await isExpenseLinkedToBank(companyId, id))
       ) {
         return { ok: false, error: LINKED_EXPENSE_EDIT_ERROR };
       }
@@ -400,7 +400,7 @@ export async function deleteExpense(id: string): Promise<ActionResult> {
           error: `This expense is recharged on invoice ${rebill.number}. Remove it from that invoice first.`,
         };
       }
-      if (await isExpenseLinkedToBank(id)) {
+      if (await isExpenseLinkedToBank(companyId, id)) {
         return { ok: false, error: LINKED_EXPENSE_DELETE_ERROR };
       }
       if (existing.status !== "pending") {

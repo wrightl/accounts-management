@@ -7,6 +7,7 @@
 import "server-only";
 import { and, eq, gt, gte, ilike, inArray, isNull, lt, lte, or, sql, type SQL } from "drizzle-orm";
 import { getDb } from "@/db";
+import { matchOfCompany } from "@/lib/bank/match-scope";
 import {
   bankAccounts,
   bankTransactions,
@@ -255,7 +256,10 @@ export const LINKED_EXPENSE_DELETE_ERROR =
   "This expense is linked to a bank transaction. Unlink it before deleting.";
 
 /** Whether a confirmed bank match settles this expense. Caller checks the company. */
-export async function isExpenseLinkedToBank(expenseId: string): Promise<boolean> {
+export async function isExpenseLinkedToBank(
+  companyId: string,
+  expenseId: string,
+): Promise<boolean> {
   const [match] = await getDb()
     .select({ id: reconciliationMatches.id })
     .from(reconciliationMatches)
@@ -263,6 +267,7 @@ export async function isExpenseLinkedToBank(expenseId: string): Promise<boolean>
       and(
         eq(reconciliationMatches.expenseId, expenseId),
         eq(reconciliationMatches.confirmed, true),
+        matchOfCompany(companyId),
       ),
     )
     .limit(1);
@@ -289,6 +294,7 @@ export async function bankDebitLinkError(
       and(
         eq(reconciliationMatches.bankTransactionId, bankTransactionId),
         eq(reconciliationMatches.confirmed, true),
+        matchOfCompany(companyId),
       ),
     )
     .limit(1);
@@ -352,6 +358,7 @@ export async function linkExpenseToBankTx(
       .where(
         and(
           eq(reconciliationMatches.confirmed, true),
+          matchOfCompany(companyId),
           or(
             eq(reconciliationMatches.bankTransactionId, bankTransactionId),
             eq(reconciliationMatches.expenseId, expenseId),
@@ -370,6 +377,7 @@ export async function linkExpenseToBankTx(
       .where(
         and(
           eq(reconciliationMatches.confirmed, false),
+          matchOfCompany(companyId),
           or(
             eq(reconciliationMatches.bankTransactionId, bankTransactionId),
             eq(reconciliationMatches.expenseId, expenseId),
@@ -439,7 +447,9 @@ export async function unlinkExpenseMatch(
     const locked = periodLockError(await getBooksLockedThrough(companyId, db), row.bookedAt);
     if (locked) throw new ExpenseLinkError(locked);
 
-    await db.delete(reconciliationMatches).where(eq(reconciliationMatches.id, row.match.id));
+    await db
+      .delete(reconciliationMatches)
+      .where(and(eq(reconciliationMatches.id, row.match.id), matchOfCompany(companyId)));
     return {
       matchId: row.match.id,
       bankTransactionId: row.match.bankTransactionId,

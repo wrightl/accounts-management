@@ -33,6 +33,7 @@ import {
 } from '@/lib/bank/list-params';
 import type { SortDir } from '@/lib/table-sort';
 import { getDb } from '@/db';
+import { matchOfCompany } from '@/lib/bank/match-scope';
 import {
     bankAccounts,
     bankTransactionLabels,
@@ -719,9 +720,12 @@ export async function listBankTransactions(
         .select()
         .from(reconciliationMatches)
         .where(
-            inArray(
-                reconciliationMatches.bankTransactionId,
-                pageTx.map((tx) => tx.id),
+            and(
+                inArray(
+                    reconciliationMatches.bankTransactionId,
+                    pageTx.map((tx) => tx.id),
+                ),
+                matchOfCompany(companyId),
             ),
         );
     // Unconfirmed suggestions are the team's unfinished work.
@@ -1166,7 +1170,10 @@ export async function suggestMatches(
                     .select()
                     .from(reconciliationMatches)
                     .where(
-                        eq(reconciliationMatches.paymentId, incoming.paymentId),
+                        and(
+                            eq(reconciliationMatches.paymentId, incoming.paymentId),
+                            matchOfCompany(companyId),
+                        ),
                     )
                     .limit(1);
                 if (existing[0]) continue;
@@ -1196,7 +1203,10 @@ export async function suggestMatches(
                     .select()
                     .from(reconciliationMatches)
                     .where(
-                        eq(reconciliationMatches.invoiceId, incoming.invoiceId),
+                        and(
+                            eq(reconciliationMatches.invoiceId, incoming.invoiceId),
+                            matchOfCompany(companyId),
+                        ),
                     )
                     .limit(1);
                 if (existing[0]) continue;
@@ -1297,9 +1307,12 @@ export async function suggestMatches(
                     .select()
                     .from(reconciliationMatches)
                     .where(
-                        eq(
-                            reconciliationMatches.reimbursementId,
-                            reimbMatch.candidate.id,
+                        and(
+                            eq(
+                                reconciliationMatches.reimbursementId,
+                                reimbMatch.candidate.id,
+                            ),
+                            matchOfCompany(companyId),
                         ),
                     )
                     .limit(1);
@@ -1530,7 +1543,7 @@ export async function confirmMatch(companyId: string, matchId: string) {
             await tx
                 .update(reconciliationMatches)
                 .set({ paymentId, confirmed: true })
-                .where(eq(reconciliationMatches.id, matchId));
+                .where(and(eq(reconciliationMatches.id, matchId), matchOfCompany(companyId)));
         } else if (
             match.matchType === 'reimbursement' &&
             match.reimbursementId
@@ -1553,7 +1566,7 @@ export async function confirmMatch(companyId: string, matchId: string) {
             await tx
                 .update(reconciliationMatches)
                 .set({ confirmed: true })
-                .where(eq(reconciliationMatches.id, matchId));
+                .where(and(eq(reconciliationMatches.id, matchId), matchOfCompany(companyId)));
         } else if (match.matchType === 'expense' && match.expenseId) {
             const [expense] = await tx
                 .select()
@@ -1591,12 +1604,12 @@ export async function confirmMatch(companyId: string, matchId: string) {
             await tx
                 .update(reconciliationMatches)
                 .set({ confirmed: true })
-                .where(eq(reconciliationMatches.id, matchId));
+                .where(and(eq(reconciliationMatches.id, matchId), matchOfCompany(companyId)));
         } else {
             await tx
                 .update(reconciliationMatches)
                 .set({ confirmed: true })
-                .where(eq(reconciliationMatches.id, matchId));
+                .where(and(eq(reconciliationMatches.id, matchId), matchOfCompany(companyId)));
         }
     });
 }
@@ -1620,6 +1633,7 @@ export async function dismissMatch(companyId: string, matchId: string) {
             and(
                 eq(reconciliationMatches.id, matchId),
                 eq(reconciliationMatches.confirmed, false),
+                matchOfCompany(companyId),
             ),
         );
 }
@@ -1906,7 +1920,7 @@ export async function clearBankCreditExplanation(
     await assertBankRowOpen(db, companyId, match.bankTransactionId);
     await db
         .delete(reconciliationMatches)
-        .where(eq(reconciliationMatches.id, matchId));
+        .where(and(eq(reconciliationMatches.id, matchId), matchOfCompany(companyId)));
 }
 
 /** Incoming bank transactions not linked to any reconciliation match. */
@@ -2232,13 +2246,19 @@ export async function lockBankTransaction(
 }
 
 export async function isBankTransactionAvailable(
+    companyId: string,
     transactionId: string,
 ): Promise<boolean> {
     const db = getDb();
     const [match] = await db
         .select({ id: reconciliationMatches.id })
         .from(reconciliationMatches)
-        .where(eq(reconciliationMatches.bankTransactionId, transactionId))
+        .where(
+            and(
+                eq(reconciliationMatches.bankTransactionId, transactionId),
+                matchOfCompany(companyId),
+            ),
+        )
         .limit(1);
     return !match;
 }

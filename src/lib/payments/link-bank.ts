@@ -1,6 +1,7 @@
 import "server-only";
 import { and, eq, sql, sum } from "drizzle-orm";
 import { getDb } from "@/db";
+import { matchOfCompany } from "@/lib/bank/match-scope";
 import { invoices, payments, reconciliationMatches } from "@/db/schema";
 import type { ActionResult } from "@/actions/result";
 import { writeAudit } from "@/lib/audit";
@@ -65,12 +66,20 @@ function receiptFits(amountPence: number, paymentPence: number, owedPence: numbe
 }
 
 /** Whether a confirmed bank match already settles this payment. */
-async function paymentIsLinked(db: ReturnType<typeof getDb> | Tx, paymentId: string) {
+async function paymentIsLinked(
+  db: ReturnType<typeof getDb> | Tx,
+  companyId: string,
+  paymentId: string,
+) {
   const [row] = await db
     .select({ id: reconciliationMatches.id })
     .from(reconciliationMatches)
     .where(
-      and(eq(reconciliationMatches.paymentId, paymentId), eq(reconciliationMatches.confirmed, true)),
+      and(
+        eq(reconciliationMatches.paymentId, paymentId),
+        eq(reconciliationMatches.confirmed, true),
+        matchOfCompany(companyId),
+      ),
     )
     .limit(1);
   return Boolean(row);
@@ -160,13 +169,18 @@ export async function linkPaymentToBankTransaction(
       if (storedStatus(inv.status) === "void" || storedStatus(inv.status) === "draft") {
         throw new LinkError(`Can't link a payment on a ${storedStatus(inv.status)} invoice`);
       }
-      if (await paymentIsLinked(tx, paymentId)) {
+      if (await paymentIsLinked(tx, companyId, paymentId)) {
         throw new LinkError("This payment is already linked to a bank transaction");
       }
       const [taken] = await tx
         .select({ id: reconciliationMatches.id, paymentId: reconciliationMatches.paymentId })
         .from(reconciliationMatches)
-        .where(eq(reconciliationMatches.bankTransactionId, bankTransactionId))
+        .where(
+          and(
+            eq(reconciliationMatches.bankTransactionId, bankTransactionId),
+            matchOfCompany(companyId),
+          ),
+        )
         .limit(1);
       // A pending suggestion for this same payment is replaced; anything else means it's used.
       if (taken && taken.paymentId !== paymentId) {
@@ -187,6 +201,7 @@ export async function linkPaymentToBankTransaction(
           and(
             eq(reconciliationMatches.paymentId, paymentId),
             eq(reconciliationMatches.confirmed, false),
+            matchOfCompany(companyId),
           ),
         );
 
