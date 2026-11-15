@@ -4,6 +4,7 @@ import { writeAudit } from "@/lib/audit";
 import { ensureLocalUser } from "@/lib/users";
 import { streamYearEndPack } from "@/lib/year-end/pack";
 import { parsePeriod } from "@/lib/year-end/period";
+import { clearStaleConfirmations } from "@/lib/year-end/responses";
 import { recordYearEndRun } from "@/lib/year-end/runs";
 
 export const dynamic = "force-dynamic";
@@ -65,13 +66,19 @@ export async function GET(request: Request) {
   const recordWhenSent = new TransformStream<Uint8Array, Uint8Array>({
     async flush() {
       await recordYearEndRun(companyId, period, pack.outstandingChecks, actorUserId);
+      // The workbook already showed these as not confirmed; now the stored ticks go too.
+      await clearStaleConfirmations(companyId, period, pack.notes);
       await writeAudit({
         companyId,
         actorUserId,
         action: "year_end.export",
         entityType: "year_end_run",
         entityId: `${period.from}_${period.to}`,
-        meta: { ...period, outstandingChecks: pack.outstandingChecks },
+        meta: {
+          ...period,
+          outstandingChecks: pack.outstandingChecks,
+          unconfirmedNotes: pack.notes.unconfirmed,
+        },
       });
     },
   });

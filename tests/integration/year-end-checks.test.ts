@@ -19,7 +19,11 @@ import { namesAnotherPeriod, runChecks, type Check } from "@/lib/year-end/checks
 import { prepareYearEndPack } from "@/lib/year-end/pack";
 import type { PackPeriod } from "@/lib/year-end/period";
 import { TAB } from "@/lib/year-end/workbook";
-import { LTD_YEAR, TAX_YEAR, column, findSheet, seedYearEnd } from "./year-end-fixture";
+import { LTD_YEAR, TAX_YEAR, findSheet, layoutTable, seedYearEnd } from "./year-end-fixture";
+
+/** The row-level detail of the checks, in section g of the Notes for the accountant tab. */
+const records = (sheets: Parameters<typeof findSheet>[0]) =>
+  layoutTable(findSheet(sheets, TAB.notes), ["What to check", "Record"]).rows;
 
 vi.mock("server-only", () => ({}));
 
@@ -194,7 +198,7 @@ describe("bank checks", () => {
       ],
     });
     expect(check("owed-to-customers").title).not.toContain("money received");
-    expect(column(findSheet(pack.workbook.sheets, TAB.review), "Record")).toContain(
+    expect(records(pack.workbook.sheets).map((r) => r.Record)).toContain(
       "INV-3 · Acme Trading · £10.00 owed back",
     );
   });
@@ -445,7 +449,7 @@ describe("sole trader transfers", () => {
   });
 });
 
-describe("summary ties and the Items to review tab", () => {
+describe("summary ties and the record-level detail in the notes", () => {
   it("finds every summary figure equal to its detail tab", async () => {
     const { companyId } = await limited();
     const { texts } = await checksFor(companyId, LTD_YEAR);
@@ -464,19 +468,17 @@ describe("summary ties and the Items to review tab", () => {
     });
   });
 
-  it("writes every item the checks found to the Items to review tab", async () => {
+  it("writes every item the checks found beneath the summary on the Notes for the accountant tab", async () => {
     const seeded = await limited();
     await seeded.bankLine("2025-07-01", -1_234, "Mystery Ltd");
     const { pack } = await checksFor(seeded.companyId, LTD_YEAR);
-    const review = findSheet(pack.workbook.sheets, TAB.review);
+    const review = records(pack.workbook.sheets);
     const expected = pack.checks.flatMap((c) => c.items.map((i) => [c.title, i.text]));
 
     expect(expected.length).toBeGreaterThan(0);
-    expect(review.headers).toEqual(["What to check", "Record"]);
-    expect(column(review, "What to check").map((check, i) => [check, column(review, "Record")[i]])).toEqual(
-      expected,
-    );
-    expect(column(review, "Record")).toContain("01/07/2025 · Mystery Ltd · -£12.34");
+    expect(review.map((r) => [r["What to check"], r.Record])).toEqual(expected);
+    expect(review.map((r) => r.Record)).toContain("01/07/2025 · Mystery Ltd · -£12.34");
+    expect(pack.workbook.sheets.map((s) => s.name)).not.toContain("Items to review");
   });
 });
 

@@ -18,16 +18,27 @@ vi.mock("@/lib/billing/entitlements", () => ({
 }));
 vi.mock("@/lib/year-end/pack", () => ({ prepareYearEndPack }));
 vi.mock("@/lib/year-end/runs", () => ({ recordYearEndRun }));
+const clearStaleConfirmations = vi.hoisted(() => vi.fn());
+const saveNoteResponses = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/year-end/responses", () => ({ clearStaleConfirmations, saveNoteResponses }));
+vi.mock("@/db", () => ({ getDb: vi.fn() }));
+vi.mock("@/lib/mutate", () => ({ mutate: vi.fn() }));
 const writeAudit = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/audit", () => ({ writeAudit }));
 vi.mock("@/lib/users", () => ({ ensureLocalUser: vi.fn(async () => "user-1") }));
 
-const { openYearEnd } = await import("@/actions/year-end");
+const { openYearEnd, saveYearEndNotes, saveYearEndStartDate } = await import("@/actions/year-end");
+const { mutate } = await import("@/lib/mutate");
+
+const NOTES = { sections: [], unconfirmed: 0, startDateMissing: false };
 const { requireActionPermission } = await import("@/lib/auth");
 
 beforeEach(() => {
   vi.clearAllMocks();
-  prepareYearEndPack.mockResolvedValue({ checks: [{ items: [{ text: "a" }, { text: "b" }] }] });
+  prepareYearEndPack.mockResolvedValue({
+    checks: [{ items: [{ text: "a" }, { text: "b" }] }],
+    notes: NOTES,
+  });
 });
 
 describe("openYearEnd", () => {
@@ -45,6 +56,12 @@ describe("openYearEnd", () => {
       "company-1",
       { from: "2025-04-01", to: "2026-03-31" },
       2,
+    );
+    // Ticks whose figure has changed since are removed when the year is opened.
+    expect(clearStaleConfirmations).toHaveBeenCalledWith(
+      "company-1",
+      { from: "2025-04-01", to: "2026-03-31" },
+      NOTES,
     );
     expect(writeAudit).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -72,5 +89,61 @@ describe("openYearEnd", () => {
 
     expect(result.ok).toBe(false);
     expect(recordYearEndRun).not.toHaveBeenCalled();
+  });
+});
+
+describe("saveYearEndNotes", () => {
+  const entry = { key: "general", confirmed: false, explanation: "Moved office in May", answer: "" as const };
+
+  it("saves against the notes worked out on the server, and records who did it", async () => {
+    state.role = "admin";
+    const result = await saveYearEndNotes("2025-04-01", "2026-03-31", [
+      entry,
+      // Anything that is not a real tick, answer or text is read as empty.
+      { key: "pay", confirmed: "yes", explanation: 7, answer: "maybe" } as never,
+    ]);
+
+    expect(result).toEqual({ ok: true, id: "2025-04-01_2026-03-31" });
+    expect(requireActionPermission).toHaveBeenCalledWith("reports:export");
+    expect(saveNoteResponses).toHaveBeenCalledWith(
+      "company-1",
+      { from: "2025-04-01", to: "2026-03-31" },
+      NOTES,
+      [entry, { key: "pay", confirmed: false, explanation: "", answer: "" }],
+      "user-1",
+    );
+    expect(writeAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ companyId: "company-1", action: "year_end.notes" }),
+    );
+  });
+
+  it("refuses a role that cannot download the pack, and writes nothing", async () => {
+    state.role = "pending";
+    const result = await saveYearEndNotes("2025-04-01", "2026-03-31", [entry]);
+
+    expect(result.ok).toBe(false);
+    expect(saveNoteResponses).not.toHaveBeenCalled();
+    expect(writeAudit).not.toHaveBeenCalled();
+  });
+
+  it("refuses dates that are not a period", async () => {
+    state.role = "admin";
+    const result = await saveYearEndNotes("2026-03-31", "2025-04-01", [entry]);
+
+    expect(result.ok).toBe(false);
+    expect(saveNoteResponses).not.toHaveBeenCalled();
+  });
+});
+
+describe("saveYearEndStartDate", () => {
+  it("refuses a date in the future or one that is not a date, before touching settings", async () => {
+    expect((await saveYearEndStartDate("2999-01-01")).ok).toBe(false);
+    expect((await saveYearEndStartDate("not a date")).ok).toBe(false);
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it("needs the permission to manage settings", async () => {
+    await saveYearEndStartDate("2019-06-03");
+    expect(mutate).toHaveBeenCalledWith("settings:manage", expect.any(Function), expect.anything());
   });
 });

@@ -10,6 +10,14 @@ import type {
 } from "@/lib/year-end/data";
 import { NO_CATEGORY, WRITE_OFF_CATEGORY, type Figures, type Prepayment } from "@/lib/year-end/figures";
 import {
+  NOTHING_TO_REPORT,
+  buildNotes,
+  hasContent,
+  type NoteResponses,
+  type Notes,
+} from "@/lib/year-end/notes";
+import { TAB } from "@/lib/year-end/tabs";
+import {
   NONE_IN_PERIOD,
   businessWord,
   expenseStatusKey,
@@ -32,27 +40,18 @@ import {
   type Row,
 } from "@/lib/year-end/sheets";
 
-export const TAB = {
-  cover: "Cover",
-  pnl: "Profit and loss",
-  position: "Year-end position",
-  vat: "VAT",
-  review: "Items to review",
-  sales: "Sales invoices",
-  received: "Payments received",
-  otherIncome: "Other income",
-  expenses: "Expenses",
-  reimbursements: "Reimbursements",
-  bank: "Bank transactions",
-  shares: "Shareholders and dividends",
-  outside: "Outside the period",
-} as const;
+export { TAB };
+
+/** Column widths of the Notes tab: a wide first column for sentences, then figures, then confirmations and explanations. */
+const NOTES_COLUMN_WIDTHS = [64, 22, 24, 24, 26, 30, 36];
 
 export type WorkbookOptions = {
   /** Include the VAT tab: the business is VAT registered and the plan has VAT export. */
   includeVat: boolean;
   /** The date of the export (YYYY-MM-DD). */
   exportedOn: string;
+  /** What the owner has confirmed and explained for this period, by note item. */
+  responses?: NoteResponses;
   /** Files written to the zip, so cells only link to ones that are there. */
   invoiceFile?: (invoiceId: string) => string | undefined;
   creditNoteFile?: (creditNoteId: string) => string | undefined;
@@ -64,6 +63,8 @@ export type Workbook = {
   /** Tabs left out because they would be empty. */
   omitted: string[];
   checks: Check[];
+  /** The Notes for the accountant tab as data, for the Year end page to preview. */
+  notes: Notes;
 };
 
 const NOT_PROVIDED = "Not provided";
@@ -364,10 +365,8 @@ export function buildWorkbook(
 
   // --- Reimbursements -----------------------------------------------------------
 
-  const runs = data.reimbursements.filter(
-    // A sole trader repaying themselves is drawings, not a reimbursement.
-    (r) => isLimited || r.payeeUserId !== data.owner?.id,
-  );
+  // A sole trader repaying themselves is drawings, not a reimbursement.
+  const runs = figures.reimbursementRuns;
   const reimbursementsSheet = (() => {
     if (runs.length === 0) return null;
     const layout = new Layout();
@@ -483,12 +482,7 @@ export function buildWorkbook(
       .filter((p) => p.receivedOn > period.to)
       .map((payment) => ({ invoice, payment })),
   );
-  const earlierItems = runs.flatMap((run) =>
-    run.expenseIds
-      .map((id) => data.expenses.get(id)!)
-      .filter((e) => e.spentAt != null && e.spentAt < period.from)
-      .map((expense) => ({ run, expense })),
-  );
+  const earlierItems = figures.reimbursedEarlier;
   const outsideSheet = (() => {
     const sections =
       laterPayments.length + earlierItems.length + figures.awaitingReimbursement.length + figures.paidFromBankLater.length;
@@ -623,15 +617,39 @@ export function buildWorkbook(
   );
   const checks = runChecks(data, figures, ties);
 
-  const review = detailTab(
-    TAB.review,
-    "Records the checks picked out for a second look before the accounts are finalised.",
-    [
-      { key: "check", header: "What to check" },
-      { key: "item", header: "Record" },
-    ],
-    checks.flatMap((c) => c.items.map((item): Row => ({ check: c.title, item: item.text }))),
-  );
+  // --- Notes for the accountant ---------------------------------------------------------
+
+  const notes = buildNotes(data, figures, checks, options.responses ?? new Map());
+  const notesSheet = (() => {
+    const layout = new Layout();
+    layout.add(heading(TAB.notes));
+    periodRows(layout);
+    layout.add(
+      `What the ${business}'s records show, with questions for the accountant and what the ${business} has confirmed or explained. Every figure comes from the same records as the tab named beside it.`,
+    );
+    for (const section of notes.sections) {
+      layout.gap();
+      layout.add(bold(`${section.letter}. ${section.title}`));
+      if (!hasContent(section)) {
+        layout.add(NOTHING_TO_REPORT);
+        continue;
+      }
+      for (const [i, note] of section.notes.filter((n) => n.lines.length > 0).entries()) {
+        if (i > 0) layout.gap();
+        for (const line of note.lines) {
+          if (line.kind === "figure") layout.add(line.label, line.value, line.where ?? null);
+          else if (line.kind === "table") layout.table(line.columns, line.rows);
+          else if (line.kind === "question") layout.add(bold(`Question: ${line.text}`));
+          else layout.add(line.text);
+        }
+      }
+    }
+    return layout.sheet(
+      TAB.notes,
+      `What the records show, questions for the accountant, what the ${business} has confirmed and explained, and the records the checks picked out. Read this first.`,
+      { columnWidths: NOTES_COLUMN_WIDTHS },
+    );
+  })();
 
   // --- Profit and loss ----------------------------------------------------------------
 
@@ -1065,10 +1083,10 @@ export function buildWorkbook(
   // --- Order, and the cover ---------------------------------------------------------------------
 
   const ordered: [string, PackSheet | null, boolean][] = [
+    [TAB.notes, notesSheet, true],
     [TAB.pnl, pnlSheet, true],
     [TAB.position, positionSheet, true],
     [TAB.vat, vatSheet, options.includeVat && vat],
-    [TAB.review, review.sheet, true],
     [TAB.sales, sales.sheet, true],
     [TAB.received, received.sheet, cash],
     [TAB.otherIncome, otherIncome.sheet, true],
@@ -1126,6 +1144,11 @@ export function buildWorkbook(
   cover.add(bold("Key"));
   cover.add(bold("Term"), bold("What it means"));
   for (const [term, meaning] of expenseStatusKey(isLimited)) cover.add(term, meaning);
+  cover.add("Question", `On the ${TAB.notes} tab, something the accountant is asked to decide or check.`);
+  cover.add(
+    "Confirmed by the business",
+    `On the ${TAB.notes} tab, a figure the ${business} ticked as checked on the date shown. "Not confirmed" means it has not been ticked, or the figure changed after it was.`,
+  );
   cover.add("Ref", "A short reference for each expense. Its receipt file in the receipts folder has the same name.");
   cover.add("Matched to", "The invoice, expense or other record a bank transaction was reconciled against. Blank means nothing has been matched yet.");
   if (vat) cover.add("Net", "The amount before VAT.");
@@ -1147,6 +1170,7 @@ export function buildWorkbook(
     sheets: [cover.sheet(TAB.cover, "The period, who the pack is for, and what each tab holds."), ...included],
     omitted,
     checks,
+    notes,
   };
 }
 

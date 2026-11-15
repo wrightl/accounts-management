@@ -15,6 +15,8 @@ import { buildXlsx } from "@/lib/xlsx/write";
 import { blockingItems, type Check, type CheckItem } from "@/lib/year-end/checks";
 import { loadYearEndData, type YearEndData } from "@/lib/year-end/data";
 import { deriveFigures, type Figures } from "@/lib/year-end/figures";
+import type { NoteResponses, Notes } from "@/lib/year-end/notes";
+import { loadNoteResponses } from "@/lib/year-end/responses";
 import { periodLabel, type PackPeriod } from "@/lib/year-end/period";
 import { sheetTextRows, toXlsxSheets, type PackSheet } from "@/lib/year-end/sheets";
 import { buildWorkbook, type Workbook } from "@/lib/year-end/workbook";
@@ -33,6 +35,9 @@ export type YearEndPack = {
   figures: Figures;
   workbook: Workbook;
   checks: Check[];
+  /** The Notes for the accountant, with what the owner has confirmed and explained. */
+  notes: Notes;
+  responses: NoteResponses;
 };
 
 /**
@@ -45,17 +50,28 @@ export async function prepareYearEndPack(options: {
   /** The plan includes VAT export; the VAT tab also needs the business to be VAT registered. */
   includeVat: boolean;
 }): Promise<YearEndPack> {
-  const data = await loadYearEndData(options.companyId, options.period);
+  const [data, responses] = await Promise.all([
+    loadYearEndData(options.companyId, options.period),
+    loadNoteResponses(options.companyId, options.period),
+  ]);
   const figures = deriveFigures(data);
   const workbook = buildWorkbook(data, figures, {
     includeVat: options.includeVat,
     exportedOn: todayIsoDate(),
+    responses,
   });
-  return { data, figures, workbook, checks: workbook.checks };
+  return { data, figures, workbook, checks: workbook.checks, notes: workbook.notes, responses };
 }
 
 export type YearEndPackResult =
-  | { ok: true; filename: string; stream: ReadableStream<Uint8Array>; outstandingChecks: number }
+  | {
+      ok: true;
+      filename: string;
+      stream: ReadableStream<Uint8Array>;
+      outstandingChecks: number;
+      /** The notes the workbook was written with. */
+      notes: Notes;
+    }
   /** A blocking check has items: nothing is produced until they are fixed. */
   | { ok: false; blockers: CheckItem[] };
 
@@ -73,7 +89,7 @@ export async function streamYearEndPack(options: {
 }): Promise<YearEndPackResult> {
   const { companyId, period, includeVat } = options;
   const format = options.format ?? "xlsx";
-  const { data, figures, checks } = await prepareYearEndPack(options);
+  const { data, figures, checks, notes, responses } = await prepareYearEndPack(options);
   const blockers = blockingItems(checks);
   if (blockers.length > 0) return { ok: false, blockers };
 
@@ -156,6 +172,7 @@ export async function streamYearEndPack(options: {
     const { sheets } = buildWorkbook(data, figures, {
       includeVat,
       exportedOn: todayIsoDate(),
+      responses,
       invoiceFile: (id) => ifWritten(invoiceFiles.get(id)),
       creditNoteFile: (id) => ifWritten(creditNoteFiles.get(id)),
       receiptFiles: (id) =>
@@ -176,6 +193,7 @@ export async function streamYearEndPack(options: {
     filename: `year-end-pack-${period.from}_${period.to}${format === "csv" ? "-csv" : ""}.zip`,
     stream: zipStoreStream(entries()),
     outstandingChecks: checks.reduce((total, c) => total + c.items.length, 0),
+    notes,
   };
 }
 

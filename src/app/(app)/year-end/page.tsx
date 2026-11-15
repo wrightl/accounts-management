@@ -16,6 +16,8 @@ import {
   yearEndRule,
 } from "@/lib/year-end/period";
 import { listYearEndRuns, yearStatus, type YearEndRun, type YearStatus } from "@/lib/year-end/runs";
+import { TAB } from "@/lib/year-end/tabs";
+import { AccountantNotes } from "@/components/year-end/accountant-notes";
 import { YearChooser } from "@/components/year-end/year-chooser";
 import { DisplayDate } from "@/components/date-format-provider";
 import { buttonClasses } from "@/components/ui/button";
@@ -24,7 +26,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 
-/** Items shown per check on screen; the workbook's Items to review tab lists them all. */
+/** Items shown per check on screen; the workbook's Notes for the accountant tab lists them all. */
 const ITEMS_SHOWN = 20;
 
 const STATUS_LABEL: Record<YearStatus, string> = {
@@ -93,7 +95,7 @@ function CheckCard({ check }: { check: Check }) {
       </ul>
       {more > 0 ? (
         <p className="mt-3 text-sm text-muted">
-          And {more} more. All of them are listed on the workbook&apos;s Items to review tab.
+          And {more} more. All of them are listed on the workbook&apos;s {TAB.notes} tab.
         </p>
       ) : null}
     </Card>
@@ -106,7 +108,10 @@ export default async function YearEndPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const { companyId } = await guardTenantPage("filing:read");
-  const canExport = await hasPermission("reports:export");
+  const [canExport, canManageSettings] = await Promise.all([
+    hasPermission("reports:export"),
+    hasPermission("settings:manage"),
+  ]);
   const sp = await searchParams;
   const today = todayIsoDate();
 
@@ -148,8 +153,8 @@ export default async function YearEndPage({
         title={title}
         description={
           isLimited
-            ? "Choose the financial year, review what the checks found, then download the pack for your accountant."
-            : "Choose the year, review what the checks found, then download the pack for your accountant or your Self Assessment return."
+            ? "Choose the financial year, review what the checks found, answer the notes for your accountant, then download the pack."
+            : "Choose the year, review what the checks found, answer the notes for your accountant, then download the pack for them or your Self Assessment return."
         }
       />
 
@@ -266,7 +271,30 @@ export default async function YearEndPage({
           </section>
 
           <section className="mt-12">
-            <StepHeading step={3}>Download the pack</StepHeading>
+            <StepHeading step={3}>Notes for the accountant</StepHeading>
+            <p className="mt-2 max-w-2xl text-sm text-muted">
+              This is the {TAB.notes} tab of the workbook, built from the same records as the
+              rest of the pack. Tick what you have checked and add anything your accountant
+              should know. Nothing here changes your records.
+            </p>
+            <div className="mt-5">
+              <AccountantNotes
+                // A different period has its own answers.
+                key={`${selected.from}_${selected.to}`}
+                period={selected}
+                sections={pack.notes.sections}
+                canEdit={canExport}
+                canSetStartDate={canManageSettings}
+                startDate={{
+                  label: isLimited ? "Date of incorporation" : "Date trading started",
+                  missing: pack.notes.startDateMissing,
+                }}
+              />
+            </div>
+          </section>
+
+          <section className="mt-12">
+            <StepHeading step={4}>Download the pack</StepHeading>
             {!canExport ? (
               <p className="mt-3 text-sm text-muted">
                 Your role can&apos;t download the pack. Ask an admin or your accountant.
@@ -282,9 +310,17 @@ export default async function YearEndPage({
                   One zip with the workbook, every receipt named by its expense reference, and the
                   invoice PDFs.
                   {outstandingCount(pack.checks) > 0
-                    ? " The items above are listed on the workbook's Items to review tab."
+                    ? ` The items the checks found are listed on the workbook's ${TAB.notes} tab.`
                     : ""}
                 </p>
+                {pack.notes.unconfirmed > 0 ? (
+                  <p className="mt-4 max-w-2xl rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    {pack.notes.unconfirmed}{" "}
+                    {pack.notes.unconfirmed === 1 ? "item is" : "items are"} not confirmed in the
+                    notes above. You can still download the pack: the workbook will show{" "}
+                    {pack.notes.unconfirmed === 1 ? "it" : "each"} as &quot;Not confirmed&quot;.
+                  </p>
+                ) : null}
                 <div className="mt-4 flex flex-wrap gap-3">
                   <a href={downloadHref("xlsx")} className={buttonClasses("primary")} download>
                     Download workbook and receipts

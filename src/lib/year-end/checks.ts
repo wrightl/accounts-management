@@ -8,6 +8,8 @@ export type CheckItem = {
   text: string;
   /** Where in Alfa to fix it. */
   href?: string;
+  /** The amount of the record, where it has one, for the total of its check. */
+  pence?: number;
 };
 
 export type Check = {
@@ -152,7 +154,11 @@ export function runChecks(
   add(
     "bank-unmatched",
     "Bank transactions with no match",
-    figures.unmatched.map((tx) => ({ text: bankText(tx), href: bankHref(tx) })),
+    figures.unmatched.map((tx) => ({
+      text: bankText(tx),
+      href: bankHref(tx),
+      pence: Math.abs(tx.amountPence),
+    })),
   );
 
   if (!isLimited && data.owner) {
@@ -173,7 +179,11 @@ export function runChecks(
     add(
       "owner-transfers",
       "Transfers to or from the owner not marked as drawings or money put in",
-      ownerTransfers.map((tx) => ({ text: bankText(tx), href: bankHref(tx) })),
+      ownerTransfers.map((tx) => ({
+        text: bankText(tx),
+        href: bankHref(tx),
+        pence: Math.abs(tx.amountPence),
+      })),
     );
   }
 
@@ -190,6 +200,7 @@ export function runChecks(
       .map(({ invoice, payment }) => ({
         text: `${invoice.number} · ${invoice.clientName} · ${formatGBP(payment.amountPence)} received ${date(payment.receivedOn)}`,
         href: `/invoices/${invoice.id}`,
+        pence: payment.amountPence,
       })),
   );
 
@@ -206,6 +217,7 @@ export function runChecks(
     differences.push({
       text: `Invoice payment ${[...new Set(group.map((g) => g.invoice.number))].join(", ")}: ${formatGBP(recorded)} recorded, ${formatGBP(bank.amountPence)} on the bank line of ${date(bank.bookedAt)}`,
       href: `/invoices/${group[0]!.invoice.id}`,
+      pence: Math.abs(recorded - bank.amountPence),
     });
   }
   const relevantExpenses = [...new Set([...figures.periodExpenses, ...figures.spentInPeriod])];
@@ -220,6 +232,7 @@ export function runChecks(
     differences.push({
       text: `Expense ${group.map((e) => figures.expenseRef.get(e.id)).join(", ")} (${group[0]!.description}): ${formatGBP(recorded)} recorded, ${formatGBP(-bank.amountPence)} on the bank line of ${date(bank.bookedAt)}`,
       href: `/expenses/${group[0]!.id}`,
+      pence: Math.abs(recorded + bank.amountPence),
     });
   }
   add("amount-differences", "Matched pairs where the amounts differ", differences);
@@ -251,6 +264,7 @@ export function runChecks(
     figures.owedToCustomers.map(({ invoice, pence }) => ({
       text: `${invoice.number} · ${invoice.clientName} · ${formatGBP(pence)} owed back`,
       href: `/invoices/${invoice.id}`,
+      pence,
     })),
   );
 
@@ -259,6 +273,7 @@ export function runChecks(
   const expenseItem = (e: (typeof relevantExpenses)[number], extra = ""): CheckItem => ({
     text: `${figures.expenseRef.get(e.id)} · ${date(e.spentAt)} · ${e.description} · ${formatGBP(e.amountPence)}${extra}`,
     href: `/expenses/${e.id}`,
+    pence: e.amountPence,
   });
   add(
     "expenses-uncategorised",
@@ -299,11 +314,13 @@ export function runChecks(
       reimbursementItems.push({
         text: `Reimbursement of ${formatGBP(run.totalPence)} to ${payee} on ${date(run.paidOn)} has no expenses listed`,
         href: `/reimbursements/${run.id}`,
+        pence: run.totalPence,
       });
     } else if (itemTotal !== run.totalPence) {
       reimbursementItems.push({
         text: `Reimbursement to ${payee} on ${date(run.paidOn)}: ${formatGBP(run.totalPence)} paid, but its expenses add up to ${formatGBP(itemTotal)}`,
         href: `/reimbursements/${run.id}`,
+        pence: Math.abs(run.totalPence - itemTotal),
       });
     }
   }
