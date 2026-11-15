@@ -266,4 +266,37 @@ describe("explainBankCredits", () => {
       explainBankCredits(companyId, [a.id, b.id], { matchType: "transfer" }),
     ).rejects.toBeInstanceOf(ReconciliationError);
   });
+
+  it("leaves another company's suggested match alone", async () => {
+    const mine = await insertCredit(1_000);
+    const other = await seedCompany(db, { name: "Other Co", slug: "other-co" });
+    const [otherAccount] = await db
+      .insert(bankAccounts)
+      .values({ companyId: other.id, name: "Other bank", provider: "other" })
+      .returning();
+    const [theirs] = await db
+      .insert(bankTransactions)
+      .values({
+        bankAccountId: otherAccount!.id,
+        externalId: "theirs",
+        bookedAt: "2026-03-15",
+        amountPence: 3_000,
+      })
+      .returning();
+    await db.insert(reconciliationMatches).values({
+      bankTransactionId: theirs!.id,
+      matchType: "other_income",
+      incomeCategory: "Interest",
+      confirmed: false,
+    });
+
+    await expect(
+      explainBankCredits(companyId, [mine.id, theirs!.id], { matchType: "transfer" }),
+    ).rejects.toThrow("Bank transaction not found");
+    const left = await db
+      .select()
+      .from(reconciliationMatches)
+      .where(eq(reconciliationMatches.bankTransactionId, theirs!.id));
+    expect(left).toEqual([expect.objectContaining({ matchType: "other_income", confirmed: false })]);
+  });
 });

@@ -1651,6 +1651,23 @@ export async function explainBankCredit(
 }
 
 /**
+ * This company's bank transactions among `ids`, as a query to use inside
+ * another statement. reconciliation_matches has no company_id, so each query on
+ * it scopes itself through this rather than relying on an earlier read.
+ */
+function companyTransactionIds(
+    db: Pick<ReturnType<typeof getDb>, 'select'>,
+    companyId: string,
+    ids: string[],
+) {
+    return db
+        .select({ id: bankTransactions.id })
+        .from(bankTransactions)
+        .innerJoin(bankAccounts, eq(bankTransactions.bankAccountId, bankAccounts.id))
+        .where(and(inArray(bankTransactions.id, ids), eq(bankAccounts.companyId, companyId)));
+}
+
+/**
  * Give several incoming credits the same explanation. All or nothing: if any
  * row can't be explained, none are.
  */
@@ -1708,14 +1725,13 @@ export async function explainBankCredits(
     if (!parsed.ok) throw new ReconciliationError(parsed.error);
 
     return db.transaction(async (dbTx) => {
+        const own = companyTransactionIds(dbTx, companyId, ids);
+        const ownMatches = inArray(reconciliationMatches.bankTransactionId, own);
         const confirmed = await dbTx
             .select({ id: reconciliationMatches.bankTransactionId })
             .from(reconciliationMatches)
             .where(
-                and(
-                    inArray(reconciliationMatches.bankTransactionId, ids),
-                    eq(reconciliationMatches.confirmed, true),
-                ),
+                and(ownMatches, eq(reconciliationMatches.confirmed, true)),
             );
         const reconciled = new Set(confirmed.map((c) => c.id)).size;
         if (reconciled > 0) {
@@ -1729,16 +1745,17 @@ export async function explainBankCredits(
         await dbTx
             .delete(reconciliationMatches)
             .where(
-                and(
-                    inArray(reconciliationMatches.bankTransactionId, ids),
-                    eq(reconciliationMatches.confirmed, false),
-                ),
+                and(ownMatches, eq(reconciliationMatches.confirmed, false)),
             );
 
+        const ownIds = await own;
+        if (ownIds.length !== ids.length) {
+            throw new ReconciliationError('Bank transaction not found');
+        }
         const created = await dbTx
             .insert(reconciliationMatches)
             .values(
-                ids.map((bankTransactionId) => ({
+                ownIds.map(({ id: bankTransactionId }) => ({
                     bankTransactionId,
                     matchType: parsed.value.matchType,
                     incomeCategory: parsed.value.incomeCategory,
@@ -1830,14 +1847,8 @@ export async function explainOwnerTransactions(
     const note = input.note?.trim() ? input.note.trim().slice(0, 500) : null;
 
     return db.transaction(async (dbTx) => {
-        // reconciliation_matches has no company_id: each statement scopes it to
-        // this company's bank transactions itself, rather than relying on the read above.
-        const companyTransactionIds = dbTx
-            .select({ id: bankTransactions.id })
-            .from(bankTransactions)
-            .innerJoin(bankAccounts, eq(bankTransactions.bankAccountId, bankAccounts.id))
-            .where(and(inArray(bankTransactions.id, ids), eq(bankAccounts.companyId, companyId)));
-        const ownMatches = inArray(reconciliationMatches.bankTransactionId, companyTransactionIds);
+        const ownTransactions = companyTransactionIds(dbTx, companyId, ids);
+        const ownMatches = inArray(reconciliationMatches.bankTransactionId, ownTransactions);
         const confirmed = await dbTx
             .select({ id: reconciliationMatches.bankTransactionId })
             .from(reconciliationMatches)
@@ -1856,7 +1867,7 @@ export async function explainOwnerTransactions(
             .where(
                 and(ownMatches, eq(reconciliationMatches.confirmed, false)),
             );
-        const own = await companyTransactionIds;
+        const own = await ownTransactions;
         if (own.length !== ids.length) {
             throw new ReconciliationError('Bank transaction not found');
         }
