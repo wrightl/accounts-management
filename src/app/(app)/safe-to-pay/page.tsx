@@ -174,8 +174,10 @@ export default async function SafeToPayPage() {
           </dl>
 
           <p className="mt-6 text-xs text-muted">
-            An estimate to help you decide, not advice. It assumes last quarter&apos;s VAT and last
-            year&apos;s corporation tax are unpaid until their deadlines, and doesn&apos;t include
+            An estimate to help you decide, not advice. It assumes{" "}
+            {data.vatRegistered ? <>last quarter&apos;s VAT and </> : null}last year&apos;s
+            corporation tax {data.vatRegistered ? "are" : "is"} unpaid until{" "}
+            {data.vatRegistered ? "their deadlines" : "its deadline"}, and doesn&apos;t include
             PAYE, supplier bills not yet in Alfa, or money the company owes directors. Check with
             your accountant before paying a large dividend. See the{" "}
             <Link href="/forecast" className="underline">

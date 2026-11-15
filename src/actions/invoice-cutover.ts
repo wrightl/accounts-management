@@ -150,6 +150,7 @@ export async function previewInvoiceCutover(
         warnings: cutoverWarnings({
           cutover: parsed.cutover,
           isLimitedCompany: entityType === "limited_company",
+          vatRegistered: company.vatRegistered,
           openingBalancesAsAt: company.openingBalancesAsAt,
         }),
         lockError: periodLockError(

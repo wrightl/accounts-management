@@ -13,6 +13,10 @@ import {
     getProfitAndLoss,
     getVatSummary,
 } from '@/lib/reports/queries';
+import {
+    profitAndLossBasisNote,
+    shouldShowVat,
+} from '@/lib/reports/vat-display';
 import { getCompanySettings } from '@/lib/settings/queries';
 import { getEntitlements } from '@/lib/billing/entitlements';
 import { Card, CardTitle, CardValue } from '@/components/ui/card';
@@ -59,6 +63,11 @@ export default async function ReportsPage({
         getLastWeeklyClose(companyId),
         getEntitlements(companyId),
     ]);
+    const showVat = shouldShowVat({
+        vatRegistered: company.vatRegistered,
+        hasVatOnDocuments: vat.hasVatOnDocuments,
+    });
+    const exVat = showVat ? ' (ex VAT)' : '';
 
     return (
         <div>
@@ -67,9 +76,10 @@ export default async function ReportsPage({
                 description={
                     <>
                         <p>
-                            Accrual P&amp;L (invoiced income net of VAT), VAT
-                            summary and receivables for any date range. The
-                            accountant pack is now on{' '}
+                            {showVat
+                                ? 'Accrual P&L (invoiced income net of VAT), VAT summary and receivables for any date range.'
+                                : 'Accrual P&L and receivables for any date range.'}{' '}
+                            The accountant pack is now on{' '}
                             <Link href="/year-end" className="underline">
                                 Year end
                             </Link>
@@ -103,7 +113,7 @@ export default async function ReportsPage({
                                     label: 'Accountant pack (on Year end)',
                                     href: '/year-end',
                                 },
-                                ...(entitlements.vatExport
+                                ...(entitlements.vatExport && showVat
                                     ? [
                                           {
                                               key: 'vat-csv',
@@ -125,7 +135,7 @@ export default async function ReportsPage({
 
             <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <Card>
-                    <CardTitle>Income (invoiced, ex VAT)</CardTitle>
+                    <CardTitle>Income (invoiced{showVat ? ', ex VAT' : ''})</CardTitle>
                     <CardValue>{pnl.incomeFormatted}</CardValue>
                     {pnl.creditNotePence > 0 ? (
                         <p className="mt-1 text-xs text-muted">
@@ -138,7 +148,7 @@ export default async function ReportsPage({
                     <CardValue>{pnl.otherIncomeFormatted}</CardValue>
                 </Card>
                 <Card>
-                    <CardTitle>Expenses (ex VAT)</CardTitle>
+                    <CardTitle>Expenses{exVat}</CardTitle>
                     <CardValue>{pnl.expenseFormatted}</CardValue>
                     {pnl.writeOffPence > 0 ? (
                         <p className="mt-1 text-xs text-muted">
@@ -151,45 +161,49 @@ export default async function ReportsPage({
                     <CardValue>{pnl.profitFormatted}</CardValue>
                 </Card>
             </div>
-            <p className="mt-3 text-sm text-muted">{pnl.basisNote}</p>
+            <p className="mt-3 text-sm text-muted">
+                {profitAndLossBasisNote(showVat)}
+            </p>
 
-            <section className="mt-10">
-                <div className="flex flex-wrap items-end justify-between gap-3">
-                    <h2 className="font-display text-lg font-semibold">
-                        VAT summary
-                    </h2>
-                    {vat.vatNumber ? (
-                        <p className="text-sm text-muted">VAT {vat.vatNumber}</p>
-                    ) : null}
-                </div>
-                <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                    <Card>
-                        <CardTitle>VAT on sales</CardTitle>
-                        <CardValue className="text-xl">
-                            {vat.vatOnSalesFormatted}
-                        </CardValue>
-                        {vat.creditNoteVatPence > 0 ? (
-                            <p className="mt-1 text-xs text-muted">
-                                After {vat.creditNoteVatFormatted} on credit
-                                notes
-                            </p>
+            {showVat ? (
+                <section className="mt-10">
+                    <div className="flex flex-wrap items-end justify-between gap-3">
+                        <h2 className="font-display text-lg font-semibold">
+                            VAT summary
+                        </h2>
+                        {vat.vatNumber ? (
+                            <p className="text-sm text-muted">VAT {vat.vatNumber}</p>
                         ) : null}
-                    </Card>
-                    <Card>
-                        <CardTitle>VAT on purchases</CardTitle>
-                        <CardValue className="text-xl">
-                            {vat.vatOnPurchasesFormatted}
-                        </CardValue>
-                    </Card>
-                    <Card>
-                        <CardTitle>Net VAT</CardTitle>
-                        <CardValue className="text-xl">
-                            {vat.netVatFormatted}
-                        </CardValue>
-                    </Card>
-                </div>
-                <p className="mt-3 text-sm text-muted">{vat.note}</p>
-            </section>
+                    </div>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                        <Card>
+                            <CardTitle>VAT on sales</CardTitle>
+                            <CardValue className="text-xl">
+                                {vat.vatOnSalesFormatted}
+                            </CardValue>
+                            {vat.creditNoteVatPence > 0 ? (
+                                <p className="mt-1 text-xs text-muted">
+                                    After {vat.creditNoteVatFormatted} on credit
+                                    notes
+                                </p>
+                            ) : null}
+                        </Card>
+                        <Card>
+                            <CardTitle>VAT on purchases</CardTitle>
+                            <CardValue className="text-xl">
+                                {vat.vatOnPurchasesFormatted}
+                            </CardValue>
+                        </Card>
+                        <Card>
+                            <CardTitle>Net VAT</CardTitle>
+                            <CardValue className="text-xl">
+                                {vat.netVatFormatted}
+                            </CardValue>
+                        </Card>
+                    </div>
+                    <p className="mt-3 text-sm text-muted">{vat.note}</p>
+                </section>
+            ) : null}
 
             <PeriodLockCard
                 lockedThrough={company.booksLockedThrough}
@@ -234,7 +248,7 @@ export default async function ReportsPage({
             <section className="mt-10 grid gap-8 lg:grid-cols-2">
                 <div>
                     <h2 className="mb-3 font-display text-lg font-semibold">
-                        Income by month (ex VAT)
+                        Income by month{exVat}
                     </h2>
                     <Table>
                         <THead>

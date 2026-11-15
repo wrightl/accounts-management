@@ -4,6 +4,7 @@ import { BackLink } from "@/components/ui/back-link";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { SetupStepBanner } from "@/components/data-onboarding/setup-step-banner";
 import { getImportBatchReview } from "@/lib/invoices/import/queries";
+import { getCompanySettings } from "@/lib/settings/queries";
 
 // Server Actions on this page commit and undo large imports.
 export const maxDuration = 60;
@@ -20,9 +21,10 @@ export default async function InvoiceImportBatchPage({
   const sp = await searchParams;
   const review = await getImportBatchReview(companyId, batchId);
   if (!review) notFound();
-  const [canSetCutover, canSetNumber] = await Promise.all([
+  const [canSetCutover, canSetNumber, company] = await Promise.all([
     hasPermission("books:lock"),
     hasPermission("settings:manage"),
+    getCompanySettings(companyId),
   ]);
 
   return (
@@ -37,6 +39,7 @@ export default async function InvoiceImportBatchPage({
         review={review}
         canSetCutover={canSetCutover}
         canSetNumber={canSetNumber}
+        vatRegistered={company.vatRegistered}
       />
     </div>
   );

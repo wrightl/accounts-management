@@ -1,4 +1,5 @@
 import "server-only";
+import { hasVatOnDocuments, profitAndLossBasisNote } from "@/lib/reports/vat-display";
 import { invoiceCountsInAccounts } from "@/lib/invoices/accounts-scope";
 import { and, count, desc, eq, gte, inArray, lte, ne, sql, sum } from "drizzle-orm";
 import { getDb } from "@/db";
@@ -129,8 +130,7 @@ export async function getProfitAndLoss(
     writeOffFormatted: formatGBP(writeOffPence),
     profitFormatted: formatGBP(profitPence),
     basis: "accrual" as const,
-    basisNote:
-      "Accrual basis: invoiced income is net (ex-VAT) by issue date, less credit notes by their issue date. Other income is cash on the bank date (no VAT). Expenses are net of VAT by spend date, plus invoice balances written off as bank charges or bad debt by write-off date. See VAT summary for output/input VAT.",
+    basisNote: profitAndLossBasisNote(true),
   };
 }
 
@@ -453,9 +453,15 @@ export async function getVatSummary(
   const vatOnPurchasesPence = purchases?.total ?? 0;
   const netVatPence = vatOnSalesPence - vatOnPurchasesPence;
 
+  const onDocuments = hasVatOnDocuments({
+    salesVatPence: sales?.total ?? 0,
+    creditNoteVatPence,
+    purchaseVatPence: vatOnPurchasesPence,
+  });
+
   const note = company.vatRegistered
     ? "Export for your accountant — this app does not submit to HMRC."
-    : "Company is not marked VAT registered in Settings. Figures reflect any VAT stored on documents.";
+    : "Company is not marked VAT registered in Settings, but documents in this period still record VAT. Figures reflect that VAT.";
 
   return {
     vatOnSalesPence,
@@ -467,6 +473,7 @@ export async function getVatSummary(
     vatOnPurchasesFormatted: formatGBP(vatOnPurchasesPence),
     netVatFormatted: formatGBP(netVatPence),
     vatRegistered: company.vatRegistered,
+    hasVatOnDocuments: onDocuments,
     vatNumber: company.vatNumber,
     note,
     from,

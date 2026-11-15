@@ -28,11 +28,13 @@ export function TopClientsChart({
   clients,
   periodLabel,
   includesPreCutover = false,
+  vatRegistered,
 }: {
   clients: ClientRevenueSlice[];
   periodLabel: string;
   /** The period starts before cutover, so brought-forward invoices are in these totals. */
   includesPreCutover?: boolean;
+  vatRegistered: boolean;
 }) {
   const chartData = clients.map((c, i) => ({
     ...c,
@@ -44,7 +46,7 @@ export function TopClientsChart({
     <Card className="h-full">
       <CardTitle>Revenue by client</CardTitle>
       <p className="mt-1 text-xs text-muted">
-        Invoiced, excluding VAT · {periodLabel}
+        {vatRegistered ? "Invoiced, excluding VAT" : "Invoiced"} · {periodLabel}
         {includesPreCutover ? " · includes invoices before cutover" : ""}
       </p>
       {chartData.length === 0 ? (

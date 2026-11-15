@@ -87,7 +87,7 @@ describe("cutoverImpact", () => {
 });
 
 describe("cutoverWarnings", () => {
-  const base = { cutover: CUTOVER, isLimitedCompany: true };
+  const base = { cutover: CUTOVER, isLimitedCompany: true, vatRegistered: true };
 
   it("has none without a cutover", () => {
     expect(
@@ -113,9 +113,19 @@ describe("cutoverWarnings", () => {
       cutoverWarnings({
         cutover: CUTOVER,
         isLimitedCompany: false,
+        vatRegistered: true,
         openingBalancesAsAt: null,
       }),
     ).toHaveLength(1);
+  });
+
+  it("leaves out the VAT warning when the company isn't VAT registered", () => {
+    const warnings = cutoverWarnings({
+      ...base,
+      vatRegistered: false,
+      openingBalancesAsAt: "2026-03-31",
+    });
+    expect(warnings).toEqual([]);
   });
 });
 
