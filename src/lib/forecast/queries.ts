@@ -291,6 +291,7 @@ export async function getForecastInputs(companyId: string, today: string = today
     events: events.filter((e) => e.date <= until),
     weeklySpendPence: spend.pence,
     spendBasis: spend.basis,
+    vatRegistered: company.vatRegistered,
     clients: clientRows.sort((a, b) => a.name.localeCompare(b.name)),
   };
 }

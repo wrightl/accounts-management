@@ -38,10 +38,12 @@ export function InvoiceImportReview({
   review,
   canSetCutover,
   canSetNumber,
+  vatRegistered,
 }: {
   review: ImportBatchReview;
   canSetCutover: boolean;
   canSetNumber: boolean;
+  vatRegistered: boolean;
 }) {
   const router = useRouter();
   const { confirm } = useAlert();
@@ -248,14 +250,16 @@ export function InvoiceImportReview({
         {cutover ? (
           <p className="mt-3">
             Accounts start from <DisplayDate value={cutover} />. {review.broughtForward} invoices
-            are brought forward and stay out of P&amp;L and VAT. {review.counted} count, adding{" "}
-            {formatGBP(review.netInAccounts)} income and {formatGBP(review.vatInAccounts)} VAT to
+            are brought forward and stay out of P&amp;L{vatRegistered ? " and VAT" : ""}.{" "}
+            {review.counted} count, adding {formatGBP(review.netInAccounts)} income
+            {review.vatInAccounts !== 0 ? <> and {formatGBP(review.vatInAccounts)} VAT</> : null} to
             their periods.
           </p>
         ) : (
           <p className={isOpen ? "mt-3 rounded-xl bg-wash px-4 py-3" : "mt-3"}>
             {isOpen ? <span className="font-medium">Next step: </span> : null}
-            Set a cutover date first, so invoices from before it stay out of P&amp;L and VAT.{" "}
+            Set a cutover date first, so invoices from before it stay out of P&amp;L
+            {vatRegistered ? " and VAT" : ""}.{" "}
             {canSetCutover ? (
               <Link className="underline" href="/reports">
                 Set it on the Reports page

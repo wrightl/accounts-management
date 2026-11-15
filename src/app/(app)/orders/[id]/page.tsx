@@ -146,7 +146,8 @@ export default async function OrderDetailPage({
           }}
         />
         <p className="mt-2 text-xs text-muted">
-          Net of VAT. Revenue is invoiced on this order, less credit notes
+          {company.vatRegistered ? "Net of VAT. " : null}Revenue is invoiced on this order, less
+          credit notes
           {profit.rebilledElsewherePence > 0
             ? `, plus ${formatGBP(profit.rebilledElsewherePence)} of its costs recharged on other invoices`
             : ""}

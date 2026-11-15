@@ -32,7 +32,7 @@ export const STARTER_PROMPTS = [
     name: "explain_my_numbers",
     needs: "profit_and_loss",
     title: "Explain my numbers simply",
-    text: "Explain how the business is doing this financial year as if I'm new to accounting: income, spending, profit and VAT, in a few short sentences each. No jargon without a plain explanation.",
+    text: "Explain how the business is doing this financial year as if I'm new to accounting: income, spending, profit and any tax to set aside, in a few short sentences each. No jargon without a plain explanation.",
   },
   {
     name: "draft_an_invoice",

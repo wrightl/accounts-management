@@ -108,13 +108,17 @@ function dayAfter(iso: string): string {
 export function cutoverWarnings(params: {
   cutover: string | null;
   isLimitedCompany: boolean;
+  vatRegistered: boolean;
   openingBalancesAsAt: string | null;
 }): string[] {
-  const { cutover, isLimitedCompany, openingBalancesAsAt } = params;
+  const { cutover, isLimitedCompany, vatRegistered, openingBalancesAsAt } = params;
   if (!cutover) return [];
-  const warnings = [
-    "Alfa reports VAT by issue date. If you use the VAT cash accounting scheme, VAT on payments for brought-forward invoices won't appear here.",
-  ];
+  const warnings: string[] = [];
+  if (vatRegistered) {
+    warnings.push(
+      "Alfa reports VAT by issue date. If you use the VAT cash accounting scheme, VAT on payments for brought-forward invoices won't appear here.",
+    );
+  }
   if (isLimitedCompany) {
     if (!openingBalancesAsAt) {
       warnings.push(

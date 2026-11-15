@@ -78,7 +78,9 @@ export default async function ForecastPage() {
           </li>
           <li>Unpaid invoices, on their due date. Overdue ones are counted in the first week.</li>
           <li>Order milestones and recurring invoices, paid after your usual payment terms.</li>
-          <li>VAT returns, with this quarter projected from the VAT so far.</li>
+          {inputs.vatRegistered ? (
+            <li>VAT returns, with this quarter projected from the VAT so far.</li>
+          ) : null}
           {isLtd ? <li>Corporation tax and dividends declared for future dates.</li> : null}
           <li>Reimbursements owed to the team, in the first week.</li>
           <li>

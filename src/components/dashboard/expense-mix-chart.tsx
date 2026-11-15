@@ -17,9 +17,11 @@ const COLORS = [
 export function ExpenseMixChart({
   slices,
   periodLabel,
+  vatRegistered,
 }: {
   slices: ExpenseCategorySlice[];
   periodLabel: string;
+  vatRegistered: boolean;
 }) {
   const chartData = slices.map((s, i) => ({
     ...s,
@@ -32,7 +34,8 @@ export function ExpenseMixChart({
     <Card className="h-full">
       <CardTitle>Expense mix</CardTitle>
       <p className="mt-1 text-xs text-muted">
-        By category · {periodLabel} · ex VAT
+        By category · {periodLabel}
+        {vatRegistered ? " · ex VAT" : ""}
       </p>
       {chartData.length === 0 ? (
         <div className="mt-6 space-y-2">

@@ -242,6 +242,7 @@ export default async function DashboardOverview({
                 <IncomeExpenseChart
                   data={overview.incomeExpenseSeries}
                   windowLabel={overview.chartWindowLabel}
+                  vatRegistered={overview.vatRegistered}
                 />
               </div>
 
@@ -250,10 +251,12 @@ export default async function DashboardOverview({
                   clients={overview.topClients}
                   periodLabel={overview.periodLabel}
                   includesPreCutover={overview.periodBeforeCutover}
+                  vatRegistered={overview.vatRegistered}
                 />
                 <ExpenseMixChart
                   slices={overview.expenseMix}
                   periodLabel={overview.periodLabel}
+                  vatRegistered={overview.vatRegistered}
                 />
                 <SpendingSnapshot
                   summary={overview.spending.summary}

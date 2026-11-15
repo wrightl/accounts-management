@@ -11,6 +11,7 @@ import { formatBankCategory } from "@/lib/bank/categories";
 import { DAILY_QUESTION_LIMIT, questionsAskedToday } from "@/lib/bookkeeper/ask";
 import { countUncategorisedOutgoing, listCategorySuggestions } from "@/lib/bookkeeper/categories";
 import { listAiReceiptMatches } from "@/lib/bookkeeper/receipts";
+import { getCompanySettings } from "@/lib/settings/queries";
 
 export const metadata: Metadata = { title: "AI bookkeeper" };
 
@@ -21,11 +22,12 @@ export default async function BookkeeperPage() {
     hasPermission("reports:read"),
   ]);
   const aiReady = aiGatewayConfigured();
-  const [categories, receipts, uncategorised, asked] = await Promise.all([
+  const [categories, receipts, uncategorised, asked, company] = await Promise.all([
     listCategorySuggestions(companyId),
     listAiReceiptMatches(companyId),
     countUncategorisedOutgoing(companyId),
     canAsk ? questionsAskedToday(companyId) : Promise.resolve(0),
+    getCompanySettings(companyId),
   ]);
 
   return (
@@ -44,7 +46,10 @@ export default async function BookkeeperPage() {
 
       {canAsk && aiReady ? (
         <section className="mt-8 max-w-3xl">
-          <AskBox remaining={Math.max(0, DAILY_QUESTION_LIMIT - asked)} />
+          <AskBox
+            remaining={Math.max(0, DAILY_QUESTION_LIMIT - asked)}
+            vatRegistered={company.vatRegistered}
+          />
         </section>
       ) : null}
 

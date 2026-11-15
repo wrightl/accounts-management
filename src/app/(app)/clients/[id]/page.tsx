@@ -15,6 +15,7 @@ import { formatGBP } from "@/lib/money";
 import { listClientProfitability, listProjectExpenses } from "@/lib/profitability/queries";
 import { MarginCards, ProjectExpenses } from "@/components/profitability/project-costs";
 import { DisplayDate } from "@/components/date-format-provider";
+import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 
 export default async function ClientDetailPage({
   params,
@@ -25,10 +26,11 @@ export default async function ClientDetailPage({
   const canWrite = await hasPermission("accounts:write");
   const { id } = await params;
 
-  const [overview, profitRows, costs] = await Promise.all([
+  const [overview, profitRows, costs, company] = await Promise.all([
     getClientOverview(companyId, id),
     listClientProfitability(companyId, { from: null, to: null }, id),
     listProjectExpenses(companyId, { clientId: id }),
+    getOrCreateCompanySettings(companyId),
   ]);
   if (!overview) notFound();
   const profit = profitRows[0];
@@ -193,7 +195,8 @@ export default async function ClientDetailPage({
                 }
               />
               <p className="mt-2 text-xs text-muted">
-                Net of VAT and credit notes. Costs are expenses tagged to this client or their orders.
+                {company.vatRegistered ? "Net of VAT and credit notes." : "Net of credit notes."} Costs
+                are expenses tagged to this client or their orders.
               </p>
             </section>
           ) : null}

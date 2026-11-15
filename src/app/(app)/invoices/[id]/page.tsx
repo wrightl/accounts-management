@@ -270,10 +270,14 @@ export default async function InvoiceDetailPage({
           </TBody>
         </Table>
         <dl className="ml-auto mt-3 grid max-w-xs grid-cols-[1fr_auto] gap-x-6 gap-y-1 text-sm">
-          <dt className="text-muted">Net</dt>
-          <dd className="text-right tabular-nums">{invoice.netFormatted}</dd>
-          <dt className="text-muted">VAT</dt>
-          <dd className="text-right tabular-nums">{invoice.vatFormatted}</dd>
+          {invoice.vatPence !== 0 ? (
+            <>
+              <dt className="text-muted">Net</dt>
+              <dd className="text-right tabular-nums">{invoice.netFormatted}</dd>
+              <dt className="text-muted">VAT</dt>
+              <dd className="text-right tabular-nums">{invoice.vatFormatted}</dd>
+            </>
+          ) : null}
           <dt className="font-medium">Total</dt>
           <dd className="text-right font-medium tabular-nums">{invoice.grossFormatted}</dd>
         </dl>

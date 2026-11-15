@@ -129,9 +129,15 @@ export async function getProfitAndLoss(
     writeOffFormatted: formatGBP(writeOffPence),
     profitFormatted: formatGBP(profitPence),
     basis: "accrual" as const,
-    basisNote:
-      "Accrual basis: invoiced income is net (ex-VAT) by issue date, less credit notes by their issue date. Other income is cash on the bank date (no VAT). Expenses are net of VAT by spend date, plus invoice balances written off as bank charges or bad debt by write-off date. See VAT summary for output/input VAT.",
+    basisNote: profitAndLossBasisNote(true),
   };
+}
+
+/** How the P&L is worked out. Leaves VAT out for a company that has none to report. */
+export function profitAndLossBasisNote(showVat: boolean): string {
+  return showVat
+    ? "Accrual basis: invoiced income is net (ex-VAT) by issue date, less credit notes by their issue date. Other income is cash on the bank date (no VAT). Expenses are net of VAT by spend date, plus invoice balances written off as bank charges or bad debt by write-off date. See VAT summary for output/input VAT."
+    : "Accrual basis: invoiced income by issue date, less credit notes by their issue date. Other income is cash on the bank date. Expenses by spend date, plus invoice balances written off as bank charges or bad debt by write-off date.";
 }
 
 /** Confirmed other-income credits grouped by calendar month (booked_at). */
@@ -455,7 +461,7 @@ export async function getVatSummary(
 
   const note = company.vatRegistered
     ? "Export for your accountant — this app does not submit to HMRC."
-    : "Company is not marked VAT registered in Settings. Figures reflect any VAT stored on documents.";
+    : "Company is not marked VAT registered in Settings, but documents in this period still record VAT. Figures reflect that VAT.";
 
   return {
     vatOnSalesPence,

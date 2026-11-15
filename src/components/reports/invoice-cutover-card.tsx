@@ -78,8 +78,8 @@ export function InvoiceCutoverCard({
           </h2>
           <p className="mt-1 text-sm text-muted">
             Imported invoices dated before this date are kept for reference and
-            stay in what clients owe you, but are left out of P&amp;L, VAT and
-            reserves. Invoices created in Alfa always count.
+            stay in what clients owe you, but are left out of P&amp;L,{" "}
+            {vatRegistered ? "VAT and " : ""}reserves. Invoices created in Alfa always count.
           </p>
 
           {canEdit ? (

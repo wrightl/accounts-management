@@ -50,8 +50,8 @@ export default async function DeadlinesPage() {
       <h1 className="font-display text-2xl font-semibold">Deadlines</h1>
       <p className="mt-1 max-w-3xl text-muted">
         {isLtd
-          ? "Companies House and HMRC deadlines for the next year, worked out from your year end, VAT quarters and Companies House record."
-          : "HMRC deadlines for the next year, worked out from the tax year and your VAT quarters."}{" "}
+          ? `Companies House and HMRC deadlines for the next year, worked out from your year end, ${settings.vatRegistered ? "VAT quarters " : ""}and Companies House record.`
+          : `HMRC deadlines for the next year, worked out from the tax year${settings.vatRegistered ? " and your VAT quarters" : ""}.`}{" "}
         Mark each one done once it&apos;s filed or paid.
       </p>
 

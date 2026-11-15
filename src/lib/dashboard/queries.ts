@@ -148,6 +148,8 @@ export type DashboardOverviewData = {
   isPastYear: boolean;
   /** The period starts before the invoice cutover, so sales and accounts figures differ. */
   periodBeforeCutover: boolean;
+  /** Whether chart captions should say figures are ex VAT. */
+  vatRegistered: boolean;
   /** What the monthly charts cover: the chosen earlier year, otherwise the last 12 months. */
   chartWindowLabel: string;
   /** Earlier financial years the period picker offers, newest first. */
@@ -937,6 +939,7 @@ export async function getDashboardOverview(
     periodKey,
     isPastYear: pastYear !== null,
     periodBeforeCutover,
+    vatRegistered: settings.vatRegistered,
     chartWindowLabel: pastYear ? period.label : "Last 12 months",
     pastYears,
     periodLabel: period.label,

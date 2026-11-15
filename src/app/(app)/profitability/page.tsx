@@ -103,8 +103,8 @@ export default async function ProfitabilityPage({
     <div>
       <h1 className="font-display text-2xl font-semibold">Profitability</h1>
       <p className="mt-1 max-w-2xl text-muted">
-        What each order and client earns once the costs you spent on them are taken off. All
-        figures are net of VAT.
+        What each order and client earns once the costs you spent on them are taken off.
+        {company.vatRegistered ? " All figures are net of VAT." : null}
       </p>
 
       {!anyCosts ? (

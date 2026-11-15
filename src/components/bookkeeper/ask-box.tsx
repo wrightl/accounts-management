@@ -8,13 +8,16 @@ import { FieldError, Label, Textarea } from "@/components/ui/form";
 const EXAMPLES = [
   "What did we spend on software in the last quarter?",
   "Who are our biggest clients this year?",
-  "How much VAT do we owe this quarter so far?",
   "Which invoices are overdue?",
 ];
+const VAT_EXAMPLE = "How much VAT do we owe this quarter so far?";
 
 type Answer = { question: string; answer: string; sources: string[] };
 
-export function AskBox({ remaining }: { remaining: number }) {
+export function AskBox({ remaining, vatRegistered }: { remaining: number; vatRegistered: boolean }) {
+  const examples = vatRegistered
+    ? [...EXAMPLES.slice(0, 2), VAT_EXAMPLE, ...EXAMPLES.slice(2)]
+    : EXAMPLES;
   const [question, setQuestion] = useState("");
   const [answers, setAnswers] = useState<Answer[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -71,7 +74,7 @@ export function AskBox({ remaining }: { remaining: number }) {
 
       {answers.length === 0 ? (
         <div className="flex flex-wrap gap-2">
-          {EXAMPLES.map((ex) => (
+          {examples.map((ex) => (
             <button
               key={ex}
               type="button"

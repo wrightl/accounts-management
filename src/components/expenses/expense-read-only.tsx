@@ -27,12 +27,12 @@ export async function ExpenseReadOnly({
     ["Date", expense.spentAt ? <DisplayDate key="date" value={expense.spentAt} /> : "—"],
     ["Category", expense.category ?? "—"],
     ["Status", expenseStatusLabel(expense.status as ExpenseStatus)],
-    ["VAT", formatGBP(expense.vatPence)],
     ["Source", expense.source],
     ["Paid by", paidBy ? paidBy.name || paidBy.email : "—"],
     ["Billable", expense.billable ? "Yes" : "No"],
     ["Client", client ? clientDisplayName(client) : "—"],
   ];
+  if (expense.vatPence !== 0) fields.splice(3, 0, ["VAT", formatGBP(expense.vatPence)]);
   if (expense.mileageMiles != null) {
     fields.push(["Miles", String(expense.mileageMiles)]);
     fields.push(["Mileage rate (pence)", String(expense.mileageRatePence ?? "—")]);
