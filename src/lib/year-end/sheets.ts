@@ -29,6 +29,8 @@ export type PackSheet = {
   rows: PackCell[][];
   totals?: PackCell[];
   freezeRows?: number;
+  /** Layout sheets only: fixed column widths, in characters, with text wrapped inside them. */
+  columnWidths?: number[];
 };
 
 export type Column = {
@@ -202,7 +204,11 @@ export class Layout {
     };
   }
 
-  sheet(name: string, about: string, options: { freezeRows?: number } = {}): PackSheet {
+  sheet(
+    name: string,
+    about: string,
+    options: { freezeRows?: number; columnWidths?: number[] } = {},
+  ): PackSheet {
     return { name, about, layout: true, headers: [], rows: this.rows, ...options };
   }
 }
@@ -228,6 +234,7 @@ export function toXlsxSheets(sheets: PackSheet[]): XlsxSheet[] {
     layout: s.layout,
     totals: s.totals?.map(toXlsxCell),
     freezeRows: s.freezeRows,
+    columnWidths: s.columnWidths,
   }));
 }
 

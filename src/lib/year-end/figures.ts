@@ -4,6 +4,7 @@ import type {
   PackExpense,
   PackInvoice,
   PackPerson,
+  PackReimbursement,
   YearEndData,
 } from "@/lib/year-end/data";
 import { inPeriod } from "@/lib/year-end/period";
@@ -35,6 +36,21 @@ export type CustomerCredit = {
 };
 
 export type PersonAmount ={ name: string; pence: number };
+
+/** What one person is owed at the period end, by when the costs are dated. The three parts add up to the total. */
+export type OwedSplit = {
+  name: string;
+  /** Dated before incorporation (or before a sole trader started trading). Nil when that date is not held. */
+  beforeStartPence: number;
+  /** Dated from that date on, but before the period start. */
+  earlierPence: number;
+  /** Dated in the period. */
+  thisPeriodPence: number;
+  totalPence: number;
+};
+
+/** The income category the bank screen offers for a grant. */
+export const GRANT_CATEGORY = "Grant";
 
 /** A cost with a covered period that runs outside the pack period, split by days. The three parts add up to the cost. */
 export type Prepayment = {
@@ -84,6 +100,16 @@ export type Figures = {
   possiblePrepayments: Prepayment[];
   /** Spent before the period, covering time in it (and perhaps after it). Empty on cash basis. */
   prepaymentsBroughtForward: Prepayment[];
+  /** The date of incorporation, or the date a sole trader started trading; null when not held. */
+  startDate: string | null;
+  /** Reimbursements paid in the period. A sole trader repaying themselves is drawings, so those are left out. */
+  reimbursementRuns: PackReimbursement[];
+  /** Expenses dated before the period that one of those reimbursements paid back. */
+  reimbursedEarlier: { run: PackReimbursement; expense: PackExpense }[];
+  /** `awaitingReimbursement` per person, split by when the costs are dated. */
+  owedSplit: OwedSplit[];
+  /** Other income recorded under the built-in Grant category. */
+  grants: PackBankTransaction[];
   /** Limited company. */
   owedToPeople: PersonAmount[];
   directorsPay: { name: string; salaryPence: number; dividendsPence: number }[];
@@ -252,6 +278,39 @@ export function deriveFigures(data: YearEndData): Figures {
     })),
   );
 
+  const startDate = isLimited ? company.incorporatedOn : company.tradingStartedOn;
+  const reimbursementRuns = data.reimbursements.filter(
+    (r) => isLimited || r.payeeUserId !== owner?.id,
+  );
+  const reimbursedEarlier = reimbursementRuns.flatMap((run) =>
+    run.expenseIds
+      .map((id) => data.expenses.get(id)!)
+      .filter((e) => e.spentAt != null && e.spentAt < period.from)
+      .map((expense) => ({ run, expense })),
+  );
+  // Each expense lands in exactly one part, so the parts add up to owedToPeople.
+  const owedSplit: OwedSplit[] = owedToPeople.map(({ name, pence }) => {
+    const theirs = awaitingReimbursement.filter(
+      (e) => nameOf(e.paidByUserId, "Person not recorded") === name,
+    );
+    const beforeStart = (e: PackExpense) => startDate != null && e.spentAt! < startDate;
+    const part = (keep: (e: PackExpense) => boolean) => sum(theirs.filter(keep), (e) => e.amountPence);
+    return {
+      name,
+      beforeStartPence: part(beforeStart),
+      earlierPence: part((e) => !beforeStart(e) && e.spentAt! < period.from),
+      thisPeriodPence: part((e) => !beforeStart(e) && e.spentAt! >= period.from),
+      totalPence: pence,
+    };
+  });
+  const grants = otherIncome.filter((t) =>
+    t.matches.some(
+      (m) =>
+        m.matchType === "other_income" &&
+        m.incomeCategory?.trim().toLowerCase() === GRANT_CATEGORY.toLowerCase(),
+    ),
+  );
+
   const matchesOf = (type: string) =>
     data.bankTransactions.flatMap((t) =>
       t.matches.filter((m) => m.matchType === type).map((m) => ({ tx: t, match: m })),
@@ -331,6 +390,11 @@ export function deriveFigures(data: YearEndData): Figures {
     possibleFixedAssets,
     possiblePrepayments,
     prepaymentsBroughtForward,
+    startDate,
+    reimbursementRuns,
+    reimbursedEarlier,
+    owedSplit,
+    grants,
     owedToPeople,
     directorsPay,
     drawings,

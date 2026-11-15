@@ -38,6 +38,12 @@ export type XlsxSheet = {
   totals?: XlsxCell[];
   /** Layout sheets only: keep this many rows at the top in view when scrolling. */
   freezeRows?: number;
+  /**
+   * Layout sheets only: fixed column widths in characters (the last one also
+   * applies to any further columns). Text wraps inside its column and rows grow
+   * to fit, so a sentence reads in full without resizing anything.
+   */
+  columnWidths?: number[];
 };
 
 const MAX_CELL_TEXT = 32_767;
@@ -45,6 +51,9 @@ const MAX_LINKS_PER_SHEET = 65_530;
 const MAX_WIDTH = 60;
 
 const STYLE = { money: 1, link: 2, date: 3, bold: 4, boldMoney: 5, heading: 6 } as const;
+/** Each style above (and the default, 0) has a wrapped twin this many places on. */
+const WRAP_OFFSET = 7;
+const LINE_HEIGHT = 15;
 
 const EXCEL_EPOCH = Date.UTC(1899, 11, 30);
 
@@ -124,8 +133,12 @@ function worksheet(sheet: XlsxSheet, nameOf: Map<string, string>, sheetNumber: n
   const widths = columns.map((h) => h.length);
   const links: string[] = [];
   const externalLinks: string[] = [];
+  const fixed = layout && sheet.columnWidths?.length ? sheet.columnWidths : null;
+  const fixedWidth = (col: number) => fixed![Math.min(col, fixed!.length - 1)]!;
 
   const rowXml = (cells: XlsxCell[], rowNumber: number) => {
+    // Lines the tallest wrapped cell needs, so the row can be given a height that shows them all.
+    let lines = 1;
     const out = cells.map((cell, col) => {
       const ref = `${columnName(col)}${rowNumber}`;
       const { value, money, link, date, formula, bold, heading } =
@@ -166,6 +179,17 @@ function worksheet(sheet: XlsxSheet, nameOf: Map<string, string>, sheetNumber: n
         links.push(`<hyperlink ref="${ref}" r:id="rId${externalLinks.length}"/>`);
         style = STYLE.link;
       }
+      // A heading stays on one line and runs across the sheet.
+      if (fixed && !heading) {
+        style += WRAP_OFFSET;
+        if (typeof value === "string") {
+          const perLine = Math.max(fixedWidth(col) - 2, 1);
+          const needed = text
+            .split("\n")
+            .reduce((total, part) => total + Math.max(1, Math.ceil(part.length / perLine)), 0);
+          lines = Math.max(lines, needed);
+        }
+      }
       const s = style ? ` s="${style}"` : "";
 
       if (formula) {
@@ -187,7 +211,8 @@ function worksheet(sheet: XlsxSheet, nameOf: Map<string, string>, sheetNumber: n
         text.slice(0, MAX_CELL_TEXT),
       )}</t></is></c>`;
     });
-    return `<row r="${rowNumber}">${out.join("")}</row>`;
+    const height = lines > 1 ? ` ht="${lines * LINE_HEIGHT}" customHeight="1"` : "";
+    return `<row r="${rowNumber}"${height}>${out.join("")}</row>`;
   };
 
   const rows = layout
@@ -200,7 +225,7 @@ function worksheet(sheet: XlsxSheet, nameOf: Map<string, string>, sheetNumber: n
   const cols = widths
     .map(
       (w, i) =>
-        `<col min="${i + 1}" max="${i + 1}" width="${Math.min(Math.max(w, 8) + 2, MAX_WIDTH)}" customWidth="1"/>`,
+        `<col min="${i + 1}" max="${i + 1}" width="${fixed ? fixedWidth(i) : Math.min(Math.max(w, 8) + 2, MAX_WIDTH)}" customWidth="1"/>`,
     )
     .join("");
 
@@ -349,7 +374,7 @@ const STYLES =
   `<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>` +
   `<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>` +
   `<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>` +
-  `<cellXfs count="7">` +
+  `<cellXfs count="14">` +
   `<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>` +
   `<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>` +
   `<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>` +
@@ -357,6 +382,14 @@ const STYLES =
   `<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>` +
   `<xf numFmtId="164" fontId="2" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/>` +
   `<xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1"/>` +
+  // The same seven again, wrapped and aligned to the top, for sheets with fixed column widths.
+  `<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>` +
+  `<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>` +
+  `<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>` +
+  `<xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>` +
+  `<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>` +
+  `<xf numFmtId="164" fontId="2" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>` +
+  `<xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>` +
   `</cellXfs>` +
   `<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>` +
   `</styleSheet>`;

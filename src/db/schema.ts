@@ -1946,6 +1946,44 @@ export const yearEndRuns = pgTable(
   ],
 );
 
+/**
+ * What the owner said about one item of a period's Notes for the accountant:
+ * a confirmation, an explanation, or a yes/no answer. One row per item.
+ */
+export const yearEndResponses = pgTable(
+  "year_end_responses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    periodFrom: date("period_from").notNull(),
+    periodTo: date("period_to").notNull(),
+    /** Which note item this answers, e.g. `bank-close:<bank account id>` or `general`. Never shown. */
+    itemKey: text("item_key").notNull(),
+    explanation: text("explanation"),
+    /** The answer to the item's yes/no question; null until answered. */
+    answer: boolean("answer"),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    confirmedByUserId: uuid("confirmed_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    /** The figure that was confirmed. The confirmation only stands while the note still shows it. */
+    confirmedValue: text("confirmed_value"),
+    /** Why an earlier confirmation was removed, until the item is confirmed again. */
+    clearedReason: text("cleared_reason"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("uniq_year_end_responses_item").on(
+      t.companyId,
+      t.periodFrom,
+      t.periodTo,
+      t.itemKey,
+    ),
+  ],
+);
+
 export const dataMigrationStatusEnum = pgEnum("data_migration_status", [
   "pending_effects",
   "applied",

@@ -106,9 +106,9 @@ describe("limited company, 1 April 2025 to 31 March 2026", () => {
 
     expect(sheets.map((s) => s.name)).toEqual([
       TAB.cover,
+      TAB.notes,
       TAB.pnl,
       TAB.position,
-      TAB.review,
       TAB.sales,
       TAB.otherIncome,
       TAB.expenses,
@@ -119,7 +119,7 @@ describe("limited company, 1 April 2025 to 31 March 2026", () => {
     ]);
     expect(workbook.omitted).toEqual([]);
 
-    for (const name of [TAB.cover, TAB.pnl, TAB.position, TAB.shares, TAB.outside]) {
+    for (const name of [TAB.cover, TAB.notes, TAB.pnl, TAB.position, TAB.shares, TAB.outside]) {
       const sheet = findSheet(sheets, name);
       expect(amount(sheet, "Period start")).toBe("2025-04-01");
       expect(amount(sheet, "Period end")).toBe("2026-03-31");
@@ -552,7 +552,7 @@ describe("limited company, 1 April 2025 to 31 March 2026", () => {
     const company = await seedCompany(db, { companyNumber: "01234567" });
     const { sheets, workbook } = await workbookFor(company.id, LTD_YEAR);
 
-    expect(sheets.map((s) => s.name)).toEqual([TAB.cover, TAB.pnl, TAB.position, TAB.review]);
+    expect(sheets.map((s) => s.name)).toEqual([TAB.cover, TAB.notes, TAB.pnl, TAB.position]);
     expect(workbook.omitted).toEqual([
       TAB.sales,
       TAB.otherIncome,
@@ -584,8 +584,9 @@ describe("limited company, 1 April 2025 to 31 March 2026", () => {
     await db.update(expenses).set({ vatPence: 50 }).where(eq(expenses.description, "Train ticket 2"));
 
     const registered = await workbookFor(companyId, LTD_YEAR);
-    expect(registered.sheets.map((s) => s.name).slice(0, 4)).toEqual([
+    expect(registered.sheets.map((s) => s.name).slice(0, 5)).toEqual([
       TAB.cover,
+      TAB.notes,
       TAB.pnl,
       TAB.position,
       TAB.vat,
@@ -849,7 +850,7 @@ describe("streamYearEndPack", () => {
       ]),
     );
     const names = [...parts.get("xl/workbook.xml")!.matchAll(/<sheet name="([^"]+)"/g)].map((m) => m[1]);
-    expect(names.slice(0, 5)).toEqual([TAB.cover, TAB.pnl, TAB.position, TAB.review, TAB.sales]);
+    expect(names.slice(0, 5)).toEqual([TAB.cover, TAB.notes, TAB.pnl, TAB.position, TAB.sales]);
 
     const salesXml = parts.get(`xl/worksheets/sheet${names.indexOf(TAB.sales) + 1}.xml`)!;
     // 1 April 2025 as a real Excel date, styled dd/mm/yyyy, with no time part.
@@ -927,7 +928,12 @@ describe("streamYearEndPack", () => {
     expect(pack.filename).toBe("year-end-pack-2025-04-01_2026-03-31-csv.zip");
     expect(entries).not.toContain(WORKBOOK_PATH);
     expect(entries).toEqual(
-      expect.arrayContaining(["csv/01-cover.csv", "csv/02-profit-and-loss.csv", "csv/05-sales-invoices.csv"]),
+      expect.arrayContaining([
+        "csv/01-cover.csv",
+        "csv/02-notes-for-the-accountant.csv",
+        "csv/03-profit-and-loss.csv",
+        "csv/05-sales-invoices.csv",
+      ]),
     );
     const sales = new TextDecoder().decode(entry(zip, "csv/05-sales-invoices.csv")).split("\n");
     expect(sales[0]).toContain("Date issued,Type,Number,Customer");

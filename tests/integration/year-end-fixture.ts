@@ -371,3 +371,35 @@ export function allText(sheet: PackSheet): string[] {
 
 export const sum = (values: (string | number | null)[]) =>
   values.reduce<number>((total, v) => total + (typeof v === "number" ? v : 0), 0);
+
+/**
+ * A table inside a layout tab, found by its header row: its rows keyed by
+ * header, up to its totals row or the next blank row. `nth` picks a later
+ * table with the same headers.
+ */
+export function layoutTable(sheet: PackSheet, headers: string[], nth = 0) {
+  const starts = sheet.rows.flatMap((r, i) =>
+    headers.every((h, c) => value(r[c]) === h) ? [i] : [],
+  );
+  const start = starts[nth];
+  if (start == null) {
+    throw new Error(`No table starting "${headers.join(" | ")}" on ${sheet.name}`);
+  }
+  const names = sheet.rows[start]!.map((c) => String(value(c)));
+  const record = (r: PackCell[]) =>
+    Object.fromEntries(names.map((name, c) => [name, value(r[c])])) as Record<
+      string,
+      string | number | null
+    >;
+  const rows: Record<string, string | number | null>[] = [];
+  let total: Record<string, string | number | null> | null = null;
+  for (const r of sheet.rows.slice(start + 1)) {
+    if (r.length === 0) break;
+    if (value(r[0]) === "Total") {
+      total = record(r);
+      break;
+    }
+    rows.push(record(r));
+  }
+  return { rows, total };
+}

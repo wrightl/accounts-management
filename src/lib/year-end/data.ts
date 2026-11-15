@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, eq, inArray, isNotNull, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, ne, or, sql, type SQL } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { getDb } from "@/db";
 import {
@@ -19,6 +19,7 @@ import {
   reimbursementItems,
   reimbursements,
   users,
+  yearEndRuns,
   type Company,
 } from "@/db/schema";
 import {
@@ -33,6 +34,7 @@ import {
   invoiceCountsInAccounts,
   paymentCountsInAccounts,
 } from "@/lib/invoices/accounts-scope";
+import { todayIsoDate } from "@/lib/dates";
 import { getCompanySettings } from "@/lib/settings/queries";
 import { listShareholders } from "@/lib/shareholders/queries";
 import type { PackPeriod } from "@/lib/year-end/period";
@@ -128,6 +130,23 @@ export type PackExpense = {
   reimbursementPaidOn: string | null;
   bank: PackBankMatch | null;
   receipts: PackReceipt[];
+};
+
+/** An expense dated before the period that was entered too late for the pack of the period it is dated in. */
+export type PackLateExpense = {
+  id: string;
+  refNumber: number;
+  description: string;
+  spentAt: string;
+  /** The UK calendar date it was created in Alfa. */
+  enteredOn: string;
+  amountPence: number;
+  /**
+   * The date of the last export of an earlier pack that could have shown it,
+   * which it was entered after. Null when no such export is recorded: it is
+   * then listed because it was entered on or after this period's start.
+   */
+  afterExportOn: string | null;
 };
 
 export type PackWriteOff = {
@@ -255,6 +274,8 @@ export type YearEndData = {
   totalShares: number | null;
   /** Cash basis only: money received from and refunded to customers in the period. */
   cashReceipts: PackCashReceipt[];
+  /** Expenses dated before the period and entered after the earlier pack that would have shown them. */
+  lateExpenses: PackLateExpense[];
 };
 
 function personName(user: { name: string | null; email: string }): string {
@@ -730,6 +751,64 @@ export async function loadYearEndData(
     expenseIds: (itemsByReimbursement.get(r.id) ?? []).map((i) => i.expense.id),
   }));
 
+  // --- Expenses dated before the period, entered too late for an earlier pack ----
+  // "Too late" is after the last export of any earlier pack that covers the
+  // spend date or a later one: that pack could have shown it, and each expense
+  // is then reported once. With no such export on record, it is one entered on
+  // or after this period's start.
+
+  const earlierExports = await db
+    .select({ periodTo: yearEndRuns.periodTo, exportedAt: yearEndRuns.exportedAt })
+    .from(yearEndRuns)
+    .where(
+      and(
+        eq(yearEndRuns.companyId, companyId),
+        isNotNull(yearEndRuns.exportedAt),
+        sql`${yearEndRuns.periodTo} < ${period.from}`,
+      ),
+    );
+  const firstExport = earlierExports
+    .map((r) => r.exportedAt!)
+    .sort((a, b) => a.getTime() - b.getTime())[0];
+  const enteredOn = londonDate(expenses.createdAt);
+  const enteredInOrAfterPeriod = sql`${enteredOn} >= ${period.from}`;
+  const lateRows = await db
+    .select({
+      id: expenses.id,
+      refNumber: expenses.refNumber,
+      description: expenses.description,
+      spentAt: expenses.spentAt,
+      amountPence: expenses.amountPence,
+      createdAt: expenses.createdAt,
+      enteredOn,
+    })
+    .from(expenses)
+    .where(
+      and(
+        eq(expenses.companyId, companyId),
+        expenseInPack,
+        sql`${expenses.spentAt} < ${period.from}`,
+        firstExport
+          ? or(enteredInOrAfterPeriod, gt(expenses.createdAt, firstExport))
+          : enteredInOrAfterPeriod,
+      ),
+    )
+    .orderBy(asc(expenses.spentAt), asc(expenses.createdAt), asc(expenses.id));
+  const lateExpenses = lateRows.flatMap((row): PackLateExpense[] => {
+    const spentAt = row.spentAt!;
+    const { createdAt, ...rest } = row;
+    const exports = earlierExports
+      .filter((r) => r.periodTo >= spentAt)
+      .map((r) => r.exportedAt!.getTime());
+    if (exports.length > 0) {
+      const lastExport = Math.max(...exports);
+      return createdAt.getTime() > lastExport
+        ? [{ ...rest, spentAt, afterExportOn: todayIsoDate(new Date(lastExport)) }]
+        : [];
+    }
+    return row.enteredOn >= period.from ? [{ ...rest, spentAt, afterExportOn: null }] : [];
+  });
+
   // --- Limited company: dividends and the share register ----------------------
 
   let dividends: PackDividend[] = [];
@@ -875,6 +954,7 @@ export async function loadYearEndData(
     shareholders: shareholderRows,
     totalShares,
     cashReceipts,
+    lateExpenses,
   };
 }
 
