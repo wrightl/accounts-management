@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requirePermission, ForbiddenError } from "@/lib/auth";
+import { writeAudit } from "@/lib/audit";
 import { ensureLocalUser } from "@/lib/users";
 import { streamYearEndPack } from "@/lib/year-end/pack";
 import { parsePeriod } from "@/lib/year-end/period";
@@ -57,14 +58,25 @@ export async function GET(request: Request) {
     );
   }
 
-  await recordYearEndRun(
-    user.companyId,
-    period,
-    pack.outstandingChecks,
-    await ensureLocalUser(user),
-  );
+  const companyId = user.companyId;
+  const actorUserId = await ensureLocalUser(user);
+  // Mark the year exported only once the whole zip has been sent: a download
+  // that fails or is cancelled part way never reaches flush.
+  const recordWhenSent = new TransformStream<Uint8Array, Uint8Array>({
+    async flush() {
+      await recordYearEndRun(companyId, period, pack.outstandingChecks, actorUserId);
+      await writeAudit({
+        companyId,
+        actorUserId,
+        action: "year_end.export",
+        entityType: "year_end_run",
+        entityId: `${period.from}_${period.to}`,
+        meta: { ...period, outstandingChecks: pack.outstandingChecks },
+      });
+    },
+  });
 
-  return new NextResponse(pack.stream, {
+  return new NextResponse(pack.stream.pipeThrough(recordWhenSent), {
     status: 200,
     headers: {
       "Content-Type": "application/zip",

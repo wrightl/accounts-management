@@ -18,6 +18,9 @@ vi.mock("@/lib/billing/entitlements", () => ({
 }));
 vi.mock("@/lib/year-end/pack", () => ({ prepareYearEndPack }));
 vi.mock("@/lib/year-end/runs", () => ({ recordYearEndRun }));
+const writeAudit = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/audit", () => ({ writeAudit }));
+vi.mock("@/lib/users", () => ({ ensureLocalUser: vi.fn(async () => "user-1") }));
 
 const { openYearEnd } = await import("@/actions/year-end");
 const { requireActionPermission } = await import("@/lib/auth");
@@ -43,6 +46,14 @@ describe("openYearEnd", () => {
       { from: "2025-04-01", to: "2026-03-31" },
       2,
     );
+    expect(writeAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        companyId: "company-1",
+        actorUserId: "user-1",
+        action: "year_end.review",
+        meta: { from: "2025-04-01", to: "2026-03-31", outstandingChecks: 2 },
+      }),
+    );
   });
 
   it("refuses a role without it, and writes nothing", async () => {
@@ -52,6 +63,7 @@ describe("openYearEnd", () => {
     expect(result).toEqual({ ok: false, error: "You do not have permission to do that." });
     expect(prepareYearEndPack).not.toHaveBeenCalled();
     expect(recordYearEndRun).not.toHaveBeenCalled();
+    expect(writeAudit).not.toHaveBeenCalled();
   });
 
   it("refuses dates that are not a period", async () => {

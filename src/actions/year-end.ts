@@ -1,6 +1,8 @@
 "use server";
 
 import { requireActionPermission } from "@/lib/auth";
+import { writeAudit } from "@/lib/audit";
+import { ensureLocalUser } from "@/lib/users";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { outstandingCount } from "@/lib/year-end/checks";
 import { prepareYearEndPack } from "@/lib/year-end/pack";
@@ -27,6 +29,15 @@ export async function openYearEnd(from: string, to: string): Promise<ActionResul
     period,
     includeVat: entitlements.vatExport,
   });
-  await recordYearEndRun(companyId, period, outstandingCount(checks));
+  const outstanding = outstandingCount(checks);
+  await recordYearEndRun(companyId, period, outstanding);
+  await writeAudit({
+    companyId,
+    actorUserId: await ensureLocalUser(authz.user),
+    action: "year_end.review",
+    entityType: "year_end_run",
+    entityId: `${period.from}_${period.to}`,
+    meta: { ...period, outstandingChecks: outstanding },
+  });
   return { ok: true, id: `${period.from}_${period.to}` };
 }

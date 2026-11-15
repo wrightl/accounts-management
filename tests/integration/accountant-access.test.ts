@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
-import { users } from "@/db/schema";
+import { auditLog, users, yearEndRuns } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import { seedCompany } from "@/lib/test/seed-company";
 import { GET as invoicePdf } from "@/app/api/invoices/[id]/pdf/route";
 import { GET as dividendPaperwork } from "@/app/api/dividends/[id]/paperwork/route";
@@ -130,6 +131,28 @@ describe("accountant file access", () => {
       "year-end-pack-2025-04-01_2026-03-31.zip",
     );
     await res.body?.cancel();
+  });
+
+  it("marks the year exported only once the whole download has been sent", async () => {
+    const res = await yearEndPack(
+      new Request("http://localhost/api/year-end/pack?from=2025-04-01&to=2026-03-31"),
+    );
+    expect(await db.select().from(yearEndRuns)).toEqual([]);
+
+    await res.arrayBuffer();
+    const [run] = await db.select().from(yearEndRuns);
+    expect(run).toMatchObject({ periodFrom: "2025-04-01", periodTo: "2026-03-31" });
+    expect(run?.exportedAt).toBeInstanceOf(Date);
+    const audit = await db.select().from(auditLog).where(eq(auditLog.action, "year_end.export"));
+    expect(audit).toHaveLength(1);
+  });
+
+  it("does not mark the year exported when the download is cancelled", async () => {
+    const res = await yearEndPack(
+      new Request("http://localhost/api/year-end/pack?from=2025-04-01&to=2026-03-31"),
+    );
+    await res.body?.cancel();
+    expect(await db.select().from(yearEndRuns)).toEqual([]);
   });
 
   it("allows the CSV version of the year-end pack", async () => {
