@@ -17,6 +17,7 @@ import {
 } from "@/components/bank/expense-link-dialog";
 import { isExpenseLinkable } from "@/lib/bank/expense-link";
 import { periodLockError } from "@/lib/period-lock";
+import { formatExpenseRef } from "@/lib/references";
 import { ExpenseForm } from "@/components/expenses/expense-form";
 import { ReceiptPanel } from "@/components/expenses/receipt-panel";
 import { BackLink } from "@/components/ui/back-link";
@@ -94,8 +95,14 @@ export default async function ExpenseDetailPage({
 
   return (
     <div>
-      <div className="mb-6">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <BackLink href={listHref}>Expenses</BackLink>
+        <p className="text-sm text-muted">
+          Reference{" "}
+          <span className="font-medium text-foreground">
+            {formatExpenseRef(detail.expense.refNumber)}
+          </span>
+        </p>
       </div>
 
       {detail.expense.status === "pending" && (

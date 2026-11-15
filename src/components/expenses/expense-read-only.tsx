@@ -9,6 +9,7 @@ import { clientDisplayName } from "@/lib/clients/display";
 import { expenseStatusLabel, type ExpenseStatus } from "@/lib/expenses/categories";
 import type { getExpenseDetail } from "@/lib/expenses/queries";
 import { formatGBP } from "@/lib/money";
+import { formatExpenseRef } from "@/lib/references";
 import type { Role } from "@/lib/roles";
 
 /** An expense for someone who can't edit it, limited to what the accountant pack exports. */
@@ -24,6 +25,7 @@ export async function ExpenseReadOnly({
   const { expense, paidBy, client, receipts } = detail;
   const settlements = await listBankSettlements(companyId, { expenseId: expense.id });
   const fields: [string, React.ReactNode][] = [
+    ["Reference", formatExpenseRef(expense.refNumber)],
     ["Date", expense.spentAt ? <DisplayDate key="date" value={expense.spentAt} /> : "—"],
     ["Category", expense.category ?? "—"],
     ["Status", expenseStatusLabel(expense.status as ExpenseStatus)],
@@ -32,7 +34,7 @@ export async function ExpenseReadOnly({
     ["Billable", expense.billable ? "Yes" : "No"],
     ["Client", client ? clientDisplayName(client) : "—"],
   ];
-  if (expense.vatPence !== 0) fields.splice(3, 0, ["VAT", formatGBP(expense.vatPence)]);
+  if (expense.vatPence !== 0) fields.splice(4, 0, ["VAT", formatGBP(expense.vatPence)]);
   if (expense.mileageMiles != null) {
     fields.push(["Miles", String(expense.mileageMiles)]);
     fields.push(["Mileage rate (pence)", String(expense.mileageRatePence ?? "—")]);

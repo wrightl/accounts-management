@@ -404,7 +404,10 @@ describe("inbound email jobs", () => {
     // Re-running a processed job reports every expense without creating more.
     const again = await processInboundEmailJob(jobId);
     expect(again.expenseIds).toEqual(result.expenseIds);
-    expect(await db.select().from(expenses)).toHaveLength(2);
+    const created = await db.select().from(expenses);
+    expect(created).toHaveLength(2);
+    // Each expense from the email has its own reference number.
+    expect(created.map((e) => e.refNumber).sort()).toEqual([1, 2]);
   });
 
   async function enqueueTwoAttachmentEmail(

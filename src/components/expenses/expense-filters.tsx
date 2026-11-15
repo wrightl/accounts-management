@@ -75,7 +75,7 @@ export function ExpenseFilters({
           id="q"
           name="q"
           type="search"
-          placeholder="Description or client…"
+          placeholder="Description, client or EXP ref…"
           defaultValue={params.q}
         />
       </div>

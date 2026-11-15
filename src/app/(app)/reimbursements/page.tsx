@@ -1,3 +1,4 @@
+import Form from "next/form";
 import Link from "next/link";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { can } from "@/lib/roles";
@@ -20,6 +21,8 @@ import { listPageHref, parseListPaging } from "@/lib/list-paging";
 import { defineTableSort, parseTableSort, setTableSortParams } from "@/lib/table-sort";
 import { DisplayDate } from "@/components/date-format-provider";
 import { PageHeader } from "@/components/ui/page-header";
+import { Input } from "@/components/ui/form";
+import { formatReimbursementRef } from "@/lib/references";
 
 const SORT = defineTableSort({
   columns: ["payee", "status", "reference", "date", "created", "total"],
@@ -46,21 +49,28 @@ export default async function ReimbursementsPage({
   const canRaiseQuery = can(role, "queries:raise");
   const sp = await searchParams;
   const runFilter = sp.filter === "paid" ? "paid" : sp.filter === "pending" ? "pending" : "all";
+  const q = (sp.q ?? "").trim().slice(0, 200);
   const sort = parseTableSort(sp, SORT);
   const th = sortHeaders("/reimbursements", sp, SORT, sort);
   /** All / Pending / Paid links keep the current sort. */
   const filterHref = (filter: "all" | "pending" | "paid") => {
     const qs = new URLSearchParams(filter === "all" ? {} : { filter });
+    if (q) qs.set("q", q);
     setTableSortParams(qs, SORT, sort);
     const query = qs.toString();
     return query ? `/reimbursements?${query}` : "/reimbursements";
   };
+
+  const searchKeep = [...new URLSearchParams(filterHref(runFilter).split("?")[1] ?? "")].filter(
+    ([name]) => name !== "q",
+  );
 
   // Money still owed and runs not yet paid aren't in the pack, so don't load them.
   const [{ rows: runs, ...paging }, balances, founders, reimbursable] = await Promise.all([
     listReimbursementPage(companyId, {
       scope,
       status: runFilter === "all" ? undefined : runFilter,
+      q,
       ...sort,
       ...parseListPaging(sp),
     }),
@@ -117,6 +127,23 @@ export default async function ReimbursementsPage({
       <div className="mt-8">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-display text-lg font-semibold">Runs</h2>
+          {/* A search keeps the filter and sort, and goes back to the first page. */}
+          <Form action="/reimbursements" role="search" className="flex flex-1 justify-end gap-2 sm:max-w-sm">
+            {searchKeep.map(([name, value]) => (
+              <input key={name} type="hidden" name={name} value={value} />
+            ))}
+            <Input
+              key={q}
+              name="q"
+              type="search"
+              aria-label="Search reimbursement runs"
+              placeholder="REIMB ref, reference or payee…"
+              defaultValue={q}
+            />
+            <button type="submit" className={buttonClasses("secondary", "text-sm")}>
+              Search
+            </button>
+          </Form>
           {inPack ? null : (
           <div className="flex gap-2">
             <Link
@@ -147,6 +174,7 @@ export default async function ReimbursementsPage({
             <THead>
               <TR>
                 {showQueries ? <QueryHeaderCell /> : null}
+                <TH>Ref</TH>
                 {th("Payee", "payee")}
                 {th("Status", "status")}
                 {th("Reference", "reference")}
@@ -162,6 +190,7 @@ export default async function ReimbursementsPage({
                   {showQueries ? (
                     <QueryCell kind="reimbursement" id={r.id} queries={queries.get(r.id)} canRaise={canRaiseQuery} />
                   ) : null}
+                  <TD className="whitespace-nowrap text-muted">{formatReimbursementRef(r.refNumber)}</TD>
                   <TD>
                     <Link
                       href={`/reimbursements/${r.id}`}

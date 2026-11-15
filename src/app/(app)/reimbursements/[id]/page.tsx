@@ -14,6 +14,7 @@ import { BackLink } from "@/components/ui/back-link";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { DisplayDate } from "@/components/date-format-provider";
+import { formatExpenseRef, formatReimbursementRef } from "@/lib/references";
 
 export default async function ReimbursementDetailPage({
   params,
@@ -52,8 +53,9 @@ export default async function ReimbursementDetailPage({
               </Link>
             ) : null}
           </div>
-          <p className="mt-1 capitalize text-muted">
-            {detail.reimbursement.status}
+          <p className="mt-1 text-muted">
+            {formatReimbursementRef(detail.reimbursement.refNumber)} ·{" "}
+            <span className="capitalize">{detail.reimbursement.status}</span>
             {detail.reimbursement.paidAt
               ? <> · Paid <DisplayDate value={detail.reimbursement.paidAt} /></>
               : detail.reimbursement.reimbursementDate
@@ -95,6 +97,7 @@ export default async function ReimbursementDetailPage({
         <Table>
           <THead>
             <TR>
+              <TH>Ref</TH>
               <TH>Date</TH>
               <TH>Description</TH>
               <TH>Category</TH>
@@ -104,6 +107,9 @@ export default async function ReimbursementDetailPage({
           <TBody>
             {detail.items.map((i) => (
               <TR key={i.itemId}>
+                <TD className="whitespace-nowrap text-muted">
+                  {formatExpenseRef(i.expense.refNumber)}
+                </TD>
                 <TD className="text-muted"><DisplayDate value={i.expense.spentAt} /></TD>
                 <TD>
                   <Link

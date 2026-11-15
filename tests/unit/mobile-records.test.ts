@@ -34,6 +34,10 @@ describe("toMobileExpense", () => {
     });
 
     expect(payload.description).toBe("");
+    expect(payload.reference).toBeNull();
+    expect(toMobileExpense({ id: "e2", companyId: "co_1", status: "recorded", refNumber: 197 }).reference).toBe(
+      "EXP-0197",
+    );
     expect(payload.category).toBe("Other");
     expect(payload.expenseDate).toBe("2026-09-01");
     expect(payload.source).toBe("manual");

@@ -23,6 +23,7 @@ import {
 import { buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
+import { formatExpenseRef } from "@/lib/references";
 import { findLocalUser } from "@/lib/users";
 import { getCompany } from "@/lib/tenant";
 import { ExpenseImportButton } from "@/components/expenses/expense-import-panel";
@@ -234,6 +235,7 @@ export default async function ExpensesPage({
                 <TH className="w-8 pr-0">
                   <span className="sr-only">Notes and queries</span>
                 </TH>
+                <TH>Ref</TH>
                 {sortHeader("Date", "date")}
                 {sortHeader("Description", "description")}
                 {sortHeader("Category", "category")}
@@ -271,6 +273,7 @@ export default async function ExpensesPage({
                       canRaise={canRaiseQuery}
                     />
                   </TD>
+                  <TD className="whitespace-nowrap text-muted">{formatExpenseRef(e.refNumber)}</TD>
                   <TD className="text-muted"><DisplayDate value={e.spentAt} /></TD>
                   <TD>
                     <Link

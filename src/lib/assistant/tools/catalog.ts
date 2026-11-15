@@ -3,6 +3,7 @@ import { z } from "zod";
 import { and, desc, eq, gte, ilike, lte, or, sql, sum } from "drizzle-orm";
 import { getDb } from "@/db";
 import { bankAccounts, bankTransactions, companies, expenses } from "@/db/schema";
+import { formatExpenseRef } from "@/lib/references";
 import { expenseInPack } from "@/lib/accountant/record-scope";
 import { listClients } from "@/lib/clients/queries";
 import { getTopClientsByRevenue } from "@/lib/dashboard/queries";
@@ -101,6 +102,7 @@ export const ASSISTANT_TOOLS: readonly AssistantTool[] = [
         .where(where);
       const rows = await db
         .select({
+          refNumber: expenses.refNumber,
           date: expenses.spentAt,
           description: expenses.description,
           category: expenses.category,
@@ -114,6 +116,7 @@ export const ASSISTANT_TOOLS: readonly AssistantTool[] = [
         count: total?.count ?? 0,
         totalIncludingVat: formatGBP(total?.gross ?? 0),
         largest: rows.map((r) => ({
+          reference: formatExpenseRef(r.refNumber),
           date: r.date,
           description: r.description,
           category: r.category,

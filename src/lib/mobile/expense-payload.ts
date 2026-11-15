@@ -4,6 +4,7 @@ import {
   type PaymentSourceSuggestion,
 } from "@/lib/expenses/payment-source";
 import { formatExpenseAmount } from "@/lib/money";
+import { formatExpenseRef } from "@/lib/references";
 
 type ReceiptInput = {
   id: string;
@@ -17,6 +18,8 @@ type ReceiptInput = {
 export type MobileExpenseInput = {
   id: string;
   companyId: string;
+  /** The stored reference number; sent to the phone as "EXP-0001". */
+  refNumber?: number | null;
   description?: string | null;
   amountPence?: number | null;
   /** Currency the receipt was in; null or GBP for sterling. */
@@ -69,6 +72,7 @@ export function toMobileExpense(expense: MobileExpenseInput) {
   return {
     id: expense.id,
     companyId: expense.companyId,
+    reference: expense.refNumber ? formatExpenseRef(expense.refNumber) : null,
     description: expense.description ?? "",
     amountPence,
     /** Foreign currency and amount (minor units), or null for sterling. */
