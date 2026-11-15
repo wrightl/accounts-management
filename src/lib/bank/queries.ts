@@ -1830,14 +1830,19 @@ export async function explainOwnerTransactions(
     const note = input.note?.trim() ? input.note.trim().slice(0, 500) : null;
 
     return db.transaction(async (dbTx) => {
+        // reconciliation_matches has no company_id: each statement scopes it to
+        // this company's bank transactions itself, rather than relying on the read above.
+        const companyTransactionIds = dbTx
+            .select({ id: bankTransactions.id })
+            .from(bankTransactions)
+            .innerJoin(bankAccounts, eq(bankTransactions.bankAccountId, bankAccounts.id))
+            .where(and(inArray(bankTransactions.id, ids), eq(bankAccounts.companyId, companyId)));
+        const ownMatches = inArray(reconciliationMatches.bankTransactionId, companyTransactionIds);
         const confirmed = await dbTx
             .select({ id: reconciliationMatches.bankTransactionId })
             .from(reconciliationMatches)
             .where(
-                and(
-                    inArray(reconciliationMatches.bankTransactionId, ids),
-                    eq(reconciliationMatches.confirmed, true),
-                ),
+                and(ownMatches, eq(reconciliationMatches.confirmed, true)),
             );
         if (confirmed.length > 0) {
             throw new ReconciliationError(
@@ -1849,15 +1854,16 @@ export async function explainOwnerTransactions(
         await dbTx
             .delete(reconciliationMatches)
             .where(
-                and(
-                    inArray(reconciliationMatches.bankTransactionId, ids),
-                    eq(reconciliationMatches.confirmed, false),
-                ),
+                and(ownMatches, eq(reconciliationMatches.confirmed, false)),
             );
+        const own = await companyTransactionIds;
+        if (own.length !== ids.length) {
+            throw new ReconciliationError('Bank transaction not found');
+        }
         const created = await dbTx
             .insert(reconciliationMatches)
             .values(
-                ids.map((bankTransactionId) => ({
+                own.map(({ id: bankTransactionId }) => ({
                     bankTransactionId,
                     matchType: input.matchType,
                     personUserId,

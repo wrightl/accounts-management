@@ -359,6 +359,28 @@ describe("sole trader transfers", () => {
     expect(pack.figures.moneyPutIn[0]).toEqual({ label: "Paid into the business bank account", pence: 5_000 });
   });
 
+  it("never reads, clears or explains another business's bank transactions", async () => {
+    const seeded = await soleTrader();
+    const other = await limited();
+    const theirs = await other.bankLine("2025-07-01", -5_000, "Someone else");
+    await db.insert(reconciliationMatches).values({
+      bankTransactionId: theirs.id,
+      matchType: "expense",
+      expenseId: other.edgeExpenses[1]!.id,
+      confirmed: false,
+    });
+    const mine = await seeded.bankLine("2025-07-01", -5_000, "Sam Carter");
+
+    await expect(
+      explainOwnerTransactions(seeded.companyId, [mine.id, theirs.id], { matchType: "drawings" }),
+    ).rejects.toThrow("Bank transaction not found");
+    const left = await db
+      .select()
+      .from(reconciliationMatches)
+      .where(eq(reconciliationMatches.bankTransactionId, theirs.id));
+    expect(left).toEqual([expect.objectContaining({ matchType: "expense", confirmed: false })]);
+  });
+
   it("only lets a limited company mark money out as salary, to a named person", async () => {
     const seeded = await limited();
     const out = await seeded.bankLine("2025-07-01", -3_000, "Sam Carter");
