@@ -11,24 +11,46 @@ import { DeleteCompanyDangerZone } from "@/components/settings/delete-company-da
 import { SettingsPageHeader } from "@/components/settings/settings-page-header";
 import { SettingsWithRail, type SettingsSection } from "@/components/settings/settings-section-nav";
 import { DisplayDate } from "@/components/date-format-provider";
+import { BankOpeningBalances } from "@/components/settings/bank-opening-balances";
+import { asc, eq } from "drizzle-orm";
+import { getDb } from "@/db";
+import { bankAccounts, users } from "@/db/schema";
 
 export default async function BusinessSettingsPage() {
   const { companyId } = await guardTenantPage("settings:manage");
 
-  const [settings, incomeCategories] = await Promise.all([
+  const db = getDb();
+  const [settings, incomeCategories, accounts, members] = await Promise.all([
     getOrCreateCompanySettings(companyId),
     listIncomeCategoriesWithUsage(companyId),
+    db
+      .select({
+        id: bankAccounts.id,
+        name: bankAccounts.name,
+        openingBalancePence: bankAccounts.openingBalancePence,
+        openingBalanceDate: bankAccounts.openingBalanceDate,
+      })
+      .from(bankAccounts)
+      .where(eq(bankAccounts.companyId, companyId))
+      .orderBy(asc(bankAccounts.createdAt)),
+    db
+      .select({ id: users.id, name: users.name, email: users.email })
+      .from(users)
+      .where(eq(users.companyId, companyId))
+      .orderBy(asc(users.createdAt)),
   ]);
 
   const limited = settings.entityType === "limited_company";
   const sections: SettingsSection[] = [
     { id: "details", label: limited ? "Company profile" : "Business profile" },
+    { id: "year-end", label: "Year end" },
     { id: "vat", label: "VAT" },
     { id: "bank", label: "Bank details" },
     { id: "invoicing", label: "Invoicing" },
     { id: "cutover", label: "Spreadsheet cutover" },
     { id: "expenses", label: "Expenses" },
     ...(limited ? [{ id: "companies-house", label: "Companies House" }] : []),
+    { id: "bank-balances", label: "Bank balances" },
     { id: "income-categories", label: "Income categories" },
     { id: "danger-zone", label: "Delete company" },
   ];
@@ -44,7 +66,23 @@ export default async function BusinessSettingsPage() {
           />
         }
       >
-        <SettingsForm settings={settings} />
+        <SettingsForm
+          settings={settings}
+          members={members.map((m) => ({ id: m.id, name: m.name?.trim() || m.email }))}
+        />
+        <Card id="bank-balances" className="mt-10 scroll-mt-8 p-6">
+          <h2 className="font-display text-lg font-semibold">Bank balances</h2>
+          <p className="mt-1 text-sm text-muted">
+            For each bank account, enter one balance from a statement and the date it is from.
+            The{" "}
+            <Link href="/year-end" className="underline">
+              year-end pack
+            </Link>{" "}
+            works out the balance at the start and end of each year from it and your imported
+            transactions.
+          </p>
+          <BankOpeningBalances accounts={accounts} />
+        </Card>
         {limited ? (
           <Card id="companies-house" className="mt-10 scroll-mt-8 p-6">
             <h2 className="font-display text-lg font-semibold">Companies House</h2>

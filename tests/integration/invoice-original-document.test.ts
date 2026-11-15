@@ -14,7 +14,7 @@ import PublicInvoicePage from "@/app/i/[token]/page";
 import { deleteCompanyById } from "@/lib/companies/delete";
 import { sendEmail } from "@/lib/email";
 import { enqueueSendJob, processSendJob } from "@/lib/outbox";
-import { streamAccountantPack, listStoreZipEntries } from "@/lib/reports/accountant-pack";
+import { streamYearEndPack, listStoreZipEntries } from "@/lib/year-end/pack";
 import { getStorage } from "@/lib/storage";
 import { seedCompany } from "@/lib/test/seed-company";
 
@@ -48,7 +48,7 @@ beforeEach(async () => {
   ctx = await createTestDb();
   db = ctx.db;
   setTestDb(db as unknown as Database);
-  companyId = (await seedCompany(db)).id;
+  companyId = (await seedCompany(db, { companyNumber: "01234567" })).id;
   await db.insert(users).values({
     companyId,
     clerkUserId: "user_clerk_1",
@@ -233,34 +233,20 @@ describe("serving the original", () => {
     await attachInvoiceDocument(inv.id, pdfForm());
     await getStorage().delete((await reload(inv.id)).originalDocumentPath!);
 
-    const { stream } = await streamAccountantPack({
+    const pack = await streamYearEndPack({
       companyId,
-      from: "2026-04-01",
-      to: "2026-06-30",
+      period: { from: "2026-04-01", to: "2026-06-30" },
+      includeVat: true,
     });
+    if (!pack.ok) throw new Error("pack blocked");
+    const { stream } = pack;
     const zip = Buffer.from(await new Response(stream).arrayBuffer());
-    expect(zip.toString("latin1")).toContain("Original invoice missing, using a generated record: GONE-1");
+    expect(zip.toString("latin1")).toContain(
+      "Original of invoice GONE-1 is missing, so a generated copy is included.",
+    );
   });
 
-  it("warns in the accountant pack when a brought-forward original has gone", async () => {
-    const inv = await addInvoice({
-      number: "GONE-BF",
-      issueDate: "2026-01-01",
-      broughtForward: true,
-    });
-    await attachInvoiceDocument(inv.id, pdfForm());
-    await getStorage().delete((await reload(inv.id)).originalDocumentPath!);
-
-    const { stream } = await streamAccountantPack({
-      companyId,
-      from: "2026-04-01",
-      to: "2026-06-30",
-    });
-    const zip = Buffer.from(await new Response(stream).arrayBuffer());
-    expect(zip.toString("latin1")).toContain("Original invoice missing: GONE-BF");
-  });
-
-  it("is in the accountant pack, for counted and brought-forward invoices", async () => {
+  it("is in the year-end pack for a counted invoice, and left out for a brought-forward one", async () => {
     const counted = await addInvoice({ number: "NEW-1", issueDate: "2026-05-01" });
     await attachInvoiceDocument(counted.id, pdfForm());
     const old = await addInvoice({
@@ -270,16 +256,18 @@ describe("serving the original", () => {
     });
     await attachInvoiceDocument(old.id, pdfForm());
 
-    const { stream } = await streamAccountantPack({
+    const pack = await streamYearEndPack({
       companyId,
-      from: "2026-04-01",
-      to: "2026-06-30",
+      period: { from: "2026-04-01", to: "2026-06-30" },
+      includeVat: true,
     });
+    if (!pack.ok) throw new Error("pack blocked");
+    const { stream } = pack;
     const zip = new Uint8Array(await new Response(stream).arrayBuffer());
     const entries = listStoreZipEntries(zip);
     expect(entries).toContain("invoices/NEW-1.pdf");
-    expect(entries).toContain("reference/brought-forward-documents/OLD-2.pdf");
-    expect(entries).not.toContain("invoices/OLD-2.pdf");
+    // Brought-forward invoices are outside the accounts, so outside the pack.
+    expect(entries.filter((e) => e.includes("OLD-2"))).toEqual([]);
   });
 });
 

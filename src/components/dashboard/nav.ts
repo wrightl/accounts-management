@@ -19,6 +19,7 @@ export type NavIcon =
     | 'bank'
     | 'spending'
     | 'reports'
+    | 'yearEnd'
     | 'dividends'
     | 'shareholders'
     | 'reserves'
@@ -377,6 +378,12 @@ export const NAV_GROUPS: NavGroup[] = [
                 href: '/reports',
                 label: 'Reports',
                 icon: 'reports',
+                permission: 'filing:read',
+            },
+            {
+                href: '/year-end',
+                label: 'Year end',
+                icon: 'yearEnd',
                 permission: 'filing:read',
             },
             {

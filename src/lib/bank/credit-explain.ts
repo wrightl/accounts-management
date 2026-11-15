@@ -84,5 +84,12 @@ export function creditExplainLabel(match: {
       ? `Tax or loan — ${match.note.trim()}`
       : "Tax or loan";
   }
+  const owner: Record<string, string> = {
+    drawings: "Drawings",
+    money_put_in: "Money put in",
+    salary: "Salary",
+  };
+  const label = owner[match.matchType];
+  if (label) return match.note?.trim() ? `${label} — ${match.note.trim()}` : label;
   return match.matchType;
 }

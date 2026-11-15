@@ -2,6 +2,7 @@
 
 import { and, asc, eq, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 import { getDb } from "@/db";
+import { matchOfCompany } from "@/lib/bank/match-scope";
 import {
   auditLog,
   bankAccounts,
@@ -794,7 +795,12 @@ export async function undoInvoiceImport(batchId: string): Promise<UndoResult> {
                 })
                 .from(reconciliationMatches)
                 .leftJoin(payments, eq(reconciliationMatches.paymentId, payments.id))
-                .where(or(inArray(reconciliationMatches.invoiceId, ids), inArray(payments.invoiceId, ids))),
+                .where(
+                  and(
+                    matchOfCompany(companyId),
+                    or(inArray(reconciliationMatches.invoiceId, ids), inArray(payments.invoiceId, ids)),
+                  ),
+                ),
               tx.select({ invoiceId: sendJobs.invoiceId }).from(sendJobs).where(and(inArray(sendJobs.invoiceId, ids), eq(sendJobs.status, "sent"))),
               tx.select({ invoiceId: invoices.latePaymentForInvoiceId }).from(invoices).where(inArray(invoices.latePaymentForInvoiceId, ids)),
             ]);
@@ -858,7 +864,9 @@ export async function undoInvoiceImport(batchId: string): Promise<UndoResult> {
           );
           if (importMatchIds.length > 0) {
             // Leaving these would keep the bank row reconciled to nothing.
-            await tx.delete(reconciliationMatches).where(inArray(reconciliationMatches.id, importMatchIds));
+            await tx
+              .delete(reconciliationMatches)
+              .where(and(inArray(reconciliationMatches.id, importMatchIds), matchOfCompany(companyId)));
           }
           await tx.delete(invoices).where(
             and(

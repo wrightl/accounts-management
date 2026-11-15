@@ -68,9 +68,12 @@ export default async function ReportsPage({
                     <>
                         <p>
                             Accrual P&amp;L (invoiced income net of VAT), VAT
-                            summary, receivables, and accountant export (CSVs,
-                            invoice PDFs, receipt files, bank, and dividends from
-                            the Dividends page).
+                            summary and receivables for any date range. The
+                            accountant pack is now on{' '}
+                            <Link href="/year-end" className="underline">
+                                Year end
+                            </Link>
+                            .
                         </p>
                         <p className="mt-2 text-sm text-foreground">
                             {bank.reconciledThrough
@@ -96,14 +99,9 @@ export default async function ReportsPage({
                             label="Download"
                             items={[
                                 {
-                                    key: 'pack-csv',
-                                    label: 'Accountant pack (CSV)',
-                                    href: `/api/reports/accountant-pack?from=${from}&to=${to}`,
-                                },
-                                {
-                                    key: 'pack-xlsx',
-                                    label: 'Accountant pack (Excel)',
-                                    href: `/api/reports/accountant-pack?from=${from}&to=${to}&format=xlsx`,
+                                    key: 'year-end-pack',
+                                    label: 'Accountant pack (on Year end)',
+                                    href: '/year-end',
                                 },
                                 ...(entitlements.vatExport
                                     ? [

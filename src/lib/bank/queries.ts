@@ -33,11 +33,13 @@ import {
 } from '@/lib/bank/list-params';
 import type { SortDir } from '@/lib/table-sort';
 import { getDb } from '@/db';
+import { matchOfCompany } from '@/lib/bank/match-scope';
 import {
     bankAccounts,
     bankTransactionLabels,
     bankTransactions,
     clients,
+    companies,
     expenses,
     invoices,
     payments,
@@ -522,7 +524,10 @@ async function buildMatchLabels(
         } else if (
             match.matchType === 'other_income' ||
             match.matchType === 'transfer' ||
-            match.matchType === 'tax_or_loan'
+            match.matchType === 'tax_or_loan' ||
+            match.matchType === 'drawings' ||
+            match.matchType === 'money_put_in' ||
+            match.matchType === 'salary'
         ) {
             matchLabels.set(match.id, creditExplainLabel(match));
         }
@@ -715,9 +720,12 @@ export async function listBankTransactions(
         .select()
         .from(reconciliationMatches)
         .where(
-            inArray(
-                reconciliationMatches.bankTransactionId,
-                pageTx.map((tx) => tx.id),
+            and(
+                inArray(
+                    reconciliationMatches.bankTransactionId,
+                    pageTx.map((tx) => tx.id),
+                ),
+                matchOfCompany(companyId),
             ),
         );
     // Unconfirmed suggestions are the team's unfinished work.
@@ -1162,7 +1170,10 @@ export async function suggestMatches(
                     .select()
                     .from(reconciliationMatches)
                     .where(
-                        eq(reconciliationMatches.paymentId, incoming.paymentId),
+                        and(
+                            eq(reconciliationMatches.paymentId, incoming.paymentId),
+                            matchOfCompany(companyId),
+                        ),
                     )
                     .limit(1);
                 if (existing[0]) continue;
@@ -1192,7 +1203,10 @@ export async function suggestMatches(
                     .select()
                     .from(reconciliationMatches)
                     .where(
-                        eq(reconciliationMatches.invoiceId, incoming.invoiceId),
+                        and(
+                            eq(reconciliationMatches.invoiceId, incoming.invoiceId),
+                            matchOfCompany(companyId),
+                        ),
                     )
                     .limit(1);
                 if (existing[0]) continue;
@@ -1293,9 +1307,12 @@ export async function suggestMatches(
                     .select()
                     .from(reconciliationMatches)
                     .where(
-                        eq(
-                            reconciliationMatches.reimbursementId,
-                            reimbMatch.candidate.id,
+                        and(
+                            eq(
+                                reconciliationMatches.reimbursementId,
+                                reimbMatch.candidate.id,
+                            ),
+                            matchOfCompany(companyId),
                         ),
                     )
                     .limit(1);
@@ -1526,7 +1543,7 @@ export async function confirmMatch(companyId: string, matchId: string) {
             await tx
                 .update(reconciliationMatches)
                 .set({ paymentId, confirmed: true })
-                .where(eq(reconciliationMatches.id, matchId));
+                .where(and(eq(reconciliationMatches.id, matchId), matchOfCompany(companyId)));
         } else if (
             match.matchType === 'reimbursement' &&
             match.reimbursementId
@@ -1549,7 +1566,7 @@ export async function confirmMatch(companyId: string, matchId: string) {
             await tx
                 .update(reconciliationMatches)
                 .set({ confirmed: true })
-                .where(eq(reconciliationMatches.id, matchId));
+                .where(and(eq(reconciliationMatches.id, matchId), matchOfCompany(companyId)));
         } else if (match.matchType === 'expense' && match.expenseId) {
             const [expense] = await tx
                 .select()
@@ -1587,12 +1604,12 @@ export async function confirmMatch(companyId: string, matchId: string) {
             await tx
                 .update(reconciliationMatches)
                 .set({ confirmed: true })
-                .where(eq(reconciliationMatches.id, matchId));
+                .where(and(eq(reconciliationMatches.id, matchId), matchOfCompany(companyId)));
         } else {
             await tx
                 .update(reconciliationMatches)
                 .set({ confirmed: true })
-                .where(eq(reconciliationMatches.id, matchId));
+                .where(and(eq(reconciliationMatches.id, matchId), matchOfCompany(companyId)));
         }
     });
 }
@@ -1616,6 +1633,7 @@ export async function dismissMatch(companyId: string, matchId: string) {
             and(
                 eq(reconciliationMatches.id, matchId),
                 eq(reconciliationMatches.confirmed, false),
+                matchOfCompany(companyId),
             ),
         );
 }
@@ -1644,6 +1662,23 @@ export async function explainBankCredit(
 ): Promise<{ matchId: string }> {
     const { matchIds } = await explainBankCredits(companyId, [transactionId], input);
     return { matchId: matchIds[0] };
+}
+
+/**
+ * This company's bank transactions among `ids`, as a query to use inside
+ * another statement. reconciliation_matches has no company_id, so each query on
+ * it scopes itself through this rather than relying on an earlier read.
+ */
+function companyTransactionIds(
+    db: Pick<ReturnType<typeof getDb>, 'select'>,
+    companyId: string,
+    ids: string[],
+) {
+    return db
+        .select({ id: bankTransactions.id })
+        .from(bankTransactions)
+        .innerJoin(bankAccounts, eq(bankTransactions.bankAccountId, bankAccounts.id))
+        .where(and(inArray(bankTransactions.id, ids), eq(bankAccounts.companyId, companyId)));
 }
 
 /**
@@ -1704,14 +1739,13 @@ export async function explainBankCredits(
     if (!parsed.ok) throw new ReconciliationError(parsed.error);
 
     return db.transaction(async (dbTx) => {
+        const own = companyTransactionIds(dbTx, companyId, ids);
+        const ownMatches = inArray(reconciliationMatches.bankTransactionId, own);
         const confirmed = await dbTx
             .select({ id: reconciliationMatches.bankTransactionId })
             .from(reconciliationMatches)
             .where(
-                and(
-                    inArray(reconciliationMatches.bankTransactionId, ids),
-                    eq(reconciliationMatches.confirmed, true),
-                ),
+                and(ownMatches, eq(reconciliationMatches.confirmed, true)),
             );
         const reconciled = new Set(confirmed.map((c) => c.id)).size;
         if (reconciled > 0) {
@@ -1725,16 +1759,17 @@ export async function explainBankCredits(
         await dbTx
             .delete(reconciliationMatches)
             .where(
-                and(
-                    inArray(reconciliationMatches.bankTransactionId, ids),
-                    eq(reconciliationMatches.confirmed, false),
-                ),
+                and(ownMatches, eq(reconciliationMatches.confirmed, false)),
             );
 
+        const ownIds = await own;
+        if (ownIds.length !== ids.length) {
+            throw new ReconciliationError('Bank transaction not found');
+        }
         const created = await dbTx
             .insert(reconciliationMatches)
             .values(
-                ids.map((bankTransactionId) => ({
+                ownIds.map(({ id: bankTransactionId }) => ({
                     bankTransactionId,
                     matchType: parsed.value.matchType,
                     incomeCategory: parsed.value.incomeCategory,
@@ -1748,7 +1783,125 @@ export async function explainBankCredits(
     });
 }
 
-/** Remove a credit explanation (other_income / transfer / tax_or_loan only). */
+export type OwnerExplainType = 'drawings' | 'money_put_in' | 'salary';
+
+const OWNER_EXPLAIN_TYPES: readonly string[] = ['drawings', 'money_put_in', 'salary'];
+
+export function isOwnerExplainType(value: string): value is OwnerExplainType {
+    return OWNER_EXPLAIN_TYPES.includes(value);
+}
+
+/**
+ * Mark bank transactions as money between the business and its people rather
+ * than an expense or income: a sole trader's drawings (money out) or money
+ * put in (money in), or a limited company's salary payment to one person.
+ * All or nothing, like {@link explainBankCredits}.
+ */
+export async function explainOwnerTransactions(
+    companyId: string,
+    transactionIds: string[],
+    input: { matchType: OwnerExplainType; personUserId?: string | null; note?: string | null },
+): Promise<{ matchIds: string[] }> {
+    const ids = [...new Set(transactionIds)];
+    if (ids.length === 0) throw new ReconciliationError('Select some transactions');
+
+    const db = getDb();
+    const [company] = await db
+        .select({ entityType: companies.entityType })
+        .from(companies)
+        .where(eq(companies.id, companyId))
+        .limit(1);
+    const soleTrader = company?.entityType === 'sole_trader';
+    if (input.matchType === 'salary' ? soleTrader : !soleTrader) {
+        throw new ReconciliationError(
+            input.matchType === 'salary'
+                ? 'Salary is only for limited companies. Mark money you take out as drawings.'
+                : 'Drawings and money put in are only for sole traders.',
+        );
+    }
+
+    const rows = await db
+        .select({
+            id: bankTransactions.id,
+            amountPence: bankTransactions.amountPence,
+            bookedAt: bankTransactions.bookedAt,
+        })
+        .from(bankTransactions)
+        .innerJoin(bankAccounts, eq(bankTransactions.bankAccountId, bankAccounts.id))
+        .where(and(inArray(bankTransactions.id, ids), eq(bankAccounts.companyId, companyId)));
+    if (rows.length !== ids.length) {
+        throw new ReconciliationError('Bank transaction not found');
+    }
+    const wantsIncoming = input.matchType === 'money_put_in';
+    if (rows.some((r) => (wantsIncoming ? r.amountPence <= 0 : r.amountPence >= 0))) {
+        throw new ReconciliationError(
+            wantsIncoming
+                ? 'Only money coming in can be marked as money put in'
+                : 'Only money going out can be marked this way',
+        );
+    }
+    const locked = periodLockError(
+        await getBooksLockedThrough(companyId),
+        ...rows.map((r) => r.bookedAt),
+    );
+    if (locked) throw new ReconciliationError(locked);
+
+    let personUserId: string | null = null;
+    if (input.matchType === 'salary') {
+        const [person] = input.personUserId
+            ? await db
+                  .select({ id: users.id })
+                  .from(users)
+                  .where(and(eq(users.id, input.personUserId), eq(users.companyId, companyId)))
+                  .limit(1)
+            : [];
+        if (!person) throw new ReconciliationError('Choose who the salary was paid to');
+        personUserId = person.id;
+    }
+    const note = input.note?.trim() ? input.note.trim().slice(0, 500) : null;
+
+    return db.transaction(async (dbTx) => {
+        const ownTransactions = companyTransactionIds(dbTx, companyId, ids);
+        const ownMatches = inArray(reconciliationMatches.bankTransactionId, ownTransactions);
+        const confirmed = await dbTx
+            .select({ id: reconciliationMatches.bankTransactionId })
+            .from(reconciliationMatches)
+            .where(
+                and(ownMatches, eq(reconciliationMatches.confirmed, true)),
+            );
+        if (confirmed.length > 0) {
+            throw new ReconciliationError(
+                ids.length === 1
+                    ? 'This transaction is already reconciled'
+                    : 'Some of the selected transactions are already reconciled',
+            );
+        }
+        await dbTx
+            .delete(reconciliationMatches)
+            .where(
+                and(ownMatches, eq(reconciliationMatches.confirmed, false)),
+            );
+        const own = await ownTransactions;
+        if (own.length !== ids.length) {
+            throw new ReconciliationError('Bank transaction not found');
+        }
+        const created = await dbTx
+            .insert(reconciliationMatches)
+            .values(
+                own.map(({ id: bankTransactionId }) => ({
+                    bankTransactionId,
+                    matchType: input.matchType,
+                    personUserId,
+                    note,
+                    confirmed: true,
+                })),
+            )
+            .returning({ id: reconciliationMatches.id });
+        return { matchIds: created.map((c) => c.id) };
+    });
+}
+
+/** Remove an explanation: other income, transfer, tax or loan, drawings, money put in or salary. */
 export async function clearBankCreditExplanation(
     companyId: string,
     matchId: string,
@@ -1756,7 +1909,10 @@ export async function clearBankCreditExplanation(
     const db = getDb();
     const match = await getMatchForCompany(db, companyId, matchId);
     if (!match) throw new ReconciliationError('Match not found');
-    if (!(CREDIT_EXPLAIN_TYPES as readonly string[]).includes(match.matchType)) {
+    if (
+        !(CREDIT_EXPLAIN_TYPES as readonly string[]).includes(match.matchType) &&
+        !OWNER_EXPLAIN_TYPES.includes(match.matchType)
+    ) {
         throw new ReconciliationError(
             'Only credit explanations can be cleared this way',
         );
@@ -1764,7 +1920,7 @@ export async function clearBankCreditExplanation(
     await assertBankRowOpen(db, companyId, match.bankTransactionId);
     await db
         .delete(reconciliationMatches)
-        .where(eq(reconciliationMatches.id, matchId));
+        .where(and(eq(reconciliationMatches.id, matchId), matchOfCompany(companyId)));
 }
 
 /** Incoming bank transactions not linked to any reconciliation match. */
@@ -2090,13 +2246,19 @@ export async function lockBankTransaction(
 }
 
 export async function isBankTransactionAvailable(
+    companyId: string,
     transactionId: string,
 ): Promise<boolean> {
     const db = getDb();
     const [match] = await db
         .select({ id: reconciliationMatches.id })
         .from(reconciliationMatches)
-        .where(eq(reconciliationMatches.bankTransactionId, transactionId))
+        .where(
+            and(
+                eq(reconciliationMatches.bankTransactionId, transactionId),
+                matchOfCompany(companyId),
+            ),
+        )
         .limit(1);
     return !match;
 }

@@ -216,7 +216,7 @@ export async function updateExpense(
         (existing.amountPence !== amountPence ||
           existing.spentAt !== (parsed.data.spentAt || null) ||
           existing.status !== status) &&
-        (await isExpenseLinkedToBank(id))
+        (await isExpenseLinkedToBank(companyId, id))
       ) {
         return { ok: false, error: LINKED_EXPENSE_EDIT_ERROR };
       }
@@ -285,6 +285,9 @@ export async function updateExpense(
                 : existing.paidByUserId,
           mileageMiles,
           mileageRatePence,
+          // Left as they are when the caller didn't send them.
+          ...(parsed.data.coversFrom !== undefined ? { coversFrom: parsed.data.coversFrom } : {}),
+          ...(parsed.data.coversTo !== undefined ? { coversTo: parsed.data.coversTo } : {}),
           detectedCurrency: parsed.data.foreignCurrency,
           originalAmountMinor: parsed.data.originalAmountMinor,
         })
@@ -397,7 +400,7 @@ export async function deleteExpense(id: string): Promise<ActionResult> {
           error: `This expense is recharged on invoice ${rebill.number}. Remove it from that invoice first.`,
         };
       }
-      if (await isExpenseLinkedToBank(id)) {
+      if (await isExpenseLinkedToBank(companyId, id)) {
         return { ok: false, error: LINKED_EXPENSE_DELETE_ERROR };
       }
       if (existing.status !== "pending") {

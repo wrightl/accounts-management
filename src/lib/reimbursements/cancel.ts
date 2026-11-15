@@ -4,6 +4,7 @@ import {
   reimbursements,
 } from "@/db/schema";
 import type { getDb } from "@/db";
+import { matchOfCompany } from "@/lib/bank/match-scope";
 
 type DbTx = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
 
@@ -34,7 +35,7 @@ export async function cancelPendingReimbursementRunsForPayee(
 
   await tx
     .delete(reconciliationMatches)
-    .where(inArray(reconciliationMatches.reimbursementId, ids));
+    .where(and(inArray(reconciliationMatches.reimbursementId, ids), matchOfCompany(companyId)));
 
   await tx.delete(reimbursements).where(inArray(reimbursements.id, ids));
 

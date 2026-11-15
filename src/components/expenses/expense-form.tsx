@@ -95,6 +95,8 @@ export function ExpenseForm({
     submittedByUserId?: string | null;
     mileageMiles?: number | null;
     mileageRatePence?: number | null;
+    coversFrom?: string | null;
+    coversTo?: string | null;
   };
   founders: { id: string; name: string | null; email: string }[];
   clients: { id: string; name: string; companyName?: string | null }[];
@@ -153,6 +155,8 @@ export function ExpenseForm({
   );
   const [pendingReceipt, setPendingReceipt] = useState<File | null>(null);
   const [billable, setBillable] = useState(expense?.billable ?? false);
+  const [coversFrom, setCoversFrom] = useState(expense?.coversFrom ?? "");
+  const [coversTo, setCoversTo] = useState(expense?.coversTo ?? "");
   const [projectClientId, setProjectClientId] = useState(
     expense?.clientId ?? defaultClientId ?? "",
   );
@@ -303,6 +307,8 @@ export function ExpenseForm({
     currency,
     originalAmount,
     pendingReceipt !== null,
+    coversFrom,
+    coversTo,
   ]);
   const [savedSnapshot, setSavedSnapshot] = useState(snapshot);
   const dirty = canWrite && snapshot !== savedSnapshot;
@@ -342,6 +348,8 @@ export function ExpenseForm({
     const formData = new FormData();
     formData.set("description", description);
     formData.set("spentAt", spentAt);
+    formData.set("coversFrom", coversFrom);
+    formData.set("coversTo", coversTo);
     formData.set("category", category);
     formData.set("status", targetStatus);
     formData.set(
@@ -423,6 +431,8 @@ export function ExpenseForm({
     formData.delete("receipt");
     formData.set("description", description);
     formData.set("spentAt", spentAt);
+    formData.set("coversFrom", coversFrom);
+    formData.set("coversTo", coversTo);
     formData.set("status", status);
     formData.set("paidByUserId", status === "company_paid" ? "" : paidByUserId);
     setCurrencyFields(formData);
@@ -1060,6 +1070,46 @@ export function ExpenseForm({
           Rebillable: recharge this to the client on their next invoice
         </Label>
       </div>
+      <details open={Boolean(coversFrom || coversTo)}>
+        <summary className="cursor-pointer text-sm text-muted">
+          Covers a period (optional)
+        </summary>
+        <p className="mt-2 text-xs text-muted">
+          For a cost that pays for more than the day it was spent, such as an annual
+          subscription or insurance. Your accountant uses this at the year end.
+        </p>
+        <div className="mt-2 flex flex-wrap gap-3">
+          <div>
+            <Label htmlFor="coversFrom">Covers from</Label>
+            <Input
+              id="coversFrom"
+              type="date"
+              value={coversFrom}
+              disabled={!canWrite || pending}
+              aria-invalid={Boolean(fieldErrors.coversFrom)}
+              onChange={(e) => {
+                setCoversFrom(e.target.value);
+                clearField("coversFrom");
+              }}
+            />
+          </div>
+          <div>
+            <Label htmlFor="coversTo">Covers to</Label>
+            <Input
+              id="coversTo"
+              type="date"
+              value={coversTo}
+              disabled={!canWrite || pending}
+              aria-invalid={Boolean(fieldErrors.coversTo)}
+              onChange={(e) => {
+                setCoversTo(e.target.value);
+                clearField("coversTo");
+              }}
+            />
+          </div>
+        </div>
+        <FieldError id="coversTo-error">{fieldErrors.coversFrom ?? fieldErrors.coversTo}</FieldError>
+      </details>
       {rebilledOn ? (
         <p className="text-sm text-muted">
           Recharged on{" "}

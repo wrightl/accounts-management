@@ -645,6 +645,13 @@
       "when": 1794674683863,
       "tag": "0091_invoice_write_offs",
       "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1794680007242,
+      "tag": "0092_year_end",
+      "breakpoints": true
     }
   ]
 }

@@ -106,6 +106,8 @@ export async function createExpenseRecord(
       paidByUserId: normalized.paidByUserId,
       mileageMiles,
       mileageRatePence,
+      coversFrom: data.coversFrom ?? null,
+      coversTo: data.coversTo ?? null,
       detectedCurrency: data.foreignCurrency,
       originalAmountMinor: data.originalAmountMinor,
       createdByUserId: localUserId,

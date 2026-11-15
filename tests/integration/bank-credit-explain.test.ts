@@ -20,6 +20,7 @@ import {
   deleteUnusedIncomeCategory,
   listIncomeCategoriesWithUsage,
 } from "@/lib/bank/income-category-catalog";
+import { matchOfCompany } from "@/lib/bank/match-scope";
 import { getProfitAndLoss } from "@/lib/reports/queries";
 import { seedCompany } from "@/lib/test/seed-company";
 
@@ -265,5 +266,73 @@ describe("explainBankCredits", () => {
     await expect(
       explainBankCredits(companyId, [a.id, b.id], { matchType: "transfer" }),
     ).rejects.toBeInstanceOf(ReconciliationError);
+  });
+
+  it("leaves another company's suggested match alone", async () => {
+    const mine = await insertCredit(1_000);
+    const other = await seedCompany(db, { name: "Other Co", slug: "other-co" });
+    const [otherAccount] = await db
+      .insert(bankAccounts)
+      .values({ companyId: other.id, name: "Other bank", provider: "other" })
+      .returning();
+    const [theirs] = await db
+      .insert(bankTransactions)
+      .values({
+        bankAccountId: otherAccount!.id,
+        externalId: "theirs",
+        bookedAt: "2026-03-15",
+        amountPence: 3_000,
+      })
+      .returning();
+    await db.insert(reconciliationMatches).values({
+      bankTransactionId: theirs!.id,
+      matchType: "other_income",
+      incomeCategory: "Interest",
+      confirmed: false,
+    });
+
+    await expect(
+      explainBankCredits(companyId, [mine.id, theirs!.id], { matchType: "transfer" }),
+    ).rejects.toThrow("Bank transaction not found");
+    const left = await db
+      .select()
+      .from(reconciliationMatches)
+      .where(eq(reconciliationMatches.bankTransactionId, theirs!.id));
+    expect(left).toEqual([expect.objectContaining({ matchType: "other_income", confirmed: false })]);
+  });
+});
+
+describe("matchOfCompany", () => {
+  it("keeps only the matches on one company's bank transactions", async () => {
+    const mine = await insertCredit(1_000);
+    const other = await seedCompany(db, { name: "Other Co", slug: "other-co" });
+    const [otherAccount] = await db
+      .insert(bankAccounts)
+      .values({ companyId: other.id, name: "Other bank", provider: "other" })
+      .returning();
+    const [theirs] = await db
+      .insert(bankTransactions)
+      .values({ bankAccountId: otherAccount!.id, externalId: "theirs", bookedAt: "2026-03-15", amountPence: 3_000 })
+      .returning();
+    await db.insert(reconciliationMatches).values([
+      { bankTransactionId: mine.id, matchType: "transfer", confirmed: true },
+      { bankTransactionId: theirs!.id, matchType: "transfer", confirmed: true },
+    ]);
+
+    const rows = await db
+      .select({ tx: reconciliationMatches.bankTransactionId })
+      .from(reconciliationMatches)
+      .where(matchOfCompany(companyId));
+    expect(rows).toEqual([{ tx: mine.id }]);
+
+    // Clearing by match id can't reach another company's match.
+    const [theirMatch] = await db
+      .select()
+      .from(reconciliationMatches)
+      .where(eq(reconciliationMatches.bankTransactionId, theirs!.id));
+    await expect(clearBankCreditExplanation(companyId, theirMatch!.id)).rejects.toThrow("Match not found");
+    expect(
+      await db.select().from(reconciliationMatches).where(eq(reconciliationMatches.id, theirMatch!.id)),
+    ).toHaveLength(1);
   });
 });

@@ -6,6 +6,7 @@
 
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/db";
+import { matchOfCompany } from "@/lib/bank/match-scope";
 import {
   bankAccounts,
   bankTransactions,
@@ -274,6 +275,7 @@ async function loadEligibleExpenses(
 }
 
 async function expenseIdsAlreadyMatched(
+  companyId: string,
   expenseIds: string[],
 ): Promise<Set<string>> {
   if (expenseIds.length === 0) return new Set();
@@ -285,6 +287,7 @@ async function expenseIdsAlreadyMatched(
       and(
         inArray(reconciliationMatches.expenseId, expenseIds),
         sql`${reconciliationMatches.expenseId} is not null`,
+        matchOfCompany(companyId),
       ),
     );
   return new Set(
@@ -330,7 +333,7 @@ export async function findBankMatchForExpense(
 ): Promise<ExpenseMatchResult | null> {
   if (!isExpenseEligibleForBankMatch(expense)) return null;
 
-  const matched = await expenseIdsAlreadyMatched([expense.id]);
+  const matched = await expenseIdsAlreadyMatched(companyId, [expense.id]);
   if (matched.has(expense.id)) return null;
 
   const txs = await loadUnmatchedOutgoing(companyId);
@@ -418,7 +421,7 @@ export async function findExpenseMatchForBankTx(
   for (const e of foreign) byId.set(e.id, e);
 
   const candidates = [...byId.values()];
-  const already = await expenseIdsAlreadyMatched(candidates.map((c) => c.id));
+  const already = await expenseIdsAlreadyMatched(companyId, candidates.map((c) => c.id));
   const open = candidates.filter((c) => !already.has(c.id));
   if (open.length === 0) return null;
 
@@ -474,6 +477,7 @@ export async function findExpenseMatchForBankTx(
 
 /** Delete unconfirmed expense suggestions for this expense. */
 export async function dismissUnconfirmedExpenseSuggestions(
+  companyId: string,
   expenseId: string,
 ): Promise<void> {
   const db = getDb();
@@ -484,6 +488,7 @@ export async function dismissUnconfirmedExpenseSuggestions(
         eq(reconciliationMatches.expenseId, expenseId),
         eq(reconciliationMatches.confirmed, false),
         eq(reconciliationMatches.matchType, "expense"),
+        matchOfCompany(companyId),
       ),
     );
 }
@@ -496,7 +501,7 @@ export async function refreshExpenseBankSuggestion(
   companyId: string,
   expenseId: string,
 ): Promise<ExpenseMatchResult | null> {
-  await dismissUnconfirmedExpenseSuggestions(expenseId);
+  await dismissUnconfirmedExpenseSuggestions(companyId, expenseId);
 
   const db = getDb();
   const [expense] = await db

@@ -31,6 +31,8 @@ export const entityTypeEnum = pgEnum("entity_type", [
   "limited_company",
   "sole_trader",
 ]);
+/** How a sole trader's profit is worked out: when money moves, or when it is earned and owed. */
+export const accountingBasisEnum = pgEnum("accounting_basis", ["cash", "accruals"]);
 export const invoiceSourceEnum = pgEnum("invoice_source", ["alfa", "import"]);
 export const invoiceStatusEnum = pgEnum("invoice_status", [
   "draft",
@@ -219,6 +221,21 @@ export const companies = pgTable("companies", {
   safeToPayBufferMonths: integer("safe_to_pay_buffer_months").notNull().default(1),
   /** Date of incorporation (Ltd), from Companies House or entered by hand. */
   incorporatedOn: date("incorporated_on"),
+  /**
+   * Sole trader only: the accounting year is the tax year, 6 April to 5 April,
+   * rather than ending on the last day of financialYearEndMonth.
+   */
+  yearEndOnFifthApril: boolean("year_end_on_fifth_april").notNull().default(true),
+  /** Sole trader only: cash basis or traditional accruals. Null until chosen. */
+  accountingBasis: accountingBasisEnum("accounting_basis"),
+  /** Sole trader only: the date the business started trading. */
+  tradingStartedOn: date("trading_started_on"),
+  /** Sole trader only: the member who owns the business. Null means the earliest admin. */
+  ownerUserId: uuid("owner_user_id").references((): AnyPgColumn => users.id, {
+    onDelete: "set null",
+  }),
+  /** Equipment costing more than this (net) is listed at the year end as a possible fixed asset. */
+  fixedAssetThresholdPence: integer("fixed_asset_threshold_pence").notNull().default(25000),
   /** Current directors, one per line, for board minutes and vouchers. */
   directorNames: text("director_names"),
   /** Next annual accounts deadline as Companies House records it. */
@@ -809,6 +826,12 @@ export const expenses = pgTable(
      */
     externalSenderEmail: text("external_sender_email"),
     notes: text("notes"),
+    /**
+     * The period this cost pays for, when it runs past the day it was spent
+     * (an annual subscription, insurance). Listed at the year end as a possible prepayment.
+     */
+    coversFrom: date("covers_from"),
+    coversTo: date("covers_to"),
     /** The team chose to show this note to their accountant (screens and pack). */
     noteSharedWithAccountant: boolean("note_shared_with_accountant").notNull().default(false),
     /** The inbound email this expense came from; one email can create several. */
@@ -951,6 +974,13 @@ export const bankAccounts = pgTable(
      * shown on an emailed receipt can be recognised as a company card.
      */
     cardLast4s: text("card_last4s").array().notNull().default([]),
+    /**
+     * The account's balance at the close of openingBalanceDate, from a bank
+     * statement. Balances at any other date are worked out from it and the
+     * imported transactions.
+     */
+    openingBalancePence: integer("opening_balance_pence"),
+    openingBalanceDate: date("opening_balance_date"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("idx_bank_accounts_company").on(t.companyId)],
@@ -1079,6 +1109,9 @@ export const reconciliationMatchTypeEnum = pgEnum("reconciliation_match_type", [
   "other_income",
   "transfer",
   "tax_or_loan",
+  "drawings", // sole trader: the owner took money out
+  "money_put_in", // sole trader: the owner paid money in
+  "salary", // limited company: net pay to a director or employee
 ]);
 
 export const reconciliationMatches = pgTable(
@@ -1099,6 +1132,10 @@ export const reconciliationMatches = pgTable(
       onDelete: "set null",
     }),
     reimbursementId: uuid("reimbursement_id").references(() => reimbursements.id, {
+      onDelete: "set null",
+    }),
+    /** Who a salary payment went to. */
+    personUserId: uuid("person_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
     /** Free-text note for credit explanations (other income / transfer / tax). */
@@ -1848,6 +1885,32 @@ export const accountantQueryMessages = pgTable(
 );
 
 /** Ledger for install-time data migrations (see src/db/data-migrate.ts). */
+/**
+ * One row per accounting period someone has reviewed or exported on the Year
+ * end page. No row means the year has not been started.
+ */
+export const yearEndRuns = pgTable(
+  "year_end_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    periodFrom: date("period_from").notNull(),
+    periodTo: date("period_to").notNull(),
+    /** When the checks were last looked at, and how many items they listed. */
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }).defaultNow().notNull(),
+    outstandingChecks: integer("outstanding_checks").notNull().default(0),
+    exportedAt: timestamp("exported_at", { withTimezone: true }),
+    exportedByUserId: uuid("exported_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+  },
+  (t) => [
+    uniqueIndex("uniq_year_end_runs_period").on(t.companyId, t.periodFrom, t.periodTo),
+  ],
+);
+
 export const dataMigrationStatusEnum = pgEnum("data_migration_status", [
   "pending_effects",
   "applied",

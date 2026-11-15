@@ -28,7 +28,7 @@ import {
 import { getDashboardKpis } from "@/lib/invoices/queries";
 import { getReservesPosition } from "@/lib/ledger/queries";
 import { listClientProfitability } from "@/lib/profitability/queries";
-import { streamAccountantPack } from "@/lib/reports/accountant-pack";
+import { prepareYearEndPack } from "@/lib/year-end/pack";
 import {
   getAgedReceivables,
   getIncomeByMonth,
@@ -159,24 +159,22 @@ async function seedScenario() {
   return old;
 }
 
-/** Text of each file in a store-only zip. */
-async function packFiles() {
-  const { stream } = await streamAccountantPack({ companyId, from: FROM, to: TO });
-  const zip = new Uint8Array(await new Response(stream).arrayBuffer());
-  const view = new DataView(zip.buffer);
-  const files = new Map<string, string>();
-  let offset = 0;
-  while (offset + 30 <= zip.length && view.getUint32(offset, true) === 0x04034b50) {
-    const size = view.getUint32(offset + 18, true);
-    const nameLength = view.getUint16(offset + 26, true);
-    const start = offset + 30 + nameLength + view.getUint16(offset + 28, true);
-    const name = new TextDecoder().decode(
-      zip.subarray(offset + 30, offset + 30 + nameLength),
-    );
-    files.set(name, new TextDecoder().decode(zip.subarray(start, start + size)));
-    offset = start + size;
-  }
-  return files;
+/** Every piece of text on each tab of the year-end workbook, keyed by tab name. */
+async function packTabs() {
+  const { workbook } = await prepareYearEndPack({
+    companyId,
+    period: { from: FROM, to: TO },
+    includeVat: true,
+  });
+  return new Map(
+    workbook.sheets.map((sheet) => [
+      sheet.name,
+      sheet.rows
+        .flat()
+        .map((cell) => (cell == null ? "" : typeof cell === "string" ? cell : String(cell.v ?? "")))
+        .join("\n"),
+    ]),
+  );
 }
 
 describe("cutover in the accounts", () => {
@@ -236,27 +234,24 @@ describe("cutover in the accounts", () => {
   it("makes the accountant pack agree with the P&L", async () => {
     await seedScenario();
     await setCutover(CUTOVER);
-    const files = await packFiles();
+    const tabs = await packTabs();
+    const pnl = await getProfitAndLoss(companyId, FROM, TO);
 
-    const invoicesCsv = files.get("invoices.csv")!;
-    expect(invoicesCsv).toContain("A-1");
-    expect(invoicesCsv).toContain("NEW-1");
-    expect(invoicesCsv).not.toContain("OLD-1");
+    const sales = tabs.get("Sales invoices")!;
+    expect(sales).toContain("A-1");
+    expect(sales).toContain("NEW-1");
+    // No row for the brought-forward invoice itself.
+    expect(sales.split("\n")).not.toContain("OLD-1");
+    // A credit note counts from the cutover, even against a brought-forward invoice.
+    expect(sales).toContain("CN-AFTER");
+    expect(sales).not.toContain("CN-BEFORE");
 
-    const creditsCsv = files.get("credit-notes.csv")!;
-    expect(creditsCsv).toContain("CN-AFTER");
-    expect(creditsCsv).not.toContain("CN-BEFORE");
+    const summary = tabs.get("Profit and loss")!.split("\n");
+    const figure = (label: string) => Number(summary[summary.indexOf(label) + 1]);
+    expect(figure("Sales invoices") + figure("Less: credit notes")).toBe(pnl.incomePence);
 
-    const paymentsCsv = files.get("payments.csv")!;
-    expect(paymentsCsv).toContain("70.00");
-    expect(paymentsCsv).not.toContain("60.00");
-    expect(paymentsCsv).toContain(",yes");
-
-    expect(files.get("reference/brought-forward-invoices.csv")).toContain("OLD-1");
-    // 60,000 gross - 2,400 credited - 13,000 paid
-    expect(files.get("reference/open-brought-forward.csv")).toContain("446.00");
-    expect(files.get("summary/aged-receivables.csv")).toContain("61_plus_days");
-    expect(files.get("summary/cutover.csv")).toContain(CUTOVER);
+    // Brought-forward invoices are outside the accounts, so no tab lists one.
+    expect([...tabs.values()].join("\n").split("\n")).not.toContain("OLD-1");
   });
 
   it("leaves brought-forward income out of client profitability", async () => {
