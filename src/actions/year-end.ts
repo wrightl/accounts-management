@@ -10,10 +10,11 @@ import type { ActionResult } from "@/actions/result";
 
 /**
  * Start (or come back to) a year: runs its checks and records how many items
- * they found, so the Year end page can show where each year has got to.
+ * they found, so the Year end page can show where each year has got to. It
+ * writes, so it needs the same permission as downloading the pack.
  */
 export async function openYearEnd(from: string, to: string): Promise<ActionResult> {
-  const authz = await requireActionPermission("filing:read");
+  const authz = await requireActionPermission("reports:export");
   if (!authz.ok) return authz;
   const companyId = authz.user.companyId;
   if (!companyId) return { ok: false, error: "Complete onboarding first." };

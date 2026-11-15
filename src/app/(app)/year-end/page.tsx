@@ -164,6 +164,7 @@ export default async function YearEndPage({
             selected={selected}
             suggested={suggested}
             customSelected={!standard}
+            canRecord={canExport}
           />
         </div>
 

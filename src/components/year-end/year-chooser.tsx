@@ -21,6 +21,7 @@ export function YearChooser({
   selected,
   suggested,
   customSelected,
+  canRecord,
 }: {
   years: YearOption[];
   /** The period being reviewed, if any. */
@@ -29,6 +30,8 @@ export function YearChooser({
   suggested: { from: string; to: string };
   /** The period being reviewed is not one of the standard years. */
   customSelected: boolean;
+  /** Whether this person may record the year as reviewed (they can download the pack). */
+  canRecord: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -42,7 +45,8 @@ export function YearChooser({
   const open = (period: { from: string; to: string }) => {
     setError(null);
     startTransition(async () => {
-      const result = await openYearEnd(period.from, period.to);
+      // Without permission to record a review, just show the year.
+      const result = canRecord ? await openYearEnd(period.from, period.to) : { ok: true as const };
       if (result.ok) {
         router.push(`/year-end?from=${period.from}&to=${period.to}`);
       } else {
