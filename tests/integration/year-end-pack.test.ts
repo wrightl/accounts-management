@@ -23,6 +23,7 @@ import {
 } from "@/lib/year-end/pack";
 import { recordYearEndRun, listYearEndRuns, yearStatus } from "@/lib/year-end/runs";
 import { NONE_IN_PERIOD } from "@/lib/year-end/labels";
+import { formatExpenseRef, formatReimbursementRef } from "@/lib/references";
 import { inPeriod, type PackPeriod } from "@/lib/year-end/period";
 import type { PackSheet } from "@/lib/year-end/sheets";
 import { TAB } from "@/lib/year-end/workbook";
@@ -73,6 +74,9 @@ function expectDatesInPeriod(sheet: PackSheet, header: string, period: PackPerio
   expect(dates.length).toBeGreaterThan(0);
   for (const date of dates) expect(inPeriod(String(date), period)).toBe(true);
 }
+
+/** The reference stored on a seeded expense. */
+const exp = (expense: { refNumber: number }) => formatExpenseRef(expense.refNumber);
 
 const OWED_BACK = "Owed back to customer at period end (£)";
 
@@ -479,11 +483,11 @@ describe("limited company, 1 April 2025 to 31 March 2026", () => {
     const sheet = findSheet(sheets, TAB.reimbursements);
 
     expect(sheet.rows.map((r) => r.map(value))).toEqual([
-      ["Date paid", "Paid to", "Reference", "Expense ref", "Date spent", "Description", "Amount (£)", "Note"],
-      [seeded.reimbursedOn, "Jo Field", "RB-1", null, null, "2 expenses", 4_000, null],
-      [null, null, null, "EXP-0001", addDays(LTD_YEAR.from, -20), "Printer paper", 1_500, "Dated before this period"],
-      [null, null, null, "EXP-0004", addDays(LTD_YEAR.from, 5), "Desk lamp", 2_500, null],
-      ["Total reimbursed", null, null, null, null, null, 4_000],
+      ["Date paid", "Ref", "Paid to", "Reference", "Expense ref", "Date spent", "Description", "Amount (£)", "Note"],
+      [seeded.reimbursedOn, formatReimbursementRef(seeded.run.refNumber), "Jo Field", "RB-1", null, null, "2 expenses", 4_000, null],
+      [null, null, null, null, exp(seeded.reimbursedEarlier), addDays(LTD_YEAR.from, -20), "Printer paper", 1_500, "Dated before this period"],
+      [null, null, null, null, exp(seeded.reimbursedInPeriod), addDays(LTD_YEAR.from, 5), "Desk lamp", 2_500, null],
+      ["Total reimbursed", null, null, null, null, null, null, 4_000],
     ]);
     expect(sheet.freezeRows).toBe(1);
   });
@@ -505,15 +509,15 @@ describe("limited company, 1 April 2025 to 31 March 2026", () => {
       ["Total", null, null, 10_000],
     ]);
     expect(section("Reimbursed in the period for expenses dated before it")).toEqual([
-      [seeded.reimbursedOn, "Jo Field", "EXP-0001", addDays(LTD_YEAR.from, -20), "Printer paper", 1_500],
+      [seeded.reimbursedOn, "Jo Field", exp(seeded.reimbursedEarlier), addDays(LTD_YEAR.from, -20), "Printer paper", 1_500],
       ["Total", null, null, null, null, 1_500],
     ]);
     expect(section("Expenses awaiting reimbursement at the period end")).toEqual([
-      [addDays(LTD_YEAR.from, -5), "EXP-0002", "Jo Field", "Stamps", 700],
+      [addDays(LTD_YEAR.from, -5), exp(seeded.awaiting), "Jo Field", "Stamps", 700],
       ["Total", null, null, null, 700],
     ]);
     expect(section("Bank payments made after the period end for expenses dated in the period")).toEqual([
-      [addDays(LTD_YEAR.to, 3), "EXP-0005", LTD_YEAR.to, "Train ticket 3", 4_000],
+      [addDays(LTD_YEAR.to, 3), exp(seeded.edgeExpenses[2]!), LTD_YEAR.to, "Train ticket 3", 4_000],
       ["Total", null, null, null, 4_000],
     ]);
 
@@ -791,7 +795,7 @@ describe("sole trader, 6 April 2025 to 5 April 2026", () => {
     });
     const { sheets } = await workbookFor(seeded.companyId, TAX_YEAR);
 
-    const paidTo = findSheet(sheets, TAB.reimbursements).rows.map((r) => value(r[1]));
+    const paidTo = findSheet(sheets, TAB.reimbursements).rows.map((r) => value(r[2]));
     expect(paidTo).toContain("Jo Field");
     expect(paidTo).not.toContain("Sam Carter");
     expect(amount(findSheet(sheets, TAB.position), "Reimbursements paid to the owner")).toBe(900);
@@ -812,7 +816,8 @@ describe("streamYearEndPack", () => {
   }
 
   it("zips the workbook with receipts named by expense reference and invoices by number", async () => {
-    const { companyId } = await seedWithReceipt();
+    const { companyId, edgeExpenses } = await seedWithReceipt();
+    const withReceipts = exp(edgeExpenses[1]!);
     const pack = await streamYearEndPack({ companyId, period: LTD_YEAR, includeVat: true });
     if (!pack.ok) throw new Error("blocked");
     const zip = await collect(pack.stream);
@@ -826,8 +831,8 @@ describe("streamYearEndPack", () => {
         "invoices/INV-2.pdf",
         "invoices/INV-3.pdf",
         "credit-notes/CN-1.pdf",
-        "receipts/EXP-0003.jpg",
-        "receipts/EXP-0003-2.jpg",
+        `receipts/${withReceipts}.jpg`,
+        `receipts/${withReceipts}-2.jpg`,
       ]),
     );
     expect(entries).not.toContain("invoices/INV-1.pdf");
@@ -835,7 +840,7 @@ describe("streamYearEndPack", () => {
 
     const text = (name: string) => new TextDecoder().decode(entry(zip, name));
     expect(text("README.txt")).toContain("Accounting period: 1 April 2025 to 31 March 2026");
-    expect(text("README.txt")).toContain("Receipt for EXP-0005 (Train ticket 3) could not be included");
+    expect(text("README.txt")).toContain(`Receipt for ${exp(edgeExpenses[2]!)} (Train ticket 3) could not be included`);
 
     const parts = new Map(
       readStoreZipEntries(entry(zip, WORKBOOK_PATH)).map(([name, data]) => [
@@ -854,7 +859,62 @@ describe("streamYearEndPack", () => {
     expect(parts.get("xl/styles.xml")).toContain('formatCode="dd/mm/yyyy"');
 
     const expensesXml = parts.get(`xl/worksheets/sheet${names.indexOf(TAB.expenses) + 1}.xml`)!;
-    expect(expensesXml).toContain("EXP-0003.jpg, EXP-0003-2.jpg");
+    expect(expensesXml).toContain(`${withReceipts}.jpg, ${withReceipts}-2.jpg`);
+  });
+
+  it("gives every record the same reference and receipt file name after an older expense is added", async () => {
+    const { companyId, edgeExpenses } = await seedWithReceipt();
+    const exportPack = async () => {
+      const pack = await streamYearEndPack({ companyId, period: LTD_YEAR, includeVat: true });
+      if (!pack.ok) throw new Error("blocked");
+      const receipts = listStoreZipEntries(await collect(pack.stream)).filter((e) => e.startsWith("receipts/"));
+      const { sheets } = await workbookFor(companyId, LTD_YEAR);
+      const expenseTab = findSheet(sheets, TAB.expenses);
+      const refs = column(expenseTab, "Ref");
+      const descriptions = column(expenseTab, "Description");
+      return {
+        receipts,
+        expenseRefs: new Map(descriptions.map((d, i) => [String(d), String(refs[i])])),
+        dates: column(expenseTab, "Date spent").map(String),
+        reimbursements: findSheet(sheets, TAB.reimbursements).rows.map((r) => r.map(value)),
+        outside: findSheet(sheets, TAB.outside).rows.map((r) => r.map(value)),
+        matched: column(findSheet(sheets, TAB.bank), "Matched to"),
+      };
+    };
+
+    const before = await exportPack();
+    expect(before.expenseRefs.size).toBeGreaterThan(1);
+
+    // Dated on the first day of the period, so it sorts ahead of everything already there.
+    const { expenses } = await import("@/db/schema");
+    const [older] = await db
+      .insert(expenses)
+      .values({
+        companyId,
+        description: "Old receipt found later",
+        category: "Office",
+        spentAt: LTD_YEAR.from,
+        amountPence: 1_234,
+        status: "company_paid",
+      })
+      .returning();
+    const after = await exportPack();
+
+    // The new record takes the next number. The tab stays in date order, so it is not at the end.
+    expect(older.refNumber).toBeGreaterThan(Math.max(...edgeExpenses.map((e) => e.refNumber)));
+    expect(after.expenseRefs.get("Old receipt found later")).toBe(exp(older));
+    expect(after.dates).toEqual([...after.dates].sort());
+    expect([...after.expenseRefs.keys()].at(-1)).not.toBe("Old receipt found later");
+
+    // Nothing that was already there moved.
+    expect(after.expenseRefs.size).toBe(before.expenseRefs.size + 1);
+    for (const [description, ref] of before.expenseRefs) {
+      expect(after.expenseRefs.get(description), description).toBe(ref);
+    }
+    expect(after.receipts).toEqual(before.receipts);
+    expect(after.reimbursements).toEqual(before.reimbursements);
+    expect(after.outside).toEqual(before.outside);
+    expect(after.matched).toEqual(before.matched);
   });
 
   it("writes one CSV per tab in the CSV version", async () => {

@@ -1,3 +1,4 @@
+import { formatExpenseRef, formatReimbursementRef } from "@/lib/references";
 import { NextResponse } from "next/server";
 import { requirePermission, ForbiddenError } from "@/lib/auth";
 import { getReimbursementDetail } from "@/lib/reimbursements/queries";
@@ -30,7 +31,7 @@ export async function GET(
   }
 
   const lines = [
-    ["reimbursement_id", "payee", "status", "reference", "total_gbp", "reimbursement_date"].join(","),
+    ["reimbursement_id", "payee", "status", "reference", "total_gbp", "reimbursement_date", "ref"].join(","),
     [
       detail.reimbursement.id,
       csvCell(detail.payee.name || detail.payee.email),
@@ -38,9 +39,10 @@ export async function GET(
       csvCell(detail.reimbursement.reference ?? ""),
       (detail.reimbursement.totalPence / 100).toFixed(2),
       detail.reimbursement.reimbursementDate ?? "",
+      formatReimbursementRef(detail.reimbursement.refNumber),
     ].join(","),
     "",
-    ["expense_id", "date", "description", "category", "amount_gbp"].join(","),
+    ["expense_id", "date", "description", "category", "amount_gbp", "ref"].join(","),
     ...detail.items.map((i) =>
       [
         i.expense.id,
@@ -48,6 +50,7 @@ export async function GET(
         csvCell(i.expense.description),
         csvCell(i.expense.category ?? ""),
         (i.expense.amountPence / 100).toFixed(2),
+        formatExpenseRef(i.expense.refNumber),
       ].join(","),
     ),
   ];

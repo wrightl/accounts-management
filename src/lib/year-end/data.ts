@@ -106,6 +106,8 @@ export type PackReceipt = { id: string; blobPath: string; filename: string };
 
 export type PackExpense = {
   id: string;
+  /** The stored reference number, shown as EXP-0001. */
+  refNumber: number;
   description: string;
   category: string | null;
   spentAt: string | null;
@@ -187,6 +189,8 @@ export type PackBankAccount = {
 
 export type PackReimbursement = {
   id: string;
+  /** The stored reference number, shown as REIMB-0001. */
+  refNumber: number;
   payeeUserId: string;
   reference: string | null;
   totalPence: number;
@@ -588,6 +592,7 @@ export async function loadYearEndData(
   const reimbursementRows = await db
     .select({
       id: reimbursements.id,
+      refNumber: reimbursements.refNumber,
       payeeUserId: reimbursements.payeeUserId,
       reference: reimbursements.reference,
       totalPence: reimbursements.totalPence,
@@ -691,6 +696,7 @@ export async function loadYearEndData(
       e.id,
       {
         id: e.id,
+        refNumber: e.refNumber,
         description: e.description,
         category: e.category,
         spentAt: e.spentAt,

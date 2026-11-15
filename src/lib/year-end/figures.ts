@@ -1,3 +1,4 @@
+import { formatExpenseRef } from "@/lib/references";
 import type {
   PackBankTransaction,
   PackExpense,
@@ -49,7 +50,7 @@ export type Prepayment = {
 export type Figures = {
   /** Whether amounts are shown net of VAT with VAT columns. */
   vat: boolean;
-  /** Short reference for every expense the pack mentions, e.g. EXP-0007. */
+  /** The stored reference of every expense the pack mentions, e.g. EXP-0007. */
   expenseRef: Map<string, string>;
   expenseNetPence: (expense: PackExpense) => number;
   /** When the business paid for it: the date cash basis counts it on. */
@@ -150,9 +151,7 @@ export function deriveFigures(data: YearEndData): Figures {
     ...(cash ? [] : all.filter(coversIntoPeriod)),
   ]);
   const expenseRef = new Map(
-    all
-      .filter((e) => mentioned.has(e))
-      .map((e, i) => [e.id, `EXP-${String(i + 1).padStart(4, "0")}`]),
+    all.filter((e) => mentioned.has(e)).map((e) => [e.id, formatExpenseRef(e.refNumber)]),
   );
 
   const otherIncome = data.bankTransactions.filter((t) =>

@@ -309,6 +309,26 @@ export const documentSequences = pgTable(
   (t) => [primaryKey({ columns: [t.companyId, t.kind, t.year] })],
 );
 
+/**
+ * The last reference number given to an expense or reimbursement in each company.
+ * Written only by the assign_record_number trigger (migration 0093), in the same
+ * transaction as the insert it numbers, so numbers never repeat and are never reused.
+ */
+export const recordCounters = pgTable(
+  "record_counters",
+  {
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    lastNumber: integer("last_number").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.companyId, t.kind] }),
+    check("record_counters_kind_known", sql`${t.kind} in ('expense', 'reimbursement')`),
+  ],
+);
+
 /** Local mirror of Clerk users, with the app role and optional tenant.
  *  Platform operators use role `platform_admin` and have no company.
  */
@@ -776,6 +796,12 @@ export const expenses = pgTable(
     companyId: uuid("company_id")
       .notNull()
       .references(() => companies.id, { onDelete: "cascade" }),
+    /**
+     * Shown as EXP-0001. Set once by a database trigger when the row is inserted,
+     * whatever value is supplied, and never changed or reused. The default only
+     * lets inserts leave it out.
+     */
+    refNumber: integer("ref_number").notNull().default(0),
     description: text("description").notNull(),
     category: text("category"),
     spentAt: date("spent_at"),
@@ -848,6 +874,7 @@ export const expenses = pgTable(
   },
   (t) => [
     index("idx_expenses_company").on(t.companyId),
+    uniqueIndex("uniq_expenses_company_ref_number").on(t.companyId, t.refNumber),
     uniqueIndex("uniq_expenses_client_request")
       .on(t.companyId, t.clientRequestId)
       .where(sql`${t.clientRequestId} is not null`),
@@ -863,6 +890,7 @@ export const expenses = pgTable(
         'Professional fees', 'Equipment', 'Training', 'Other'
       )`,
     ),
+    check("expenses_ref_number_assigned", sql`${t.refNumber} > 0`),
     check(
       "expenses_stated_payment_source_via_known",
       sql`${t.statedPaymentSourceVia} is null or ${t.statedPaymentSourceVia} in ('email', 'reply')`,
@@ -902,15 +930,22 @@ export const reimbursements = pgTable(
     payeeUserId: uuid("payee_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
+    /** Shown as REIMB-0001. Set once by a database trigger on insert, like expenses.refNumber. */
+    refNumber: integer("ref_number").notNull().default(0),
     status: reimbursementStatusEnum("status").notNull().default("pending"),
     totalPence: integer("total_pence").notNull().default(0),
+    /** Free text typed by the user, such as a bank payment reference. */
     reference: text("reference"),
     /** Date the run is paid on. Optional while pending; set from paidAt once paid. */
     reimbursementDate: date("reimbursement_date"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     paidAt: timestamp("paid_at", { withTimezone: true }),
   },
-  (t) => [index("idx_reimbursements_company").on(t.companyId)],
+  (t) => [
+    index("idx_reimbursements_company").on(t.companyId),
+    uniqueIndex("uniq_reimbursements_company_ref_number").on(t.companyId, t.refNumber),
+    check("reimbursements_ref_number_assigned", sql`${t.refNumber} > 0`),
+  ],
 );
 
 export const reimbursementItems = pgTable(
@@ -2101,6 +2136,7 @@ export const schema = {
   expenseReceipts,
   reimbursements,
   reimbursementItems,
+  recordCounters,
   auditLog,
   bankAccounts,
   bankSpendingCategories,

@@ -1,5 +1,6 @@
 import { formatIsoDateLong, formatIsoDateUk } from "@/lib/dates";
 import { formatGBP } from "@/lib/money";
+import { formatReimbursementRef } from "@/lib/references";
 import { runChecks, type Check, type CheckItem } from "@/lib/year-end/checks";
 import type {
   PackExpense,
@@ -304,7 +305,8 @@ export function buildWorkbook(
         case "reimbursement": {
           const run = data.reimbursements.find((r) => r.id === match.reimbursementId);
           const payee = personName(run?.payeeUserId);
-          return payee ? `Reimbursement to ${payee}` : "Reimbursement";
+          const label = run ? `Reimbursement ${formatReimbursementRef(run.refNumber)}` : "Reimbursement";
+          return payee ? `${label} to ${payee}` : label;
         }
         case "other_income":
           return `Other income: ${match.incomeCategory?.trim() || "Other"}`;
@@ -371,6 +373,7 @@ export function buildWorkbook(
     const layout = new Layout();
     const columns: Column[] = [
       { key: "paidOn", header: "Date paid", keep: true },
+      { key: "run", header: "Ref", keep: true },
       { key: "payee", header: "Paid to" },
       { key: "reference", header: "Reference" },
       { key: "bank", header: "Date on bank statement" },
@@ -385,6 +388,7 @@ export function buildWorkbook(
       return [
         {
           paidOn: { v: run.paidOn, kind: "date" },
+          run: bold(formatReimbursementRef(run.refNumber)),
           payee: bold(personName(run.payeeUserId) ?? "Person not recorded"),
           reference: run.reference,
           bank: day(run.bank?.bookedAt),

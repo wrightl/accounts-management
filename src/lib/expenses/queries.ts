@@ -18,6 +18,7 @@ import type { ExpenseSortColumn } from "@/lib/expenses/list-sort";
 import type { TableSort } from "@/lib/table-sort";
 import { type ListPaging, type Paged, fetchPage } from "@/lib/list-paging";
 import { bankSearchPattern } from "@/lib/bank/list-params";
+import { parseRefSearch } from "@/lib/references";
 import { labelsForExpenses } from "@/lib/labels/queries";
 import {
   matchDuplicates,
@@ -26,7 +27,7 @@ import {
 } from "@/lib/expenses/duplicates";
 
 export interface ExpenseFilters {
-  /** Matches description or client name. */
+  /** Matches description, client name or the EXP reference ("EXP-0197" or "197"). */
   q?: string;
   from?: string;
   to?: string;
@@ -98,7 +99,12 @@ function expenseListConditions(companyId: string, filters: ExpenseFilters): SQL[
   if (filters.scope === "pack") conditions.push(expenseInPack);
   const pattern = filters.q ? bankSearchPattern(filters.q) : null;
   if (pattern) {
-    const search = or(ilike(expenses.description, pattern), ilike(clientDisplayNameSql, pattern));
+    const refNumber = parseRefSearch(filters.q ?? "", "EXP");
+    const search = or(
+      ilike(expenses.description, pattern),
+      ilike(clientDisplayNameSql, pattern),
+      refNumber === null ? undefined : eq(expenses.refNumber, refNumber),
+    );
     if (search) conditions.push(search);
   }
   if (filters.from) conditions.push(gte(expenses.spentAt, filters.from));
@@ -141,6 +147,7 @@ export async function listExpenses(
   const query = db
     .select({
       id: expenses.id,
+      refNumber: expenses.refNumber,
       description: expenses.description,
       category: expenses.category,
       spentAt: expenses.spentAt,
@@ -191,6 +198,7 @@ export async function listExpenses(
       null;
     return {
       id: r.id,
+      refNumber: r.refNumber,
       description: r.description,
       category: r.category,
       spentAt: r.spentAt,

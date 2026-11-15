@@ -1,5 +1,7 @@
 import "server-only";
-import { and, asc, count, desc, eq, ne, sql, sum, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, ne, or, sql, sum, type SQL } from "drizzle-orm";
+import { bankSearchPattern } from "@/lib/bank/list-params";
+import { parseRefSearch } from "@/lib/references";
 import { getDb } from "@/db";
 import { reimbursementInPack, type RecordScope } from "@/lib/accountant/record-scope";
 import {
@@ -42,6 +44,7 @@ export async function listReimbursements(companyId: string, scope: RecordScope =
   const rows = await db
     .select({
       id: reimbursements.id,
+      refNumber: reimbursements.refNumber,
       status: reimbursements.status,
       totalPence: reimbursements.totalPence,
       reference: reimbursements.reference,
@@ -103,14 +106,26 @@ export async function listReimbursementPage(
   options: {
     scope?: RecordScope;
     status?: "pending" | "paid";
+    /** Matches the REIMB reference ("REIMB-0012" or "12"), the typed reference or the payee. */
+    q?: string;
   } & TableSort<ReimbursementSortColumn> &
     ListPaging,
 ) {
   const db = getDb();
+  const pattern = options.q ? bankSearchPattern(options.q) : null;
+  const refNumber = parseRefSearch(options.q ?? "", "REIMB");
   const where = and(
     eq(reimbursements.companyId, companyId),
     options.scope === "pack" ? reimbursementInPack : undefined,
     options.status ? eq(reimbursements.status, options.status) : undefined,
+    pattern
+      ? or(
+          ilike(reimbursements.reference, pattern),
+          ilike(users.name, pattern),
+          ilike(users.email, pattern),
+          refNumber === null ? undefined : eq(reimbursements.refNumber, refNumber),
+        )
+      : undefined,
   );
   // Users aren't tenant rows: someone can belong to several companies.
   const payeeJoin = eq(reimbursements.payeeUserId, users.id);
@@ -128,6 +143,7 @@ export async function listReimbursementPage(
       db
         .select({
           id: reimbursements.id,
+          refNumber: reimbursements.refNumber,
           status: reimbursements.status,
           totalPence: reimbursements.totalPence,
           reference: reimbursements.reference,
