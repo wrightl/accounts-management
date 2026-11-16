@@ -1,6 +1,9 @@
 import { formatIsoDateUk } from "@/lib/dates";
 import type { XlsxCell, XlsxSheet } from "@/lib/xlsx/write";
 
+/** A record's row on another tab: counted after the header on a detail tab, the sheet row on a layout tab. */
+export type SheetRow = { sheet: string; row: number };
+
 /**
  * One cell of the pack, before it becomes Excel or CSV. Money is held in pence
  * and dates as YYYY-MM-DD, so both formats are written from the same values.
@@ -17,6 +20,8 @@ export type PackCell =
       formula?: string;
       /** A file in the zip this cell opens. */
       file?: string;
+      /** The row on another tab this cell opens, in the workbook only. */
+      goto?: SheetRow;
     };
 
 export type PackSheet = {
@@ -54,6 +59,13 @@ export const number = (value: number | null | undefined, extra: Extra = {}): Pac
   value == null ? null : { v: value, kind: "number", ...extra };
 export const bold = (text: string): PackCell => ({ v: text, bold: true });
 export const heading = (text: string): PackCell => ({ v: text, heading: true });
+
+/** The cell, linked to a row on another tab when there is one. Blank cells stay unlinked. */
+export function linkTo(cell: PackCell | undefined, to: SheetRow | undefined): PackCell {
+  if (cell == null) return null;
+  if (!to || cell === "") return cell;
+  return typeof cell === "string" ? { v: cell, goto: to } : { ...cell, goto: to };
+}
 
 function valueOf(cell: PackCell | undefined): string | number | null {
   if (cell == null) return null;
@@ -216,9 +228,9 @@ export class Layout {
 function toXlsxCell(cell: PackCell): XlsxCell {
   if (cell == null) return "";
   if (typeof cell === "string") return cell;
-  const { v, kind, bold: isBold, heading: isHeading, formula, file } = cell;
+  const { v, kind, bold: isBold, heading: isHeading, formula, file, goto } = cell;
   if (v == null) return "";
-  const link = file ? { file } : undefined;
+  const link = file ? { file } : goto ? { sheet: goto.sheet, row: goto.row } : undefined;
   if (kind === "money" && typeof v === "number") {
     return { value: v / 100, money: true, bold: isBold, formula, link };
   }

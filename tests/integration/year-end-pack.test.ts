@@ -25,7 +25,7 @@ import { recordYearEndRun, listYearEndRuns, yearStatus } from "@/lib/year-end/ru
 import { NONE_IN_PERIOD } from "@/lib/year-end/labels";
 import { formatExpenseRef, formatReimbursementRef } from "@/lib/references";
 import { inPeriod, type PackPeriod } from "@/lib/year-end/period";
-import type { PackSheet } from "@/lib/year-end/sheets";
+import type { PackCell, PackSheet, SheetRow } from "@/lib/year-end/sheets";
 import { TAB } from "@/lib/year-end/workbook";
 import { readStoreZipEntries } from "@/lib/zip/store";
 import {
@@ -490,6 +490,61 @@ describe("limited company, 1 April 2025 to 31 March 2026", () => {
       ["Total reimbursed", null, null, null, null, null, null, 4_000],
     ]);
     expect(sheet.freezeRows).toBe(1);
+  });
+
+  it("links invoice numbers, expense refs and bank dates to their rows on their own tabs", async () => {
+    const seeded = await seedYearEnd(db, { entityType: "limited_company", period: LTD_YEAR });
+    const { sheets } = await workbookFor(seeded.companyId, LTD_YEAR);
+    const goto = (cell: PackCell | undefined) =>
+      cell != null && typeof cell !== "string" ? cell.goto : undefined;
+    /** The cell a link lands on: column A of the row, counted after the header on a table tab. */
+    const target = (to: SheetRow) => {
+      const sheet = findSheet(sheets, to.sheet);
+      const row = sheet.rows[to.row - 1];
+      expect(row, `${to.sheet} row ${to.row}`).toBeDefined();
+      return { sheet, row: row! };
+    };
+    const cellIn = (sheet: PackSheet, row: PackCell[], header: string) =>
+      value(row[sheet.headers.indexOf(header)]);
+
+    // Every link lands on the record its cell names.
+    let links = 0;
+    for (const sheet of sheets) {
+      for (const cell of sheet.rows.flat()) {
+        const to = goto(cell);
+        if (!to) continue;
+        links++;
+        const text = String(value(cell));
+        const { sheet: dest, row } = target(to);
+        if (to.sheet === TAB.sales) expect(text).toContain(String(cellIn(dest, row, "Number")));
+        else if (to.sheet === TAB.expenses) expect(text).toContain(String(cellIn(dest, row, "Ref")));
+        else if (to.sheet === TAB.bank) expect(text).toBe(String(cellIn(dest, row, "Date")));
+        else if (to.sheet === TAB.reimbursements) expect(text).toContain(String(value(row[1])));
+        else if (to.sheet === TAB.otherIncome) expect(text).toContain("Other income");
+        else throw new Error(`Unexpected link from ${sheet.name} to ${to.sheet}`);
+      }
+    }
+    expect(links).toBeGreaterThan(0);
+
+    const position = findSheet(sheets, TAB.position);
+    expect(goto(labelledRow(position, "INV-2")[0])?.sheet).toBe(TAB.sales);
+
+    const reimbursements = findSheet(sheets, TAB.reimbursements);
+    const refCell = (ref: string) => reimbursements.rows.flat().find((c) => value(c) === ref);
+    expect(goto(refCell(exp(seeded.reimbursedInPeriod)))?.sheet).toBe(TAB.expenses);
+    // Dated before the period, so it isn't on the Expenses tab to link to.
+    expect(goto(refCell(exp(seeded.reimbursedEarlier)))).toBeUndefined();
+
+    // A bank payment after the period end isn't on the Bank transactions tab; its expense is on Expenses.
+    const outside = findSheet(sheets, TAB.outside);
+    const late = outside.rows.find((r) => value(r[1]) === exp(seeded.edgeExpenses[2]!))!;
+    expect(goto(late[0])).toBeUndefined();
+    expect(goto(late[1])?.sheet).toBe(TAB.expenses);
+
+    // The bank tab's matches open the record they were matched to.
+    const bank = findSheet(sheets, TAB.bank);
+    const matched = bank.headers.indexOf("Matched to");
+    expect(bank.rows.some((r) => goto(r[matched]) != null)).toBe(true);
   });
 
   it("keeps records dated outside the period in their own sections, out of the P&L", async () => {

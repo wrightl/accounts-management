@@ -1,8 +1,9 @@
 import { zipStore } from "@/lib/zip/store";
 
 /**
- * A link to another sheet's row (1-based, after the header), to a file beside
- * the workbook (a relative path), or to a web address.
+ * A link to another sheet's row, to a file beside the workbook (a relative
+ * path), or to a web address. The row is 1-based: counted after the header on
+ * a table sheet, and the sheet's own row number on a layout sheet.
  */
 export type XlsxLink = { sheet: string; row: number } | { file: string } | { url: string };
 
@@ -50,9 +51,9 @@ const MAX_CELL_TEXT = 32_767;
 const MAX_LINKS_PER_SHEET = 65_530;
 const MAX_WIDTH = 60;
 
-const STYLE = { money: 1, link: 2, date: 3, bold: 4, boldMoney: 5, heading: 6 } as const;
+const STYLE = { money: 1, link: 2, date: 3, bold: 4, boldMoney: 5, heading: 6, linkDate: 7 } as const;
 /** Each style above (and the default, 0) has a wrapped twin this many places on. */
-const WRAP_OFFSET = 7;
+const WRAP_OFFSET = 8;
 const LINE_HEIGHT = 15;
 
 const EXCEL_EPOCH = Date.UTC(1899, 11, 30);
@@ -81,8 +82,9 @@ const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
 export async function buildXlsx(sheets: XlsxSheet[]): Promise<Uint8Array> {
   const names = sheetNames(sheets.map((s) => s.name));
   const nameOf = new Map(sheets.map((s, i) => [s.name, names[i]]));
+  const layoutSheets = new Set(sheets.filter((s) => s.layout).map((s) => s.name));
 
-  const built = sheets.map((sheet, i) => worksheet(sheet, nameOf, i + 1));
+  const built = sheets.map((sheet, i) => worksheet(sheet, nameOf, layoutSheets, i + 1));
   const tableNames = uniqueTableNames(names);
 
   const parts: [string, string][] = [
@@ -125,7 +127,12 @@ export async function buildXlsx(sheets: XlsxSheet[]): Promise<Uint8Array> {
   return zipStore(parts, "Workbook");
 }
 
-function worksheet(sheet: XlsxSheet, nameOf: Map<string, string>, sheetNumber: number) {
+function worksheet(
+  sheet: XlsxSheet,
+  nameOf: Map<string, string>,
+  layoutSheets: Set<string>,
+  sheetNumber: number,
+) {
   const width = sheetWidth(sheet);
   const layout = sheet.layout === true;
   // A table's header cells must be text matching its column names exactly.
@@ -169,16 +176,16 @@ function worksheet(sheet: XlsxSheet, nameOf: Map<string, string>, sheetNumber: n
               : 0;
       const target =
         link && text !== "" && links.length < MAX_LINKS_PER_SHEET
-          ? linkTarget(link, nameOf)
+          ? linkTarget(link, nameOf, layoutSheets)
           : null;
       if (target && "location" in target) {
         links.push(`<hyperlink ref="${ref}" location="${xmlEscape(target.location)}"/>`);
-        style = STYLE.link;
       } else if (target) {
         externalLinks.push(target.external);
         links.push(`<hyperlink ref="${ref}" r:id="rId${externalLinks.length}"/>`);
-        style = STYLE.link;
       }
+      // A linked date keeps its date format.
+      if (target) style = serial !== null ? STYLE.linkDate : STYLE.link;
       // A heading stays on one line and runs across the sheet.
       if (fixed && !heading) {
         style += WRAP_OFFSET;
@@ -304,12 +311,15 @@ function sheetWidth(sheet: XlsxSheet) {
 function linkTarget(
   link: XlsxLink,
   nameOf: Map<string, string>,
+  layoutSheets: Set<string>,
 ): { location: string } | { external: string } | null {
   if ("file" in link) return { external: encodeURI(link.file) };
   if ("url" in link) return { external: link.url };
   const name = nameOf.get(link.sheet);
   if (!name) return null;
-  return { location: `${quoteSheet(name)}!A${link.row + 1}` };
+  // A table sheet's rows start below its header; a layout sheet's at row 1.
+  const row = layoutSheets.has(link.sheet) ? link.row : link.row + 1;
+  return { location: `${quoteSheet(name)}!A${row}` };
 }
 
 function workbook(names: string[]) {
@@ -360,7 +370,7 @@ function rels(items: { type: string; target: string; external?: boolean }[]) {
   return `${XML_HEAD}<Relationships xmlns="${NS_PKG_REL}">${body}</Relationships>`;
 }
 
-// Fonts: default, link, bold, heading. Cell styles: default, money, link, date, bold, bold money, heading.
+// Fonts: default, link, bold, heading. Cell styles: default, money, link, date, bold, bold money, heading, linked date.
 const STYLES =
   XML_HEAD +
   `<styleSheet xmlns="${NS_MAIN}">` +
@@ -374,7 +384,7 @@ const STYLES =
   `<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>` +
   `<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>` +
   `<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>` +
-  `<cellXfs count="14">` +
+  `<cellXfs count="16">` +
   `<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>` +
   `<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>` +
   `<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>` +
@@ -382,7 +392,8 @@ const STYLES =
   `<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>` +
   `<xf numFmtId="164" fontId="2" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/>` +
   `<xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1"/>` +
-  // The same seven again, wrapped and aligned to the top, for sheets with fixed column widths.
+  `<xf numFmtId="165" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/>` +
+  // The same eight again, wrapped and aligned to the top, for sheets with fixed column widths.
   `<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>` +
   `<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>` +
   `<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>` +
@@ -390,6 +401,7 @@ const STYLES =
   `<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>` +
   `<xf numFmtId="164" fontId="2" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>` +
   `<xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>` +
+  `<xf numFmtId="165" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>` +
   `</cellXfs>` +
   `<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>` +
   `</styleSheet>`;
