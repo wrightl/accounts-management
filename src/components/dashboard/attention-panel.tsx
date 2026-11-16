@@ -62,7 +62,7 @@ export function AttentionPanel({
     items.overdueInvoices.length +
     items.expiringQuotes.length +
     (items.unreconciledCount > 0 ? 1 : 0) +
-    items.pendingExpenses.length +
+    items.pendingExpensesCount +
     items.inboundEmailIssues.length;
 
   const allClear = urgentCount === 0;
@@ -174,7 +174,7 @@ export function AttentionPanel({
 
           <InboxSection
             title="Pending expenses"
-            count={items.pendingExpenses.length}
+            count={items.pendingExpensesCount}
             emptyMessage="No expenses awaiting review."
             priority="low"
           >

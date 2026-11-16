@@ -1,5 +1,6 @@
 import {
   eachMonth,
+  financialYearEndDate,
   financialYearStartDate,
   formatPeriodRangeLabel,
   resolveFinancialYearPeriod,
@@ -162,12 +163,21 @@ export function resolveDashboardPeriod(
   return resolveFinancialYearPeriod(fyEndMonth, fyStartYear);
 }
 
-/** Months for the dashboard charts: the chosen earlier financial year, otherwise the 12 months to today. */
+/**
+ * Months for the dashboard charts: the chosen financial year (this one or an
+ * earlier one), otherwise the 12 months to today. This financial year lists
+ * every month to its end, so later months show empty, but data runs only to
+ * today, like the tiles.
+ */
 export function dashboardChartMonths(
   key: DashboardPeriodKey,
   fyEndMonth: number,
   today: string = todayIsoDate(),
 ): { from: string; to: string; months: string[] } {
+  if (key === "fy") {
+    const from = financialYearStartDate(fyEndMonth, today);
+    return { from, to: today, months: eachMonth(from, financialYearEndDate(fyEndMonth, from)) };
+  }
   const fyStartYear = pastFinancialYearStart(key);
   if (fyStartYear === null) return trailingChartMonths(12, today);
   const { from, to } = resolveFinancialYearPeriod(fyEndMonth, fyStartYear);

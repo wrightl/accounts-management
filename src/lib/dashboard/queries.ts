@@ -14,7 +14,11 @@ import {
 import { countUnreconciledBankTransactions } from "@/lib/bank/queries";
 import { resolvePeriod, todayIsoDate } from "@/lib/dates";
 import { getReimbursableSummary } from "@/lib/expenses/queries";
-import { listPendingExpenses, listInboundEmailIssues } from "@/lib/expenses/inbound-email";
+import {
+  countPendingExpenses,
+  listPendingExpenses,
+  listInboundEmailIssues,
+} from "@/lib/expenses/inbound-email";
 import {
   countOverdueInvoices,
   getDashboardKpis,
@@ -93,11 +97,14 @@ export type MonthlyCashPoint = {
   invoicedPence: number;
   collectedPence: number;
   incomePence: number;
+  /** Money received that was not for an invoice. Part of profit, not of income. */
+  otherIncomePence: number;
   expensePence: number;
   profitPence: number;
   invoicedFormatted: string;
   collectedFormatted: string;
   incomeFormatted: string;
+  otherIncomeFormatted: string;
   expenseFormatted: string;
   profitFormatted: string;
 };
@@ -130,7 +137,10 @@ export type DashboardAttentionData = {
   overdueInvoices: OverdueInvoiceRow[];
   expiringQuotes: ExpiringQuoteRow[];
   unreconciledCount: number;
+  /** The newest few, for the list. */
   pendingExpenses: Awaited<ReturnType<typeof listPendingExpenses>>;
+  /** Every pending expense, which can be more than the list shows. */
+  pendingExpensesCount: number;
   inboundEmailIssues: Awaited<ReturnType<typeof listInboundEmailIssues>>;
   reimbursableFormatted: string;
   owedToMeFormatted: string;
@@ -601,11 +611,13 @@ function mergeCashSeries(
       invoicedPence,
       collectedPence,
       incomePence,
+      otherIncomePence,
       expensePence,
       profitPence,
       invoicedFormatted: formatGBP(invoicedPence),
       collectedFormatted: formatGBP(collectedPence),
       incomeFormatted: formatGBP(incomePence),
+      otherIncomeFormatted: formatGBP(otherIncomePence),
       expenseFormatted: formatGBP(expensePence),
       profitFormatted: formatGBP(profitPence),
     };
@@ -724,6 +736,7 @@ export async function getDashboardOverview(
     pendingExpenses,
     inboundEmailIssues,
     quotePipelinePence,
+    pendingExpensesCount,
   ] = await Promise.all([
     getDashboardKpis(companyId),
     countOverdueInvoices(companyId),
@@ -768,6 +781,7 @@ export async function getDashboardOverview(
       ? listInboundEmailIssues(companyId, 5)
       : Promise.resolve([]),
     getQuotePipelinePence(companyId),
+    countPendingExpenses(companyId),
   ]);
 
   const cashSeries = mergeCashSeries(
@@ -857,10 +871,13 @@ export async function getDashboardOverview(
       value: pnl.profitFormatted,
       valuePence: pnl.profitPence,
       href: "/reports",
-      subtitle: `${pnl.incomeFormatted} income · ${pnl.expenseFormatted} expenses`,
+      subtitle:
+        pnl.otherIncomePence !== 0
+          ? `${pnl.incomeFormatted} invoiced · ${pnl.otherIncomeFormatted} other income · ${pnl.expenseFormatted} expenses`
+          : `${pnl.incomeFormatted} income · ${pnl.expenseFormatted} expenses`,
       insight: periodBeforeCutover
-        ? "Accrual · invoiced net less expenses · leaves out invoices before cutover"
-        : "Accrual · invoiced net less expenses",
+        ? "Accrual · invoiced net plus other income, less expenses · leaves out invoices before cutover"
+        : "Accrual · invoiced net plus other income, less expenses",
       delta: {
         ...profitDelta,
         caption: `vs ${period.compareLabel}`,
@@ -940,7 +957,7 @@ export async function getDashboardOverview(
     isPastYear: pastYear !== null,
     periodBeforeCutover,
     vatRegistered: settings.vatRegistered,
-    chartWindowLabel: pastYear ? period.label : "Last 12 months",
+    chartWindowLabel: pastYear || periodKey === "fy" ? period.label : "Last 12 months",
     pastYears,
     periodLabel: period.label,
     compareLabel: period.compareLabel,
@@ -967,6 +984,7 @@ export async function getDashboardOverview(
       expiringQuotes,
       unreconciledCount,
       pendingExpenses,
+      pendingExpensesCount,
       inboundEmailIssues,
       reimbursableFormatted: reimbursable.totalFormatted,
       owedToMeFormatted: owed.owedToMeFormatted,

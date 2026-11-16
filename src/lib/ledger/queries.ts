@@ -30,6 +30,8 @@ export async function getLedgerSettings(companyId: string) {
       openingBalancesAsAt: companies.openingBalancesAsAt,
       openingReservesPence: companies.openingReservesPence,
       associatedCompanies: companies.associatedCompanies,
+      incorporatedOn: companies.incorporatedOn,
+      invoiceCutoverDate: companies.invoiceCutoverDate,
     })
     .from(companies)
     .where(eq(companies.id, companyId))
@@ -94,12 +96,24 @@ export async function getReservesPosition(companyId: string, asOf: string = toda
   const currentStart = financialYearStartDate(fyEnd, asOf);
 
   let firstStart: string;
+  // Without opening balances, the date the accounts start from: the later of
+  // incorporation and the invoice cutover. Earlier records are not a trading
+  // year of this company (costs before it existed, or a year whose invoices
+  // the cutover leaves out), so they must not become losses carried forward.
+  let recordsFrom: string | null = null;
   if (settings.openingBalancesAsAt) {
     firstStart = addDays(settings.openingBalancesAsAt, 1);
   } else {
     const earliest = await earliestRecordDate(companyId);
-    firstStart = earliest && earliest < currentStart
-      ? financialYearStartDate(fyEnd, earliest)
+    const floor =
+      [settings.incorporatedOn, settings.invoiceCutoverDate]
+        .filter((d): d is string => Boolean(d))
+        .sort()
+        .at(-1) ?? null;
+    recordsFrom = earliest && floor && earliest < floor ? floor : null;
+    const from = recordsFrom ?? earliest;
+    firstStart = from && from < currentStart
+      ? financialYearStartDate(fyEnd, from)
       : currentStart;
   }
 
@@ -114,8 +128,9 @@ export async function getReservesPosition(companyId: string, asOf: string = toda
     const end = financialYearEndDate(fyEnd, start);
     const current = start === currentStart;
     const to = current && asOf < end ? asOf : end;
+    const profitFrom = recordsFrom && recordsFrom > start ? recordsFrom : start;
     const [pnl, dividendsPence] = await Promise.all([
-      getProfitAndLoss(companyId, start, to),
+      getProfitAndLoss(companyId, profitFrom, to),
       sumDividendsPence(companyId, start, end),
     ]);
     inputs.push({ start, end, profitPence: pnl.profitPence, dividendsPence, current });
