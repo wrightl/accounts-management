@@ -115,6 +115,7 @@ const nextConfig: NextConfig = {
     },
     ...(devOrigin ? { allowedDevOrigins: [devOrigin] } : {}),
     experimental: {
+        agentUpgrade: 'security',
         serverActions: {
             bodySizeLimit: '5mb',
         },
