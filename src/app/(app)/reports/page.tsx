@@ -129,6 +129,12 @@ export default async function ReportsPage({
             />
 
             <ReportPeriodForm from={from} to={to} />
+            {from > to ? (
+                <p className="mt-2 rounded-xl bg-wash px-4 py-3 text-sm">
+                    The From date is after the To date, so every figure below is
+                    zero. Swap the dates to see the period.
+                </p>
+            ) : null}
             <p className="mt-2 text-sm text-muted">
                 Financial year ends in {yearEndLabel}.
             </p>
@@ -239,7 +245,7 @@ export default async function ReportsPage({
                         <CardValue className="text-xl">{aged.d60}</CardValue>
                     </Card>
                     <Card>
-                        <CardTitle>90+ days</CardTitle>
+                        <CardTitle>Over 60 days</CardTitle>
                         <CardValue className="text-xl">{aged.d90}</CardValue>
                     </Card>
                 </div>

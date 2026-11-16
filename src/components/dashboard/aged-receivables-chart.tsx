@@ -25,7 +25,7 @@ const BUCKET_LABELS = [
   { key: "current", label: "Current" },
   { key: "d30", label: "1–30 days" },
   { key: "d60", label: "31–60 days" },
-  { key: "d90", label: "90+ days" },
+  { key: "d90", label: "Over 60 days" },
 ] as const;
 
 export function AgedReceivablesChart({

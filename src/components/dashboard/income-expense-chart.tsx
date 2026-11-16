@@ -25,6 +25,7 @@ function formatAxis(value: number): string {
 
 type ChartRow = MonthlyCashPoint & {
   income: number;
+  otherIncome: number;
   expenses: number;
   profit: number;
 };
@@ -41,12 +42,16 @@ export function IncomeExpenseChart({
   const rows: ChartRow[] = data.map((point) => ({
     ...point,
     income: penceToPounds(point.incomePence),
+    otherIncome: penceToPounds(point.otherIncomePence),
     expenses: penceToPounds(point.expensePence),
     profit: penceToPounds(point.profitPence),
   }));
 
+  // Other income is part of profit, so it is stacked on invoiced income:
+  // otherwise the bars would not add up to the profit line.
+  const hasOtherIncome = rows.some((row) => row.otherIncomePence !== 0);
   const hasData = rows.some(
-    (row) => row.incomePence > 0 || row.expensePence > 0,
+    (row) => row.incomePence > 0 || row.otherIncomePence !== 0 || row.expensePence > 0,
   );
 
   return (
@@ -59,7 +64,7 @@ export function IncomeExpenseChart({
       {!hasData ? (
         <div className="mt-6 space-y-2">
           <p className="text-sm text-muted">
-            No invoiced income or expenses in this period.
+            No income or expenses in this period.
           </p>
           <Link href="/reports" className="text-sm text-brand hover:underline">
             Open reports →
@@ -88,6 +93,9 @@ export function IncomeExpenseChart({
                 formatter={(_value, name, item) => {
                   const payload = item.payload as ChartRow;
                   if (name === "Income") return [payload.incomeFormatted, "Income"];
+                  if (name === "Other income") {
+                    return [payload.otherIncomeFormatted, "Other income"];
+                  }
                   if (name === "Expenses") return [payload.expenseFormatted, "Expenses"];
                   if (name === "Profit") return [payload.profitFormatted, "Profit"];
                   return [String(_value), String(name)];
@@ -102,10 +110,22 @@ export function IncomeExpenseChart({
               <Bar
                 dataKey="income"
                 name="Income"
+                stackId="income"
                 fill="var(--periwinkle)"
-                radius={[4, 4, 0, 0]}
+                radius={hasOtherIncome ? [0, 0, 0, 0] : [4, 4, 0, 0]}
                 maxBarSize={22}
               />
+              {hasOtherIncome ? (
+                <Bar
+                  dataKey="otherIncome"
+                  name="Other income"
+                  stackId="income"
+                  fill="var(--periwinkle)"
+                  fillOpacity={0.45}
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={22}
+                />
+              ) : null}
               <Bar
                 dataKey="expenses"
                 name="Expenses"

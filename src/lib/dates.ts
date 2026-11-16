@@ -251,7 +251,9 @@ export function resolveSpendingPeriod(
       compareFrom: prevFyStart,
       compareTo,
       buckets: "month",
-      label: `FY ${monthName(startMonth)} – ${monthName(endMonth)} ${parseIso(from).year}`,
+      label: `FY ${monthName(startMonth)} ${parseIso(from).year} – ${monthName(endMonth)} ${
+        parseIso(financialYearEndDate(fyEndMonth, from)).year
+      }`,
       compareLabel: `Prior FY`,
     };
   }

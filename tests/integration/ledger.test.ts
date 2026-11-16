@@ -144,6 +144,45 @@ describe("reserves", () => {
     expect(position.years[0]!.closingReservesPence).toBe(810_000);
   });
 
+  it("starts at the invoice cutover, so older costs are not losses carried forward", async () => {
+    // Loaded for reference, like a cost paid personally years ago.
+    await db.insert(expenses).values({
+      companyId,
+      description: "Old course",
+      spentAt: addDays(lastYearEnd, -400),
+      amountPence: 500_000,
+      status: "company_paid",
+    });
+    await seedInvoice(currentStart, 1_000_000);
+    await db
+      .update(companies)
+      .set({ invoiceCutoverDate: currentStart })
+      .where(eq(companies.id, companyId));
+
+    const position = await getReservesPosition(companyId);
+    expect(position.years).toHaveLength(1);
+    expect(position.currentYear.profitPence).toBe(1_000_000);
+    // 19% of £10,000, with no earlier loss to set against it.
+    expect(position.currentYear.tax.taxPence).toBe(190_000);
+  });
+
+  it("leaves out costs dated before incorporation in the first year", async () => {
+    const incorporatedOn = addDays(lastYearEnd, -100);
+    await db.insert(expenses).values({
+      companyId,
+      description: "Before the company existed",
+      spentAt: addDays(incorporatedOn, -20),
+      amountPence: 300_000,
+      status: "company_paid",
+    });
+    await seedInvoice(addDays(lastYearEnd, -30), 1_000_000);
+    await db.update(companies).set({ incorporatedOn }).where(eq(companies.id, companyId));
+
+    const position = await getReservesPosition(companyId);
+    expect(position.years).toHaveLength(2);
+    expect(position.years[0]!.profitPence).toBe(1_000_000);
+  });
+
   it("only accepts a year end, and only from admins and accountants", async () => {
     const wrongDay = await saveOpeningBalances(
       openingForm({ openingBalancesAsAt: addDays(lastYearEnd, -1) }),

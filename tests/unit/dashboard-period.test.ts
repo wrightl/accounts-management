@@ -68,6 +68,8 @@ describe("resolveDashboardPeriod", () => {
     const period = resolveDashboardPeriod("fy", 3, "2026-09-19");
     expect(period.from).toBe("2026-04-01");
     expect(period.to).toBe("2026-09-19");
+    // Names the years it starts and ends in, like an earlier financial year.
+    expect(period.label).toBe("FY April 2026 – March 2027");
   });
 });
 
@@ -142,9 +144,20 @@ describe("earlier financial years", () => {
     expect(months[11]).toBe("2025-03");
   });
 
+  it("charts this financial year to its end, with data to today", () => {
+    const { from, to, months } = dashboardChartMonths("fy", 3, "2026-11-16");
+    expect(from).toBe("2026-04-01");
+    expect(to).toBe("2026-11-16");
+    expect(months).toHaveLength(12);
+    expect(months[0]).toBe("2026-04");
+    expect(months[11]).toBe("2027-03");
+  });
+
   it("charts the trailing 12 months otherwise", () => {
-    expect(dashboardChartMonths("fy", 3, "2026-09-19")).toEqual(
-      trailingChartMonths(12, "2026-09-19"),
-    );
+    for (const key of ["this-month", "last-3-months", "trailing-12"] as const) {
+      expect(dashboardChartMonths(key, 3, "2026-09-19")).toEqual(
+        trailingChartMonths(12, "2026-09-19"),
+      );
+    }
   });
 });

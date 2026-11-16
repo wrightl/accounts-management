@@ -67,13 +67,17 @@ export default async function ForecastPage() {
         <ul className="mt-2 list-disc space-y-1 pl-5">
           <li>
             Starting cash:{" "}
-            {inputs.cash.known
-              ? `${formatGBP(inputs.cash.cashPence)} ${
-                  inputs.cash.source === "statement"
-                    ? <>from the latest statement balance on <DisplayDate value={inputs.cash.asOf} /></>
-                    : <>from opening cash plus transactions to <DisplayDate value={inputs.cash.asOf} /></>
-                }`
-              : "unknown"}
+            {inputs.cash.known ? (
+              <>
+                {formatGBP(inputs.cash.cashPence)}{" "}
+                {inputs.cash.source === "statement"
+                  ? "from the latest statement balance on "
+                  : "from opening cash plus transactions to "}
+                <DisplayDate value={inputs.cash.asOf} />
+              </>
+            ) : (
+              "unknown"
+            )}
             .
           </li>
           <li>Unpaid invoices, on their due date. Overdue ones are counted in the first week.</li>
