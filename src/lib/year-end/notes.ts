@@ -5,8 +5,23 @@ import type { Check } from "@/lib/year-end/checks";
 import type { YearEndData } from "@/lib/year-end/data";
 import type { Figures } from "@/lib/year-end/figures";
 import { businessWord } from "@/lib/year-end/labels";
-import { day, money, number, type Column, type PackCell, type Row } from "@/lib/year-end/sheets";
+import {
+  day,
+  linkTo,
+  money,
+  number,
+  type Column,
+  type PackCell,
+  type Row,
+  type SheetRow,
+} from "@/lib/year-end/sheets";
 import { TAB } from "@/lib/year-end/tabs";
+
+/** A record's row on its own tab, when it is in the pack. */
+export type NoteLinks = {
+  invoice: (invoiceNumber: string) => SheetRow | undefined;
+  bank: (bankTransactionId: string) => SheetRow | undefined;
+};
 
 /** What the owner has said about one item, as stored. */
 export type NoteResponse = {
@@ -106,7 +121,11 @@ export function buildNotes(
   figures: Figures,
   checks: Check[],
   responses: NoteResponses,
+  /** Where records sit on the other tabs, so the workbook can link to them. */
+  links?: NoteLinks,
 ): Notes {
+  const toInvoice = (invoiceNumber: string) => links?.invoice(invoiceNumber);
+  const toBank = (txId: string) => links?.bank(txId);
   const { period, company, isLimited } = data;
   const business = businessWord(isLimited);
   const start = figures.startDate;
@@ -463,7 +482,7 @@ export function buildNotes(
             { key: "paidOn", header: "Date later paid" },
           ],
           rows: figures.debtors.map(({ invoice, balancePence, paidOn }): Row => ({
-            number: invoice.number,
+            number: linkTo(invoice.number, toInvoice(invoice.number)),
             customer: invoice.clientName,
             owed: amount(balancePence),
             paidOn: paidOn ? day(paidOn) : "Not yet paid in full",
@@ -499,7 +518,7 @@ export function buildNotes(
             explanationColumn,
           ],
           rows: figures.owedToCustomers.map(({ invoice, pence, refundedOn }, i): Row => ({
-            number: invoice.number,
+            number: linkTo(invoice.number, toInvoice(invoice.number)),
             customer: invoice.clientName,
             owed: amount(pence),
             refundedOn: refundedOn ? day(refundedOn) : "Not yet refunded",
@@ -593,7 +612,7 @@ export function buildNotes(
             explanationColumn,
           ],
           rows: figures.grants.map((tx, i): Row => ({
-            date: day(tx.bookedAt),
+            date: linkTo(day(tx.bookedAt), toBank(tx.id)),
             from: tx.counterparty,
             amount: amount(tx.amountPence),
             note:

@@ -31,6 +31,7 @@ import {
   day,
   detailTab,
   heading,
+  linkTo,
   money,
   number,
   type Column,
@@ -38,6 +39,7 @@ import {
   type PackCell,
   type PackSheet,
   type Row,
+  type SheetRow,
 } from "@/lib/year-end/sheets";
 
 export { TAB };
@@ -88,6 +90,21 @@ export function buildWorkbook(
     layout.add("Period end", day(period.to));
   };
 
+  // Where each record sits on its own tab, so a cell elsewhere can link to its row.
+  // A record that isn't on the tab (dated outside the period) has no row and no link.
+  const invoiceRow = new Map<string, number>();
+  const expenseRow = new Map<string, number>();
+  const bankRow = new Map(data.bankTransactions.map((tx, i) => [tx.id, i + 1]));
+  const otherIncomeRow = new Map(figures.otherIncome.map((tx, i) => [tx.id, i + 1]));
+  const runRow = new Map<string, number>();
+  const at = (sheet: string, rows: Map<string, number>, key: string | null | undefined): SheetRow | undefined => {
+    const row = key == null ? undefined : rows.get(key);
+    return row == null ? undefined : { sheet, row };
+  };
+  const toInvoice = (number: string | null | undefined) => at(TAB.sales, invoiceRow, number);
+  const toExpense = (id: string | null | undefined) => at(TAB.expenses, expenseRow, id);
+  const toBank = (id: string | null | undefined) => at(TAB.bank, bankRow, id);
+
   // --- Sales invoices --------------------------------------------------------
 
   const settledOn = (invoice: PackInvoice) =>
@@ -104,11 +121,11 @@ export function buildWorkbook(
       .filter((p) => p.receivedOn <= date)
       .reduce((total, p) => total + p.amountPence, 0);
 
-  const salesRows: Row[] = [
-    ...data.invoices.map((inv): Row => {
+  const salesEntries: Keyed[] = [
+    ...data.invoices.map((inv): Keyed => {
       const balance = figures.invoiceBalanceAt(inv, period.to);
       const file = options.invoiceFile?.(inv.id);
-      return {
+      return keyed(inv.number, {
         date: day(inv.issueDate),
         type: "Invoice",
         number: file ? { v: inv.number, file } : inv.number,
@@ -123,11 +140,11 @@ export function buildWorkbook(
         // Money owed back to the customer has its own column, never a negative debt.
         overpaid: balance < 0 ? money(-balance) : null,
         paidOn: day(settledOn(inv)),
-      };
+      });
     }),
-    ...data.creditNotes.map((note): Row => {
+    ...data.creditNotes.map((note): Keyed => {
       const file = options.creditNoteFile?.(note.id);
-      return {
+      return keyed(null, {
         date: day(note.issueDate),
         type: "Credit note",
         number: file ? { v: note.number, file } : note.number,
@@ -136,9 +153,10 @@ export function buildWorkbook(
         net: money(-note.netPence),
         vat: vat ? money(-note.vatPence) : null,
         gross: vat ? money(-note.grossPence) : null,
-      };
+      });
     }),
-  ].sort(byDate);
+  ].sort(byEntryDate);
+  const salesRows = placeRows(salesEntries, invoiceRow);
   const sales = detailTab(
     TAB.sales,
     cash
@@ -181,7 +199,7 @@ export function buildWorkbook(
     data.cashReceipts.map((r): Row => ({
       date: day(r.date),
       type: r.kind === "payment" ? "Payment" : `Refund (credit note ${r.documentNumber})`,
-      invoice: r.invoiceNumber,
+      invoice: linkTo(r.invoiceNumber, toInvoice(r.invoiceNumber)),
       customer: r.clientName,
       amount: vat ? money(r.amountPence) : null,
       vat: vat ? money(r.amountPence - r.netPence) : null,
@@ -207,7 +225,7 @@ export function buildWorkbook(
     figures.otherIncome.map((tx): Row => {
       const match = tx.matches.find((m) => m.matchType === "other_income")!;
       return {
-        date: day(tx.bookedAt),
+        date: linkTo(day(tx.bookedAt), toBank(tx.id)),
         account: tx.bankAccountName,
         category: match.incomeCategory?.trim() || "Other",
         from: tx.counterparty,
@@ -225,10 +243,10 @@ export function buildWorkbook(
     const names = files.map((f) => f.slice(f.lastIndexOf("/") + 1)).join(", ");
     return { v: names, file: files[0] };
   };
-  const expenseRows: Row[] = [
-    ...figures.periodExpenses.map((e): Row => {
+  const expenseEntries: Keyed[] = [
+    ...figures.periodExpenses.map((e): Keyed => {
       const paidByOwner = figures.paidByOwner(e);
-      return {
+      return keyed(e.id, {
         date: day(e.spentAt),
         ref: ref(e),
         paid: cash ? day(figures.expensePaidOn(e)) : null,
@@ -246,21 +264,22 @@ export function buildWorkbook(
         coversTo: day(e.coversTo),
         notes: e.note,
         receipt: receiptCell(e),
-      };
+      });
     }),
     // On cash basis an amount that was never received is not an expense.
     ...(cash
       ? []
-      : data.writeOffs.map((w): Row => ({
+      : data.writeOffs.map((w): Keyed => keyed(null, {
           date: day(w.writtenOffOn),
-          ref: w.invoiceNumber,
+          ref: linkTo(w.invoiceNumber, toInvoice(w.invoiceNumber)),
           description: `Unpaid balance of invoice ${w.invoiceNumber} (${w.clientName}) written off${w.note ? `: ${w.note}` : ""}`,
           category: WRITE_OFF_CATEGORY[w.kind],
           status: "Written off",
           gross: vat ? money(w.amountPence) : null,
           net: money(w.amountPence),
         }))),
-  ].sort(byDate);
+  ].sort(byEntryDate);
+  const expenseRows = placeRows(expenseEntries, expenseRow);
   const expenses = detailTab(
     TAB.expenses,
     cash
@@ -287,6 +306,70 @@ export function buildWorkbook(
     ],
     expenseRows,
   );
+
+  // --- Reimbursements -----------------------------------------------------------
+
+  // A sole trader repaying themselves is drawings, not a reimbursement.
+  const runs = figures.reimbursementRuns;
+  const reimbursementsSheet = (() => {
+    if (runs.length === 0) return null;
+    const layout = new Layout();
+    const columns: Column[] = [
+      { key: "paidOn", header: "Date paid", keep: true },
+      { key: "run", header: "Ref", keep: true },
+      { key: "payee", header: "Paid to" },
+      { key: "reference", header: "Reference" },
+      { key: "bank", header: "Date on bank statement" },
+      { key: "ref", header: "Expense ref" },
+      { key: "spent", header: "Date spent" },
+      { key: "description", header: "Description" },
+      { key: "amount", header: "Amount (£)", keep: true },
+      { key: "note", header: "Note" },
+    ];
+    const rows: Row[] = runs.flatMap((run) => {
+      const items = run.expenseIds.map((id) => data.expenses.get(id)!);
+      return [
+        {
+          paidOn: { v: run.paidOn, kind: "date" },
+          run: bold(formatReimbursementRef(run.refNumber)),
+          payee: bold(personName(run.payeeUserId) ?? "Person not recorded"),
+          reference: run.reference,
+          bank: linkTo(day(run.bank?.bookedAt), toBank(run.bank?.bankTransactionId)),
+          description: bold(`${items.length} ${items.length === 1 ? "expense" : "expenses"}`),
+          amount: money(run.totalPence, { bold: true }),
+        } satisfies Row,
+        ...items.map((e): Row => ({
+          ref: linkTo(ref(e), toExpense(e.id)),
+          spent: day(e.spentAt),
+          description: e.description,
+          amount: money(e.amountPence),
+          note: e.spentAt && e.spentAt < period.from ? "Dated before this period" : null,
+        })),
+      ];
+    });
+    const table = layout.table(columns, rows);
+    // Each reimbursement's own row, followed by one row per expense it covered.
+    let next = table.first;
+    for (const run of runs) {
+      runRow.set(run.id, next);
+      next += 1 + run.expenseIds.length;
+    }
+    const paidOn = table.letter("paidOn")!;
+    const amount = table.letter("amount")!;
+    // Only a reimbursement's own row has a date paid, so this adds up the runs, not their items.
+    layout.add(
+      ...Array.from({ length: amount.charCodeAt(0) - 65 }, (_, i) => (i === 0 ? bold("Total reimbursed") : null)),
+      money(runs.reduce((total, r) => total + r.totalPence, 0), {
+        bold: true,
+        formula: `SUMIF(${paidOn}${table.first}:${paidOn}${table.last},"<>",${amount}${table.first}:${amount}${table.last})`,
+      }),
+    );
+    return layout.sheet(
+      TAB.reimbursements,
+      `Amounts paid back to people in the period for ${business} costs they paid personally, with the expenses each one covered.`,
+      { freezeRows: 1 },
+    );
+  })();
 
   // --- Bank transactions --------------------------------------------------------
 
@@ -327,6 +410,20 @@ export function buildWorkbook(
     })();
     return match.note?.trim() ? `${label} (${match.note.trim()})` : label;
   };
+  const matchTarget = (txId: string, match: PackMatch): SheetRow | undefined => {
+    switch (match.matchType) {
+      case "invoice_payment":
+        return toInvoice(match.invoiceNumber);
+      case "expense":
+        return toExpense(match.expenseId);
+      case "reimbursement":
+        return at(TAB.reimbursements, runRow, match.reimbursementId);
+      case "other_income":
+        return at(TAB.otherIncome, otherIncomeRow, txId);
+      default:
+        return undefined;
+    }
+  };
   const running = new Map(data.bankAccounts.map((a) => [a.id, a.startBalancePence]));
   const bank = detailTab(
     TAB.bank,
@@ -357,69 +454,15 @@ export function buildWorkbook(
         amount: money(tx.amountPence),
         // Shown even at nil: a balance of zero is still a balance.
         balance: balance == null ? null : { v: balance, kind: "money" },
-        matched: tx.matches.map(matchText).join("; "),
+        // One cell holds every match; it opens the first one that has a row in this pack.
+        matched: linkTo(
+          tx.matches.map(matchText).join("; "),
+          tx.matches.map((m) => matchTarget(tx.id, m)).find((t) => t != null),
+        ),
         notes: tx.note,
       };
     }),
   );
-
-  // --- Reimbursements -----------------------------------------------------------
-
-  // A sole trader repaying themselves is drawings, not a reimbursement.
-  const runs = figures.reimbursementRuns;
-  const reimbursementsSheet = (() => {
-    if (runs.length === 0) return null;
-    const layout = new Layout();
-    const columns: Column[] = [
-      { key: "paidOn", header: "Date paid", keep: true },
-      { key: "run", header: "Ref", keep: true },
-      { key: "payee", header: "Paid to" },
-      { key: "reference", header: "Reference" },
-      { key: "bank", header: "Date on bank statement" },
-      { key: "ref", header: "Expense ref" },
-      { key: "spent", header: "Date spent" },
-      { key: "description", header: "Description" },
-      { key: "amount", header: "Amount (£)", keep: true },
-      { key: "note", header: "Note" },
-    ];
-    const rows: Row[] = runs.flatMap((run) => {
-      const items = run.expenseIds.map((id) => data.expenses.get(id)!);
-      return [
-        {
-          paidOn: { v: run.paidOn, kind: "date" },
-          run: bold(formatReimbursementRef(run.refNumber)),
-          payee: bold(personName(run.payeeUserId) ?? "Person not recorded"),
-          reference: run.reference,
-          bank: day(run.bank?.bookedAt),
-          description: bold(`${items.length} ${items.length === 1 ? "expense" : "expenses"}`),
-          amount: money(run.totalPence, { bold: true }),
-        } satisfies Row,
-        ...items.map((e): Row => ({
-          ref: ref(e),
-          spent: day(e.spentAt),
-          description: e.description,
-          amount: money(e.amountPence),
-          note: e.spentAt && e.spentAt < period.from ? "Dated before this period" : null,
-        })),
-      ];
-    });
-    const table = layout.table(columns, rows);
-    const paidOn = table.letter("paidOn")!;
-    const amount = table.letter("amount")!;
-    // Only a reimbursement's own row has a date paid, so this adds up the runs, not their items.
-    layout.add(
-      ...Array.from({ length: amount.charCodeAt(0) - 65 }, (_, i) => (i === 0 ? bold("Total reimbursed") : null)),
-      money(runs.reduce((total, r) => total + r.totalPence, 0), {
-        bold: true,
-        formula: `SUMIF(${paidOn}${table.first}:${paidOn}${table.last},"<>",${amount}${table.first}:${amount}${table.last})`,
-      }),
-    );
-    return layout.sheet(
-      TAB.reimbursements,
-      `Amounts paid back to people in the period for ${business} costs they paid personally, with the expenses each one covered.`,
-      { freezeRows: 1 },
-    );
-  })();
 
   // --- Shareholders and dividends (limited company) -------------------------------
 
@@ -506,7 +549,7 @@ export function buildWorkbook(
         laterPayments
           .map(({ invoice, payment }): Row => ({
             date: day(payment.receivedOn),
-            invoice: invoice.number,
+            invoice: linkTo(invoice.number, toInvoice(invoice.number)),
             customer: invoice.clientName,
             amount: money(payment.amountPence),
           }))
@@ -528,7 +571,7 @@ export function buildWorkbook(
         earlierItems.map(({ run, expense }): Row => ({
           date: day(run.paidOn),
           payee: personName(run.payeeUserId),
-          ref: ref(expense),
+          ref: linkTo(ref(expense), toExpense(expense.id)),
           spent: day(expense.spentAt),
           description: expense.description,
           amount: money(expense.amountPence),
@@ -549,7 +592,7 @@ export function buildWorkbook(
         ],
         figures.awaitingReimbursement.map((e): Row => ({
           spent: day(e.spentAt),
-          ref: ref(e),
+          ref: linkTo(ref(e), toExpense(e.id)),
           paidBy: personName(e.paidByUserId) ?? "Person not recorded",
           description: e.description,
           amount: money(e.amountPence),
@@ -569,8 +612,8 @@ export function buildWorkbook(
           { key: "amount", header: "Amount (£)", total: true },
         ],
         figures.paidFromBankLater.map((e): Row => ({
-          date: day(e.bank!.bookedAt),
-          ref: ref(e),
+          date: linkTo(day(e.bank!.bookedAt), toBank(e.bank!.bankTransactionId)),
+          ref: linkTo(ref(e), toExpense(e.id)),
           spent: day(e.spentAt),
           description: e.description,
           amount: money(-e.bank!.amountPence),
@@ -619,7 +662,10 @@ export function buildWorkbook(
 
   // --- Notes for the accountant ---------------------------------------------------------
 
-  const notes = buildNotes(data, figures, checks, options.responses ?? new Map());
+  const notes = buildNotes(data, figures, checks, options.responses ?? new Map(), {
+    invoice: toInvoice,
+    bank: toBank,
+  });
   const notesSheet = (() => {
     const layout = new Layout();
     layout.add(heading(TAB.notes));
@@ -850,7 +896,7 @@ export function buildWorkbook(
           { key: "paidOn", header: "Date later paid" },
         ],
         figures.debtors.map(({ invoice, balancePence, paidOn }): Row => ({
-          number: invoice.number,
+          number: linkTo(invoice.number, toInvoice(invoice.number)),
           date: day(invoice.issueDate),
           customer: invoice.clientName,
           total: money(invoice.grossPence),
@@ -878,7 +924,7 @@ export function buildWorkbook(
           { key: "refundedOn", header: "Date later refunded" },
         ],
         figures.owedToCustomers.map(({ invoice, pence, refundedOn }): Row => ({
-          number: invoice.number,
+          number: linkTo(invoice.number, toInvoice(invoice.number)),
           date: day(invoice.issueDate),
           customer: invoice.clientName,
           total: money(invoice.grossPence),
@@ -909,7 +955,7 @@ export function buildWorkbook(
           { key: "amount", header: vat ? "Net (£)" : "Amount (£)", total: true },
         ],
         figures.possibleFixedAssets.map((e): Row => ({
-          ref: ref(e),
+          ref: linkTo(ref(e), toExpense(e.id)),
           date: day(e.spentAt),
           description: e.description,
           amount: money(figures.expenseNetPence(e)),
@@ -941,7 +987,7 @@ export function buildWorkbook(
             { key: "receipt", header: "Receipt file" },
           ],
           rows.map(({ expense: e, beforePence, inPeriodPence, laterPence }): Row => ({
-            ref: ref(e),
+            ref: linkTo(ref(e), toExpense(e.id)),
             date: day(e.spentAt),
             description: e.description,
             category: e.category ?? NO_CATEGORY,
@@ -1172,6 +1218,23 @@ export function buildWorkbook(
     checks,
     notes,
   };
+}
+
+/** A tab's row with the record it shows, so the record's position on the tab can be found after sorting. */
+type Keyed = { key: string | null; row: Row };
+
+const keyed = (key: string | null, row: Row): Keyed => ({ key, row });
+
+function byEntryDate(a: Keyed, b: Keyed): number {
+  return byDate(a.row, b.row);
+}
+
+/** The rows in tab order, recording each keyed record's 1-based row (the first, if a key repeats). */
+function placeRows(entries: Keyed[], rowOf: Map<string, number>): Row[] {
+  entries.forEach(({ key }, i) => {
+    if (key != null && !rowOf.has(key)) rowOf.set(key, i + 1);
+  });
+  return entries.map((e) => e.row);
 }
 
 /** Rows oldest first by their `date` cell. */

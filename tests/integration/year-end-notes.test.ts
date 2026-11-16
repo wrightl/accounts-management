@@ -195,7 +195,7 @@ describe("the Notes for the accountant tab", () => {
     const xml = parts.get("xl/worksheets/sheet1.xml")!;
     expect(xml).toContain(`<col min="1" max="1" width="${notes.columnWidths![0]}" customWidth="1"/>`);
     // The period start: a real date, in the wrapped twin of the dd/mm/yyyy style.
-    expect(xml).toContain('<c r="B2" s="10"><v>45748</v></c>');
+    expect(xml).toContain('<c r="B2" s="11"><v>45748</v></c>');
     // A long sentence gets a taller row instead of running off the column.
     expect(xml).toMatch(/<row r="4" ht="\d+" customHeight="1">/);
     expect(parts.get("xl/styles.xml")).toContain('<alignment wrapText="1" vertical="top"/>');

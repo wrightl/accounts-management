@@ -100,6 +100,43 @@ describe("buildXlsx", () => {
     expect(files.get("xl/worksheets/_rels/sheet1.xml.rels")).not.toContain("hyperlink");
   });
 
+  it("links to a layout sheet's own row, and keeps a linked date's date format", async () => {
+    const files = await parts([
+      { name: "Runs", headers: [], layout: true, rows: [["Ref"], ["RB-1"], ["item"], ["RB-2"]] },
+      {
+        name: "Bank",
+        headers: ["Run", "Date"],
+        rows: [
+          [
+            { value: "RB-2", link: { sheet: "Runs", row: 4 } },
+            { value: "2025-04-01", date: true, link: { sheet: "Runs", row: 2 } },
+          ],
+        ],
+      },
+      {
+        name: "Notes",
+        headers: [],
+        layout: true,
+        columnWidths: [20],
+        rows: [[{ value: "2025-04-01", date: true, link: { sheet: "Bank", row: 1 } }]],
+      },
+    ]);
+    const bank = files.get("xl/worksheets/sheet2.xml")!;
+    const notes = files.get("xl/worksheets/sheet3.xml")!;
+    const styles = files.get("xl/styles.xml")!;
+
+    expect(bank).toContain(`<hyperlink ref="A2" location="'Runs'!A4"/>`);
+    // A linked date is still a real date, in the link font with the dd/mm/yyyy format.
+    expect(bank).toContain('<c r="B2" s="7"><v>45748</v></c>');
+    expect(notes).toContain(`<hyperlink ref="A1" location="'Bank'!A2"/>`);
+    expect(notes).toContain('<c r="A1" s="15"><v>45748</v></c>');
+    const xfs = [...styles.matchAll(/<xf [^>]*xfId="0"[^>]*\/?>/g)].map((m) => m[0]);
+    expect(styles).toContain('<cellXfs count="16">');
+    expect(xfs).toHaveLength(16);
+    expect(xfs[7]).toContain('numFmtId="165" fontId="1"');
+    expect(xfs[15]).toContain('numFmtId="165" fontId="1"');
+  });
+
   it("makes each sheet an Excel table under a frozen header", async () => {
     const files = await parts([
       { name: "P&L", headers: ["Item", "Value (£)"], rows: [["a", "b"], ["c", "d"]] },
