@@ -25,7 +25,7 @@ export default async function NewDividendPage({
       <div className="mb-6">
         <BackLink href="/dividends">Dividends</BackLink>
       </div>
-      <h1 className="mb-2 font-display text-2xl font-semibold">New dividend</h1>
+      <h1 className="mb-2 font-display text-2xl font-semibold">Create dividend</h1>
       {split.balanced && (
         <p className="mb-6 text-sm text-muted">
           Enter a total amount. It is split across all active shareholders by share

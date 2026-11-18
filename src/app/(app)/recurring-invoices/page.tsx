@@ -49,7 +49,7 @@ export default async function RecurringInvoicesPage({
                             className={buttonClasses('primary')}
                         >
                             <Plus className="h-4 w-4" />
-                            New schedule
+                            Create schedule
                         </Link>
                     ) : null
                 }
@@ -61,7 +61,7 @@ export default async function RecurringInvoicesPage({
                         title="No recurring schedules yet"
                         description="Set up a monthly retainer so invoices create themselves on schedule."
                         actionHref={canWrite ? '/recurring-invoices/new' : undefined}
-                        actionLabel={canWrite ? 'New schedule' : undefined}
+                        actionLabel={canWrite ? 'Create schedule' : undefined}
                         actionIcon={<Plus className="h-4 w-4" />}
                     />
                 ) : (

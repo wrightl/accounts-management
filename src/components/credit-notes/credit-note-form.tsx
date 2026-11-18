@@ -75,7 +75,10 @@ export function CreditNoteForm({
   const [pending, startTransition] = useTransition();
   const lineDefault = vatEnabled ? (initialLines[0]?.vatRate ?? 0) : 0;
   const [lines, setLines] = useState<CreditNoteLineDraft[]>(
-    initialLines.length > 0 ? initialLines : [newLine(lineDefault)],
+    initialLines.length > 0
+      ? initialLines
+      : // A fixed key: keys feed DOM ids, and a random one fails hydration.
+        [{ ...newLine(lineDefault), key: "initial-0" }],
   );
 
   const totals = useMemo(() => {
@@ -141,8 +144,8 @@ export function CreditNoteForm({
   }
 
   const lineGrid = vatEnabled
-    ? "sm:grid-cols-[1fr_70px_100px_80px_110px_2.5rem]"
-    : "sm:grid-cols-[1fr_80px_120px_80px_2.5rem]";
+    ? "sm:grid-cols-[1.5rem_1fr_70px_100px_80px_110px_2.5rem]"
+    : "sm:grid-cols-[1.5rem_1fr_80px_120px_80px_2.5rem]";
 
   return (
     <form ref={formRef} noValidate onSubmit={preventResetSubmit(onSubmit)} className={`${PAGE_WIDTH.editor} space-y-6`}>
@@ -192,9 +195,10 @@ export function CreditNoteForm({
         </p>
         <FieldError id="lines-error">{fieldErrors.lines}</FieldError>
         <div className={`hidden gap-2 text-xs font-medium text-muted sm:grid ${lineGrid}`}>
+          <span aria-hidden="true" />
           <span>Description</span>
           <span>Qty</span>
-          <span>Unit £ (ex VAT)</span>
+          <span>Unit Cost £{vatEnabled ? " (ex VAT)" : ""}</span>
           <span>Disc %</span>
           {vatEnabled ? <span>VAT</span> : null}
           <span className="sr-only">Remove</span>
@@ -206,6 +210,9 @@ export function CreditNoteForm({
           const discountKey = `lines.${index}.discountPercent`;
           return (
             <div key={line.key} className={`grid gap-2 ${lineGrid}`}>
+              <span className="text-sm text-muted tabular-nums sm:pt-[9px] sm:text-right">
+                {index + 1}.
+              </span>
               <div className="min-w-0">
                 <Input
                   placeholder="Description"
@@ -250,7 +257,7 @@ export function CreditNoteForm({
               </div>
               <div className="min-w-0">
                 <Input
-                  placeholder="£ unit"
+                  placeholder="unit cost"
                   aria-label="Unit price"
                   value={line.unitPricePounds}
                   disabled={pending}

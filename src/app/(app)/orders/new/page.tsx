@@ -19,7 +19,7 @@ export default async function NewOrderPage() {
       <div className="mb-6">
         <BackLink href="/orders">Orders</BackLink>
       </div>
-      <h1 className="mb-6 font-display text-2xl font-semibold">New order</h1>
+      <h1 className="mb-6 font-display text-2xl font-semibold">Create order</h1>
       <div className={PAGE_WIDTH.editor}>
         <OrderForm
           clients={clients}

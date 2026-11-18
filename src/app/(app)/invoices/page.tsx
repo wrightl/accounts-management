@@ -95,7 +95,7 @@ export default async function InvoicesPage({
                 </Link>
                 <Link href="/invoices/new" className={buttonClasses("primary")}>
                   <Plus className="h-4 w-4" />
-                  New invoice
+                  Create invoice
                 </Link>
               </>
             ) : null}
@@ -131,7 +131,7 @@ export default async function InvoicesPage({
               title="No invoices yet"
               description="Create an invoice to bill a client, or convert an accepted quote into an order first."
               actionHref={canWrite ? "/invoices/new" : undefined}
-              actionLabel={canWrite ? "Create an invoice" : undefined}
+              actionLabel={canWrite ? "Create invoice" : undefined}
               actionIcon={<Plus className="h-4 w-4" />}
             />
           )

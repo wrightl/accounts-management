@@ -13,7 +13,7 @@ const NEW_CLIENT = "__new_client__";
 export type ClientSelectOption = ClientNameFields & { id: string };
 
 /**
- * A client dropdown with a "New client…" option that creates one in a dialog
+ * A client dropdown with a "Create client…" option that creates one in a dialog
  * and selects it. Submits the chosen id through `name`, like Select.
  */
 export function ClientSelect({
@@ -58,11 +58,15 @@ export function ClientSelect({
   const [creating, setCreating] = useState(false);
   const current = value ?? own;
 
-  const all = [...clients, ...created.filter((c) => !clients.some((k) => k.id === c.id))];
+  // Sorted by the name people see, not the contact name the query orders by.
+  const all = [...clients, ...created.filter((c) => !clients.some((k) => k.id === c.id))].sort(
+    (a, b) =>
+      clientDisplayName(a).localeCompare(clientDisplayName(b), "en-GB", { sensitivity: "base" }),
+  );
   const options: SelectOption[] = [
     ...leadingOptions,
     ...all.map((c) => ({ value: c.id, label: labelFor(c) })),
-    ...(canCreate ? [{ value: NEW_CLIENT, label: "+ New client…" }] : []),
+    ...(canCreate ? [{ value: NEW_CLIENT, label: "+ Create client…" }] : []),
   ];
 
   function choose(next: string) {

@@ -67,7 +67,7 @@ export function NewClientDialog({
 
   if (typeof document === "undefined") return null;
   return createPortal(
-    <Dialog open={open} onClose={close} title="New client">
+    <Dialog open={open} onClose={close} title="Create client">
       <form
         ref={formRef}
         noValidate

@@ -110,7 +110,8 @@ export function QuoteForm({
           ...l,
           vatRate: vatRegistered ? l.vatRate : 0,
         }))
-      : [newLine(lineDefault)],
+      : // A fixed key: keys feed DOM ids, and a random one fails hydration.
+        [{ ...newLine(lineDefault), key: "initial-0" }],
   );
 
   const totals = useMemo(() => {
@@ -178,8 +179,8 @@ export function QuoteForm({
   }
 
   const lineGrid = vatRegistered
-    ? "sm:grid-cols-[1fr_70px_100px_80px_110px_90px_2.5rem]"
-    : "sm:grid-cols-[1fr_70px_100px_80px_90px_2.5rem]";
+    ? "sm:grid-cols-[1.5rem_1fr_70px_100px_80px_110px_90px_2.5rem]"
+    : "sm:grid-cols-[1.5rem_1fr_70px_100px_80px_90px_2.5rem]";
 
   return (
     <form ref={formRef} noValidate className="space-y-4" onSubmit={preventResetSubmit(onSubmit)}>
@@ -236,9 +237,10 @@ export function QuoteForm({
         <div
           className={`hidden gap-2 text-xs font-medium text-muted sm:grid ${lineGrid}`}
         >
+          <span aria-hidden="true" />
           <span>Description</span>
           <span>Qty</span>
-          <span>Unit £ (ex VAT)</span>
+          <span>Unit Cost £{vatRegistered ? " (ex VAT)" : ""}</span>
           <span>Disc %</span>
           {vatRegistered ? <span>VAT</span> : null}
           <span className="text-right">Total</span>
@@ -252,6 +254,9 @@ export function QuoteForm({
           const discountKey = `lines.${index}.discountPercent`;
           return (
             <div key={line.key} className={`grid gap-2 ${lineGrid}`}>
+              <span className="text-sm text-muted tabular-nums sm:pt-[9px] sm:text-right">
+                {index + 1}.
+              </span>
               <div className="min-w-0">
                 <Input
                   placeholder="Description"
@@ -301,7 +306,7 @@ export function QuoteForm({
               </div>
               <div className="min-w-0">
                 <Input
-                  placeholder="£"
+                  placeholder="unit cost"
                   value={line.unitPricePounds}
                   disabled={pending}
                   aria-invalid={Boolean(fieldErrors[priceKey])}

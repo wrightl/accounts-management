@@ -70,7 +70,7 @@ export default async function DividendsPage({
               className={buttonClasses("primary")}
             >
               <Plus className="h-4 w-4" />
-              New dividend
+              Create dividend
             </Link>
           ) : null
         }
