@@ -1,5 +1,6 @@
 "use client";
 
+import { BellOff, BellRing } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
@@ -59,6 +60,7 @@ export function UnchasedImportsBanner({
         </p>
         {canWrite ? (
           <Button type="button" variant="secondary" disabled={pending} onClick={onChase}>
+            <BellRing className="h-4 w-4" />
             {pending ? "Saving…" : "Chase these invoices"}
           </Button>
         ) : null}
@@ -110,6 +112,7 @@ export function InvoiceChaseToggle({
           {!hasClientEmail ? " The client has no email address, so reminders can't be sent." : ""}
         </p>
         <Button type="button" variant="secondary" disabled={pending} onClick={onToggle}>
+          {enabled ? <BellOff className="h-4 w-4" /> : <BellRing className="h-4 w-4" />}
           {enabled ? "Stop chasing" : "Start chasing"}
         </Button>
       </div>

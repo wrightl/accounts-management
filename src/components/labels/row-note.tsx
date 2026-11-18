@@ -1,6 +1,6 @@
 "use client";
 
-import { StickyNote } from "lucide-react";
+import { StickyNote, Trash2 } from "lucide-react";
 import { useId, useState, useTransition } from "react";
 import { setRowNoteAction } from "@/actions/labels";
 import { Button } from "@/components/ui/button";
@@ -81,6 +81,7 @@ function NoteDialog({
             disabled={pending}
             onClick={() => save(null)}
           >
+            <Trash2 className="h-4 w-4" />
             Delete
           </Button>
         ) : null}

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Check, MoreHorizontal, Receipt, Upload, X, type LucideIcon } from "lucide-react";
+import { Check, CreditCard, MessageSquareText, MoreHorizontal, Pencil, Plus, Receipt, RefreshCw, Tags, Trash2, Upload, X, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAlert } from "@/components/ui/alert-dialog";
 import { Dialog, DialogActions } from "@/components/ui/dialog";
@@ -208,6 +208,7 @@ export function SuggestMatchesDialog({
                         runAction(() => confirmBankMatch(item.matchId), [item.matchId])
                       }
                     >
+                      <Check className="h-4 w-4" />
                       Accept
                     </Button>
                     <Button
@@ -218,6 +219,7 @@ export function SuggestMatchesDialog({
                         runAction(() => dismissBankMatch(item.matchId), [item.matchId])
                       }
                     >
+                      <X className="h-4 w-4" />
                       Decline
                     </Button>
                   </div>
@@ -242,6 +244,7 @@ export function SuggestMatchesDialog({
                 )
               }
             >
+              <X className="h-4 w-4" />
               Decline all
             </Button>
             <Button
@@ -254,6 +257,7 @@ export function SuggestMatchesDialog({
                 )
               }
             >
+              <Check className="h-4 w-4" />
               Accept all
             </Button>
           </>
@@ -314,12 +318,15 @@ export function BankToolbar({
             });
           }}
         >
+          <RefreshCw className="h-4 w-4" />
           {pending ? "Matching…" : "Re-run suggestions"}
         </Button>
         <Button type="button" variant="secondary" onClick={() => setCategoriesOpen(true)}>
+          <Tags className="h-4 w-4" />
           Categories
         </Button>
         <Button type="button" variant="secondary" onClick={() => setCardsOpen(true)}>
+          <CreditCard className="h-4 w-4" />
           Company cards
         </Button>
         <Button type="button" onClick={() => setImportOpen(true)}>
@@ -588,6 +595,7 @@ function CustomCategoryRow({
           disabled={disabled || pending}
           onClick={() => setEditing(true)}
         >
+          <Pencil className="h-4 w-4" />
           Rename
         </Button>
         <Button
@@ -597,6 +605,7 @@ function CustomCategoryRow({
           title={inUse ? "Re-categorise or rename its transactions first" : undefined}
           onClick={() => run(() => deleteBankSpendingCategory(category.id))}
         >
+          <Trash2 className="h-4 w-4" />
           {pending ? "Removing…" : "Remove"}
         </Button>
       </div>
@@ -653,6 +662,7 @@ function CustomCategoriesDialog({
           />
         </div>
         <Button type="submit" disabled={pending || !name.trim()}>
+          <Plus className="h-4 w-4" />
           {pending ? "Adding…" : "Add"}
         </Button>
       </form>
@@ -1086,6 +1096,7 @@ export function ReconciliationCell({
             disabled={pending}
             onClick={() => setExplainOpen(true)}
           >
+            <MessageSquareText className="h-4 w-4" />
             Explain
           </Button>
           <RowActionsMenu

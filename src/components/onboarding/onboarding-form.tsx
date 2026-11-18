@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Search } from "lucide-react";
 import { completeOnboarding } from "@/actions/onboarding";
 import { lookupCompaniesHouse } from "@/actions/companies-house";
 import { Button } from "@/components/ui/button";
@@ -360,6 +360,7 @@ export function OnboardingForm({
                 disabled={pending || lookingUp}
                 onClick={lookUpCompany}
               >
+                <Search className="h-4 w-4" />
                 {lookingUp ? "Looking up…" : "Look up"}
               </Button>
             ) : null}

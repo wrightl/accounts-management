@@ -1,5 +1,6 @@
 "use client";
 
+import { RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -103,6 +104,7 @@ export function QuoteHistory({
                         });
                       }}
                     >
+                      <RotateCcw className="h-4 w-4" />
                       Restore
                     </Button>
                   ) : null}

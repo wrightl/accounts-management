@@ -1,5 +1,6 @@
 "use client";
 
+import { Pencil } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition, type FormEvent } from "react";
 import { updateMyInboundAlias } from "@/actions/inbound-alias";
@@ -113,6 +114,7 @@ export function InboundAddress({
         </span>
         <CopyButton value={address} />
         <Button type="button" variant="secondary" className="text-xs" onClick={() => setEditing(true)}>
+          <Pencil className="h-4 w-4" />
           Change
         </Button>
       </div>

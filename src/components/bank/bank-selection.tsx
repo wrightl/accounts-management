@@ -1,5 +1,6 @@
 "use client";
 
+import { MessageSquareText, Tags } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   createContext,
@@ -127,10 +128,12 @@ export function BankBulkActions({
     <div className="flex flex-wrap items-center justify-end gap-2">
       <span className="text-sm text-muted">{ids.length} selected</span>
       <Button type="button" variant="secondary" onClick={() => setDialog("labels")}>
+        <Tags className="h-4 w-4" />
         Add labels
       </Button>
       {canExplain ? (
         <Button type="button" variant="secondary" onClick={() => setDialog("explain")}>
+          <MessageSquareText className="h-4 w-4" />
           Explain
         </Button>
       ) : null}

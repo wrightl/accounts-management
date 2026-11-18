@@ -1,6 +1,6 @@
 "use client";
 
-import { Download } from "lucide-react";
+import { Download, PoundSterling, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
@@ -197,6 +197,7 @@ export function InvoiceActions({
             disabled={pending}
             onClick={togglePayment}
           >
+            <PoundSterling className="h-4 w-4" />
             Record payment
           </Button>
         )}
@@ -221,6 +222,7 @@ export function InvoiceActions({
               });
             }}
           >
+            <Send className="h-4 w-4" />
             {pending ? "Sending…" : status === "draft" ? "Send invoice" : "Resend invoice"}
           </Button>
         )}

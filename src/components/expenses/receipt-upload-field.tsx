@@ -1,5 +1,6 @@
 "use client";
 
+import { Trash2 } from "lucide-react";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label } from "@/components/ui/form";
@@ -143,6 +144,7 @@ export function ReceiptUploadField({
         </div>
         {file && (
           <Button type="button" variant="ghost" disabled={disabled || pending} onClick={clearFile}>
+            <Trash2 className="h-4 w-4" />
             Remove
           </Button>
         )}

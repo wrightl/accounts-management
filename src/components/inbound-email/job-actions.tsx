@@ -1,5 +1,6 @@
 "use client";
 
+import { RefreshCw, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
@@ -37,6 +38,7 @@ export function RetryInboundJobButton({
   return (
     <span className={className}>
       <Button type="button" variant="secondary" disabled={pending} onClick={onRetry}>
+        <RefreshCw className="h-4 w-4" />
         {pending ? "Retrying…" : "Retry now"}
       </Button>
       <FieldError>{error}</FieldError>
@@ -81,6 +83,7 @@ export function DismissInboundJobButton({
   return (
     <span className={className}>
       <Button type="button" variant="ghost" disabled={pending} onClick={onDismiss}>
+        <X className="h-4 w-4" />
         {pending ? "Dismissing…" : "Dismiss"}
       </Button>
       <FieldError>{error}</FieldError>
@@ -119,6 +122,7 @@ export function DismissInboundJobForm({ jobId }: { jobId: string }) {
         />
       </div>
       <Button type="submit" variant="destructive" disabled={pending}>
+        <X className="h-4 w-4" />
         {pending ? "Dismissing…" : "Dismiss job"}
       </Button>
       <FieldError>{error}</FieldError>
@@ -162,6 +166,7 @@ export function RetryAllInboundIssuesButton({
   return (
     <span className={className}>
       <Button type="button" variant="secondary" disabled={pending} onClick={onRetryAll}>
+        <RefreshCw className="h-4 w-4" />
         {pending ? "Retrying…" : `Retry all (${issueCount})`}
       </Button>
       <FieldError>{error}</FieldError>

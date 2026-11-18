@@ -1,5 +1,6 @@
 "use client";
 
+import { FilePlus } from "lucide-react";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createInvoiceFromOrder } from "@/actions/orders";
@@ -128,6 +129,7 @@ export function OrderActions({
   return (
     <>
       <Button type="button" disabled={pending || !canCreate} onClick={openDialog}>
+        <FilePlus className="h-4 w-4" />
         {pending ? "Creating…" : "Create Invoice"}
       </Button>
 
@@ -305,6 +307,7 @@ export function OrderActions({
               Cancel
             </button>
             <Button type="button" disabled={pending} onClick={submit}>
+              <FilePlus className="h-4 w-4" />
               {pending ? "Creating…" : "Create invoice"}
             </Button>
           </DialogActions>

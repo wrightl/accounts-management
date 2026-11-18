@@ -1,5 +1,6 @@
 "use client";
 
+import { Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState, useTransition } from "react";
@@ -267,6 +268,7 @@ export function DeleteDividendDeclarationButton({
         });
       }}
     >
+      <Trash2 className="h-4 w-4" />
       Delete
     </Button>
   );

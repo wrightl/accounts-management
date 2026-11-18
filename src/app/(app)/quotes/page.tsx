@@ -1,4 +1,4 @@
-import { Plus } from "lucide-react";
+import { Filter, Plus } from "lucide-react";
 import Link from "next/link";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { listClients } from "@/lib/clients/queries";
@@ -101,6 +101,7 @@ export default async function QuotesPage({
             </div>
             <div className="sm:col-span-2">
               <button type="submit" className={buttonClasses("secondary")}>
+                <Filter className="h-4 w-4" />
                 Filter
               </button>
             </div>

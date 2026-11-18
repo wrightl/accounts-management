@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
@@ -150,12 +151,14 @@ export function AssistantSetup({ address }: { address: string }) {
         <div className="mt-5 flex flex-wrap gap-2">
           {index > 0 ? (
             <Button type="button" variant="secondary" onClick={() => setIndex(index - 1)}>
+              <ArrowLeft className="h-4 w-4" />
               Back
             </Button>
           ) : null}
           {!last ? (
             <Button type="button" onClick={() => setIndex(index + 1)}>
               Next
+              <ArrowRight className="h-4 w-4" />
             </Button>
           ) : null}
         </div>

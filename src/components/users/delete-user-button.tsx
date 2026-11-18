@@ -1,5 +1,6 @@
 "use client";
 
+import { Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { deleteUser } from "@/actions/users";
@@ -79,6 +80,7 @@ export function DeleteUserButton({
         </button>
       ) : (
         <Button type="button" variant={variant} disabled={pending} onClick={onDelete}>
+          <Trash2 className="h-4 w-4" />
           {pending ? "Deleting…" : "Delete"}
         </Button>
       )}

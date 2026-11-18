@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useState, useTransition } from "react";
-import { CircleCheck, CircleDashed, CircleMinus } from "lucide-react";
+import { ArrowRight, Check, CircleCheck, CircleDashed, CircleMinus, RotateCcw } from "lucide-react";
 import {
   commitInvoiceImportChunk,
   discardInvoiceImport,
@@ -296,12 +296,14 @@ export function InvoiceImportReview({
           ) : null}
           {hasCommitted && batch.status !== "undone" ? (
             <Button type="button" variant="ghost" disabled={pending} onClick={undo}>
+              <RotateCcw className="h-4 w-4" />
               Undo import
             </Button>
           ) : null}
           {batch.status === "committed" ? (
             <Link className={buttonClasses("secondary")} href="/invoices">
               View invoices
+              <ArrowRight className="h-4 w-4" />
             </Link>
           ) : null}
         </div>
@@ -410,6 +412,7 @@ export function InvoiceImportReview({
               disabled={pending}
               onClick={() => run(() => approveImportDrafts(batch.id, { allWithoutProblems: true }))}
             >
+              <Check className="h-4 w-4" />
               Approve all {review.approvable} without problems
             </Button>
           ) : null}

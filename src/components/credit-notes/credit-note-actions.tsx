@@ -1,6 +1,6 @@
 "use client";
 
-import { Download } from "lucide-react";
+import { Download, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { Button, buttonClasses } from "@/components/ui/button";
@@ -108,6 +108,7 @@ export function CreditNoteActions({
             disabled={pending}
             onClick={() => run(() => sendCreditNote(creditNoteId))}
           >
+            <Send className="h-4 w-4" />
             {pending ? "Sending…" : sent ? "Resend to client" : "Send to client"}
           </Button>
         ) : null}

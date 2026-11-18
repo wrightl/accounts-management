@@ -98,10 +98,12 @@ export function PeriodLockCard({
                 />
               </div>
               <Button type="submit" disabled={pending}>
+                <Lock className="h-4 w-4" />
                 {pending ? "Saving…" : lockedThrough ? "Move lock" : "Lock books"}
               </Button>
               {lockedThrough ? (
                 <Button type="button" variant="ghost" disabled={pending} onClick={onUnlock}>
+                  <LockOpen className="h-4 w-4" />
                   Remove lock
                 </Button>
               ) : null}

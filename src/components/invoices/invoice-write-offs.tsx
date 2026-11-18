@@ -1,5 +1,6 @@
 "use client";
 
+import { CircleSlash, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { removeWriteOff, writeOffInvoice } from "@/actions/payments";
@@ -96,6 +97,7 @@ export function InvoiceWriteOffs({
                         });
                       }}
                     >
+                      <Trash2 className="h-4 w-4" />
                       Remove
                     </Button>
                   </TD>
@@ -200,6 +202,7 @@ export function InvoiceWriteOffs({
           </form>
         ) : (
           <Button type="button" variant="secondary" className="mt-3" onClick={() => setOpen(true)}>
+            <CircleSlash className="h-4 w-4" />
             Write off balance
           </Button>
         )

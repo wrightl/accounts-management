@@ -1,5 +1,6 @@
 "use client";
 
+import { CreditCard, ExternalLink } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
@@ -97,11 +98,13 @@ export function OnlinePaymentsPanel({
       <div className="flex flex-wrap gap-2">
         {status === "not_connected" ? (
           <Button type="button" disabled={pending} onClick={connect}>
+            <CreditCard className="h-4 w-4" />
             {pending ? "Opening Stripe…" : "Connect Stripe"}
           </Button>
         ) : null}
         {status === "pending" ? (
           <Button type="button" disabled={pending} onClick={connect}>
+            <CreditCard className="h-4 w-4" />
             {pending ? "Opening Stripe…" : "Continue setup"}
           </Button>
         ) : null}
@@ -113,6 +116,7 @@ export function OnlinePaymentsPanel({
             className={buttonClasses("secondary")}
           >
             Open Stripe dashboard
+            <ExternalLink className="h-4 w-4" />
           </a>
         ) : null}
         {status !== "not_connected" ? (

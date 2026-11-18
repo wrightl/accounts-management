@@ -1,5 +1,6 @@
 "use client";
 
+import { Check, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import {
@@ -96,6 +97,7 @@ export function PublicQuoteActions({
             });
           }}
         >
+          <Check className="h-4 w-4" />
           {pending
             ? "Working…"
             : deposit?.byCard
@@ -111,6 +113,7 @@ export function PublicQuoteActions({
             setDeclineOpen(true);
           }}
         >
+          <X className="h-4 w-4" />
           Decline
         </Button>
       </div>

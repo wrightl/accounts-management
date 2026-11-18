@@ -1,5 +1,6 @@
 "use client";
 
+import { Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
@@ -77,6 +78,7 @@ export function IncomeCategoriesPanel({
           />
         </div>
         <Button type="submit" disabled={pending || !name.trim()}>
+          <Plus className="h-4 w-4" />
           {pending && !pendingId ? "Adding…" : "Add"}
         </Button>
       </form>
@@ -120,6 +122,7 @@ export function IncomeCategoriesPanel({
                     });
                   }}
                 >
+                  <Trash2 className="h-4 w-4" />
                   {removing ? "Removing…" : "Remove"}
                 </Button>
               </li>

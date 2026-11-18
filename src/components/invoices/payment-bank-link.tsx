@@ -1,5 +1,6 @@
 "use client";
 
+import { Link2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { findReceiptsForPayment, linkPaymentToBank } from "@/actions/payments";
@@ -54,6 +55,7 @@ export function PaymentBankLink({
   if (!open) {
     return (
       <Button type="button" variant="ghost" onClick={openPicker}>
+        <Link2 className="h-4 w-4" />
         Link bank receipt
       </Button>
     );

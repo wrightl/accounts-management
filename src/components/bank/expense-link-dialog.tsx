@@ -1,5 +1,6 @@
 "use client";
 
+import { Link2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useEffectEvent, useState, useTransition, type ReactNode } from "react";
 import { NewExpenseFromBankListLink } from "@/components/bank/bank-list-position";
@@ -311,6 +312,7 @@ export function LinkBankTransactionButton({ expenseId }: { expenseId: string }) 
   return (
     <>
       <button type="button" className={buttonClasses("secondary")} onClick={() => setOpen(true)}>
+        <Link2 className="h-4 w-4" />
         Link bank transaction
       </button>
       {open ? (

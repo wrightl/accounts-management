@@ -1,5 +1,6 @@
 "use client";
 
+import { Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import {
@@ -83,6 +84,7 @@ export function InvoiceOriginalDocument({
         </div>
         {filename ? (
           <Button type="button" variant="ghost" disabled={pending} onClick={onRemove}>
+            <Trash2 className="h-4 w-4" />
             Remove
           </Button>
         ) : null}

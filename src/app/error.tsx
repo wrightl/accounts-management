@@ -1,5 +1,6 @@
 "use client";
 
+import { RefreshCw } from "lucide-react";
 import { useEffect } from "react";
 import { buttonClasses } from "@/components/ui/button";
 import { reportClientError } from "@/actions/platform";
@@ -29,6 +30,7 @@ export default function Error({
       ) : null}
       <div className="mt-6 flex gap-3">
         <button type="button" className={buttonClasses("primary")} onClick={reset}>
+          <RefreshCw className="h-4 w-4" />
           Try again
         </button>
         <a href="/dashboard" className={buttonClasses("secondary")}>

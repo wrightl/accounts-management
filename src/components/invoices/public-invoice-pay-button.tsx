@@ -1,5 +1,6 @@
 "use client";
 
+import { CreditCard } from "lucide-react";
 import { useState, useTransition } from "react";
 import { startInvoiceCheckout } from "@/actions/public-invoices";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,7 @@ export function PublicInvoicePayButton({
           });
         }}
       >
+        <CreditCard className="h-4 w-4" />
         {pending ? "Opening secure payment…" : `Pay ${amountFormatted} by card`}
       </Button>
       <p className="text-xs text-muted">

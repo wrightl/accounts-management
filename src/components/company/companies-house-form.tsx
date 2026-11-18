@@ -1,5 +1,6 @@
 "use client";
 
+import { RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import {
@@ -117,6 +118,7 @@ export function CompaniesHouseForm({
         </Button>
         {canRefresh ? (
           <Button type="button" variant="ghost" disabled={pending} onClick={refresh}>
+            <RefreshCw className="h-4 w-4" />
             Refresh from Companies House
           </Button>
         ) : null}

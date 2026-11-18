@@ -1,5 +1,6 @@
 "use client";
 
+import { Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { revokeUserInvite } from "@/actions/users";
@@ -65,6 +66,7 @@ export function RevokeInviteButton({
         </button>
       ) : (
         <Button type="button" variant={variant} disabled={pending} onClick={onRevoke}>
+          <Trash2 className="h-4 w-4" />
           {pending ? "Revoking…" : "Revoke"}
         </Button>
       )}
