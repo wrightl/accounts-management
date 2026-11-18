@@ -1,18 +1,22 @@
 import Link from "next/link";
 import { buttonClasses } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { ReactNode } from "react";
 
 export function EmptyState({
   title,
   description,
   actionHref,
   actionLabel,
+  actionIcon,
   className,
 }: {
   title: string;
   description: string;
   actionHref?: string;
   actionLabel?: string;
+  /** Optional leading icon for the action, e.g. `<Plus className="h-4 w-4" />`. */
+  actionIcon?: ReactNode;
   className?: string;
 }) {
   return (
@@ -31,6 +35,7 @@ export function EmptyState({
           href={actionHref}
           className={cn(buttonClasses("primary"), "mt-6 inline-flex")}
         >
+          {actionIcon}
           {actionLabel}
         </Link>
       ) : null}

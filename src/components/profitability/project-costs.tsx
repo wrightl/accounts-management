@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import Link from "next/link";
 import { buttonClasses } from "@/components/ui/button";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
@@ -67,6 +68,7 @@ export function ProjectExpenses({
         <h2 className="font-display text-lg font-semibold">Costs</h2>
         {canWrite ? (
           <Link href={addHref} className={buttonClasses("secondary")}>
+            <Plus className="h-4 w-4" />
             Add a cost
           </Link>
         ) : null}

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Plus } from 'lucide-react';
 import { guardTenantPage, hasPermission } from '@/lib/auth';
 import { can } from '@/lib/roles';
 import { QueryCell, QueryHeaderCell } from '@/components/queries/query-cells';
@@ -47,6 +48,7 @@ export default async function RecurringInvoicesPage({
                             href="/recurring-invoices/new"
                             className={buttonClasses('primary')}
                         >
+                            <Plus className="h-4 w-4" />
                             New schedule
                         </Link>
                     ) : null
@@ -60,6 +62,7 @@ export default async function RecurringInvoicesPage({
                         description="Set up a monthly retainer so invoices create themselves on schedule."
                         actionHref={canWrite ? '/recurring-invoices/new' : undefined}
                         actionLabel={canWrite ? 'New schedule' : undefined}
+                        actionIcon={<Plus className="h-4 w-4" />}
                     />
                 ) : (
                     <Table>

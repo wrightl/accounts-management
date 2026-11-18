@@ -1,5 +1,6 @@
 "use client";
 
+import { Check, RotateCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { markDeadlineDone, undoDeadlineDone } from "@/actions/deadlines";
@@ -40,6 +41,7 @@ export function DeadlineDoneButton({
         })
       }
     >
+      {done ? <RotateCcw className="h-4 w-4" /> : <Check className="h-4 w-4" />}
       {done ? "Undo" : "Mark done"}
     </Button>
   );

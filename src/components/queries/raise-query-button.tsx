@@ -1,5 +1,6 @@
 "use client";
 
+import { MessageSquarePlus, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useId, useState, useTransition } from "react";
 import { raiseQuery } from "@/actions/accountant-queries";
@@ -22,6 +23,7 @@ export function RaiseQueryButton({
   return (
     <>
       <Button type="button" variant="secondary" onClick={() => setOpen(true)}>
+        <MessageSquarePlus className="h-4 w-4" />
         Raise a query
       </Button>
       {open ? (
@@ -101,6 +103,7 @@ export function RaiseQueryDialog({
           Cancel
         </Button>
         <Button type="button" disabled={pending} onClick={submit}>
+          <Send className="h-4 w-4" />
           {pending ? "Sending…" : "Send query"}
         </Button>
       </DialogActions>

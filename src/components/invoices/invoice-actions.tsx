@@ -1,5 +1,6 @@
 "use client";
 
+import { Download, PoundSterling, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
@@ -184,6 +185,7 @@ export function InvoiceActions({
       <div className="flex flex-wrap gap-2">
         <a href={`/api/invoices/${invoiceId}/pdf`}>
           <Button type="button" variant="secondary" disabled={pending}>
+            <Download className="h-4 w-4" />
             Download PDF
           </Button>
         </a>
@@ -195,6 +197,7 @@ export function InvoiceActions({
             disabled={pending}
             onClick={togglePayment}
           >
+            <PoundSterling className="h-4 w-4" />
             Record payment
           </Button>
         )}
@@ -219,6 +222,7 @@ export function InvoiceActions({
               });
             }}
           >
+            <Send className="h-4 w-4" />
             {pending ? "Sending…" : status === "draft" ? "Send invoice" : "Resend invoice"}
           </Button>
         )}

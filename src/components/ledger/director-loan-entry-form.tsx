@@ -1,5 +1,6 @@
 "use client";
 
+import { Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useTransition } from "react";
 import { addDirectorLoanEntry, deleteDirectorLoanEntry } from "@/actions/ledger";
@@ -155,6 +156,7 @@ export function DeleteDirectorLoanEntryButton({ id }: { id: string }) {
         });
       }}
     >
+      <Trash2 className="h-4 w-4" />
       Delete
     </Button>
   );

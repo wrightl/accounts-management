@@ -1,5 +1,6 @@
 'use client';
 
+import { X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useRef, useState, useTransition } from 'react';
 import { updateQuoteStatus } from '@/actions/quotes';
@@ -272,6 +273,7 @@ export function QuoteStatusActions({
                             Cancel
                         </button>
                         <Button type="submit" disabled={pending}>
+                            <X className="h-4 w-4" />
                             {pending ? 'Saving…' : 'Decline quote'}
                         </Button>
                     </DialogActions>

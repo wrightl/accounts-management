@@ -1,5 +1,6 @@
 "use client";
 
+import { Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
@@ -132,6 +133,7 @@ export function InvoiceImportStart() {
           </div>
 
           <Button type="button" disabled={pending} onClick={stage}>
+            <Upload className="h-4 w-4" />
             {pending ? "Reading…" : "Review invoices"}
           </Button>
         </>

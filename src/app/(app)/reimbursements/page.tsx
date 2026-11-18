@@ -1,3 +1,4 @@
+import { Search } from "lucide-react";
 import Form from "next/form";
 import Link from "next/link";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
@@ -141,6 +142,7 @@ export default async function ReimbursementsPage({
               defaultValue={q}
             />
             <button type="submit" className={buttonClasses("secondary", "text-sm")}>
+              <Search className="h-4 w-4" />
               Search
             </button>
           </Form>

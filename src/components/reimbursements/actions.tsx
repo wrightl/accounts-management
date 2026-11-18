@@ -1,5 +1,6 @@
 "use client";
 
+import { CircleCheck, Pencil } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
@@ -91,6 +92,7 @@ export function ReimbursementActions({
       }
       onClick={onMarkPaid}
     >
+      <CircleCheck className="h-4 w-4" />
       {pending ? "Saving…" : "Mark as paid"}
     </Button>
   );
@@ -104,6 +106,7 @@ export function ReimbursementActions({
             href={`/reimbursements/${id}/edit`}
             className={buttonClasses("ghost", "text-sm")}
           >
+            <Pencil className="h-4 w-4" />
             Edit
           </Link>
           {markPaidButton}

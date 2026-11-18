@@ -1,5 +1,6 @@
 "use client";
 
+import { Check, Trash2, X } from "lucide-react";
 import { ClientSelect } from "@/components/clients/client-select";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -1188,6 +1189,7 @@ export function ExpenseForm({
           {isPending ? (
             <>
               <Button type="button" disabled={pending} onClick={onApprove}>
+                <Check className="h-4 w-4" />
                 {pending ? "Approving…" : "Approve"}
               </Button>
               <Button
@@ -1199,6 +1201,7 @@ export function ExpenseForm({
                 {pending ? "Saving…" : "Save draft"}
               </Button>
               <Button type="button" variant="ghost" disabled={pending} onClick={onReject}>
+                <X className="h-4 w-4" />
                 Reject
               </Button>
             </>
@@ -1236,6 +1239,7 @@ export function ExpenseForm({
                 });
               }}
             >
+              <Trash2 className="h-4 w-4" />
               Delete
             </Button>
           )}

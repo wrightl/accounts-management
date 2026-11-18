@@ -1,5 +1,6 @@
 "use client";
 
+import { RotateCcw, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useId, useState, useTransition } from "react";
 import { closeQuery, reopenQuery, replyToQuery } from "@/actions/accountant-queries";
@@ -53,6 +54,7 @@ export function QueryThreadActions({
             disabled={pending}
             onClick={() => run(() => reopenQuery(queryId))}
           >
+            <RotateCcw className="h-4 w-4" />
             Reopen
           </Button>
         ) : null}
@@ -79,6 +81,7 @@ export function QueryThreadActions({
           disabled={pending}
           onClick={() => run(() => replyToQuery(queryId, { body }), () => setBody(""))}
         >
+          <Send className="h-4 w-4" />
           {pending ? "Sending…" : "Send reply"}
         </Button>
         {canClose ? (

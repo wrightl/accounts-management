@@ -1,5 +1,6 @@
 "use client";
 
+import { Send } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
@@ -203,6 +204,7 @@ export function ForgotPasswordForm() {
           </div>
           {error && !fieldErrors.email ? <FieldError>{error}</FieldError> : null}
           <Button type="submit" disabled={pending} className="w-full">
+            <Send className="h-4 w-4" />
             {pending ? "Sending…" : "Send reset code"}
           </Button>
         </form>

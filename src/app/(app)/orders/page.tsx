@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import Link from "next/link";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { listOrderPage } from "@/lib/orders/queries";
@@ -38,6 +39,7 @@ export default async function OrdersPage({
         actions={
           canWrite ? (
             <Link href="/orders/new" className={buttonClasses("primary")}>
+              <Plus className="h-4 w-4" />
               New order
             </Link>
           ) : null
@@ -51,6 +53,7 @@ export default async function OrdersPage({
             description="Orders come from accepted quotes, or you can create one by hand before invoicing."
             actionHref={canWrite ? "/orders/new" : undefined}
             actionLabel={canWrite ? "Create an order" : undefined}
+            actionIcon={<Plus className="h-4 w-4" />}
           />
         ) : (
           <Table>

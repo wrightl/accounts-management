@@ -1,5 +1,6 @@
 "use client";
 
+import { Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useTransition } from "react";
 import { Button } from "@/components/ui/button";
@@ -120,6 +121,7 @@ export function ClientForm({
               disabled={pending}
               onClick={onDelete}
             >
+              <Trash2 className="h-4 w-4" />
               Delete
             </Button>
           )}

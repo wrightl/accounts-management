@@ -1,5 +1,6 @@
 'use client';
 
+import { Search } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTransition } from 'react';
@@ -126,6 +127,7 @@ export function BankFilters({
             ) : null}
             <div className="flex flex-wrap items-end gap-3 sm:col-span-2 lg:col-span-6">
                 <button type="submit" className={buttonClasses('secondary')}>
+                    <Search className="h-4 w-4" />
                     Search
                 </button>
                 {hasActiveBankFilters(params) ? (

@@ -1,5 +1,6 @@
 "use client";
 
+import { Download, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { sendQuote } from "@/actions/quotes";
@@ -62,11 +63,13 @@ export function QuoteActions({
       <div className="flex flex-wrap gap-2">
         <a href={`/api/quotes/${quoteId}/pdf`}>
           <Button type="button" variant="secondary" disabled={pending}>
+            <Download className="h-4 w-4" />
             Download PDF
           </Button>
         </a>
         {canSend && (
           <Button type="button" disabled={pending} onClick={openSendDialog}>
+            <Send className="h-4 w-4" />
             Send PDF
           </Button>
         )}
@@ -155,6 +158,7 @@ export function QuoteActions({
               Cancel
             </button>
             <Button type="submit" disabled={pending}>
+              <Send className="h-4 w-4" />
               {pending ? "Sending…" : "Send"}
             </Button>
           </DialogActions>

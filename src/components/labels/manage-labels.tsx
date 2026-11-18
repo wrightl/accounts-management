@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Tag } from "lucide-react";
+import { Pencil, Plus, Tag, Trash2 } from "lucide-react";
 import { createLabelAction, deleteLabelAction, updateLabelAction } from "@/actions/labels";
 import { LabelChip, LabelColorPicker } from "@/components/labels/label-chip";
 import { useAlert } from "@/components/ui/alert-dialog";
@@ -98,9 +98,11 @@ function ManagedLabelRow({
       </div>
       <div className="flex gap-1">
         <Button type="button" variant="ghost" disabled={pending} onClick={() => setEditing(true)}>
+          <Pencil className="h-4 w-4" />
           Edit
         </Button>
         <Button type="button" variant="ghost" disabled={pending} onClick={remove}>
+          <Trash2 className="h-4 w-4" />
           {pending ? "Deleting…" : "Delete"}
         </Button>
       </div>
@@ -151,6 +153,7 @@ function ManageLabelsDialog({
             onChange={(e) => setName(e.target.value)}
           />
           <Button type="submit" disabled={pending || !name.trim()}>
+            <Plus className="h-4 w-4" />
             {pending ? "Adding…" : "Add"}
           </Button>
         </div>

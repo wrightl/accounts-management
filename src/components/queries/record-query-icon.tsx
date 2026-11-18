@@ -1,6 +1,6 @@
 "use client";
 
-import { MessageCircleCheck, MessageCircleQuestion } from "lucide-react";
+import { MessageCircleCheck, MessageCircleQuestion, MessageSquarePlus } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { QueryStatusBadge } from "@/components/queries/query-status-badge";
@@ -91,6 +91,7 @@ export function RecordQueryIcon({
             </Button>
             {canRaise ? (
               <Button type="button" onClick={() => setDialog("raise")}>
+                <MessageSquarePlus className="h-4 w-4" />
                 Raise another
               </Button>
             ) : null}

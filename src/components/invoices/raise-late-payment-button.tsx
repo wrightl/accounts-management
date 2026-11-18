@@ -1,5 +1,6 @@
 "use client";
 
+import { FilePlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { raiseLatePaymentInvoice } from "@/actions/late-payment";
@@ -26,6 +27,7 @@ export function RaiseLatePaymentButton({ invoiceId }: { invoiceId: string }) {
         })
       }
     >
+      <FilePlus className="h-4 w-4" />
       {pending ? "Raising…" : "Raise late payment invoice"}
     </Button>
   );

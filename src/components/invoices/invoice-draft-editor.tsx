@@ -1,5 +1,6 @@
 "use client";
 
+import { Check } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import {
@@ -315,6 +316,7 @@ export function InvoiceDraftEditor({
           </Button>
           {!approved ? (
             <Button type="button" disabled={pending || dirty || errors.length > 0} onClick={approve}>
+              <Check className="h-4 w-4" />
               Approve
             </Button>
           ) : (

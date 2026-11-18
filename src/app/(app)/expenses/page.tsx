@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Link2 } from "lucide-react";
+import { Link2, Plus } from "lucide-react";
 import { guardTenantPage, hasPermission, requireUser } from "@/lib/auth";
 import { can } from "@/lib/roles";
 import { recordScopeFor, forAccountant } from "@/lib/accountant/record-scope";
@@ -146,6 +146,7 @@ export default async function ExpensesPage({
               <ManageLabelsButton labels={labels} />
               <ExpenseImportButton canWrite={canWrite} defaultOpen={sp.import === "1"} />
               <Link href="/expenses/new" className={buttonClasses("primary")}>
+                <Plus className="h-4 w-4" />
                 New expense
               </Link>
             </>
@@ -220,6 +221,7 @@ export default async function ExpensesPage({
               description="Log spend with New expense, import a CSV, or email a receipt."
               actionHref={canWrite ? "/expenses/new" : undefined}
               actionLabel={canWrite ? "New expense" : undefined}
+              actionIcon={<Plus className="h-4 w-4" />}
             />
           )
         ) : (

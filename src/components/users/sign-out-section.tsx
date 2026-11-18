@@ -1,5 +1,6 @@
 "use client";
 
+import { LogOut } from "lucide-react";
 import { useState } from "react";
 import { useClerk } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ export function SignOutSection() {
             }
           }}
         >
+          <LogOut className="h-4 w-4" />
           {pending ? "Signing out…" : "Sign out"}
         </Button>
       </div>

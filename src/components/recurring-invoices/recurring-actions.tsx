@@ -1,5 +1,6 @@
 "use client";
 
+import { FilePlus, Pause, Play, Trash2 } from "lucide-react";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,7 @@ export function RecurringInvoiceActions({
           disabled={pending}
           onClick={() => run(() => setRecurringInvoiceEnabled(id, !enabled))}
         >
+          {enabled ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
           {enabled ? "Pause" : "Resume"}
         </Button>
         <Button
@@ -69,6 +71,7 @@ export function RecurringInvoiceActions({
           }}
           title={!enabled ? "Resume the schedule first" : undefined}
         >
+          <FilePlus className="h-4 w-4" />
           Generate now
         </Button>
         <Button
@@ -93,6 +96,7 @@ export function RecurringInvoiceActions({
             });
           }}
         >
+          <Trash2 className="h-4 w-4" />
           Delete
         </Button>
       </div>

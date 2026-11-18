@@ -3,15 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition, type ReactNode } from "react";
-import {
-  ArrowRight,
-  CircleCheck,
-  CircleDashed,
-  CircleDot,
-  CircleMinus,
-  History,
-  Pause,
-} from "lucide-react";
+import { ArrowRight, CircleCheck, CircleDashed, CircleDot, CircleMinus, History, Pause, RotateCcw } from "lucide-react";
 import {
   hideDataOnboarding,
   markStepVisited,
@@ -334,6 +326,7 @@ function StepRow({
               disabled={pending}
               onClick={() => onOverride(null)}
             >
+              <RotateCcw className="h-4 w-4" />
               Reopen
             </Button>
           ) : !resolved ? (

@@ -447,6 +447,7 @@ export function InvoiceForm({
                   disabled={pending}
                   onClick={() => addRebills(notAdded)}
                 >
+                  <Plus className="h-4 w-4" />
                   Add all ({notAdded.length})
                 </Button>
               ) : null}
@@ -475,6 +476,7 @@ export function InvoiceForm({
                         disabled={pending}
                         onClick={() => addRebills([r])}
                       >
+                        <Plus className="h-4 w-4" />
                         Add
                       </Button>
                     )}

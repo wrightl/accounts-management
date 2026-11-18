@@ -1,3 +1,4 @@
+import { ArrowRight, Upload } from "lucide-react";
 import Link from "next/link";
 import { guardTenantPage } from "@/lib/auth";
 import { isPeriodPreset, resolvePeriod } from "@/lib/dates";
@@ -72,6 +73,7 @@ export default async function SpendingPage({
         }
         actions={
           <Link href="/transactions" className={buttonClasses("secondary")}>
+            <Upload className="h-4 w-4" />
             Import CSV
           </Link>
         }
@@ -94,6 +96,7 @@ export default async function SpendingPage({
           </p>
           <Link href="/transactions" className={`${buttonClasses("primary")} mt-4 inline-flex`}>
             Go to Transactions
+            <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
       ) : (

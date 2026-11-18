@@ -1,3 +1,4 @@
+import { UserPlus } from "lucide-react";
 import Link from "next/link";
 import { guardTenantPage } from "@/lib/auth";
 import { listUserPage } from "@/lib/users";
@@ -32,6 +33,7 @@ export default async function UsersPage({
         description="Invite co-founders and your accountant, and set what each person can do."
         actions={
           <Link href="/users/new" className={buttonClasses("primary")}>
+            <UserPlus className="h-4 w-4" />
             Invite user
           </Link>
         }

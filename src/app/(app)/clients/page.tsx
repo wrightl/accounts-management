@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import Link from "next/link";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { listClientPage } from "@/lib/clients/queries";
@@ -42,6 +43,7 @@ export default async function ClientsPage({
             <>
               <ClientImportButton canWrite={canWrite} defaultOpen={sp.import === "1"} />
               <Link href="/clients/new" className={buttonClasses("primary")}>
+                <Plus className="h-4 w-4" />
                 New client
               </Link>
             </>
@@ -56,6 +58,7 @@ export default async function ClientsPage({
             description="Add the people or companies you invoice so quotes and invoices have somewhere to go."
             actionHref={canWrite ? "/clients/new" : undefined}
             actionLabel={canWrite ? "Add a client" : undefined}
+            actionIcon={<Plus className="h-4 w-4" />}
           />
         ) : (
           <Table>

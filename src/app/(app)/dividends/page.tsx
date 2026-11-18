@@ -1,3 +1,4 @@
+import { Download, Plus } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
@@ -68,6 +69,7 @@ export default async function DividendsPage({
               href="/dividends/new"
               className={buttonClasses("primary")}
             >
+              <Plus className="h-4 w-4" />
               New dividend
             </Link>
           ) : null
@@ -151,6 +153,7 @@ export default async function DividendsPage({
                         href={`/api/dividends/${d.id}/paperwork`}
                         className={buttonClasses("secondary")}
                       >
+                        <Download className="h-4 w-4" />
                         Minutes and vouchers (PDF)
                       </a>
                     )}

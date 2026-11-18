@@ -1,5 +1,6 @@
 "use client";
 
+import { Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { useClerk } from "@clerk/nextjs";
 import { deleteCompany } from "@/actions/settings";
@@ -109,6 +110,7 @@ export function DeleteCompanyDangerZone({
         disabled={pending}
         onClick={onDelete}
       >
+        <Trash2 className="h-4 w-4" />
         {pending ? "Deleting…" : "Delete company"}
       </Button>
     </section>

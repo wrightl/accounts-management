@@ -1,3 +1,4 @@
+import { Filter, Plus } from "lucide-react";
 import Link from "next/link";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { listClients } from "@/lib/clients/queries";
@@ -63,6 +64,7 @@ export default async function QuotesPage({
         actions={
           canWrite ? (
             <Link href="/quotes/new" className={buttonClasses("primary")}>
+              <Plus className="h-4 w-4" />
               New quote
             </Link>
           ) : null
@@ -99,6 +101,7 @@ export default async function QuotesPage({
             </div>
             <div className="sm:col-span-2">
               <button type="submit" className={buttonClasses("secondary")}>
+                <Filter className="h-4 w-4" />
                 Filter
               </button>
             </div>
@@ -114,6 +117,7 @@ export default async function QuotesPage({
                   description="Start with a quote so clients can accept work before you invoice."
                   actionHref={canWrite ? "/quotes/new" : undefined}
                   actionLabel={canWrite ? "Create a quote" : undefined}
+                  actionIcon={<Plus className="h-4 w-4" />}
                 />
               )
             ) : (

@@ -1,5 +1,6 @@
 "use client";
 
+import { Check } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { closeWeek } from "@/actions/close";
@@ -33,6 +34,7 @@ export function CloseWeekButton({ outstanding }: { outstanding: number }) {
         });
       }}
     >
+      <Check className="h-4 w-4" />
       {pending ? "Closing…" : "Close the week"}
     </Button>
   );

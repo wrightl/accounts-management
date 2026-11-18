@@ -1,5 +1,6 @@
 "use client";
 
+import { Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
@@ -102,6 +103,7 @@ export function ExpenseImportButton({
   return (
     <>
       <Button type="button" variant="secondary" onClick={() => setOpen(true)}>
+        <Upload className="h-4 w-4" />
         Import CSV
       </Button>
 

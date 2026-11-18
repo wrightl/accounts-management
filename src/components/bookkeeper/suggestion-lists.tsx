@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Sparkles } from "lucide-react";
+import { Check, Sparkles, X } from "lucide-react";
 import {
   acceptCategorySuggestions,
   acceptReceiptMatch,
@@ -109,6 +109,7 @@ export function CategorySuggestionList({
             disabled={pending}
             onClick={() => run(() => acceptCategorySuggestions(rows.map((r) => r.id)))}
           >
+            <Check className="h-4 w-4" />
             Accept all {rows.length}
           </Button>
           <Button
@@ -117,6 +118,7 @@ export function CategorySuggestionList({
             disabled={pending}
             onClick={() => run(() => dismissCategorySuggestions(rows.map((r) => r.id)))}
           >
+            <X className="h-4 w-4" />
             Dismiss all
           </Button>
         </div>
@@ -145,6 +147,7 @@ export function CategorySuggestionList({
                   disabled={pending}
                   onClick={() => run(() => acceptCategorySuggestions([r.id]))}
                 >
+                  <Check className="h-4 w-4" />
                   Accept
                 </Button>
                 <Button
@@ -153,6 +156,7 @@ export function CategorySuggestionList({
                   disabled={pending}
                   onClick={() => run(() => dismissCategorySuggestions([r.id]))}
                 >
+                  <X className="h-4 w-4" />
                   Dismiss
                 </Button>
               </div>
@@ -220,6 +224,7 @@ export function ReceiptMatchList({ rows, canWrite }: { rows: ReceiptMatchRow[]; 
                     disabled={pending}
                     onClick={() => run(() => acceptReceiptMatch(r.matchId, useBank[r.matchId] ?? false))}
                   >
+                    <Check className="h-4 w-4" />
                     Accept
                   </Button>
                   <Button
@@ -228,6 +233,7 @@ export function ReceiptMatchList({ rows, canWrite }: { rows: ReceiptMatchRow[]; 
                     disabled={pending}
                     onClick={() => run(() => dismissBankMatch(r.matchId))}
                   >
+                    <X className="h-4 w-4" />
                     Decline
                   </Button>
                 </div>

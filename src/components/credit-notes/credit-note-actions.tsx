@@ -1,5 +1,6 @@
 "use client";
 
+import { Download, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { Button, buttonClasses } from "@/components/ui/button";
@@ -98,6 +99,7 @@ export function CreditNoteActions({
           href={`/api/credit-notes/${creditNoteId}/pdf`}
           className={buttonClasses("secondary")}
         >
+          <Download className="h-4 w-4" />
           Download PDF
         </a>
         {canWrite && canSend ? (
@@ -106,6 +108,7 @@ export function CreditNoteActions({
             disabled={pending}
             onClick={() => run(() => sendCreditNote(creditNoteId))}
           >
+            <Send className="h-4 w-4" />
             {pending ? "Sending…" : sent ? "Resend to client" : "Send to client"}
           </Button>
         ) : null}

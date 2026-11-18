@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Check, Copy } from "lucide-react";
 import { buttonClasses } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +34,7 @@ export function CopyButton({
       aria-label={label}
       className={cn(buttonClasses("secondary", "text-xs shrink-0"), className)}
     >
+      {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
       {copied ? "Copied" : label}
     </button>
   );

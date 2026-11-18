@@ -1,3 +1,4 @@
+import { Download } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { markPublicInvoiceViewed } from "@/actions/public-invoices";
@@ -212,6 +213,7 @@ export default async function PublicInvoicePage({
           href={`/i/${encodeURIComponent(token)}/pdf`}
           className={buttonClasses("secondary")}
         >
+          <Download className="h-4 w-4" />
           Download PDF
         </a>
       </section>

@@ -1,5 +1,6 @@
 "use client";
 
+import { Trash2, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useTransition } from "react";
 import { Button } from "@/components/ui/button";
@@ -80,6 +81,7 @@ export function ReceiptPanel({
                       });
                     }}
                   >
+                    <Trash2 className="h-4 w-4" />
                     Remove
                   </Button>
                 )}
@@ -155,6 +157,7 @@ export function ReceiptPanel({
             <FieldError id="receipt-error">{fieldErrors.receipt}</FieldError>
           </div>
           <Button type="submit" variant="secondary" disabled={pending}>
+            <Upload className="h-4 w-4" />
             {pending ? "Uploading…" : "Upload"}
           </Button>
         </form>

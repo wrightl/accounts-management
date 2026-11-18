@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -96,6 +97,7 @@ export default async function SafeToPayPage() {
               href={`/dividends/new?amount=${(result.safeNowPence / 100).toFixed(2)}`}
               className={`${buttonClasses("primary")} mt-4`}
             >
+              <Plus className="h-4 w-4" />
               Declare a dividend
             </Link>
           ) : null}
