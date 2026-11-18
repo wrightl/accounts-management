@@ -13,7 +13,7 @@ const NEW_CLIENT = "__new_client__";
 export type ClientSelectOption = ClientNameFields & { id: string };
 
 /**
- * A client dropdown with a "New client…" option that creates one in a dialog
+ * A client dropdown with a "Create client…" option that creates one in a dialog
  * and selects it. Submits the chosen id through `name`, like Select.
  */
 export function ClientSelect({
@@ -66,7 +66,7 @@ export function ClientSelect({
   const options: SelectOption[] = [
     ...leadingOptions,
     ...all.map((c) => ({ value: c.id, label: labelFor(c) })),
-    ...(canCreate ? [{ value: NEW_CLIENT, label: "+ New client…" }] : []),
+    ...(canCreate ? [{ value: NEW_CLIENT, label: "+ Create client…" }] : []),
   ];
 
   function choose(next: string) {

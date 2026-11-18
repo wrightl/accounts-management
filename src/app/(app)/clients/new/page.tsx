@@ -11,7 +11,7 @@ export default async function NewClientPage() {
       <div className="mb-6 flex items-center gap-3">
         <BackLink href="/clients">Clients</BackLink>
       </div>
-      <h1 className="mb-6 font-display text-2xl font-semibold">New client</h1>
+      <h1 className="mb-6 font-display text-2xl font-semibold">Create client</h1>
       <ClientForm mode="create" canWrite={canWrite} />
     </div>
   );

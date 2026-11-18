@@ -21,7 +21,7 @@ export default async function NewQuotePage() {
       <div className="mb-6 flex items-center gap-3">
         <BackLink href="/quotes">Quotes</BackLink>
       </div>
-      <h1 className="mb-6 font-display text-2xl font-semibold">New quote</h1>
+      <h1 className="mb-6 font-display text-2xl font-semibold">Create quote</h1>
       {clients.length === 0 ? (
         <p className="text-sm text-muted">
           Add a{" "}

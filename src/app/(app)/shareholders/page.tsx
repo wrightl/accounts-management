@@ -65,7 +65,7 @@ export default async function ShareholdersPage({
               className={buttonClasses("primary")}
             >
               <Plus className="h-4 w-4" />
-              New shareholder
+              Create shareholder
             </Link>
           ) : null
         }
@@ -90,7 +90,7 @@ export default async function ShareholdersPage({
               title="No active shareholders yet"
               description="Add shareholders so dividend runs can split amounts by shareholding."
               actionHref={canWrite ? "/shareholders/new" : undefined}
-              actionLabel={canWrite ? "Add a shareholder" : undefined}
+              actionLabel={canWrite ? "Create shareholder" : undefined}
               actionIcon={<Plus className="h-4 w-4" />}
             />
           ) : (

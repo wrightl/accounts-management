@@ -14,7 +14,7 @@ export default async function NewShareholderPage() {
       <div className="mb-6">
         <BackLink href="/shareholders">Shareholders</BackLink>
       </div>
-      <h1 className="mb-6 font-display text-2xl font-semibold">New shareholder</h1>
+      <h1 className="mb-6 font-display text-2xl font-semibold">Create shareholder</h1>
       <ShareholderForm mode="create" users={founders} canWrite={canWrite} />
     </div>
   );

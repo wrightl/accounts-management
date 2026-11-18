@@ -40,7 +40,7 @@ export default async function OrdersPage({
           canWrite ? (
             <Link href="/orders/new" className={buttonClasses("primary")}>
               <Plus className="h-4 w-4" />
-              New order
+              Create order
             </Link>
           ) : null
         }
@@ -52,7 +52,7 @@ export default async function OrdersPage({
             title="No orders yet"
             description="Orders come from accepted quotes, or you can create one by hand before invoicing."
             actionHref={canWrite ? "/orders/new" : undefined}
-            actionLabel={canWrite ? "Create an order" : undefined}
+            actionLabel={canWrite ? "Create order" : undefined}
             actionIcon={<Plus className="h-4 w-4" />}
           />
         ) : (

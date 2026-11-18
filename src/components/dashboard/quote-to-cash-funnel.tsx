@@ -25,7 +25,7 @@ export function QuoteToCashFunnel({
         <div className="mt-6 space-y-2">
           <p className="text-sm text-muted">Nothing in the funnel yet.</p>
           <Link href="/quotes/new" className="text-sm text-brand hover:underline">
-            Create a quote →
+            Create quote →
           </Link>
         </div>
       ) : (

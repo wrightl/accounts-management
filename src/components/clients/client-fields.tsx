@@ -12,7 +12,7 @@ export type ClientFieldValues = {
 
 /**
  * The inputs for a client's details, shared by the client page and the
- * "New client" dialog. Field names match `clientRawFromFormData`.
+ * "Create client" dialog. Field names match `clientRawFromFormData`.
  */
 export function ClientFields({
   client,

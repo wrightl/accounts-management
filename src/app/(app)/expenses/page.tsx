@@ -147,7 +147,7 @@ export default async function ExpensesPage({
               <ExpenseImportButton canWrite={canWrite} defaultOpen={sp.import === "1"} />
               <Link href="/expenses/new" className={buttonClasses("primary")}>
                 <Plus className="h-4 w-4" />
-                New expense
+                Create expense
               </Link>
             </>
           ) : null
@@ -218,9 +218,9 @@ export default async function ExpensesPage({
           ) : (
             <EmptyState
               title="No expenses yet"
-              description="Log spend with New expense, import a CSV, or email a receipt."
+              description="Log spend with Create expense, import a CSV, or email a receipt."
               actionHref={canWrite ? "/expenses/new" : undefined}
-              actionLabel={canWrite ? "New expense" : undefined}
+              actionLabel={canWrite ? "Create expense" : undefined}
               actionIcon={<Plus className="h-4 w-4" />}
             />
           )

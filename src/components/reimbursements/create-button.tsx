@@ -35,13 +35,13 @@ export function CreateReimbursementButton({
     <>
       <Button type="button" onClick={() => setOpen(true)}>
         <Plus className="h-4 w-4" />
-        New reimbursement run
+        Create reimbursement run
       </Button>
 
       <Dialog
         open={open}
         onClose={() => setOpen(false)}
-        title="New reimbursement run"
+        title="Create reimbursement run"
         className="max-w-xl"
       >
         <CreateReimbursementForm

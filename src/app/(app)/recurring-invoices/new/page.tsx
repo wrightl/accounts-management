@@ -18,7 +18,7 @@ export default async function NewRecurringInvoicePage() {
       <div className="mb-6">
         <BackLink href="/recurring-invoices">Recurring</BackLink>
       </div>
-      <h1 className="mb-6 font-display text-2xl font-semibold">New schedule</h1>
+      <h1 className="mb-6 font-display text-2xl font-semibold">Create schedule</h1>
       <RecurringInvoiceForm
         mode="create"
         clients={clients}

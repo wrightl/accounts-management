@@ -44,7 +44,7 @@ export default async function ClientsPage({
               <ClientImportButton canWrite={canWrite} defaultOpen={sp.import === "1"} />
               <Link href="/clients/new" className={buttonClasses("primary")}>
                 <Plus className="h-4 w-4" />
-                New client
+                Create client
               </Link>
             </>
           ) : null
@@ -57,7 +57,7 @@ export default async function ClientsPage({
             title="No clients yet"
             description="Add the people or companies you invoice so quotes and invoices have somewhere to go."
             actionHref={canWrite ? "/clients/new" : undefined}
-            actionLabel={canWrite ? "Add a client" : undefined}
+            actionLabel={canWrite ? "Create client" : undefined}
             actionIcon={<Plus className="h-4 w-4" />}
           />
         ) : (
