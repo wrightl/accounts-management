@@ -58,7 +58,11 @@ export function ClientSelect({
   const [creating, setCreating] = useState(false);
   const current = value ?? own;
 
-  const all = [...clients, ...created.filter((c) => !clients.some((k) => k.id === c.id))];
+  // Sorted by the name people see, not the contact name the query orders by.
+  const all = [...clients, ...created.filter((c) => !clients.some((k) => k.id === c.id))].sort(
+    (a, b) =>
+      clientDisplayName(a).localeCompare(clientDisplayName(b), "en-GB", { sensitivity: "base" }),
+  );
   const options: SelectOption[] = [
     ...leadingOptions,
     ...all.map((c) => ({ value: c.id, label: labelFor(c) })),

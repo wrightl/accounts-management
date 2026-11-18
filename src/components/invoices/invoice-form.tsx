@@ -119,7 +119,11 @@ export function InvoiceForm({
     const starting = rebillable.filter(
       (r) => r.clientId === clientId && initialRebillIds.includes(r.id),
     );
-    return starting.length > 0 ? starting.map((o) => rebillLine(o, lineDefault)) : [newLine(lineDefault)];
+    const initial =
+      starting.length > 0 ? starting.map((o) => rebillLine(o, lineDefault)) : [newLine(lineDefault)];
+    // Keys feed DOM ids, so lines rendered on the server need keys that match
+    // in the browser; a random key here fails hydration.
+    return initial.map((l, i) => ({ ...l, key: `initial-${i}` }));
   });
   const clientRebillable = rebillable.filter((r) => r.clientId === clientId);
   const addedExpenseIds = new Set(lines.flatMap((l) => (l.expenseId ? [l.expenseId] : [])));
@@ -271,13 +275,14 @@ export function InvoiceForm({
         <div
           className={`hidden gap-2 text-xs font-medium text-muted sm:grid ${
             vatRegistered
-              ? "sm:grid-cols-[1fr_70px_100px_80px_110px_2.5rem]"
-              : "sm:grid-cols-[1fr_80px_120px_80px_2.5rem]"
+              ? "sm:grid-cols-[1.5rem_1fr_70px_100px_80px_110px_2.5rem]"
+              : "sm:grid-cols-[1.5rem_1fr_80px_120px_80px_2.5rem]"
           }`}
         >
+          <span aria-hidden="true" />
           <span>Description</span>
           <span>Qty</span>
-          <span>Unit £ (ex VAT)</span>
+          <span>Unit Cost £{vatRegistered ? " (ex VAT)" : ""}</span>
           <span>Disc %</span>
           {vatRegistered ? <span>VAT</span> : null}
           <span className="sr-only">Remove</span>
@@ -292,10 +297,13 @@ export function InvoiceForm({
               key={line.key}
               className={`grid gap-2 ${
                 vatRegistered
-                  ? "sm:grid-cols-[1fr_70px_100px_80px_110px_2.5rem]"
-                  : "sm:grid-cols-[1fr_80px_120px_80px_2.5rem]"
+                  ? "sm:grid-cols-[1.5rem_1fr_70px_100px_80px_110px_2.5rem]"
+                  : "sm:grid-cols-[1.5rem_1fr_80px_120px_80px_2.5rem]"
               }`}
             >
+              <span className="text-sm text-muted tabular-nums sm:pt-[9px] sm:text-right">
+                {index + 1}.
+              </span>
               <div className="min-w-0">
                 <Input
                   placeholder="Description"
@@ -349,7 +357,7 @@ export function InvoiceForm({
               </div>
               <div className="min-w-0">
                 <Input
-                  placeholder="£ unit"
+                  placeholder="unit cost"
                   value={line.unitPricePounds}
                   disabled={pending}
                   aria-invalid={Boolean(fieldErrors[priceKey])}
