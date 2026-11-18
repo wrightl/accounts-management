@@ -1,3 +1,4 @@
+import { Download } from "lucide-react";
 import { guardTenantPage, hasPermission } from '@/lib/auth';
 import { financialYearStartDate, monthName, todayIsoDate } from '@/lib/dates';
 import { InvoiceCutoverCard } from '@/components/reports/invoice-cutover-card';
@@ -107,6 +108,7 @@ export default async function ReportsPage({
                     canExport ? (
                         <LinkMenuButton
                             label="Download"
+                            icon={<Download className="h-4 w-4" />}
                             items={[
                                 {
                                     key: 'year-end-pack',

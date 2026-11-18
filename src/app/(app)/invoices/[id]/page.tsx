@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Pencil } from "lucide-react";
+import { Download, FilePlus, Pencil } from "lucide-react";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { recordScopeFor } from "@/lib/accountant/record-scope";
 import { RecordQueries } from "@/components/queries/record-queries";
@@ -196,6 +196,7 @@ export default async function InvoiceDetailPage({
                     href={`/invoices/${invoice.id}/credit-notes/new`}
                     className={buttonClasses("secondary")}
                   >
+                    <FilePlus className="h-4 w-4" />
                     Raise credit note
                   </Link>
                 ) : null}
@@ -205,6 +206,7 @@ export default async function InvoiceDetailPage({
         ) : (
           <>
             <a href={`/api/invoices/${invoice.id}/pdf`} className={buttonClasses("secondary")}>
+              <Download className="h-4 w-4" />
               Download PDF
             </a>
             {copyLink}

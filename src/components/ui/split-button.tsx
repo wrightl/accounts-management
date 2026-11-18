@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { buttonClasses, type Variant } from "@/components/ui/button";
@@ -13,6 +13,7 @@ export type SplitButtonOption = {
 
 export function SplitButton({
   primaryLabel,
+  icon,
   onPrimary,
   options,
   disabled,
@@ -20,6 +21,8 @@ export function SplitButton({
   menuAriaLabel = "More actions",
 }: {
   primaryLabel: string;
+  /** Optional leading icon for the primary half, e.g. `<Send className="h-4 w-4" />`. */
+  icon?: ReactNode;
   onPrimary: () => void;
   options: SplitButtonOption[];
   disabled?: boolean;
@@ -48,6 +51,7 @@ export function SplitButton({
         onClick={onPrimary}
         className={buttonClasses(variant)}
       >
+        {icon}
         {primaryLabel}
       </button>
     );
@@ -61,6 +65,7 @@ export function SplitButton({
         onClick={onPrimary}
         className={cn(buttonClasses(variant), "rounded-r-none pr-4")}
       >
+        {icon}
         {primaryLabel}
       </button>
       <button

@@ -1,5 +1,6 @@
 "use client";
 
+import { Plus } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -33,6 +34,7 @@ export function CreateReimbursementButton({
   return (
     <>
       <Button type="button" onClick={() => setOpen(true)}>
+        <Plus className="h-4 w-4" />
         New reimbursement run
       </Button>
 

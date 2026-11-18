@@ -1,5 +1,6 @@
 "use client";
 
+import { Download } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { Button, buttonClasses } from "@/components/ui/button";
@@ -98,6 +99,7 @@ export function CreditNoteActions({
           href={`/api/credit-notes/${creditNoteId}/pdf`}
           className={buttonClasses("secondary")}
         >
+          <Download className="h-4 w-4" />
           Download PDF
         </a>
         {canWrite && canSend ? (

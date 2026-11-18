@@ -1,5 +1,6 @@
 "use client";
 
+import { Download } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { sendQuote } from "@/actions/quotes";
@@ -62,6 +63,7 @@ export function QuoteActions({
       <div className="flex flex-wrap gap-2">
         <a href={`/api/quotes/${quoteId}/pdf`}>
           <Button type="button" variant="secondary" disabled={pending}>
+            <Download className="h-4 w-4" />
             Download PDF
           </Button>
         </a>

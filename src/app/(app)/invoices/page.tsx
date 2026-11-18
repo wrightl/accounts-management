@@ -1,3 +1,4 @@
+import { Plus, Upload } from "lucide-react";
 import Link from "next/link";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { can } from "@/lib/roles";
@@ -89,9 +90,11 @@ export default async function InvoicesPage({
             {canWrite ? (
               <>
                 <Link href="/invoices/import" className={buttonClasses("ghost")}>
+                  <Upload className="h-4 w-4" />
                   Imports
                 </Link>
                 <Link href="/invoices/new" className={buttonClasses("primary")}>
+                  <Plus className="h-4 w-4" />
                   New invoice
                 </Link>
               </>
@@ -129,6 +132,7 @@ export default async function InvoicesPage({
               description="Create an invoice to bill a client, or convert an accepted quote into an order first."
               actionHref={canWrite ? "/invoices/new" : undefined}
               actionLabel={canWrite ? "Create an invoice" : undefined}
+              actionIcon={<Plus className="h-4 w-4" />}
             />
           )
         ) : (

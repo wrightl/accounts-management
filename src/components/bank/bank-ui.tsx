@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Check, MoreHorizontal, Receipt, X, type LucideIcon } from "lucide-react";
+import { Check, MoreHorizontal, Receipt, Upload, X, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAlert } from "@/components/ui/alert-dialog";
 import { Dialog, DialogActions } from "@/components/ui/dialog";
@@ -323,6 +323,7 @@ export function BankToolbar({
           Company cards
         </Button>
         <Button type="button" onClick={() => setImportOpen(true)}>
+          <Upload className="h-4 w-4" />
           Import
         </Button>
       </div>

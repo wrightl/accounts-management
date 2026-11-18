@@ -1,3 +1,4 @@
+import { Inbox } from "lucide-react";
 import { guardTenantPage } from "@/lib/auth";
 import { ensureLocalUser } from "@/lib/users";
 import {
@@ -32,6 +33,7 @@ export default async function NotificationSettingsPage() {
         description="Which events reach you in the app, by email, or as push alerts."
         actions={
           <Link href="/inbox" className={buttonClasses("secondary")}>
+            <Inbox className="h-4 w-4" />
             Open inbox
           </Link>
         }

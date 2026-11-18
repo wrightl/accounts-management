@@ -1,3 +1,4 @@
+import { Download } from "lucide-react";
 import { notFound } from "next/navigation";
 import { markPublicQuoteViewed } from "@/actions/public-quotes";
 import { PublicQuoteActions } from "@/components/quotes/public-quote-actions";
@@ -143,6 +144,7 @@ export default async function PublicQuotePage({
           href={`/q/${encodeURIComponent(token)}/pdf`}
           className={buttonClasses("secondary")}
         >
+          <Download className="h-4 w-4" />
           Download PDF
         </a>
       </div>

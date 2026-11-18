@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { buttonClasses, type Variant } from "@/components/ui/button";
@@ -14,10 +14,13 @@ export type LinkMenuItem = {
 /** A button that opens a menu of links, such as downloads. Usable from server pages. */
 export function LinkMenuButton({
   label,
+  icon,
   items,
   variant = "primary",
 }: {
   label: string;
+  /** Optional leading icon, e.g. `<Download className="h-4 w-4" />`. */
+  icon?: ReactNode;
   items: LinkMenuItem[];
   variant?: Variant;
 }) {
@@ -52,6 +55,7 @@ export function LinkMenuButton({
         onClick={() => setOpen((value) => !value)}
         className={buttonClasses(variant)}
       >
+        {icon}
         {label}
         <ChevronDown
           className={cn("h-4 w-4 transition-transform", open && "rotate-180")}

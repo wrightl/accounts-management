@@ -1,3 +1,4 @@
+import { Download } from "lucide-react";
 import Link from "next/link";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { getEntitlements } from "@/lib/billing/entitlements";
@@ -323,9 +324,11 @@ export default async function YearEndPage({
                 ) : null}
                 <div className="mt-4 flex flex-wrap gap-3">
                   <a href={downloadHref("xlsx")} className={buttonClasses("primary")} download>
+                    <Download className="h-4 w-4" />
                     Download workbook and receipts
                   </a>
                   <a href={downloadHref("csv")} className={buttonClasses("ghost")} download>
+                    <Download className="h-4 w-4" />
                     Download as CSV files
                   </a>
                 </div>

@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
@@ -63,6 +64,7 @@ export default async function ShareholdersPage({
               href="/shareholders/new"
               className={buttonClasses("primary")}
             >
+              <Plus className="h-4 w-4" />
               New shareholder
             </Link>
           ) : null
@@ -89,6 +91,7 @@ export default async function ShareholdersPage({
               description="Add shareholders so dividend runs can split amounts by shareholding."
               actionHref={canWrite ? "/shareholders/new" : undefined}
               actionLabel={canWrite ? "Add a shareholder" : undefined}
+              actionIcon={<Plus className="h-4 w-4" />}
             />
           ) : (
             <Table>
