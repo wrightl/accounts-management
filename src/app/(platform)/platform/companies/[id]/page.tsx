@@ -14,6 +14,7 @@ import { getCompanyBillingDetail } from "@/lib/platform/billing-queries";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import {
   CompanyDeleteForm,
+  CompanyDemoResetForm,
   CompanyInviteAdminForm,
   CompanySupportNoteForm,
   CompanySuspendForm,
@@ -68,6 +69,9 @@ export default async function PlatformCompanyDetailPage({
             <span className="font-mono text-xs">{company.slug}</span>
           </p>
         </div>
+        {company.isDemo ? (
+          <StatusPill status="demo" label="Demo company" tone="info" className="!text-sm normal-case" />
+        ) : null}
         {company.suspendedAt ? (
           <StatusPill
             status="suspended"
@@ -236,6 +240,9 @@ export default async function PlatformCompanyDetailPage({
       </section>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
+        {company.isDemo ? (
+          <CompanyDemoResetForm companyId={company.id} companyName={company.name} />
+        ) : null}
         <CompanySuspendForm
           companyId={company.id}
           suspended={Boolean(company.suspendedAt)}

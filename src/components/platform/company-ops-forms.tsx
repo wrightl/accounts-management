@@ -11,6 +11,7 @@ import {
     addCompanySupportNote,
     deleteCompanyAsPlatform,
     platformInviteCompanyAdmin,
+    resetDemoCompanyAsPlatform,
     suspendCompany,
     unsuspendCompany,
 } from '@/actions/platform';
@@ -426,6 +427,61 @@ export function CompanyDeleteForm({
                 }}
             >
                 {pending ? 'Deleting…' : 'Delete company'}
+            </Button>
+        </div>
+    );
+}
+
+/** Rebuild a demo company's records up to today. Shown only for demo companies. */
+export function CompanyDemoResetForm({
+    companyId,
+    companyName,
+}: {
+    companyId: string;
+    companyName: string;
+}) {
+    const router = useRouter();
+    const { confirm, alert } = useAlert();
+    const [pending, start] = useTransition();
+
+    return (
+        <div className="rounded-2xl border border-border bg-white p-5">
+            <h2 className="font-display text-lg font-semibold">
+                Reset demo data
+            </h2>
+            <p className="mt-1 text-sm text-muted">
+                Delete everything recorded in {companyName} and rebuild three
+                years of sample books ending today. Members, logins and billing
+                stay as they are. Takes up to a minute.
+            </p>
+            <Button
+                type="button"
+                variant="secondary"
+                className="mt-4"
+                disabled={pending}
+                onClick={async () => {
+                    // Confirm must run outside startTransition, or the dialog waits on it.
+                    const ok = await confirm({
+                        title: 'Reset demo data?',
+                        message: `Everything in ${companyName}, including anything added during a demo, is replaced with fresh sample data dated up to today.`,
+                        confirmLabel: 'Reset demo data',
+                    });
+                    if (!ok) return;
+                    start(async () => {
+                        const result = await resetDemoCompanyAsPlatform(companyId);
+                        if (result.ok) {
+                            toast('Demo data rebuilt up to today.');
+                            router.refresh();
+                            return;
+                        }
+                        void alert({
+                            title: "Couldn't reset the demo data",
+                            message: result.error,
+                        });
+                    });
+                }}
+            >
+                {pending ? 'Resetting…' : 'Reset demo data'}
             </Button>
         </div>
     );

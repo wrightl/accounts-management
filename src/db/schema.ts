@@ -247,6 +247,11 @@ export const companies = pgTable("companies", {
   /** When set, tenant writes and outbound cron for this company are blocked. */
   suspendedAt: timestamp("suspended_at", { withTimezone: true }),
   suspendedReason: text("suspended_reason"),
+  /**
+   * A fictional company for sales demos (see `src/lib/demo`). Only the demo
+   * script sets it. Its data can be wiped and rebuilt, and it never emails clients.
+   */
+  isDemo: boolean("is_demo").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [

@@ -115,6 +115,9 @@ export default async function PlatformCompaniesPage({
                     >
                       {r.name}
                     </Link>
+                    {r.isDemo ? (
+                      <StatusPill status="demo" label="Demo" tone="info" className="ml-2" />
+                    ) : null}
                   </TD>
                   <TD className="font-mono text-xs text-muted">{r.slug}</TD>
                   <TD className="text-muted">

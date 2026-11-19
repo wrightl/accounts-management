@@ -16,6 +16,8 @@
         "db:migrate": "node ./scripts/migrate-on-build.mjs",
         "auth:agent": "tsx scripts/agent-auth.ts",
         "promo:seed": "tsx scripts/seed-promo-demo.ts",
+        "demo:create": "tsx --require ./scripts/stub-server-only.cjs scripts/demo.ts create",
+        "demo:reset": "tsx --require ./scripts/stub-server-only.cjs scripts/demo.ts reset",
         "promo:record": "PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers tsx scripts/record-promo.ts",
         "promo:assemble": "node scripts/assemble-promo-video.mjs",
         "promo:all": "npm run promo:seed && npm run promo:record && npm run promo:assemble",

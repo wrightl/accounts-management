@@ -28,7 +28,7 @@ import {
   parseCreditNoteRefundInput,
 } from "@/lib/credit-notes/schema";
 import { renderCompanyCreditNotePdf } from "@/lib/pdf/templates/company-render";
-import { sendEmail } from "@/lib/email";
+import { sendClientEmail } from "@/lib/email/client-email";
 import { resolveClientEmailSender } from "@/lib/email/resolve-client-sender";
 import { escapeHtml } from "@/lib/html";
 import { getCompanySettings } from "@/lib/settings/queries";
@@ -383,7 +383,7 @@ export async function sendCreditNote(id: string): Promise<ActionResult> {
       const number = escapeHtml(creditNote.number);
       const invoiceNumber = escapeHtml(invoice.number);
       const amount = escapeHtml(creditNote.grossFormatted);
-      await sendEmail({
+      await sendClientEmail(companyId, {
         to: client.email,
         from: sender.from,
         replyTo: sender.replyTo,

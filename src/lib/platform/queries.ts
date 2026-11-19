@@ -35,6 +35,7 @@ export type PlatformCompanyListItem = {
   entityType: string;
   createdAt: Date;
   suspendedAt: Date | null;
+  isDemo: boolean;
   memberCount: number;
   failedInbound: number;
   failedSend: number;
@@ -128,6 +129,7 @@ export async function listPlatformCompanies(
       entityType: companies.entityType,
       createdAt: companies.createdAt,
       suspendedAt: companies.suspendedAt,
+      isDemo: companies.isDemo,
       memberCount: sql<number>`(
         select count(*)::int from ${companyMemberships}
         where ${companyMemberships.companyId} = ${companyId}
@@ -273,7 +275,8 @@ export async function getPlatformOverviewStats() {
   const db = getDb();
   const [companyStats] = await db
     .select({
-      total: count(),
+      // Demo companies are ours, not customers.
+      total: sql<number>`count(*) filter (where not ${companies.isDemo})::int`,
       suspended: sql<number>`count(*) filter (where ${companies.suspendedAt} is not null)::int`,
     })
     .from(companies);
