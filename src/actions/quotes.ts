@@ -11,7 +11,7 @@ import { createDraftQuoteRecord } from "@/lib/quotes/create";
 import { loadOrRenderQuotePdf } from "@/lib/quotes/pdf-cache";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { parseVatRate, resolveLineVatRate } from "@/lib/vat";
-import { sendEmail } from "@/lib/email";
+import { sendClientEmail } from "@/lib/email/client-email";
 import { resolveClientEmailSender } from "@/lib/email/resolve-client-sender";
 import {
   canEditQuote,
@@ -474,7 +474,7 @@ export async function sendQuote(quoteId: string, formData: FormData): Promise<Ac
         actorUserId: localUserId,
       });
 
-      await sendEmail({
+      await sendClientEmail(companyId, {
         to: parsed.data.to,
         from: sender.from,
         replyTo: sender.replyTo,

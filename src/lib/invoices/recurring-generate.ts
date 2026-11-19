@@ -74,6 +74,8 @@ export async function generateRecurringInvoices(
         eq(recurringInvoices.enabled, true),
         eq(recurringInvoices.dayOfMonth, day),
         isNull(companies.suspendedAt),
+        // A demo company's invoices are rebuilt to today by a reset instead.
+        eq(companies.isDemo, false),
       ),
     );
 

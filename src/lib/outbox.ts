@@ -2,7 +2,7 @@ import "server-only";
 import { and, eq, inArray, isNotNull, isNull, lt, or, sql, sum } from "drizzle-orm";
 import { getDb } from "@/db";
 import { clients, companies, invoices, payments, sendJobs } from "@/db/schema";
-import { sendEmail } from "@/lib/email";
+import { sendClientEmail } from "@/lib/email/client-email";
 import { resolveClientEmailSender } from "@/lib/email/resolve-client-sender";
 import { escapeHtml } from "@/lib/html";
 import { formatGBP } from "@/lib/money";
@@ -239,6 +239,8 @@ export async function enqueueOverdueReminders(): Promise<number> {
         isNotNull(clients.email),
         eq(companies.remindersEnabled, true),
         isNull(companies.suspendedAt),
+        // A demo company's clients are made up; its reminder history is seeded.
+        eq(companies.isDemo, false),
       ),
     );
 
@@ -322,7 +324,7 @@ async function deliverInvoice(invoiceId: string, actorUserId?: string | null) {
     actorUserId,
   });
 
-  await sendEmail({
+  await sendClientEmail(invRow.companyId, {
     to: detail.client.email,
     from: sender.from,
     replyTo: sender.replyTo,
@@ -418,7 +420,7 @@ async function deliverReminder(
     ? `Under the Late Payment of Commercial Debts (Interest) Act 1998 we're entitled to statutory interest at ${charge.ratePercent}% a year (Bank of England base rate of ${charge.basePercent}% plus 8%) and fixed compensation of ${formatGBP(charge.compensationPence)}. Interest to date is ${formatGBP(charge.interestPence)} and is adding up at ${formatGBP(charge.dailyInterestPence)} a day until the invoice is paid.`
     : null;
 
-  await sendEmail({
+  await sendClientEmail(row.invoice.companyId, {
     to: row.clientEmail,
     from: sender.from,
     replyTo: sender.replyTo,

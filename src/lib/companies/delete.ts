@@ -1,18 +1,9 @@
 import "server-only";
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { clerkClient } from "@clerk/nextjs/server";
 import { getDb } from "@/db";
-import {
-  companies,
-  companyBilling,
-  expenseReceipts,
-  expenses,
-  invoiceImportDrafts,
-  invoiceTemplateAssets,
-  invoices,
-  quotes,
-  users,
-} from "@/db/schema";
+import { companies, companyBilling, users } from "@/db/schema";
+import { collectBlobPaths } from "@/lib/companies/blob-paths";
 import { clerkErrorMessage } from "@/lib/clerk-invite";
 import { serverEnv } from "@/env";
 import { getStripe } from "@/lib/billing/stripe";
@@ -122,75 +113,6 @@ async function cancelStripeForCompany(companyId: string): Promise<void> {
       },
     });
   }
-}
-
-async function collectBlobPaths(companyId: string): Promise<string[]> {
-  const db = getDb();
-  const paths = new Set<string>();
-
-  const [company] = await db
-    .select({ logoUrl: companies.logoUrl })
-    .from(companies)
-    .where(eq(companies.id, companyId))
-    .limit(1);
-  if (company?.logoUrl) paths.add(company.logoUrl);
-
-  const invoicePdfs = await db
-    .select({
-      path: invoices.pdfBlobPath,
-      originalPath: invoices.originalDocumentPath,
-    })
-    .from(invoices)
-    .where(eq(invoices.companyId, companyId));
-  for (const row of invoicePdfs) {
-    if (row.path) paths.add(row.path);
-    if (row.originalPath) paths.add(row.originalPath);
-  }
-
-  const importDrafts = await db
-    .select({ path: invoiceImportDrafts.documentPath })
-    .from(invoiceImportDrafts)
-    .where(eq(invoiceImportDrafts.companyId, companyId));
-  for (const row of importDrafts) {
-    if (row.path) paths.add(row.path);
-  }
-
-  const quotePdfs = await db
-    .select({ path: quotes.pdfBlobPath })
-    .from(quotes)
-    .where(eq(quotes.companyId, companyId));
-  for (const row of quotePdfs) {
-    if (row.path) paths.add(row.path);
-  }
-
-  const templateAssets = await db
-    .select({ path: invoiceTemplateAssets.blobPath })
-    .from(invoiceTemplateAssets)
-    .where(eq(invoiceTemplateAssets.companyId, companyId));
-  for (const row of templateAssets) {
-    paths.add(row.path);
-  }
-
-  const expenseIds = await db
-    .select({ id: expenses.id })
-    .from(expenses)
-    .where(eq(expenses.companyId, companyId));
-  if (expenseIds.length > 0) {
-    const receipts = await db
-      .select({ path: expenseReceipts.blobPath })
-      .from(expenseReceipts)
-      .where(
-        inArray(
-          expenseReceipts.expenseId,
-          expenseIds.map((e) => e.id),
-        ),
-      );
-    for (const row of receipts) {
-      if (row.path) paths.add(row.path);
-    }
-  }
-
-  return [...paths];
 }
 
 async function purgeBlobs(paths: string[]): Promise<void> {

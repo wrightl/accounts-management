@@ -64,6 +64,7 @@ import {
   platformSettingsRawFromFormData,
 } from "@/lib/platform/schema";
 import { deleteCompanyById } from "@/lib/companies/delete";
+import { NotDemoCompanyError, resetDemoCompany } from "@/lib/demo/reset";
 
 async function inboundJobCompanyId(jobId: string): Promise<string | null> {
   const [job] = await getDb()
@@ -190,6 +191,33 @@ export async function deleteCompanyAsPlatform(
         meta: { confirmationName: parsed.data.confirmationName },
       },
       paths: ["/platform", "/platform/companies"],
+    },
+  );
+}
+
+/** Rebuild a demo company's records so they run up to today. Demo companies only. */
+export async function resetDemoCompanyAsPlatform(companyId: string): Promise<ActionResult> {
+  const parsed = z.string().uuid().safeParse(companyId);
+  if (!parsed.success) return { ok: false, error: "Company not found" };
+
+  return platformMutate(
+    async ({ localUserId }) => {
+      try {
+        await resetDemoCompany({ companyId: parsed.data, actorUserId: localUserId });
+      } catch (err) {
+        if (err instanceof NotDemoCompanyError) return { ok: false, error: err.message };
+        throw err;
+      }
+      return { ok: true, id: parsed.data };
+    },
+    {
+      audit: {
+        action: "platform.company.demo_reset",
+        entityType: "company",
+        entityId: parsed.data,
+        companyId: null,
+      },
+      paths: [`/platform/companies/${parsed.data}`],
     },
   );
 }
