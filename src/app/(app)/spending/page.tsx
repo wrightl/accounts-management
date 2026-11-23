@@ -69,7 +69,7 @@ export default async function SpendingPage({
         title="Spending"
         description={
           <>
-            Cash outflows from your bank import — {resolved.label}.
+            Money out from your bank import, {resolved.label}.
           </>
         }
         actions={

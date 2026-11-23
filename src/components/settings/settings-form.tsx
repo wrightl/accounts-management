@@ -441,7 +441,7 @@ export function SettingsForm({
             <span className="font-medium text-foreground">VAT registered</span>
             <span className="mt-0.5 block text-xs text-muted">
               Enables VAT rates on quotes, invoices, orders, and expenses.
-              Export only — this app does not submit to HMRC.
+              Export only. Alfa does not submit to HMRC.
             </span>
           </span>
         </label>
@@ -674,7 +674,7 @@ export function SettingsForm({
         </h2>
         <p className="text-sm text-muted">
           Optional cash at bank on the day you start using Alfa. Shown on
-          Transactions for context — not included in profit and loss. Clear both
+          Transactions for context, not included in profit and loss. Clear both
           fields to remove.
         </p>
         <div className="grid gap-4 sm:grid-cols-2">

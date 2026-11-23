@@ -139,7 +139,6 @@ export default async function ExpensesPage({
       <SetupStepBanner stepId="expenses" entityType={entityType} from={sp.from} />
       <PageHeader
         title="Expenses"
-        description="Log spend and attach receipts."
         actions={
           canWrite ? (
             <>
@@ -173,7 +172,7 @@ export default async function ExpensesPage({
             href="/reimbursements"
             className="font-medium text-foreground underline-offset-2 hover:underline"
           >
-            Create reimbursement run →
+            Create reimbursement run
           </Link>
         </div>
       )}

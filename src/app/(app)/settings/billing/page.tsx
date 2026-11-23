@@ -17,7 +17,6 @@ export default async function BillingSettingsPage({
     <div>
       <SettingsPageHeader
         title="Billing"
-        description="Manage your organisation plan, trial, and payment method."
       />
       {sp.checkout === "success" ? (
         <Callout tone="success" className="mb-6">

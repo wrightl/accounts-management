@@ -460,7 +460,7 @@ export async function getVatSummary(
   });
 
   const note = company.vatRegistered
-    ? "Export for your accountant — this app does not submit to HMRC."
+    ? "Export for your accountant. Alfa does not submit to HMRC."
     : "Company is not marked VAT registered in Settings, but documents in this period still record VAT. Figures reflect that VAT.";
 
   return {

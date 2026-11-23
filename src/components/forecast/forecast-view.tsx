@@ -24,6 +24,8 @@ import {
 import { formatGBP, poundsToPence } from "@/lib/money";
 import { DisplayDate } from "@/components/date-format-provider";
 import { Callout } from "@/components/ui/callout";
+import { calloutTones } from "@/components/ui/callout";
+import { cn } from "@/lib/utils";
 
 function shortDate(iso: string): string {
   return new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-GB", {
@@ -114,7 +116,7 @@ export function ForecastView({
       {warning ? (
         <p
           role="status"
-          className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm"
+          className={cn("rounded-xl border px-4 py-3 text-sm", calloutTones.danger)}
         >
           {forecast.firstNegative
             ? <>Cash runs out in the week of <DisplayDate value={forecast.firstNegative.start} />, </>

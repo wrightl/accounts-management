@@ -19,7 +19,7 @@ export default async function AuditLogPage({
     <div>
       <SettingsPageHeader
         title="Audit log"
-        description="Sensitive changes to this company and who made them. Admins only."
+        description="Sensitive changes to this company and who made them."
       />
 
       <div>

@@ -74,14 +74,14 @@ export function creditExplainLabel(match: {
   if (match.matchType === "other_income") {
     const cat = match.incomeCategory?.trim() || "Other income";
     const base = `Other income · ${cat}`;
-    return match.note?.trim() ? `${base} — ${match.note.trim()}` : base;
+    return match.note?.trim() ? `${base}: ${match.note.trim()}` : base;
   }
   if (match.matchType === "transfer") {
-    return match.note?.trim() ? `Transfer — ${match.note.trim()}` : "Transfer";
+    return match.note?.trim() ? `Transfer: ${match.note.trim()}` : "Transfer";
   }
   if (match.matchType === "tax_or_loan") {
     return match.note?.trim()
-      ? `Tax or loan — ${match.note.trim()}`
+      ? `Tax or loan: ${match.note.trim()}`
       : "Tax or loan";
   }
   const owner: Record<string, string> = {
@@ -90,6 +90,6 @@ export function creditExplainLabel(match: {
     salary: "Salary",
   };
   const label = owner[match.matchType];
-  if (label) return match.note?.trim() ? `${label} — ${match.note.trim()}` : label;
+  if (label) return match.note?.trim() ? `${label}: ${match.note.trim()}` : label;
   return match.matchType;
 }

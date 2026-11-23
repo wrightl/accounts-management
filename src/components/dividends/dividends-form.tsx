@@ -22,6 +22,8 @@ import {
 } from "@/lib/dividends/schema";
 import { splitDividendPence } from "@/lib/dividends/split";
 import { formatGBP, poundsToPence } from "@/lib/money";
+import { calloutTones } from "@/components/ui/callout";
+import { cn } from "@/lib/utils";
 
 type Holder = { id: string; name: string; shareCount: number };
 
@@ -181,7 +183,7 @@ export function DividendDeclareForm({
         </p>
       ) : null}
       {overReservesMessage ? (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm">
+        <div className={cn("rounded-xl border px-4 py-3 text-sm", calloutTones.danger)}>
           <p id="confirmOverReserves-error">{overReservesMessage}</p>
           <label className="mt-3 flex items-start gap-3">
             <input

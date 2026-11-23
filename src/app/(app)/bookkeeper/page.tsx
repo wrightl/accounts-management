@@ -36,7 +36,7 @@ export default async function BookkeeperPage() {
     <div>
       <PageHeader
         title="AI bookkeeper"
-        description="Suggestions to speed up the bookkeeping, and answers from your own figures. Nothing changes until someone accepts it."
+        description="Suggestions and answers from your own figures, which change nothing until someone accepts them."
       />
       {!aiReady ? (
         <Callout className="mt-4 max-w-2xl">

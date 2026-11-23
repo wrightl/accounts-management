@@ -16,6 +16,8 @@ import { formatGBP } from "@/lib/money";
 import { DisplayDate } from "@/components/date-format-provider";
 import { PageHeader } from "@/components/ui/page-header";
 import { cardClasses } from "@/components/ui/card";
+import { calloutTones } from "@/components/ui/callout";
+import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Director's loans" };
 
@@ -113,7 +115,7 @@ export default async function DirectorsLoansPage({
                 {d.warnings.map((w) => (
                   <li
                     key={w.kind}
-                    className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm"
+                    className={cn("rounded-xl border px-4 py-3 text-sm", calloutTones.danger)}
                   >
                     <WarningText warning={w} />
                   </li>

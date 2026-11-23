@@ -185,7 +185,7 @@ export default async function ExpenseDetailPage({
             href={`/reimbursements?payee=${payeeId}&expense=${detail.expense.id}`}
             className="font-medium text-foreground underline-offset-2 hover:underline"
           >
-            Add to a reimbursement run →
+            Add to a reimbursement run
           </Link>
         </Callout>
       )}
@@ -201,7 +201,7 @@ export default async function ExpenseDetailPage({
             href={`/reimbursements/${linkedRun.reimbursementId}`}
             className="font-medium text-foreground underline-offset-2 hover:underline"
           >
-            View run ({linkedRun.totalFormatted}) →
+            View run ({linkedRun.totalFormatted})
           </Link>
         </Callout>
       )}

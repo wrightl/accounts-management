@@ -57,7 +57,7 @@ export function PublicQuoteActions({
   if (done === "accepted") {
     return (
       <p className="rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-foreground">
-        Thank you — you have accepted this quote. The team will be in touch.
+        Thank you, you have accepted this quote. The team will be in touch.
       </p>
     );
   }

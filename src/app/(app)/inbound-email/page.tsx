@@ -22,6 +22,7 @@ import { DisplayDate } from "@/components/date-format-provider";
 import { ListPagination } from "@/components/ui/list-pagination";
 import { listPageHref, parseListPaging } from "@/lib/list-paging";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Callout } from "@/components/ui/callout";
 
 const FILTERS: { value: InboundEmailJobListFilter; label: string }[] = [
   { value: "attention", label: "Needs attention" },
@@ -50,16 +51,16 @@ export default async function InboundEmailPage({
     <div>
       <SettingsPageHeader
         title="Inbound email"
-        description="Receipts emailed in. Retry or dismiss any that could not be read."
+        description="Receipts emailed in, with any that couldn't be read to retry or dismiss."
         actions={<RetryAllInboundIssuesButton issueCount={issueCount} />}
       />
 
       {issueCount > 0 ? (
-        <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
-          <span className="font-medium text-destructive">{issueCount}</span> job
-          {issueCount === 1 ? "" : "s"} need attention — usually attachment download or OCR
-          failures. Retry after fixing network or Resend configuration.
-        </div>
+        <Callout tone="danger" className="mb-4">
+          {issueCount === 1 ? "1 email needs" : `${issueCount} emails need`} attention, usually
+          because an attachment couldn&apos;t be downloaded or read. Retry once the network or
+          Resend settings are fixed.
+        </Callout>
       ) : null}
 
       <div className="flex flex-wrap gap-2">

@@ -203,7 +203,7 @@ export function PlatformSettingsForm({
           >
             {modelOptions.map((model) => (
               <option key={model.id} value={model.id}>
-                {model.name} — {model.id}
+                {model.name} ({model.id})
               </option>
             ))}
             <option value={CUSTOM_RECEIPT_OCR_MODEL}>Custom model ID…</option>
@@ -328,7 +328,7 @@ export function PlatformSettingsForm({
             {catalogPreview.essentials.name}
           </span>
           {catalogPreview.essentials.description
-            ? ` — ${catalogPreview.essentials.description}`
+            ? `: ${catalogPreview.essentials.description}`
             : null}
           <br />
           {catalogPreview.essentials.monthLabel}/mo ·{" "}
@@ -391,7 +391,7 @@ export function PlatformSettingsForm({
             {catalogPreview.premium.name}
           </span>
           {catalogPreview.premium.description
-            ? ` — ${catalogPreview.premium.description}`
+            ? `: ${catalogPreview.premium.description}`
             : null}
           <br />
           {catalogPreview.premium.monthLabel}/mo ·{" "}

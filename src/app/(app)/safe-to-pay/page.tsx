@@ -46,9 +46,13 @@ function Parts({ parts }: { parts: Array<{ label: string; pence: number }> }) {
   const shown = parts.filter((p) => p.pence !== 0);
   if (shown.length < 2) return null;
   return (
-    <span className="block text-xs">
-      {shown.map((p) => `${p.label}: ${formatGBP(p.pence)}`).join(" · ")}
-    </span>
+    <ul className="text-xs">
+      {shown.map((p) => (
+        <li key={p.label}>
+          {p.label}: {formatGBP(p.pence)}
+        </li>
+      ))}
+    </ul>
   );
 }
 

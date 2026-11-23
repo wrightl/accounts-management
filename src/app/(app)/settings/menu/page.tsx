@@ -6,7 +6,7 @@ import { getMenuFeatures } from "@/lib/menu/queries";
 import { aiGatewayConfigured } from "@/lib/ai/models";
 import { NAV_GROUPS, optionalNavItems } from "@/components/dashboard/nav";
 import { MenuSettingsForm } from "@/components/menu/menu-settings-form";
-import { SettingsPageHeader, SETTINGS_FORM_WIDTH } from "@/components/settings/settings-page-header";
+import { SettingsPageHeader } from "@/components/settings/settings-page-header";
 
 export default async function MenuSettingsPage() {
   const session = await guardTenantPage("workspace:read");
@@ -23,15 +23,7 @@ export default async function MenuSettingsPage() {
     <div>
       <SettingsPageHeader
         title="Your menu"
-        description={
-          <span className={`block ${SETTINGS_FORM_WIDTH}`}>
-            Choose which pages show in your sidebar. Overview, Transactions,
-            Expenses, Clients, Invoices, Reports, Deadlines, and Settings always
-            show. Hidden pages still work: find them with search (⌘K), and their
-            reminders and calculations keep running. This only changes your
-            menu, not anyone else&apos;s.
-          </span>
-        }
+        description="Choose which pages show in your own sidebar; hidden pages still work and can be found with search (⌘K)."
       />
       <MenuSettingsForm
         bundles={bundlesFor(session.entityType)}

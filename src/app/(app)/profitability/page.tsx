@@ -135,7 +135,7 @@ export default async function ProfitabilityPage({
                       href={`/invoices/new?clientId=${c.clientId}`}
                       className="font-medium text-foreground underline-offset-2 hover:underline"
                     >
-                      Create invoice →
+                      Create invoice
                     </Link>
                   ) : null}
                 </span>

@@ -46,8 +46,8 @@ export default async function NewCreditNotePage({
         title={<>Credit note for {invoice.number}</>}
         description={
           <>
-            Invoice total {invoice.grossFormatted}
-            {creditedPence > 0 ? ` · ${formatGBP(creditedPence)} already credited` : null}
+            The invoice total is {invoice.grossFormatted}
+            {creditedPence > 0 ? `, of which ${formatGBP(creditedPence)} is already credited` : null}.
           </>
         }
         className="mb-6"

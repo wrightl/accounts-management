@@ -118,7 +118,7 @@ export function BankImportForm({
 
   const headerOptions = useMemo(
     () => [
-      { value: "", label: "— Not mapped —" },
+      { value: "", label: "Not mapped" },
       ...headers.map((h) => ({ value: h, label: h })),
     ],
     [headers],
@@ -262,7 +262,7 @@ export function BankImportForm({
       <p className="text-sm text-muted">
         Importing as <span className="font-medium text-foreground">{bankLabelText}</span>
         {isOther || forceMapper
-          ? " — map your CSV columns below."
+          ? ". Map your CSV columns below."
           : ". Change the bank in Settings if this is wrong."}
       </p>
 

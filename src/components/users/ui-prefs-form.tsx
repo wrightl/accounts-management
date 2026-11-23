@@ -180,7 +180,7 @@ export function UiPrefsForm({ prefs: rawPrefs }: { prefs: unknown }) {
         id="toasts"
         name="toasts"
         label="Success messages"
-        help="Stay on screen until you dismiss them — useful if you read slowly or magnify."
+        help="Stay on screen until you dismiss them. Useful if you read slowly or magnify."
         defaultValue={prefs.toasts}
         disabled={pending}
         error={fieldErrors.toasts}

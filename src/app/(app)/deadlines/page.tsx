@@ -54,8 +54,8 @@ export default async function DeadlinesPage() {
         title="Deadlines"
         description={
           isLtd
-            ? "Companies House and HMRC deadlines for the next year. Mark each one done once it's filed or paid."
-            : "HMRC deadlines for the next year. Mark each one done once it's filed or paid."
+            ? "Companies House and HMRC deadlines for the next year."
+            : "HMRC deadlines for the next year."
         }
       />
 

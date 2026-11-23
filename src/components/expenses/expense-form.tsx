@@ -962,7 +962,7 @@ export function ExpenseForm({
                 <option value="company_paid">Company paid</option>
               </Select>
               <p className="mt-1 text-xs text-muted">
-                Current status: Pending review — choose the final status when approving.
+                Pending review. Choose the final status when you approve it.
               </p>
               <FieldError id="status-error">{fieldErrors.status}</FieldError>
             </>

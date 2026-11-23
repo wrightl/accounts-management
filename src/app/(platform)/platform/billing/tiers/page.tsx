@@ -27,7 +27,7 @@ export default async function PlatformBillingTiersPage() {
       </h1>
       <p className="mt-1 max-w-2xl text-muted">
         Limits apply immediately to all companies on that tier. Existing members
-        above a lowered user cap are grandfathered — new invites are blocked.
+        above a lowered user cap are grandfathered, but new invites are blocked.
         Stripe price IDs are managed in{" "}
         <Link href="/platform/settings" className="underline">
           Platform → Settings

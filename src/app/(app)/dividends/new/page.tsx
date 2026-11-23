@@ -28,7 +28,7 @@ export default async function NewDividendPage({
         title="Create dividend"
         description={
           split.balanced
-            ? "Enter a total amount. It is split across all active shareholders by share count."
+            ? "Enter a total and it is split across active shareholders by share count."
             : undefined
         }
         className="mb-6"

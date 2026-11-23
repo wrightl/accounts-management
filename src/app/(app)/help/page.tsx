@@ -24,7 +24,7 @@ export default async function HelpPage() {
     <div>
       <PageHeader
         title="How to use this app"
-        description="What to do first, how money moves through the app, and a simple weekly routine. Each part links to the screen it describes."
+        description="What to do first, how money moves through the app, and a simple weekly routine."
       />
       <div className="mt-8">
         <HelpGuide entityType={user.entityType} role={user.role} />

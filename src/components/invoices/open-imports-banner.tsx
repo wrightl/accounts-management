@@ -30,7 +30,7 @@ export function OpenImportsBanner({ imports }: { imports: ImportBatchSummary[] }
           href={single ? `/invoices/import/${only.id}` : "/invoices/import"}
           className="font-medium text-foreground underline underline-offset-2"
         >
-          {single ? "Review and save →" : "View imports →"}
+          {single ? "Review and save" : "View imports"}
         </Link>
       </div>
     </Callout>

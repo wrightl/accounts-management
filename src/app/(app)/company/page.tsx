@@ -42,7 +42,7 @@ export default async function CompanyPage() {
     <div>
       <SettingsPageHeader
         title="Company profile"
-        description="Registered details used for year-end, the accountant pack, and filing deadlines. Only admins can change these."
+        description="Registered details used for year end and filing deadlines, which only admins can change."
       />
 
       <div className={SETTINGS_FORM_WIDTH}>

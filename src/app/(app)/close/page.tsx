@@ -37,7 +37,7 @@ export default async function WeeklyClosePage() {
     <div className="max-w-3xl">
       <PageHeader
         title="Weekly close"
-        description="Fifteen minutes a week keeps the books up to date. Work down the list, then close the week."
+        description="Work down the list, then close the week."
         actions={canWrite ? <CloseWeekButton outstanding={checklist.outstanding} /> : null}
       />
 

@@ -182,7 +182,7 @@ export function OnboardingForm({
           >
             <p className="font-display text-lg font-semibold">Sole trader</p>
             <p className="mt-2 text-sm text-muted">
-              You trade as an individual. No share register — UTR is optional.
+              You trade as an individual. No share register, and your UTR is optional.
             </p>
           </button>
         </div>
@@ -267,7 +267,7 @@ export function OnboardingForm({
             ? "Enter your details and your company as registered at Companies House."
             : "Enter your details and trading name."}
           {planChoice.plan !== "trial"
-            ? " After this step you will add a card on Stripe — you get 30 days free before the first charge."
+            ? " After this step you will add a card on Stripe. You get 30 days free before the first charge."
             : null}
         </p>
       </div>
@@ -503,7 +503,7 @@ export function OnboardingForm({
           disabled={pending}
           required={false}
           showAccountDetails
-          optionalHint="Optional — needed for invoice payment details and CSV import."
+          optionalHint="Optional, but needed for invoice payment details and CSV import."
           errors={fieldErrors}
           onClearError={clearField}
         />
@@ -532,7 +532,7 @@ export function OnboardingForm({
             ? "Creating…"
             : planChoice.plan === "trial"
               ? "Create account"
-              : "Continue — start free trial"}
+              : "Continue and start free trial"}
         </Button>
       </FormStickyActions>
     </form>

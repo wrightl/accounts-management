@@ -44,7 +44,7 @@ function buildCards(catalog: StripeCatalog | null): PlanCard[] {
       priceNote: "30 days",
       description: "Try the full weekly rhythm before you pick a paid plan.",
       features: [
-        "Core books — quotes, invoices, expenses, reports",
+        "Core books: quotes, invoices, expenses, reports",
         "Recurring invoices",
         "Up to 5 users",
         "All multi-bank CSV providers",
@@ -94,7 +94,7 @@ export function SignupPlanPicker({
   initialPlan,
   onConfirmed,
   title = "Choose your plan",
-  subtitle = "Pick a tier to continue. Paid plans include a 30-day free trial — card required, charged after the trial.",
+  subtitle = "Pick a tier to continue. Paid plans include a 30-day free trial. A card is required and charged after the trial.",
   tone = "dark",
 }: {
   catalog: StripeCatalog | null;

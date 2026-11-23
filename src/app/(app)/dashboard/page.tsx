@@ -78,7 +78,7 @@ export default async function DashboardOverview({
       <div>
         <PageHeader
           title={`Welcome${user.name ? `, ${user.name.split(" ")[0]}` : ""}`}
-          description="Your account is waiting for an administrator to give you a role (admin, co-founder or accountant). You can't view or change the books until then."
+          description="An administrator needs to give you a role before you can see the books."
         />
       </div>
     );

@@ -73,8 +73,8 @@ export function SubscribeGateActions({
         </Callout>
       ) : (
         <p className="text-sm text-muted">
-          Add a card for <strong>{planLabel}</strong> to open your books — you
-          get 30 days free before the first charge — or continue without a card
+          Add a card for <strong>{planLabel}</strong> to open your books. You
+          get 30 days free before the first charge. Or continue without a card
           on the Trial plan.
         </p>
       )}

@@ -103,7 +103,7 @@ export default async function InboundEmailJobPage({
                     href={`/expenses/${job.expenseId}`}
                     className="font-medium text-foreground underline underline-offset-2"
                   >
-                    View expense →
+                    View expense
                   </Link>
                 </dd>
               </div>

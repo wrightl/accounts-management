@@ -81,7 +81,6 @@ export default async function InvoicesPage({
     <div>
       <PageHeader
         title="Invoices"
-        description="Create, send and track client invoices."
         actions={
           <>
             <Link href="/credit-notes" className={buttonClasses("ghost")}>

@@ -62,7 +62,6 @@ export default async function BusinessSettingsPage() {
         header={
           <SettingsPageHeader
             title="Business settings"
-            description="Company details, Companies House, VAT, financial year, bank details, numbering, and income categories."
           />
         }
       >

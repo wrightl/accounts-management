@@ -167,7 +167,7 @@ export default async function OrderDetailPage({
               href={`/invoices/new?clientId=${detail.client.id}&orderId=${detail.order.id}`}
               className="font-medium text-foreground underline-offset-2 hover:underline"
             >
-              Invoice them →
+              Invoice them
             </Link>
           </p>
         ) : null}

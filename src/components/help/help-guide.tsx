@@ -95,7 +95,7 @@ function Term({
 }) {
   return (
     <p className="text-sm text-foreground/90">
-      <span className="font-medium text-foreground">{name}</span> — {children}
+      <span className="font-medium text-foreground">{name}</span>: {children}
     </p>
   );
 }
@@ -142,7 +142,7 @@ export function HelpGuide({
           <p className="mt-3 text-sm text-foreground/90">
             Alfa replaces the usual pile of spreadsheets, Drive
             folders, and emailed receipts. You record what you billed, what you
-            spent, and what hit the bank — in one place.
+            spent, and what hit the bank, all in one place.
           </p>
           <BulletList
             items={[
@@ -151,7 +151,7 @@ export function HelpGuide({
                 currency are converted to pounds for you.
               </>,
               <>
-                If you are VAT registered, turn it on in Settings — invoices,
+                If you are VAT registered, turn it on in Settings. Invoices,
                 quotes, and expenses then use VAT rates, and Reports can export
                 a period summary for your accountant.
               </>,
@@ -178,8 +178,8 @@ export function HelpGuide({
                     <HelpLink href="/settings/business">Business settings</HelpLink>
                   ) : (
                     <span>Settings</span>
-                  )}{" "}
-                  — trading name, address, logo, bank account, and invoice number
+                  )}
+                  : trading name, address, logo, bank account, and invoice number
                   prefixes.
                   <span
                     className={cn(
@@ -258,7 +258,7 @@ export function HelpGuide({
                 ) : (
                   <span>Settings</span>
                 )}
-                . This is context for cutover only — it does not change P&amp;L.
+                . This is context for cutover only and does not change P&amp;L.
               </>,
               <>
                 Import your bank CSV on{" "}
@@ -374,8 +374,8 @@ export function HelpGuide({
             </p>
             <p className="mt-2 text-sm text-foreground/90">
               For retainers, set up a monthly schedule under{" "}
-              <HelpLink href="/recurring-invoices">Recurring</HelpLink> — leave
-              as draft or email automatically each month.
+              <HelpLink href="/recurring-invoices">Recurring</HelpLink>. Leave it
+              as a draft or email it automatically each month.
             </p>
           </Card>
           <Card className="mt-4">
@@ -403,8 +403,8 @@ export function HelpGuide({
             <Term name="Draft">not sent yet; you can still edit.</Term>
             <Term name="Sent">waiting for the client to pay.</Term>
             <Term name="Overdue">
-              still sent, but past the due date. You do not set this —
-              the app shows it automatically.
+              still sent, but past the due date. You do not set this; the
+              app shows it automatically.
             </Term>
             <Term name="Paid">settled in full.</Term>
             <Term name="Void">
@@ -425,7 +425,7 @@ export function HelpGuide({
         <section aria-labelledby="spend">
           <SectionHeading id="spend">Tracking spend</SectionHeading>
           <p className="mt-3 text-sm text-muted">
-            Three ways in — same destination on{" "}
+            Three ways in, all ending up on{" "}
             <HelpLink href="/expenses">Expenses</HelpLink>.
           </p>
           <BulletList
@@ -538,7 +538,7 @@ export function HelpGuide({
               </>,
               <>
                 For credits that are not client payments, use{" "}
-                <strong>Explain</strong> — other income (counts in profit), a
+                <strong>Explain</strong>: other income (counts in profit), a
                 transfer, or tax or loan. Administrators can add extra income
                 categories in <HelpLink href="/settings/business">Business settings</HelpLink>.
               </>,
@@ -617,7 +617,7 @@ export function HelpGuide({
               ]}
             />
             <p className="mt-2 text-sm text-muted">
-              This is a record for your accountant — it does not move money in
+              This is a record for your accountant. It does not move money in
               the bank.
             </p>
           </section>
@@ -644,7 +644,7 @@ export function HelpGuide({
               <Term name="Tax & reserves">
                 <HelpLink href="/reserves">retained earnings</HelpLink> year by
                 year and an estimate of corporation tax, including marginal
-                relief. An estimate only — your accountant works out the final
+                relief. It is an estimate only; your accountant works out the final
                 figure.
               </Term>
               <Term name="Director's loans">
@@ -721,7 +721,7 @@ export function HelpGuide({
             items={[
               <>
                 <HelpLink href="/reports">Reports</HelpLink> show{" "}
-                <strong>invoiced</strong> income for the period (ex-VAT) — not
+                <strong>invoiced</strong> income for the period (ex-VAT), not
                 cash collected in the bank. If you are VAT registered, download
                 the VAT CSV from the same page for your accountant.
               </>,
@@ -841,23 +841,23 @@ export function HelpGuide({
           <BulletList
             items={[
               <>
-                <strong>Motion</strong> — reduce animations, or follow your
+                <strong>Motion</strong>: reduce animations, or follow your
                 device setting.
               </>,
               <>
-                <strong>Text size</strong> and <strong>contrast</strong> — larger
+                <strong>Text size</strong> and <strong>contrast</strong>: larger
                 type and stronger borders when you need them.
               </>,
               <>
-                <strong>Readable font</strong> — Atkinson Hyperlegible for
+                <strong>Readable font</strong>: Atkinson Hyperlegible for
                 clearer letter shapes.
               </>,
               <>
-                <strong>Success messages</strong> — keep them on screen until you
+                <strong>Success messages</strong>: keep them on screen until you
                 dismiss them.
               </>,
               <>
-                <strong>Date format</strong> — how dates are shown across the
+                <strong>Date format</strong>: how dates are shown across the
                 app.
               </>,
             ]}
@@ -877,7 +877,7 @@ export function HelpGuide({
           </p>
           <p className="mt-4 text-sm text-foreground/90">
             Alfa works with the accessibility tools already on your phone or
-            computer — VoiceOver, TalkBack, magnification, and dictation. We do
+            computer: VoiceOver, TalkBack, magnification and dictation. We do
             not replace those apps; we aim to stay out of their way.
           </p>
         </section>
@@ -889,7 +889,7 @@ export function HelpGuide({
           </p>
           <BulletList
             items={[
-              <>Live bank feed (CSV import only — no Open Banking yet).</>,
+              <>Live bank feed (CSV import only, no Open Banking yet).</>,
               <>
                 Making Tax Digital or submitting VAT returns to HMRC (export for
                 your accountant only).

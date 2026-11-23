@@ -42,7 +42,7 @@ export default async function PlatformOverviewPage() {
         : "—",
       href: "/platform/billing",
       note: billingStats
-        ? `${billingStats.trialing} trial · ${billingStats.pastDue} past due`
+        ? `${billingStats.trialing} on trial, ${billingStats.pastDue} past due`
         : undefined,
     },
     {
@@ -74,7 +74,7 @@ export default async function PlatformOverviewPage() {
       href: "/platform/jobs?inboundStatus=pending&sendStatus=pending",
       note:
         stats.pendingInbound + stats.pendingSend > 0
-          ? `${stats.pendingInbound} inbound · ${stats.pendingSend} send`
+          ? `${stats.pendingInbound} inbound, ${stats.pendingSend} to send`
           : undefined,
     },
   ];

@@ -31,7 +31,7 @@ export function BankSettlements({
               href={s.href}
               className="font-medium text-foreground underline-offset-2 hover:underline"
             >
-              View transaction →
+              View transaction
             </Link>
             {action ? <> · {action}</> : null}
           </li>

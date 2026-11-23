@@ -28,7 +28,6 @@ export default async function SettingsHubPage() {
     <div>
       <PageHeader
         title="Settings"
-        description="Your own preferences, and the details and people behind the business."
         className="mb-8"
       />
       <div className="max-w-2xl space-y-8">
