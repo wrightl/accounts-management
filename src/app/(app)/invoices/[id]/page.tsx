@@ -13,7 +13,7 @@ import {
 } from "@/lib/invoices/status";
 import { listBankSettlements } from "@/lib/bank/settlements";
 import { BankSettlements } from "@/components/bank/bank-settlements";
-import { Card, CardTitle, CardValue } from "@/components/ui/card";
+import { Card, CardTitle, CardValue, cardClasses } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { buttonClasses } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -381,7 +381,7 @@ export default async function InvoiceDetailPage({
       ) : null}
 
       {lateCharge ? (
-        <section className="mt-8 rounded-2xl border border-border bg-surface p-5">
+        <section className={cardClasses("mt-8")}>
           <h2 className="font-display text-lg font-semibold">Late payment charges</h2>
           <p className="mt-1 max-w-2xl text-sm text-muted">
             If {clientDisplayName(client)} is a business, you can claim statutory interest and

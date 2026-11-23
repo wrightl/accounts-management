@@ -23,6 +23,7 @@ import {
   parsePlatformSettingsInput,
   platformSettingsRawFromFormData,
 } from "@/lib/platform/schema";
+import { cardClasses } from "@/components/ui/card";
 
 type CatalogPreview = {
   essentials: {
@@ -88,7 +89,7 @@ export function PlatformSettingsForm({
     <form
       ref={formRef}
       noValidate
-      className="mt-6 max-w-xl space-y-5 rounded-2xl border border-border bg-white p-6"
+      className={cardClasses("mt-6 max-w-xl space-y-5")}
       onSubmit={preventResetSubmit((formData) => {
         clearAll();
         formData.set("defaultReceiptOcrProvider", ocrProvider);

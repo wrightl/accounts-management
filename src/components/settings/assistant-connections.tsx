@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { setAssistantConnected, setAssistantDrafts } from "@/actions/assistant";
 import { Button } from "@/components/ui/button";
 import { FieldError } from "@/components/ui/form";
+import { cardClasses } from "@/components/ui/card";
 
 export type ConnectionRow = {
   id: string;
@@ -54,7 +55,7 @@ export function AssistantConnections({
 
   return (
     <div className="space-y-3">
-      <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
+      <ul className={cardClasses("p-0 divide-y divide-border overflow-hidden")}>
         {connections.map((c) => (
           <li key={c.id} className="flex flex-wrap items-center gap-4 px-5 py-4">
             <span className="min-w-0 flex-1">

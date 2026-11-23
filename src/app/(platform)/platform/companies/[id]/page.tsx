@@ -24,6 +24,7 @@ import { MemberActions } from "@/components/platform/member-actions";
 import { StatusPill } from "@/components/platform/status-pill";
 import { stripeDashboardUrl } from "@/lib/billing/stripe-dashboard";
 import { DisplayDate } from "@/components/date-format-provider";
+import { cardClasses } from "@/components/ui/card";
 
 export default async function PlatformCompanyDetailPage({
   params,
@@ -82,7 +83,7 @@ export default async function PlatformCompanyDetailPage({
       </div>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
-        <section className="rounded-2xl border border-border bg-white p-5">
+        <section className={cardClasses()}>
           <h2 className="font-display text-lg font-semibold">Profile</h2>
           <dl className="mt-3 space-y-2 text-sm">
             <div className="flex justify-between gap-4">
@@ -112,7 +113,7 @@ export default async function PlatformCompanyDetailPage({
           </dl>
         </section>
 
-        <section className="rounded-2xl border border-border bg-white p-5">
+        <section className={cardClasses()}>
           <h2 className="font-display text-lg font-semibold">Job counts</h2>
           <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
             <div>
@@ -153,7 +154,7 @@ export default async function PlatformCompanyDetailPage({
           readOnly={entitlements.readOnly}
         />
 
-        <section className="rounded-2xl border border-border bg-white p-5">
+        <section className={cardClasses()}>
           <h2 className="font-display text-lg font-semibold">Invite admin</h2>
           <p className="mt-1 text-sm text-muted">
             Send a Clerk invite and attach the user as company admin.

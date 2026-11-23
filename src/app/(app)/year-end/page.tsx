@@ -252,7 +252,7 @@ export default async function YearEndPage({
 
             <div className="mt-5 space-y-4">
               {failing.length === 0 ? (
-                <Card className="p-5 text-sm">
+                <Card className="text-sm">
                   All {passed} checks are clear for this period.
                 </Card>
               ) : (

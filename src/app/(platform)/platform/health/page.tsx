@@ -11,6 +11,7 @@ import { getLatestCronRuns } from "@/lib/platform/queries";
 import { ExpandableText } from "@/components/platform/expandable-text";
 import { StatusPill } from "@/components/platform/status-pill";
 import { DisplayDate } from "@/components/date-format-provider";
+import { cardClasses } from "@/components/ui/card";
 
 type CronRun = Awaited<ReturnType<typeof getLatestCronRuns>>["daily"] | null;
 
@@ -108,7 +109,7 @@ export default async function PlatformHealthPage() {
         ))}
       </ul>
 
-      <section className="mt-8 max-w-lg rounded-2xl border border-border bg-white p-5">
+      <section className={cardClasses("mt-8 max-w-lg")}>
         <h2 className="font-display text-lg font-semibold">Cron</h2>
         <dl className="mt-3 space-y-3 text-sm">
           <CronResult

@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { OpeningBalancesForm } from "@/components/ledger/opening-balances-form";
 import { SetupStepBanner } from "@/components/data-onboarding/setup-step-banner";
-import { Card, CardTitle, CardValue } from "@/components/ui/card";
+import { Card, CardTitle, CardValue, cardClasses } from "@/components/ui/card";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { financialYearStartDate } from "@/lib/dates";
 import { addDays, ctPaymentDueDate } from "@/lib/ledger/corporation-tax";
@@ -190,7 +190,7 @@ export default async function ReservesPage({
       {canSetOpening ? (
         <section
           id="opening-balances"
-          className="mt-10 scroll-mt-6 rounded-2xl border border-border bg-surface p-5"
+          className={cardClasses("mt-10 scroll-mt-6")}
         >
           <h2 className="font-display text-lg font-semibold">Opening balances</h2>
           <p className="mb-4 mt-1 max-w-2xl text-sm text-muted">

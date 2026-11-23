@@ -15,6 +15,7 @@ import { listPageHref, parseListPaging } from "@/lib/list-paging";
 import { formatGBP } from "@/lib/money";
 import { DisplayDate } from "@/components/date-format-provider";
 import { PageHeader } from "@/components/ui/page-header";
+import { cardClasses } from "@/components/ui/card";
 
 export const metadata: Metadata = { title: "Director's loans" };
 
@@ -80,7 +81,7 @@ export default async function DirectorsLoansPage({
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         {accounts.directors.map((d) => (
-          <section key={d.userId} className="rounded-2xl border border-border bg-surface p-5">
+          <section key={d.userId} className={cardClasses()}>
             <h2 className="text-sm font-medium text-muted">{d.name}</h2>
             <p
               className={

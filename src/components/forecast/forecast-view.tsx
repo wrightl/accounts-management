@@ -12,7 +12,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Card, CardTitle, CardValue } from "@/components/ui/card";
+import { Card, CardTitle, CardValue, cardClasses } from "@/components/ui/card";
 import { Input, Label, Select } from "@/components/ui/form";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import {
@@ -177,7 +177,7 @@ export function ForecastView({
         </p>
       </section>
 
-      <section className="rounded-2xl border border-border bg-surface p-5">
+      <section className={cardClasses()}>
         <h2 className="font-display text-lg font-semibold">What if…</h2>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <div>

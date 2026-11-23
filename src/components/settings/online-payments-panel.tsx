@@ -12,6 +12,7 @@ import { useAlert } from "@/components/ui/alert-dialog";
 import { FieldError } from "@/components/ui/form";
 import type { OnlinePaymentsStatus } from "@/lib/payments/online-status";
 import { Callout } from "@/components/ui/callout";
+import { Card } from "@/components/ui/card";
 
 const STATUS_COPY: Record<OnlinePaymentsStatus, { title: string; body: string }> = {
   not_connected: {
@@ -86,7 +87,7 @@ export function OnlinePaymentsPanel({
   }
 
   return (
-    <div className="max-w-2xl space-y-4 rounded-2xl border border-border bg-surface p-6">
+    <Card className="max-w-2xl space-y-4">
       <div>
         <h2 className="font-display text-lg font-semibold">{copy.title}</h2>
         <p className="mt-1 text-sm text-muted">{copy.body}</p>
@@ -127,6 +128,6 @@ export function OnlinePaymentsPanel({
         ) : null}
       </div>
       <FieldError>{error}</FieldError>
-    </div>
+    </Card>
   );
 }

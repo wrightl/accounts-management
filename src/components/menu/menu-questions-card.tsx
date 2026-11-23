@@ -9,6 +9,7 @@ import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
 import { toast } from "@/components/ui/toast-store";
 import { MenuQuestions } from "@/components/menu/menu-questions";
 import type { MenuBundle } from "@/lib/menu/features";
+import { cardClasses } from "@/components/ui/card";
 
 /**
  * The onboarding menu questions, for people who never answered them (invited
@@ -35,7 +36,7 @@ export function MenuQuestionsCard({ bundles }: { bundles: MenuBundle[] }) {
   return (
     <section
       aria-labelledby="menu-questions-title"
-      className="mt-6 flex flex-wrap items-start gap-4 rounded-2xl border border-border bg-surface px-5 py-4"
+      className={cardClasses("mt-6 flex flex-wrap items-start gap-4")}
     >
       <PanelLeft className="mt-0.5 h-5 w-5 shrink-0 text-muted" aria-hidden />
       <form

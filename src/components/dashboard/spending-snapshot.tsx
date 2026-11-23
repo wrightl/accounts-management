@@ -4,6 +4,7 @@ import Link from "next/link";
 import { SpendingChart } from "@/components/spending/spending-chart";
 import type { SpendingSummary } from "@/lib/spending/queries";
 import type { SpendingSeriesPoint } from "@/lib/spending/series";
+import { Card } from "@/components/ui/card";
 
 export function SpendingSnapshot({
   summary,
@@ -19,7 +20,7 @@ export function SpendingSnapshot({
   buckets: "day" | "month";
 }) {
   return (
-    <div className="rounded-2xl border border-border bg-surface p-5">
+    <Card>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-normal text-muted">Cash spending</h3>
@@ -44,6 +45,6 @@ export function SpendingSnapshot({
           compareLabel={compareLabel}
         />
       </div>
-    </div>
+    </Card>
   );
 }

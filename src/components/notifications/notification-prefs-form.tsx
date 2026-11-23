@@ -15,6 +15,7 @@ import {
 } from "@/lib/notifications/types";
 import type { EventChannelMatrix } from "@/lib/notifications/prefs-merge";
 import { clientEnv } from "@/env";
+import { Card } from "@/components/ui/card";
 
 type Mode = "company" | "user";
 
@@ -157,7 +158,7 @@ export function NotificationPrefsForm({
       </div>
 
       {showPushEnable ? (
-        <div className="rounded-2xl border border-border bg-surface p-4">
+        <Card>
           <p className="text-sm font-medium">Browser push</p>
           <p className="mt-1 text-xs text-muted">
             Allow this browser to show alerts when you are away from the app.
@@ -173,7 +174,7 @@ export function NotificationPrefsForm({
           {pushStatus ? (
             <p className="mt-2 text-xs text-muted">{pushStatus}</p>
           ) : null}
-        </div>
+        </Card>
       ) : null}
 
       <div className="overflow-x-auto rounded-2xl border border-border">

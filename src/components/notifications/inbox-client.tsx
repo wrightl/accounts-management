@@ -12,6 +12,7 @@ import {
 } from "@/actions/notifications";
 import type { Notification } from "@/db/schema";
 import { DisplayDate } from "@/components/date-format-provider";
+import { cardClasses } from "@/components/ui/card";
 
 export function InboxClient({
   initial,
@@ -113,7 +114,7 @@ export function InboxClient({
             No notifications{filter === "unread" ? " unread" : ""}.
           </p>
         ) : (
-          <ul className="overflow-hidden rounded-2xl border border-border bg-surface">
+          <ul className={cardClasses("p-0 overflow-hidden")}>
             {items.map((n) => {
               const unread = !n.readAt;
               const active = n.id === selectedId;
@@ -152,7 +153,7 @@ export function InboxClient({
 
       <div className="min-w-0">
         {selected ? (
-          <article className="rounded-2xl border border-border bg-surface p-6">
+          <article className={cardClasses()}>
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="font-display text-xl font-semibold">

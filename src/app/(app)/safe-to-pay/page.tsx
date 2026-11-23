@@ -11,6 +11,7 @@ import { DisplayDate } from "@/components/date-format-provider";
 import { getDateFormat } from "@/lib/date-format.server";
 import { Callout } from "@/components/ui/callout";
 import { PageHeader } from "@/components/ui/page-header";
+import { Card, cardClasses } from "@/components/ui/card";
 
 export const metadata: Metadata = { title: "Safe to pay yourself" };
 
@@ -83,7 +84,7 @@ export default async function SafeToPayPage() {
       ) : null}
 
       <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:max-w-5xl">
-        <div className="rounded-2xl border border-border bg-surface p-5">
+        <Card>
           <p className="text-sm text-muted">Safe to pay today</p>
           <p className="mt-1 font-display text-4xl font-semibold tabular-nums">
             {formatGBP(result.safeNowPence)}
@@ -102,8 +103,8 @@ export default async function SafeToPayPage() {
               Declare a dividend
             </Link>
           ) : null}
-        </div>
-        <div className="rounded-2xl border border-border bg-surface p-5">
+        </Card>
+        <Card>
           <p className="text-sm text-muted">By <DisplayDate value={data.until} />, if clients pay on time</p>
           <p className="mt-1 font-display text-4xl font-semibold tabular-nums">
             {formatGBP(result.safeLaterPence)}
@@ -112,7 +113,7 @@ export default async function SafeToPayPage() {
             Adds {formatGBP(result.expectedInPence)} expected in.
             {result.laterLimitedBy === "reserves" ? " Limited by profits available." : ""}
           </p>
-        </div>
+        </Card>
       </section>
 
       {data.split.length > 1 ? (
@@ -191,7 +192,7 @@ export default async function SafeToPayPage() {
         </section>
 
         {canManage ? (
-          <section className="rounded-2xl border border-border bg-surface p-5">
+          <section className={cardClasses()}>
             <h2 className="mb-4 font-display text-lg font-semibold">Assumptions</h2>
             <SafeToPayAssumptionsForm
               vatRegistered={data.vatRegistered}

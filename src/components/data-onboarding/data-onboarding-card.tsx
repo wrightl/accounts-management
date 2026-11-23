@@ -21,6 +21,7 @@ import type { ChecklistStep, StepState } from "@/lib/data-onboarding/checklist";
 import type { DataOnboardingView } from "@/lib/data-onboarding/queries";
 import type { StepId } from "@/lib/data-onboarding/steps";
 import { cn } from "@/lib/utils";
+import { cardClasses } from "@/components/ui/card";
 
 /** Where "Back to checklist" lands. */
 export const DATA_ONBOARDING_ANCHOR = "data-setup";
@@ -84,7 +85,7 @@ export function DataOnboardingCard({
       <section
         id={DATA_ONBOARDING_ANCHOR}
         aria-labelledby="data-setup-title"
-        className="mt-6 flex flex-wrap items-start gap-4 rounded-2xl border border-border bg-surface px-5 py-4"
+        className={cardClasses("mt-6 flex flex-wrap items-start gap-4")}
       >
         <History className="mt-0.5 h-5 w-5 shrink-0 text-muted" aria-hidden />
         <div className="min-w-0 flex-1">
@@ -121,7 +122,7 @@ export function DataOnboardingCard({
       <section
         id={DATA_ONBOARDING_ANCHOR}
         aria-label="History setup"
-        className="mt-6 flex flex-wrap items-center gap-4 rounded-2xl border border-border bg-surface px-5 py-3"
+        className={cardClasses("mt-6 flex flex-wrap items-center gap-4")}
       >
         <Pause className="h-4 w-4 shrink-0 text-muted" aria-hidden />
         <p className="min-w-0 flex-1 text-sm text-muted">
@@ -149,7 +150,7 @@ export function DataOnboardingCard({
     <section
       id={DATA_ONBOARDING_ANCHOR}
       aria-labelledby="data-setup-title"
-      className="mt-6 rounded-2xl border border-border bg-surface px-5 py-4"
+      className={cardClasses("mt-6")}
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 flex-1">

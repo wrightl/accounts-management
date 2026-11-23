@@ -170,7 +170,7 @@ export function AccountantNotes({
   return (
     <div className="space-y-4">
       {startDate.missing ? (
-        <Card className="border-warning/40 p-5 text-sm">
+        <Card className="border-warning/40 text-sm">
           <p className="font-medium">{startDate.label} is needed</p>
           <p className="mt-1 text-muted">
             The notes separate costs dated before it, because your accountant treats those
@@ -200,7 +200,7 @@ export function AccountantNotes({
       ) : null}
 
       {sections.map((section) => (
-        <Card key={section.letter} className="p-5 text-sm">
+        <Card key={section.letter} className="text-sm">
           <h3 className="font-medium">
             {section.letter}. {section.title}
           </h3>

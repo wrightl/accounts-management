@@ -46,7 +46,7 @@ export default async function CompanyPage() {
       />
 
       <div className={SETTINGS_FORM_WIDTH}>
-        <Card className="p-6">
+        <Card>
           <h2 className="font-display text-lg font-semibold">Identity</h2>
           <dl className="mt-4 grid gap-4 sm:grid-cols-2">
             <Field label="Entity type" value={entityLabel} />
@@ -71,7 +71,7 @@ export default async function CompanyPage() {
         </Card>
 
         {settings.entityType === "limited_company" ? (
-          <Card id="companies-house" className="mt-6 scroll-mt-6 p-6">
+          <Card id="companies-house" className="mt-6 scroll-mt-6">
             <h2 className="font-display text-lg font-semibold">Companies House</h2>
             <p className="mt-1 text-sm text-muted">
               Directors appear on board minutes and dividend vouchers. The dates
@@ -96,7 +96,7 @@ export default async function CompanyPage() {
           </Card>
         ) : null}
 
-        <Card className="mt-6 p-6">
+        <Card className="mt-6">
           <h2 className="font-display text-lg font-semibold">
             Invoice bank details
           </h2>

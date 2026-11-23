@@ -24,6 +24,7 @@ import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import type { ImportBatchReview } from "@/lib/invoices/import/queries";
 import { formatGBP } from "@/lib/money";
 import { cn } from "@/lib/utils";
+import { cardClasses } from "@/components/ui/card";
 
 const BASIS_NOTE = {
   email: "Same email as an existing client",
@@ -220,7 +221,7 @@ export function InvoiceImportReview({
 
   return (
     <div className="mt-6 space-y-8">
-      <section className="rounded-2xl border border-border bg-surface p-5 text-sm">
+      <section className={cardClasses("text-sm")}>
         <h2 className="font-display text-lg font-semibold">
           {batch.status === "committed"
             ? "Import saved"
@@ -323,7 +324,7 @@ export function InvoiceImportReview({
       </section>
 
       {batch.status === "committed" ? (
-        <section className="rounded-2xl border border-border bg-surface p-5 text-sm">
+        <section className={cardClasses("text-sm")}>
           <h2 className="font-display text-lg font-semibold">Your next invoice</h2>
           <p className="mt-1">Your next invoice in Alfa will be {review.nextNumber}.</p>
           {canSetNumber ? (

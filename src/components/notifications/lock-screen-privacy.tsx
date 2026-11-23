@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { toast } from "@/components/ui/toast";
 import { saveHidePushDetailsAction } from "@/actions/notifications";
+import { Card } from "@/components/ui/card";
 
 /** Hide what push alerts say, for a phone or computer other people can see. */
 export function LockScreenPrivacy({ initial }: { initial: boolean }) {
@@ -23,7 +24,7 @@ export function LockScreenPrivacy({ initial }: { initial: boolean }) {
   }
 
   return (
-    <div className="rounded-2xl border border-border bg-surface p-4">
+    <Card>
       <label className="flex items-start gap-3">
         <input
           type="checkbox"
@@ -40,6 +41,6 @@ export function LockScreenPrivacy({ initial }: { initial: boolean }) {
           </span>
         </span>
       </label>
-    </div>
+    </Card>
   );
 }

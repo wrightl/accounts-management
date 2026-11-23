@@ -14,6 +14,7 @@ import { StatusPill } from "@/components/platform/status-pill";
 import { cn } from "@/lib/utils";
 import type { ActionResult } from "@/actions/result";
 import { DisplayDate } from "@/components/date-format-provider";
+import { cardClasses } from "@/components/ui/card";
 
 function StripeId({ id, href }: { id: string | null; href: string | null }) {
   if (!id) return <dd className="font-mono text-xs">—</dd>;
@@ -93,7 +94,7 @@ export function CompanyBillingOpsForm({
   }
 
   return (
-    <section className="rounded-2xl border border-border bg-white p-5">
+    <section className={cardClasses()}>
       <h2 className="font-display text-lg font-semibold">Billing</h2>
       <dl className="mt-3 space-y-2 text-sm">
         <Row label="Plan">

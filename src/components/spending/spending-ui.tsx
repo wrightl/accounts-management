@@ -4,6 +4,7 @@ import { CustomPeriodForm } from "@/components/period/custom-period-form";
 import { PERIOD_PRESET_OPTIONS, todayIsoDate } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import type { SpendingTrend } from "@/lib/spending/queries";
+import { Card } from "@/components/ui/card";
 
 const BREAKDOWN_OPTIONS = [
   { value: "category", label: "Top categories" },
@@ -110,7 +111,7 @@ export function SpendingTrendSummary({
     trend === "up" ? "more" : trend === "down" ? "less" : "the same as";
 
   return (
-    <div className="rounded-2xl border border-border bg-surface p-5">
+    <Card>
       <p className="text-sm text-muted">Spending this period</p>
       <div className="mt-2 flex flex-wrap items-center gap-3">
         <p className="font-display text-3xl font-normal tracking-tight">{totalFormatted}</p>
@@ -125,6 +126,6 @@ export function SpendingTrendSummary({
           )}
         </div>
       </div>
-    </div>
+    </Card>
   );
 }

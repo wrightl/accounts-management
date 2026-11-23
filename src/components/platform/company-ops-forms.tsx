@@ -24,6 +24,7 @@ import {
     parseSuspendCompanyInput,
 } from '@/lib/platform/schema';
 import { useAlert } from '@/components/ui/alert-dialog';
+import { Card, cardClasses } from "@/components/ui/card";
 
 export function CompanySuspendForm({
     companyId,
@@ -49,7 +50,7 @@ export function CompanySuspendForm({
     return (
         <div
             ref={containerRef}
-            className="rounded-2xl border border-border bg-white p-5"
+            className={cardClasses()}
         >
             <h2 className="font-display text-lg font-semibold">
                 {suspended ? 'Unsuspend company' : 'Suspend company'}
@@ -445,7 +446,7 @@ export function CompanyDemoResetForm({
     const [pending, start] = useTransition();
 
     return (
-        <div className="rounded-2xl border border-border bg-white p-5">
+        <Card>
             <h2 className="font-display text-lg font-semibold">
                 Reset demo data
             </h2>
@@ -483,6 +484,6 @@ export function CompanyDemoResetForm({
             >
                 {pending ? 'Resetting…' : 'Reset demo data'}
             </Button>
-        </div>
+        </Card>
     );
 }
