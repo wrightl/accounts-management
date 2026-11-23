@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  compareLine,
+  comparePhrase,
   dashboardChartMonths,
   formatDeltaPercent,
   parseDashboardPeriod,
@@ -159,5 +161,44 @@ describe("earlier financial years", () => {
         trailingChartMonths(12, "2026-09-19"),
       );
     }
+  });
+});
+
+describe("comparePhrase", () => {
+  it("keeps month names as they are", () => {
+    expect(comparePhrase("September 2026")).toBe("September 2026");
+  });
+  it("turns Prior labels into 'the previous ...'", () => {
+    expect(comparePhrase("Prior FY")).toBe("the previous financial year");
+    expect(comparePhrase("Prior 3 months")).toBe("the previous 3 months");
+    expect(comparePhrase("Prior 12 months")).toBe("the previous 12 months");
+    expect(comparePhrase("Prior period")).toBe("the previous period");
+  });
+});
+
+describe("compareLine", () => {
+  it("says None when there was nothing to compare with", () => {
+    expect(compareLine({ percent: null, direction: "up" }, "September 2026")).toEqual({
+      label: "None in September 2026",
+      direction: "flat",
+    });
+  });
+  it("says Same when nothing changed", () => {
+    expect(compareLine({ percent: 0, direction: "flat" }, "Prior 3 months")).toEqual({
+      label: "Same as the previous 3 months",
+      direction: "flat",
+    });
+  });
+  it("says Up with the percentage and keeps the direction", () => {
+    expect(compareLine({ percent: 29, direction: "up" }, "September 2026")).toEqual({
+      label: "Up 29% on September 2026",
+      direction: "up",
+    });
+  });
+  it("says Down without a minus sign", () => {
+    expect(compareLine({ percent: -12, direction: "down" }, "Prior FY")).toEqual({
+      label: "Down 12% on the previous financial year",
+      direction: "down",
+    });
   });
 });

@@ -1,4 +1,5 @@
 import "server-only";
+import { compareLine, type HeroLine } from "@/lib/dashboard/period";
 import { and, eq, gte, inArray, isNotNull, isNull, lte, min, ne, notExists, or, sql, sum } from "drizzle-orm";
 import type { SessionUser } from "@/lib/auth";
 import { getDb } from "@/db";
@@ -84,26 +85,7 @@ export type HeroKpi = {
   accent?: "default" | "destructive";
 };
 
-export type HeroLine = { label: string; direction: "up" | "down" | "flat" };
-
-/** "the previous financial year" for "Prior FY"; month names stay as they are. */
-function comparePhrase(compareLabel: string): string {
-  if (!compareLabel.startsWith("Prior ")) return compareLabel;
-  const rest = compareLabel.slice("Prior ".length).replace(/^FY$/, "financial year");
-  return `the previous ${rest}`;
-}
-
-/** "Up 29% on September 2026", "Same as the previous 3 months", "None in September 2026". */
-function compareLine(
-  delta: { percent: number | null; direction: "up" | "down" | "flat" },
-  compareLabel: string,
-): HeroLine {
-  const than = comparePhrase(compareLabel);
-  if (delta.percent == null) return { label: `None in ${than}`, direction: "flat" };
-  if (delta.percent === 0) return { label: `Same as ${than}`, direction: "flat" };
-  const word = delta.percent > 0 ? "Up" : "Down";
-  return { label: `${word} ${Math.abs(delta.percent)}% on ${than}`, direction: delta.direction };
-}
+export type { HeroLine } from "@/lib/dashboard/period";
 
 export type MonthlyCashPoint = {
   month: string;
