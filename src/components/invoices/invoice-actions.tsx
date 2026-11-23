@@ -3,7 +3,7 @@
 import { Download, PoundSterling, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition, type ReactNode } from "react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonClasses } from "@/components/ui/button";
 import { FieldError, Input, Label } from "@/components/ui/form";
 import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
 import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
@@ -40,7 +40,7 @@ function AmountDifference({
   const diff = receivedPence - balancePence;
   if (diff === 0) return null;
   return (
-    <p className="mt-2 text-sm text-amber-700">
+    <p className="mt-2 text-sm text-warning">
       {diff > 0
         ? `${formatGBP(diff)} more than the balance due. The extra will show as a refund due to the client.`
         : `${formatGBP(-diff)} less than the balance due. The rest will stay owed on the invoice.`}
@@ -118,7 +118,7 @@ export function InvoiceActions({
         <Label htmlFor={id}>{label}</Label>
         <select
           id={id}
-          className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+          className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm"
           value={placeholder === null ? (selectedMatchId ?? "") : ""}
           onChange={(e) => chooseReceipt(e.target.value)}
         >
@@ -183,27 +183,16 @@ export function InvoiceActions({
   return (
     <div className="min-w-0 flex-1 space-y-4">
       <div className="flex flex-wrap gap-2">
-        <a href={`/api/invoices/${invoiceId}/pdf`}>
-          <Button type="button" variant="secondary" disabled={pending}>
-            <Download className="h-4 w-4" />
-            Download PDF
-          </Button>
+        <a href={`/api/invoices/${invoiceId}/pdf`} className={buttonClasses("ghost")}>
+          <Download className="h-4 w-4" />
+          Download PDF
         </a>
         {extraActions}
-        {(status === "sent" || status === "overdue") && (
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={pending}
-            onClick={togglePayment}
-          >
-            <PoundSterling className="h-4 w-4" />
-            Record payment
-          </Button>
-        )}
         {(status === "draft" || status === "sent" || status === "overdue") && (
           <Button
             type="button"
+            // Pink while it is a draft; once sent, recording payment is the main job.
+            variant={status === "draft" ? "primary" : "ghost"}
             disabled={pending}
             onClick={async () => {
               if (isImported) {
@@ -224,6 +213,16 @@ export function InvoiceActions({
           >
             <Send className="h-4 w-4" />
             {pending ? "Sending…" : status === "draft" ? "Send invoice" : "Resend invoice"}
+          </Button>
+        )}
+        {(status === "sent" || status === "overdue") && (
+          <Button
+            type="button"
+            disabled={pending}
+            onClick={togglePayment}
+          >
+            <PoundSterling className="h-4 w-4" />
+            Record payment
           </Button>
         )}
       </div>
@@ -266,7 +265,7 @@ export function InvoiceActions({
           {loadingMatches ? (
             <p className="text-sm text-muted">Searching bank transactions…</p>
           ) : selectedMatch && !manualEntry ? (
-            <div className="rounded-lg border border-border bg-wash/40 p-3">
+            <div className="rounded-xl border border-border bg-wash/40 p-3">
               <p className="text-sm font-medium">
                 {selectedIsSuggested ? "Identified bank payment" : "Chosen bank payment"}
               </p>

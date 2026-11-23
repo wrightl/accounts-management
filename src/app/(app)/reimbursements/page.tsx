@@ -24,6 +24,7 @@ import { DisplayDate } from "@/components/date-format-provider";
 import { PageHeader } from "@/components/ui/page-header";
 import { Input } from "@/components/ui/form";
 import { formatReimbursementRef } from "@/lib/references";
+import { EmptyState } from "@/components/ui/empty-state";
 
 const SORT = defineTableSort({
   columns: ["payee", "status", "reference", "date", "created", "total"],
@@ -170,7 +171,7 @@ export default async function ReimbursementsPage({
           )}
         </div>
         {runs.length === 0 ? (
-          <p className="text-sm text-muted">No reimbursement runs match.</p>
+          <EmptyState description="No reimbursement runs match." />
         ) : (
           <Table>
             <THead>

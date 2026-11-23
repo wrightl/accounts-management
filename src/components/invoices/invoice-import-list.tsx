@@ -5,7 +5,7 @@ import type { ImportBatchSummary } from "@/lib/invoices/import/queries";
 import { cn } from "@/lib/utils";
 
 const STATUS = {
-  draft: { label: "Not saved yet", className: "bg-brand text-navy" },
+  draft: { label: "Not saved yet", className: "bg-warning/15 text-warning" },
   committed: { label: "Saved", className: "bg-success/15 text-success" },
   undone: { label: "Undone", className: "bg-wash text-muted" },
   discarded: { label: "Discarded", className: "bg-wash text-muted" },
@@ -51,7 +51,7 @@ export function InvoiceImportList({ batches }: { batches: ImportBatchSummary[] }
                   {batch.status === "draft" ? (
                     <Link
                       href={`/invoices/import/${batch.id}`}
-                      className="text-xs text-brand underline underline-offset-2"
+                      className="text-xs text-foreground underline underline-offset-2"
                     >
                       Review and save
                     </Link>

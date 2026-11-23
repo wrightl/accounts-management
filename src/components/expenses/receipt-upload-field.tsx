@@ -15,7 +15,7 @@ function extractionSummary(extraction: ReceiptExtraction): string {
   if (extraction.amountPounds) parts.push("amount");
   if (extraction.spentAt) parts.push("date");
   if (extraction.category) parts.push("category");
-  if (parts.length === 0) return "No fields could be read — fill in the details manually.";
+  if (parts.length === 0) return "No fields could be read. Fill in the details by hand.";
   return `Filled: ${parts.join(", ")}`;
 }
 
@@ -93,7 +93,7 @@ export function ReceiptUploadField({
       // The action rejects, rather than returns, if the request is refused.
       const result = await extractReceiptFields(formData).catch(() => ({
         ok: false as const,
-        error: "Could not read this receipt — fill in the details manually.",
+        error: "Could not read this receipt. Fill in the details by hand.",
       }));
       if (!result.ok) {
         setExtractError(result.error);
@@ -105,7 +105,7 @@ export function ReceiptUploadField({
   }
 
   return (
-    <div className="space-y-3 rounded-lg border border-border p-4">
+    <div className="space-y-3 rounded-xl border border-border p-4">
       <div>
         <h2 className="font-display text-lg font-semibold">Receipt</h2>
         <p className="mt-1 text-xs text-muted">
@@ -119,7 +119,7 @@ export function ReceiptUploadField({
         <img
           src={previewUrl}
           alt="Receipt preview"
-          className="max-h-40 rounded-md border border-border object-contain"
+          className="max-h-40 rounded-xl border border-border object-contain"
         />
       )}
 

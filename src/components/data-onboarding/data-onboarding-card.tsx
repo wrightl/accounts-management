@@ -21,6 +21,7 @@ import type { ChecklistStep, StepState } from "@/lib/data-onboarding/checklist";
 import type { DataOnboardingView } from "@/lib/data-onboarding/queries";
 import type { StepId } from "@/lib/data-onboarding/steps";
 import { cn } from "@/lib/utils";
+import { cardClasses } from "@/components/ui/card";
 
 /** Where "Back to checklist" lands. */
 export const DATA_ONBOARDING_ANCHOR = "data-setup";
@@ -28,7 +29,7 @@ export const DATA_ONBOARDING_ANCHOR = "data-setup";
 const STATE_ICON: Record<StepState, { Icon: typeof CircleCheck; className: string; label: string }> = {
   todo: { Icon: CircleDashed, className: "text-muted", label: "To do" },
   in_progress: { Icon: CircleDot, className: "text-navy", label: "In progress" },
-  done: { Icon: CircleCheck, className: "text-green-700", label: "Done" },
+  done: { Icon: CircleCheck, className: "text-success", label: "Done" },
   skipped: { Icon: CircleMinus, className: "text-muted", label: "Skipped" },
   not_applicable: { Icon: CircleMinus, className: "text-muted", label: "Doesn't apply" },
 };
@@ -84,7 +85,7 @@ export function DataOnboardingCard({
       <section
         id={DATA_ONBOARDING_ANCHOR}
         aria-labelledby="data-setup-title"
-        className="mt-6 flex flex-wrap items-start gap-4 rounded-2xl border border-border bg-surface px-5 py-4"
+        className={cardClasses("mt-6 flex flex-wrap items-start gap-4")}
       >
         <History className="mt-0.5 h-5 w-5 shrink-0 text-muted" aria-hidden />
         <div className="min-w-0 flex-1">
@@ -121,7 +122,7 @@ export function DataOnboardingCard({
       <section
         id={DATA_ONBOARDING_ANCHOR}
         aria-label="History setup"
-        className="mt-6 flex flex-wrap items-center gap-4 rounded-2xl border border-border bg-surface px-5 py-3"
+        className={cardClasses("mt-6 flex flex-wrap items-center gap-4")}
       >
         <Pause className="h-4 w-4 shrink-0 text-muted" aria-hidden />
         <p className="min-w-0 flex-1 text-sm text-muted">
@@ -149,7 +150,7 @@ export function DataOnboardingCard({
     <section
       id={DATA_ONBOARDING_ANCHOR}
       aria-labelledby="data-setup-title"
-      className="mt-6 rounded-2xl border border-border bg-surface px-5 py-4"
+      className={cardClasses("mt-6")}
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
@@ -367,7 +368,7 @@ function MenuItem({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="rounded-lg px-3 py-2 text-left text-sm text-foreground hover:bg-wash disabled:opacity-50"
+      className="rounded-xl px-3 py-2 text-left text-sm text-foreground hover:bg-wash disabled:opacity-50"
     >
       {children}
     </button>

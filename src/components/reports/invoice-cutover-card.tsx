@@ -14,6 +14,7 @@ import { FieldError, Input, Label } from "@/components/ui/form";
 import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
 import { useFieldErrors } from "@/components/ui/use-field-errors";
 import { formatGBP } from "@/lib/money";
+import { cardClasses } from "@/components/ui/card";
 
 type Preview = Extract<InvoiceCutoverPreview, { ok: true }> & { cutover: string };
 
@@ -65,7 +66,7 @@ export function InvoiceCutoverCard({
   }
 
   return (
-    <section className="mt-6 rounded-2xl border border-border bg-surface p-5">
+    <section className={cardClasses("mt-6")}>
       <div className="flex items-start gap-3">
         <History className="mt-0.5 h-5 w-5 shrink-0 text-muted" aria-hidden />
         <div className="min-w-0 flex-1">

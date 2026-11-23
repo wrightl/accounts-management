@@ -14,6 +14,7 @@ import { StatusPill } from "@/components/platform/status-pill";
 import { cn } from "@/lib/utils";
 import type { ActionResult } from "@/actions/result";
 import { DisplayDate } from "@/components/date-format-provider";
+import { cardClasses } from "@/components/ui/card";
 
 function StripeId({ id, href }: { id: string | null; href: string | null }) {
   if (!id) return <dd className="font-mono text-xs">—</dd>;
@@ -93,7 +94,7 @@ export function CompanyBillingOpsForm({
   }
 
   return (
-    <section className="rounded-2xl border border-border bg-white p-5">
+    <section className={cardClasses()}>
       <h2 className="font-display text-lg font-semibold">Billing</h2>
       <dl className="mt-3 space-y-2 text-sm">
         <Row label="Plan">
@@ -195,7 +196,7 @@ export function CompanyBillingOpsForm({
               <span className="text-muted">Note</span>
               <input
                 name="note"
-                className="mt-1 w-full rounded-lg border border-border px-3 py-2"
+                className="mt-1 w-full rounded-xl border border-border px-3 py-2"
                 placeholder="Optional reason"
               />
             </label>
@@ -204,7 +205,7 @@ export function CompanyBillingOpsForm({
               <input
                 type="date"
                 name="expiresAt"
-                className="mt-1 w-full rounded-lg border border-border px-3 py-2"
+                className="mt-1 w-full rounded-xl border border-border px-3 py-2"
               />
             </label>
             <button
@@ -240,7 +241,7 @@ export function CompanyBillingOpsForm({
                 min={1}
                 max={90}
                 defaultValue={7}
-                className="mt-1 w-24 rounded-lg border border-border px-3 py-2"
+                className="mt-1 w-24 rounded-xl border border-border px-3 py-2"
               />
             </label>
             <button

@@ -24,6 +24,7 @@ import {
     parseSuspendCompanyInput,
 } from '@/lib/platform/schema';
 import { useAlert } from '@/components/ui/alert-dialog';
+import { Card, cardClasses } from "@/components/ui/card";
 
 export function CompanySuspendForm({
     companyId,
@@ -49,7 +50,7 @@ export function CompanySuspendForm({
     return (
         <div
             ref={containerRef}
-            className="rounded-2xl border border-border bg-white p-5"
+            className={cardClasses()}
         >
             <h2 className="font-display text-lg font-semibold">
                 {suspended ? 'Unsuspend company' : 'Suspend company'}
@@ -335,12 +336,12 @@ export function CompanyDeleteForm({
     return (
         <div
             ref={containerRef}
-            className="rounded-2xl border border-red-200 bg-red-50/40 p-5"
+            className="rounded-2xl border border-destructive/25 bg-destructive/5 p-5"
         >
-            <h2 className="font-display text-lg font-semibold text-red-900">
+            <h2 className="font-display text-lg font-semibold text-destructive">
                 Delete company
             </h2>
-            <p className="mt-1 text-sm text-red-900/80">
+            <p className="mt-1 text-sm text-muted">
                 Permanently delete this company, all tenant data, and member
                 accounts (Clerk + database). Type{' '}
                 <span className="font-semibold">{companyName}</span> to confirm.
@@ -445,7 +446,7 @@ export function CompanyDemoResetForm({
     const [pending, start] = useTransition();
 
     return (
-        <div className="rounded-2xl border border-border bg-white p-5">
+        <Card>
             <h2 className="font-display text-lg font-semibold">
                 Reset demo data
             </h2>
@@ -483,6 +484,6 @@ export function CompanyDemoResetForm({
             >
                 {pending ? 'Resetting…' : 'Reset demo data'}
             </Button>
-        </div>
+        </Card>
     );
 }

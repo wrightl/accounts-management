@@ -52,7 +52,7 @@ export function ReceiptPanel({
           {receipts.map((r) => (
             <li
               key={r.id}
-              className="rounded-lg border border-border px-3 py-2 text-sm"
+              className="rounded-xl border border-border px-3 py-2 text-sm"
             >
               <div className="flex items-center justify-between gap-3">
                 <a
@@ -179,7 +179,7 @@ function ReceiptPreview({
       <iframe
         src={src}
         title={`Preview of ${receipt.filename}`}
-        className="mt-2 h-[32rem] w-full rounded border border-border bg-white"
+        className="mt-2 h-[32rem] w-full rounded-xl border border-border bg-white"
       />
     );
   }
@@ -190,7 +190,7 @@ function ReceiptPreview({
         src={src}
         alt={`Preview of ${receipt.filename}`}
         loading="lazy"
-        className="mt-2 max-h-[32rem] w-full rounded border border-border object-contain"
+        className="mt-2 max-h-[32rem] w-full rounded-xl border border-border object-contain"
       />
     );
   }

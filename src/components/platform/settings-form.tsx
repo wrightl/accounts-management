@@ -23,6 +23,7 @@ import {
   parsePlatformSettingsInput,
   platformSettingsRawFromFormData,
 } from "@/lib/platform/schema";
+import { cardClasses } from "@/components/ui/card";
 
 type CatalogPreview = {
   essentials: {
@@ -88,7 +89,7 @@ export function PlatformSettingsForm({
     <form
       ref={formRef}
       noValidate
-      className="mt-6 max-w-xl space-y-5 rounded-2xl border border-border bg-white p-6"
+      className={cardClasses("mt-6 max-w-xl space-y-5")}
       onSubmit={preventResetSubmit((formData) => {
         clearAll();
         formData.set("defaultReceiptOcrProvider", ocrProvider);
@@ -202,7 +203,7 @@ export function PlatformSettingsForm({
           >
             {modelOptions.map((model) => (
               <option key={model.id} value={model.id}>
-                {model.name} — {model.id}
+                {model.name} ({model.id})
               </option>
             ))}
             <option value={CUSTOM_RECEIPT_OCR_MODEL}>Custom model ID…</option>
@@ -327,7 +328,7 @@ export function PlatformSettingsForm({
             {catalogPreview.essentials.name}
           </span>
           {catalogPreview.essentials.description
-            ? ` — ${catalogPreview.essentials.description}`
+            ? `: ${catalogPreview.essentials.description}`
             : null}
           <br />
           {catalogPreview.essentials.monthLabel}/mo ·{" "}
@@ -390,7 +391,7 @@ export function PlatformSettingsForm({
             {catalogPreview.premium.name}
           </span>
           {catalogPreview.premium.description
-            ? ` — ${catalogPreview.premium.description}`
+            ? `: ${catalogPreview.premium.description}`
             : null}
           <br />
           {catalogPreview.premium.monthLabel}/mo ·{" "}

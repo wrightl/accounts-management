@@ -12,6 +12,7 @@ import { ClearFilters } from "@/components/platform/pager";
 import { ListPagination } from "@/components/ui/list-pagination";
 import { listPageHref, parseListPaging, fetchPage } from "@/lib/list-paging";
 import { DisplayDate } from "@/components/date-format-provider";
+import { EmptyState } from "@/components/ui/empty-state";
 
 
 export default async function PlatformActivityPage({
@@ -55,7 +56,7 @@ export default async function PlatformActivityPage({
         <select
           name="companyId"
           defaultValue={params.companyId ?? ""}
-          className="rounded-lg border border-border bg-white px-3 py-2 text-sm"
+          className="rounded-xl border border-border bg-white px-3 py-2 text-sm"
         >
           <option value="">All companies</option>
           {companyOptions.map((c) => (
@@ -68,7 +69,7 @@ export default async function PlatformActivityPage({
           name="action"
           defaultValue={params.action ?? ""}
           placeholder="Action prefix (e.g. platform.)"
-          className="rounded-lg border border-border px-3 py-2 text-sm"
+          className="rounded-xl border border-border px-3 py-2 text-sm"
         />
         <button
           type="submit"
@@ -84,7 +85,7 @@ export default async function PlatformActivityPage({
 
       <div className="mt-6">
         {rows.length === 0 ? (
-          <p className="text-sm text-muted">No activity matching filters.</p>
+          <EmptyState description="No activity matching filters." />
         ) : (
           <Table>
             <THead>

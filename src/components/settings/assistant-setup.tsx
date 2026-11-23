@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
+import { cardClasses } from "@/components/ui/card";
 
 type Step = { title: string; body?: ReactNode; showAddress?: boolean };
 
@@ -138,7 +139,7 @@ export function AssistantSetup({ address }: { address: string }) {
       <section
         aria-live="polite"
         aria-labelledby="assistant-step-title"
-        className="rounded-2xl border border-border bg-surface p-5"
+        className={cardClasses()}
       >
         <p className="text-sm text-muted">
           Step {index + 1} of {assistant.steps.length}

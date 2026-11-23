@@ -4,13 +4,13 @@ import { guardTenantPage } from "@/lib/auth";
 import { QueryStatusBadge } from "@/components/queries/query-status-badge";
 import { QueryThreadActions } from "@/components/queries/query-thread-actions";
 import { DisplayDate } from "@/components/date-format-provider";
-import { BackLink } from "@/components/ui/back-link";
 import { recordScopeFor } from "@/lib/accountant/record-scope";
 import { isUuid } from "@/lib/labels/params";
 import { getQueryDetail } from "@/lib/queries/queries";
 import { findQueryRecord } from "@/lib/queries/records";
 import type { QueryRecordKind } from "@/lib/queries/status";
 import { can } from "@/lib/roles";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function QueryDetailPage({
   params,
@@ -37,22 +37,21 @@ export default async function QueryDetailPage({
 
   return (
     <div>
-      <div className="mb-6">
-        <BackLink href="/queries">Queries</BackLink>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <h1 className="font-display text-2xl font-semibold">{query.subject}</h1>
-        <QueryStatusBadge status={query.status} />
-      </div>
-      <p className="mt-1 text-sm text-muted">
-        {record ? (
-          <Link href={record.href} className="text-foreground underline underline-offset-2">
-            {record.label}
-          </Link>
-        ) : (
-          query.recordLabel ?? "General question"
-        )}
-      </p>
+      <PageHeader
+        backHref="/queries"
+        backLabel="Queries"
+        title={query.subject}
+        titleAddon={<QueryStatusBadge status={query.status} />}
+        description={
+          record ? (
+            <Link href={record.href} className="text-foreground underline underline-offset-2">
+              {record.label}
+            </Link>
+          ) : (
+            query.recordLabel ?? "General question"
+          )
+        }
+      />
 
       <ol className="mt-6 space-y-4">
         {messages.map((m) => (

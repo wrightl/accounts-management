@@ -17,7 +17,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const ICON_STYLES: Record<QueryStatus, string> = {
-  open: "fill-current/20 text-amber-600",
+  open: "fill-current/20 text-warning",
   answered: "fill-current/20 text-navy",
   closed: "text-muted",
 };

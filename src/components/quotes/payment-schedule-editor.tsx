@@ -69,7 +69,7 @@ export function PaymentScheduleEditor({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="font-medium">Payment schedule</h3>
-          <p className="text-xs text-muted">Optional — copied to the order when accepted.</p>
+          <p className="text-xs text-muted">Optional. Copied to the order when accepted.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {[30, 60, 90].map((days) => (
@@ -102,7 +102,7 @@ export function PaymentScheduleEditor({
       {milestones.map((milestone, index) => (
         <div
           key={milestone.key}
-          className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-2"
+          className="grid gap-2 rounded-xl border border-border p-3 sm:grid-cols-2"
         >
           <div className="sm:col-span-2">
             <Label>Label</Label>

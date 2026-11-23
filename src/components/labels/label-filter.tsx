@@ -65,7 +65,7 @@ export function LabelFilter({
             <Command.Input
               autoFocus
               placeholder="Search labels…"
-              className="w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-foreground focus:outline-none"
+              className="w-full rounded-xl border border-border bg-surface px-2 py-1.5 text-sm text-foreground focus:outline-none"
             />
             <Command.List className="mt-2 max-h-56 overflow-y-auto">
               <Command.Empty className="px-2 py-1.5 text-sm text-muted">No labels found.</Command.Empty>
@@ -82,7 +82,7 @@ export function LabelFilter({
                           : [...selected, label.id],
                       )
                     }
-                    className="flex cursor-pointer items-center justify-between gap-2 rounded-lg px-2 py-1.5 data-[selected=true]:bg-wash"
+                    className="flex cursor-pointer items-center justify-between gap-2 rounded-xl px-2 py-1.5 data-[selected=true]:bg-wash"
                   >
                     <LabelChip name={label.name} color={label.color} />
                     <Check

@@ -445,7 +445,7 @@ export function InvoiceForm({
           Add line
         </Button>
         {clientRebillable.length > 0 ? (
-          <div className="rounded-lg border border-border bg-wash/50 p-3 text-sm">
+          <div className="rounded-xl border border-border bg-wash/50 p-3 text-sm">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="font-medium">Rebillable expenses for this client</p>
               {notAdded.length > 1 ? (

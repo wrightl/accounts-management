@@ -7,6 +7,7 @@ import {
 } from "@/actions/billing";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
+import { Callout } from "@/components/ui/callout";
 
 export function SubscribeGateActions({
   planLabel,
@@ -65,21 +66,21 @@ export function SubscribeGateActions({
   return (
     <div className="space-y-4">
       {canceled ? (
-        <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <Callout tone="warning">
           Checkout was canceled. Add a card for {planLabel} to start your 30-day
           free trial (first charge after the trial), or continue without a card
           on the Trial plan.
-        </p>
+        </Callout>
       ) : (
         <p className="text-sm text-muted">
-          Add a card for <strong>{planLabel}</strong> to open your books — you
-          get 30 days free before the first charge — or continue without a card
+          Add a card for <strong>{planLabel}</strong> to open your books. You
+          get 30 days free before the first charge. Or continue without a card
           on the Trial plan.
         </p>
       )}
 
       {error ? (
-        <p className="text-sm text-red-700" role="alert">
+        <p className="text-sm text-destructive" role="alert">
           {error}
         </p>
       ) : null}

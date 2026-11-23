@@ -108,13 +108,13 @@ describe("creditExplainLabel", () => {
         incomeCategory: "Grant",
         note: "Innovate UK",
       }),
-    ).toBe("Other income · Grant — Innovate UK");
+    ).toBe("Other income · Grant: Innovate UK");
   });
 
   it("labels transfer and tax_or_loan", () => {
     expect(creditExplainLabel({ matchType: "transfer" })).toBe("Transfer");
     expect(
       creditExplainLabel({ matchType: "tax_or_loan", note: "VAT refund" }),
-    ).toBe("Tax or loan — VAT refund");
+    ).toBe("Tax or loan: VAT refund");
   });
 });

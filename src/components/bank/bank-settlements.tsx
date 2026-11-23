@@ -17,7 +17,7 @@ export function BankSettlements({
 }) {
   if (settlements.length === 0) return null;
   return (
-    <div className={cn("rounded-lg border border-border bg-wash/50 px-4 py-3 text-sm", className)}>
+    <div className={cn("rounded-xl border border-border bg-wash/50 px-4 py-3 text-sm", className)}>
       <p className="font-medium">
         {settlements.length === 1 ? "Bank transaction" : "Bank transactions"}
       </p>
@@ -31,7 +31,7 @@ export function BankSettlements({
               href={s.href}
               className="font-medium text-foreground underline-offset-2 hover:underline"
             >
-              View transaction →
+              View transaction
             </Link>
             {action ? <> · {action}</> : null}
           </li>

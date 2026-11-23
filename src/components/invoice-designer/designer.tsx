@@ -18,6 +18,7 @@ import { designPoppins } from "@/components/invoice-designer/fonts";
 import { DesignKindContext } from "@/components/invoice-designer/kind-context";
 import { Layers, Palette, type DesignerAsset } from "@/components/invoice-designer/panels";
 import { designerReducer, initialDesignerState } from "@/components/invoice-designer/state";
+import { Callout } from "@/components/ui/callout";
 
 const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
@@ -257,9 +258,9 @@ export function Designer({
       </div>
 
       {error ? (
-        <p role="alert" className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">
+        <Callout role="alert" tone="danger" className="mb-3">
           {error}
-        </p>
+        </Callout>
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-[16rem_minmax(0,1fr)_17rem]">

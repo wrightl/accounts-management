@@ -40,7 +40,7 @@ function RunCronButton({
       >
         {pending ? "Running…" : label}
       </Button>
-      {error ? <p className="mt-2 text-sm text-red-700">{error}</p> : null}
+      {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
     </div>
   );
 }

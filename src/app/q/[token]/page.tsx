@@ -142,7 +142,7 @@ export default async function PublicQuotePage({
       <div className="mt-8 flex flex-wrap items-center gap-3">
         <a
           href={`/q/${encodeURIComponent(token)}/pdf`}
-          className={buttonClasses("secondary")}
+          className={buttonClasses("ghost")}
         >
           <Download className="h-4 w-4" />
           Download PDF

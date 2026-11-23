@@ -29,7 +29,7 @@ function StatusFilter({
         name={name}
         defaultValue={value ?? "all"}
         aria-label="Filter by status"
-        className="rounded-lg border border-border bg-white px-3 py-2 text-sm"
+        className="rounded-xl border border-border bg-white px-3 py-2 text-sm"
       >
         {options.map((o) => (
           <option key={o.value} value={o.value}>

@@ -99,10 +99,10 @@ export function TotalSharesForm({
         <p className="mt-1 text-xs text-muted">
           Active sum: {activeShareSum}
           {totalShares != null && activeShareSum === totalShares
-            ? " — balanced"
+            ? ", balanced"
             : totalShares != null
-              ? " — does not match"
-              : " — set total to lock the register"}
+              ? ", does not match"
+              : ". Set the total to lock the register."}
         </p>
         <FieldError id="totalShares-error">{fieldErrors.totalShares}</FieldError>
       </div>

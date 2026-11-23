@@ -1,13 +1,21 @@
 import { cn } from "@/lib/utils";
 import type { ComponentProps } from "react";
 
+/**
+ * Button hierarchy, so pages read the same way:
+ * - primary (pink): the one thing this view is for. At most one per view.
+ * - secondary (navy): the main alternative, or the submit of a small inline
+ *   form. Use sparingly; two navy buttons side by side compete with the pink.
+ * - ghost (outline): everything else, including Copy, Cancel, Filter, Export.
+ * - destructive: deletes and other actions that can't be undone.
+ */
 export type Variant = "primary" | "secondary" | "ghost" | "destructive";
 
 const variants: Record<Variant, string> = {
   primary: "bg-brand text-brand-foreground hover:bg-brand-hover",
   secondary: "bg-navy text-white hover:bg-navy/90",
   ghost: "border-navy/30 bg-surface text-foreground hover:border-navy/60 hover:bg-wash",
-  destructive: "bg-red-700 text-white hover:bg-red-800",
+  destructive: "bg-destructive text-white hover:bg-destructive/90",
 };
 
 const base =

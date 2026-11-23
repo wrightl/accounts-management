@@ -5,7 +5,7 @@ import { RecordQueries } from "@/components/queries/record-queries";
 import { getShareholder } from "@/lib/shareholders/queries";
 import { listFounders } from "@/lib/expenses/queries";
 import { ShareholderForm } from "@/components/shareholders/shareholder-form";
-import { BackLink } from "@/components/ui/back-link";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function ShareholderDetailPage({
   params,
@@ -25,18 +25,18 @@ export default async function ShareholderDetailPage({
 
   return (
     <div>
-      <div className="mb-6">
-        <BackLink href="/shareholders">Shareholders</BackLink>
-      </div>
-      <h1 className="mb-2 font-display text-2xl font-semibold">
-        {shareholder.name}
-      </h1>
-      {shareholder.archivedAt && (
-        <p className="mb-6 text-sm text-muted">Archived — read only.</p>
-      )}
-      {inPack ? (
-        <p className="text-sm text-muted">{shareholder.shareCount} shares</p>
-      ) : null}
+      <PageHeader
+        backHref="/shareholders"
+        backLabel="Shareholders"
+        title={shareholder.name}
+        description={
+          shareholder.archivedAt
+            ? "Archived, so it can't be changed."
+            : inPack
+              ? `${shareholder.shareCount} shares`
+              : undefined
+        }
+      />
       {!shareholder.archivedAt && !inPack && (
         <div className="mt-6">
           <ShareholderForm

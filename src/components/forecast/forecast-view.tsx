@@ -12,7 +12,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Card, CardTitle, CardValue } from "@/components/ui/card";
+import { Card, CardTitle, CardValue, cardClasses } from "@/components/ui/card";
 import { Input, Label, Select } from "@/components/ui/form";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import {
@@ -23,6 +23,9 @@ import {
 } from "@/lib/forecast/engine";
 import { formatGBP, poundsToPence } from "@/lib/money";
 import { DisplayDate } from "@/components/date-format-provider";
+import { Callout } from "@/components/ui/callout";
+import { calloutTones } from "@/components/ui/callout";
+import { cn } from "@/lib/utils";
 
 function shortDate(iso: string): string {
   return new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-GB", {
@@ -113,7 +116,7 @@ export function ForecastView({
       {warning ? (
         <p
           role="status"
-          className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm"
+          className={cn("rounded-xl border px-4 py-3 text-sm", calloutTones.danger)}
         >
           {forecast.firstNegative
             ? <>Cash runs out in the week of <DisplayDate value={forecast.firstNegative.start} />, </>
@@ -122,9 +125,9 @@ export function ForecastView({
           <DisplayDate value={forecast.lowest.start} />).
         </p>
       ) : (
-        <p role="status" className="rounded-xl bg-wash px-4 py-3 text-sm">
+        <Callout role="status">
           Cash stays above {formatGBP(forecast.lowCashPence)} for the next 13 weeks.
-        </p>
+        </Callout>
       )}
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -176,7 +179,7 @@ export function ForecastView({
         </p>
       </section>
 
-      <section className="rounded-2xl border border-border bg-surface p-5">
+      <section className={cardClasses()}>
         <h2 className="font-display text-lg font-semibold">What if…</h2>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <div>

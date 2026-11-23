@@ -14,6 +14,10 @@ import { ListPagination } from "@/components/ui/list-pagination";
 import { listPageHref, parseListPaging } from "@/lib/list-paging";
 import { formatGBP } from "@/lib/money";
 import { DisplayDate } from "@/components/date-format-provider";
+import { PageHeader } from "@/components/ui/page-header";
+import { cardClasses } from "@/components/ui/card";
+import { calloutTones } from "@/components/ui/callout";
+import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Director's loans" };
 
@@ -72,16 +76,14 @@ export default async function DirectorsLoansPage({
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-semibold">Director&apos;s loans</h1>
-      <p className="mt-1 max-w-2xl text-muted">
-        What each director owes the company, or is owed by it. Expenses a director paid
-        personally add to what the company owes them; reimbursements and money they take out
-        reduce it.
-      </p>
+      <PageHeader
+        title={<>Director&apos;s loans</>}
+        description="What each director owes the company, or is owed by it. Expenses a director paid personally add to what the company owes them; reimbursements and money they take out reduce it."
+      />
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         {accounts.directors.map((d) => (
-          <section key={d.userId} className="rounded-2xl border border-border bg-surface p-5">
+          <section key={d.userId} className={cardClasses()}>
             <h2 className="text-sm font-medium text-muted">{d.name}</h2>
             <p
               className={
@@ -113,7 +115,7 @@ export default async function DirectorsLoansPage({
                 {d.warnings.map((w) => (
                   <li
                     key={w.kind}
-                    className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm"
+                    className={cn("rounded-xl border px-4 py-3 text-sm", calloutTones.danger)}
                   >
                     <WarningText warning={w} />
                   </li>

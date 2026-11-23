@@ -146,7 +146,7 @@ export function ExpenseImportButton({
         </form>
 
         {rows && rows.length > 0 && (
-          <div className="mt-6 max-h-64 overflow-y-auto rounded-lg border border-border">
+          <div className="mt-6 max-h-64 overflow-y-auto rounded-xl border border-border">
             <Table>
               <THead>
                 <TR>

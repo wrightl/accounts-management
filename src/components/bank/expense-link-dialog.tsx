@@ -246,7 +246,7 @@ export function AttachExpenseDialog({
           params={{ bankTransactionId: transactionId }}
           className="text-sm font-medium underline-offset-2 hover:underline"
         >
-          Create a new expense instead →
+          Create a new expense instead
         </NewExpenseFromBankListLink>
       }
     />

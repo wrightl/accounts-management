@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useAlert } from "@/components/ui/alert-dialog";
 import { FieldError } from "@/components/ui/form";
+import { Callout } from "@/components/ui/callout";
 
 const OLD_DEBT_NOTE =
   "Clients get the next reminder on your schedule. Take care with very old debts, as a debt can become too old to recover.";
@@ -51,7 +52,7 @@ export function UnchasedImportsBanner({
   }
 
   return (
-    <div className="mt-6 rounded-xl bg-wash px-4 py-3 text-sm">
+    <Callout className="mt-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p>
           {count} imported unpaid {count === 1 ? "invoice" : "invoices"} ({totalFormatted}){" "}
@@ -66,7 +67,7 @@ export function UnchasedImportsBanner({
         ) : null}
       </div>
       <FieldError id="chase-imports-error">{error}</FieldError>
-    </div>
+    </Callout>
   );
 }
 
@@ -103,7 +104,7 @@ export function InvoiceChaseToggle({
   }
 
   return (
-    <div className="mt-3 rounded-xl bg-wash px-4 py-3 text-sm">
+    <Callout className="mt-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p>
           {enabled
@@ -117,6 +118,6 @@ export function InvoiceChaseToggle({
         </Button>
       </div>
       <FieldError id="chase-invoice-error">{error}</FieldError>
-    </div>
+    </Callout>
   );
 }

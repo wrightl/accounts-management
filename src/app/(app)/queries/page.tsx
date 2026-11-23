@@ -65,7 +65,7 @@ export default async function QueriesPage({
       <div className="mt-6">
         {rows.length === 0 ? (
           status ? (
-            <p className="text-sm text-muted">No queries with this status.</p>
+            <EmptyState description="No queries with this status." />
           ) : (
             <EmptyState
               title="No queries yet"

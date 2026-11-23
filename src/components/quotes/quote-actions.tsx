@@ -61,14 +61,17 @@ export function QuoteActions({
   return (
     <>
       <div className="flex flex-wrap gap-2">
-        <a href={`/api/quotes/${quoteId}/pdf`}>
-          <Button type="button" variant="secondary" disabled={pending}>
-            <Download className="h-4 w-4" />
-            Download PDF
-          </Button>
+        <a href={`/api/quotes/${quoteId}/pdf`} className={buttonClasses("ghost")}>
+          <Download className="h-4 w-4" />
+          Download PDF
         </a>
         {canSend && (
-          <Button type="button" disabled={pending} onClick={openSendDialog}>
+          <Button
+            type="button"
+            variant={status === "draft" ? "primary" : "ghost"}
+            disabled={pending}
+            onClick={openSendDialog}
+          >
             <Send className="h-4 w-4" />
             Send PDF
           </Button>

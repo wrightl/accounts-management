@@ -139,7 +139,6 @@ export default async function ExpensesPage({
       <SetupStepBanner stepId="expenses" entityType={entityType} from={sp.from} />
       <PageHeader
         title="Expenses"
-        description="Log spend and attach receipts."
         actions={
           canWrite ? (
             <>
@@ -163,7 +162,7 @@ export default async function ExpensesPage({
       ) : null}
 
       {scope === "all" && reimbSummary.count > 0 && (
-        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-wash/50 px-4 py-3 text-sm">
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-wash/50 px-4 py-3 text-sm">
           <span>
             <span className="font-medium text-foreground">{reimbSummary.count}</span>{" "}
             reimbursable expenses totalling{" "}
@@ -173,7 +172,7 @@ export default async function ExpensesPage({
             href="/reimbursements"
             className="font-medium text-foreground underline-offset-2 hover:underline"
           >
-            Create reimbursement run →
+            Create reimbursement run
           </Link>
         </div>
       )}
@@ -214,7 +213,7 @@ export default async function ExpensesPage({
       <div className="mt-6">
         {rows.length === 0 ? (
           filtered || myReimbursable ? (
-            <p className="text-sm text-muted">No expenses match these filters.</p>
+            <EmptyState description="No expenses match these filters." />
           ) : (
             <EmptyState
               title="No expenses yet"
@@ -252,7 +251,7 @@ export default async function ExpensesPage({
               {rows.map((e) => (
                 <TR
                   key={e.id}
-                  className={e.status === "pending" ? "bg-amber-100 hover:bg-amber-200/70" : undefined}
+                  className={e.status === "pending" ? "bg-warning/10 hover:bg-warning/15" : undefined}
                 >
                   <TD
                     className={
@@ -291,7 +290,7 @@ export default async function ExpensesPage({
                       </span>
                     ) : null}
                     {e.status === "pending" && e.externalSenderEmail ? (
-                      <span className="block text-xs text-amber-800">
+                      <span className="block text-xs text-warning">
                         Sent by {e.externalSenderEmail}, check before approving
                       </span>
                     ) : null}

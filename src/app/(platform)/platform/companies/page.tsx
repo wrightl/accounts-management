@@ -12,6 +12,7 @@ import { ClearFilters } from "@/components/platform/pager";
 import { ListPagination } from "@/components/ui/list-pagination";
 import { listPageHref, parseListPaging, fetchPage } from "@/lib/list-paging";
 import { DisplayDate } from "@/components/date-format-provider";
+import { EmptyState } from "@/components/ui/empty-state";
 
 
 const FILTER_OPTIONS = [
@@ -89,7 +90,7 @@ export default async function PlatformCompaniesPage({
 
       <div className="mt-6">
         {rows.length === 0 ? (
-          <p className="text-sm text-muted">No companies found.</p>
+          <EmptyState description="No companies found." />
         ) : (
           <Table>
             <THead>

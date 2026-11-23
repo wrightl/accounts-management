@@ -12,6 +12,7 @@ import { DeleteUserButton } from "@/components/users/delete-user-button";
 import { roleLabel } from "@/lib/roles";
 import { buttonClasses } from "@/components/ui/button";
 import { SettingsPageHeader } from "@/components/settings/settings-page-header";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export default async function UsersPage({
   searchParams,
@@ -41,9 +42,7 @@ export default async function UsersPage({
 
       <div>
         {rows.length === 0 ? (
-          <p className="text-sm text-muted">
-            No users yet. Invite someone to get started.
-          </p>
+          <EmptyState description="No users yet. Invite someone to get started." />
         ) : (
           <Table>
             <THead>
@@ -71,7 +70,7 @@ export default async function UsersPage({
                     <div className="flex flex-wrap items-center gap-3">
                       <Link
                         href={`/users/${u.id}/edit`}
-                        className="text-sm text-brand hover:underline"
+                        className="text-sm text-foreground underline underline-offset-2"
                       >
                         Edit
                       </Link>

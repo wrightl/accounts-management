@@ -211,7 +211,7 @@ export default async function PublicInvoicePage({
         </div>
         <a
           href={`/i/${encodeURIComponent(token)}/pdf`}
-          className={buttonClasses("secondary")}
+          className={buttonClasses("ghost")}
         >
           <Download className="h-4 w-4" />
           Download PDF

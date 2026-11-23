@@ -306,7 +306,7 @@ export function BankToolbar({
         {labels ? <ManageLabelsButton labels={labels} /> : null}
         <Button
           type="button"
-          variant="secondary"
+          variant="ghost"
           disabled={pending}
           onClick={() => {
             startTransition(async () => {
@@ -321,11 +321,11 @@ export function BankToolbar({
           <RefreshCw className="h-4 w-4" />
           {pending ? "Matching…" : "Re-run suggestions"}
         </Button>
-        <Button type="button" variant="secondary" onClick={() => setCategoriesOpen(true)}>
+        <Button type="button" variant="ghost" onClick={() => setCategoriesOpen(true)}>
           <Tags className="h-4 w-4" />
           Categories
         </Button>
-        <Button type="button" variant="secondary" onClick={() => setCardsOpen(true)}>
+        <Button type="button" variant="ghost" onClick={() => setCardsOpen(true)}>
           <CreditCard className="h-4 w-4" />
           Company cards
         </Button>

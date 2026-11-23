@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { OpeningBalancesForm } from "@/components/ledger/opening-balances-form";
 import { SetupStepBanner } from "@/components/data-onboarding/setup-step-banner";
-import { Card, CardTitle, CardValue } from "@/components/ui/card";
+import { Card, CardTitle, CardValue, cardClasses } from "@/components/ui/card";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { financialYearStartDate } from "@/lib/dates";
 import { addDays, ctPaymentDueDate } from "@/lib/ledger/corporation-tax";
@@ -15,6 +15,8 @@ import {
 } from "@/lib/ledger/queries";
 import { formatGBP } from "@/lib/money";
 import { DisplayDate } from "@/components/date-format-provider";
+import { Callout } from "@/components/ui/callout";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const metadata: Metadata = { title: "Tax & reserves" };
 
@@ -59,19 +61,18 @@ export default async function ReservesPage({
   return (
     <div>
       <SetupStepBanner stepId="opening_balances" entityType={entityType} from={sp.from} />
-      <h1 className="font-display text-2xl font-semibold">Tax &amp; reserves</h1>
-      <p className="mt-1 max-w-2xl text-muted">
-        A running estimate of corporation tax and of the profit the company can pay out as
-        dividends. Your accountant finalises the real figures.
-      </p>
+      <PageHeader
+        title={<>Tax &amp; reserves</>}
+        description="A running estimate of corporation tax and of the profit the company can pay out as dividends. Your accountant finalises the real figures."
+      />
 
       {!position.hasOpeningBalances ? (
-        <p className="mt-6 max-w-2xl rounded-xl bg-wash px-4 py-3 text-sm">
+        <Callout className="mt-6 max-w-2xl">
           These figures start from the first records in Alfa. If the company traded before
           then, add the retained earnings from its last balance sheet below
           {canSetOpening ? "" : " (an admin or your accountant can do this)"}, or reserves
           will be understated.
-        </p>
+        </Callout>
       ) : null}
 
       <div className="mt-6 grid gap-4 sm:grid-cols-3">
@@ -189,7 +190,7 @@ export default async function ReservesPage({
       {canSetOpening ? (
         <section
           id="opening-balances"
-          className="mt-10 scroll-mt-6 rounded-2xl border border-border bg-surface p-5"
+          className={cardClasses("mt-10 scroll-mt-6")}
         >
           <h2 className="font-display text-lg font-semibold">Opening balances</h2>
           <p className="mb-4 mt-1 max-w-2xl text-sm text-muted">

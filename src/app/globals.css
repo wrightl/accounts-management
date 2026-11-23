@@ -36,7 +36,24 @@
   --border: rgb(23 29 58 / 0.12);
   --destructive: #c23b5a;
   --success: #1a7a55;
+  /* Deep amber: reads as "check this" without leaving the navy/pink palette. */
+  --warning: #8a4b08;
+  /* Solid tints for notes. Solid, not alpha, so the lavender page doesn't muddy them. */
+  --warning-wash: #fdf1dc;
+  --destructive-wash: #fbe8ed;
+  --success-wash: #e2f3eb;
+  /* Error text on navy (auth frame, pricing), where --destructive is too dark. */
+  --destructive-on-dark: #ffb3c4;
 }
+
+/*
+ * Corner radii. Three steps only:
+ *   rounded-full  buttons, chips, badges, pills
+ *   rounded-xl    inputs, callouts, menus, small panels inside a card
+ *   rounded-2xl   cards and dialogs
+ * Tiny controls (kbd hints, icon hit areas, colour swatches) may use plain
+ * `rounded`.
+ */
 
 @theme inline {
   --color-background: var(--background);
@@ -47,6 +64,11 @@
   --color-border: var(--border);
   --color-destructive: var(--destructive);
   --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-warning-wash: var(--warning-wash);
+  --color-destructive-wash: var(--destructive-wash);
+  --color-success-wash: var(--success-wash);
+  --color-destructive-on-dark: var(--destructive-on-dark);
 
   --color-navy: var(--navy);
   --color-brand: var(--pink);
@@ -166,6 +188,7 @@ html[data-ui-font="readable"] {
 }
 
 html[data-ui-contrast="high"] {
+  --warning: #6b3a05;
   --muted: #2a3050;
   --border: rgb(23 29 58 / 0.35);
   --background: #ffffff;

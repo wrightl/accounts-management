@@ -5,6 +5,8 @@ import { ForecastView } from "@/components/forecast/forecast-view";
 import { getBroughtForwardDebtsPence, getForecastInputs } from "@/lib/forecast/queries";
 import { formatGBP } from "@/lib/money";
 import { DisplayDate } from "@/components/date-format-provider";
+import { Callout } from "@/components/ui/callout";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const metadata: Metadata = { title: "Cash forecast" };
 
@@ -24,21 +26,25 @@ export default async function ForecastPage() {
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-semibold">Cash forecast</h1>
-      <p className="mt-1 max-w-2xl text-muted">
-        Cash at the end of each of the next 13 weeks, from the money you&apos;re owed and the
-        bills you know about.
-      </p>
+      <PageHeader
+        title="Cash forecast"
+        description={
+          <>
+            Cash at the end of each of the next 13 weeks, from the money you&apos;re owed and the
+            bills you know about.
+          </>
+        }
+      />
 
       {oldDebtsPence > 0 ? (
-        <p className="mt-6 max-w-2xl rounded-xl bg-wash px-4 py-3 text-sm">
+        <Callout className="mt-6 max-w-2xl">
           Week one includes {formatGBP(oldDebtsPence)} still owed on invoices brought forward from
           before your cutover. These may be slow to collect, so treat that week as optimistic.
-        </p>
+        </Callout>
       ) : null}
 
       {!inputs.cash.known ? (
-        <p className="mt-6 max-w-2xl rounded-xl bg-wash px-4 py-3 text-sm">
+        <Callout className="mt-6 max-w-2xl">
           Alfa doesn&apos;t know the bank balance yet, so this starts from £0.{" "}
           <Link href="/transactions" className="underline">
             Import a bank statement
@@ -48,7 +54,7 @@ export default async function ForecastPage() {
             Settings
           </Link>
           .
-        </p>
+        </Callout>
       ) : null}
 
       <div className="mt-6">

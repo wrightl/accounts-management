@@ -7,6 +7,7 @@ import { addMenuFeatures, dismissMenuSuggestion } from "@/actions/menu";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast-store";
 import type { MenuSuggestion } from "@/lib/menu/suggestions";
+import { cardClasses } from "@/components/ui/card";
 
 /** One suggestion at a time, so it never becomes another list to work through. */
 export function MenuSuggestionCard({
@@ -39,7 +40,7 @@ export function MenuSuggestionCard({
   return (
     <section
       aria-labelledby="menu-suggestion-title"
-      className="mt-6 flex flex-wrap items-start gap-4 rounded-2xl border border-border bg-surface px-5 py-4"
+      className={cardClasses("mt-6 flex flex-wrap items-start gap-4")}
     >
       <PanelLeft className="mt-0.5 h-5 w-5 shrink-0 text-muted" aria-hidden />
       <div className="min-w-0 flex-1">

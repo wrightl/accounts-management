@@ -227,6 +227,27 @@ export function formatDeltaPercent(
   };
 }
 
+export type HeroLine = { label: string; direction: "up" | "down" | "flat" };
+
+/** "the previous financial year" for "Prior FY"; month names stay as they are. */
+export function comparePhrase(compareLabel: string): string {
+  if (!compareLabel.startsWith("Prior ")) return compareLabel;
+  const rest = compareLabel.slice("Prior ".length).replace(/^FY$/, "financial year");
+  return `the previous ${rest}`;
+}
+
+/** "Up 29% on September 2026", "Same as the previous 3 months", "None in September 2026". */
+export function compareLine(
+  delta: { percent: number | null; direction: "up" | "down" | "flat" },
+  compareLabel: string,
+): HeroLine {
+  const than = comparePhrase(compareLabel);
+  if (delta.percent == null) return { label: `None in ${than}`, direction: "flat" };
+  if (delta.percent === 0) return { label: `Same as ${than}`, direction: "flat" };
+  const word = delta.percent > 0 ? "Up" : "Down";
+  return { label: `${word} ${Math.abs(delta.percent)}% on ${than}`, direction: delta.direction };
+}
+
 export function periodCompareCaption(period: ResolvedSpendingPeriod): string {
   return `vs ${period.compareLabel.toLowerCase()}`;
 }

@@ -77,7 +77,7 @@ export function PaymentBankLink({
             <Label htmlFor={selectId}>Bank receipt</Label>
             <select
               id={selectId}
-              className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+              className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm"
               value={selected}
               disabled={pending}
               onChange={(e) => setSelected(e.target.value)}
@@ -91,7 +91,7 @@ export function PaymentBankLink({
             </select>
           </div>
           {diff !== 0 ? (
-            <p className="text-xs text-amber-700">
+            <p className="text-xs text-warning">
               The payment will change to the {chosen?.amountFormatted} received (
               {diff > 0 ? `${formatGBP(diff)} more` : `${formatGBP(-diff)} less`}).
               {diff > 0

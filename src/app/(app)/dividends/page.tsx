@@ -21,6 +21,7 @@ import { formatGBP } from "@/lib/money";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { DisplayDate } from "@/components/date-format-provider";
 import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export default async function DividendsPage({
   searchParams,
@@ -124,9 +125,7 @@ export default async function DividendsPage({
         </p>
         <div className="mt-4 space-y-8">
           {declarations.length === 0 ? (
-            <p className="text-sm text-muted">
-              No dividend declarations in this period.
-            </p>
+            <EmptyState description="No dividend declarations in this period." />
           ) : (
             declarations.map((d) => (
               <div key={d.id}>
@@ -151,7 +150,7 @@ export default async function DividendsPage({
                     {inPack ? null : (
                       <a
                         href={`/api/dividends/${d.id}/paperwork`}
-                        className={buttonClasses("secondary")}
+                        className={buttonClasses("ghost")}
                       >
                         <Download className="h-4 w-4" />
                         Minutes and vouchers (PDF)

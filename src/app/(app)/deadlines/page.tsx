@@ -6,15 +6,18 @@ import { getDeadlines, type DeadlineRow } from "@/lib/deadlines/queries";
 import type { DeadlineStatus } from "@/lib/deadlines/calc";
 import { DeadlineDoneButton } from "@/components/deadlines/deadline-done-button";
 import { VatQuartersForm } from "@/components/deadlines/vat-quarters-form";
-import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { DisplayDate } from "@/components/date-format-provider";
+import { Callout } from "@/components/ui/callout";
+import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
+import { HowWorkedOut } from "@/components/ui/how-worked-out";
 
 export const metadata: Metadata = { title: "Deadlines" };
 
 const STATUS_STYLES: Record<DeadlineStatus, string> = {
-  overdue: "bg-brand text-navy",
+  overdue: "bg-destructive/15 text-destructive",
   due_soon: "bg-accent/30 text-navy",
   upcoming: "bg-wash text-muted",
   done: "bg-success/15 text-success",
@@ -47,55 +50,71 @@ export default async function DeadlinesPage() {
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-semibold">Deadlines</h1>
-      <p className="mt-1 max-w-3xl text-muted">
-        {isLtd
-          ? `Companies House and HMRC deadlines for the next year, worked out from your year end, ${settings.vatRegistered ? "VAT quarters " : ""}and Companies House record.`
-          : `HMRC deadlines for the next year, worked out from the tax year${settings.vatRegistered ? " and your VAT quarters" : ""}.`}{" "}
-        Mark each one done once it&apos;s filed or paid.
-      </p>
+      <PageHeader
+        title="Deadlines"
+        description={
+          isLtd
+            ? "Companies House and HMRC deadlines for the next year."
+            : "HMRC deadlines for the next year."
+        }
+      />
 
       {missingCompaniesHouse ? (
-        <p className="mt-6 rounded-xl bg-wash px-4 py-3 text-sm">
+        <Callout className="mt-6">
           Your confirmation statement isn&apos;t shown because Alfa doesn&apos;t know your
           incorporation date.{" "}
           <Link href={companiesHouseHref} className="underline">
             {canManage ? "Add your Companies House details" : "See Companies House details"}
           </Link>
           .
+        </Callout>
+      ) : null}
+
+      {overdue.length > 0 ? (
+        <Callout tone="danger" className="mt-6">
+          {overdue.length === 1
+            ? `${overdue[0].label} is overdue.`
+            : `${overdue.length} deadlines are overdue.`}{" "}
+          {next ? (
+            <>
+              After that: {next.label}, due <DisplayDate value={next.dueDate} />.
+            </>
+          ) : null}
+        </Callout>
+      ) : next ? (
+        <p className="mt-6 text-sm">
+          Nothing is overdue. Next: {next.label}, due <DisplayDate value={next.dueDate} />.
+          {dueSoon.length > 1 ? ` ${dueSoon.length - 1} more are due in the next 30 days.` : ""}
         </p>
       ) : null}
 
-      <div className="mt-6 grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardTitle>Overdue</CardTitle>
-          <CardValue className={overdue.length ? "text-destructive" : undefined}>
-            {overdue.length}
-          </CardValue>
-        </Card>
-        <Card>
-          <CardTitle>Due in the next 30 days</CardTitle>
-          <CardValue>{dueSoon.length}</CardValue>
-        </Card>
-        <Card>
-          <CardTitle>Next deadline</CardTitle>
-          {next ? (
-            <>
-              <CardValue><DisplayDate value={next.dueDate} /></CardValue>
-              <p className="mt-1 text-sm text-muted">{next.label}</p>
-            </>
-          ) : (
-            <CardValue>—</CardValue>
-          )}
-        </Card>
-      </div>
-
       <section className="mt-10">
-        <h2 className="font-display text-lg font-semibold">Calendar</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="font-display text-lg font-semibold">Calendar</h2>
+          <HowWorkedOut title="How these dates are worked out">
+            {isLtd ? (
+              <p>
+                From a year end of {monthName(settings.financialYearEndMonth)}: accounts are due at
+                Companies House 9 months after it, corporation tax 9 months and a day after, and
+                the CT600 12 months after. Companies House&apos;s own dates replace these where
+                Alfa has them, which covers first accounts and changed year ends. Large companies
+                paying corporation tax in instalments aren&apos;t covered.
+              </p>
+            ) : (
+              <p>
+                Self Assessment returns and payments are due on 31 January after the tax year ends
+                on 5 April, with a second payment on account on 31 July.
+              </p>
+            )}
+            {settings.vatRegistered ? (
+              <p>
+                VAT returns and payments are due one month and seven days after each quarter ends.
+              </p>
+            ) : null}
+          </HowWorkedOut>
+        </div>
         {deadlines.length === 0 ? (
-          <p className="mt-4 text-sm text-muted">
-            Nothing due in the next year. Register for VAT in Settings to see VAT returns here.
-          </p>
+          <EmptyState className="mt-4" description="Nothing due in the next year. Register for VAT in Settings to see VAT returns here." />
         ) : (
           <div className="mt-4">
             <Table>
@@ -159,36 +178,14 @@ export default async function DeadlinesPage() {
         )}
       </section>
 
-      <section className="mt-10 max-w-3xl space-y-4 text-sm text-muted">
-        <h2 className="font-display text-lg font-semibold text-foreground">How these are worked out</h2>
-        {isLtd ? (
-          <p>
-            From a year end of {monthName(settings.financialYearEndMonth)}: accounts are due at
-            Companies House 9 months after it, corporation tax 9 months and a day after, and the
-            CT600 12 months after. Companies House&apos;s own dates replace these where Alfa has
-            them, which covers first accounts and changed year ends. Large companies paying
-            corporation tax in instalments aren&apos;t covered.{" "}
-            {canManage ? (
-              <Link href={companiesHouseHref} className="underline">
-                Companies House details
-              </Link>
-            ) : null}
-          </p>
-        ) : (
-          <p>
-            Self Assessment returns and payments are due on 31 January after the tax year ends on 5
-            April, with a second payment on account on 31 July.
-          </p>
-        )}
-        {settings.vatRegistered ? (
-          <>
-            <p>
-              VAT returns and payments are due one month and seven days after each quarter ends.
-            </p>
-            {canManage ? <VatQuartersForm vatQuarterEndMonth={settings.vatQuarterEndMonth} /> : null}
-          </>
-        ) : null}
-      </section>
+      {settings.vatRegistered && canManage ? (
+        <section className="mt-10 max-w-3xl">
+          <h2 className="font-display text-lg font-semibold">VAT quarters</h2>
+          <div className="mt-3">
+            <VatQuartersForm vatQuarterEndMonth={settings.vatQuarterEndMonth} />
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

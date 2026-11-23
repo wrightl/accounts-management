@@ -12,6 +12,7 @@ import { formatGBP } from "@/lib/money";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { StatusPill } from "@/components/platform/status-pill";
 import { DisplayDate } from "@/components/date-format-provider";
+import { Card } from "@/components/ui/card";
 
 export default async function PlatformBillingPage({
   searchParams,
@@ -66,15 +67,14 @@ export default async function PlatformBillingPage({
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((card) => (
-          <div
+          <Card
             key={card.label}
-            className="rounded-2xl border border-border bg-white p-5 shadow-sm"
           >
             <p className="text-sm text-muted">{card.label}</p>
             <p className="mt-2 font-display text-3xl font-semibold">
               {card.value}
             </p>
-          </div>
+          </Card>
         ))}
       </div>
 
@@ -102,7 +102,7 @@ export default async function PlatformBillingPage({
                     <TD>
                       <Link
                         href={`/platform/companies/${c.companyId}`}
-                        className="text-brand underline-offset-2 hover:underline"
+                        className="text-foreground underline underline-offset-2"
                       >
                         {c.companyName}
                       </Link>

@@ -1,7 +1,7 @@
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { listFounders } from "@/lib/expenses/queries";
 import { ShareholderForm } from "@/components/shareholders/shareholder-form";
-import { BackLink } from "@/components/ui/back-link";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function NewShareholderPage() {
   const { companyId } = await guardTenantPage("accounts:write");
@@ -11,10 +11,12 @@ export default async function NewShareholderPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <BackLink href="/shareholders">Shareholders</BackLink>
-      </div>
-      <h1 className="mb-6 font-display text-2xl font-semibold">Create shareholder</h1>
+      <PageHeader
+        backHref="/shareholders"
+        backLabel="Shareholders"
+        title="Create shareholder"
+        className="mb-6"
+      />
       <ShareholderForm mode="create" users={founders} canWrite={canWrite} />
     </div>
   );

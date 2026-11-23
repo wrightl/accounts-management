@@ -2,11 +2,11 @@ import Link from "next/link";
 import { guardTenantPage } from "@/lib/auth";
 import { listClients } from "@/lib/clients/queries";
 import { QuoteForm } from "@/components/quotes/quote-form";
-import { BackLink } from "@/components/ui/back-link";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { defaultLineVatRate } from "@/lib/vat";
 import { onlinePaymentsStatus } from "@/lib/payments/online-status";
 import { PAGE_WIDTH } from "@/components/ui/page-width";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function NewQuotePage() {
   const { companyId } = await guardTenantPage("accounts:write");
@@ -18,10 +18,12 @@ export default async function NewQuotePage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center gap-3">
-        <BackLink href="/quotes">Quotes</BackLink>
-      </div>
-      <h1 className="mb-6 font-display text-2xl font-semibold">Create quote</h1>
+      <PageHeader
+        backHref="/quotes"
+        backLabel="Quotes"
+        title="Create quote"
+        className="mb-6"
+      />
       {clients.length === 0 ? (
         <p className="text-sm text-muted">
           Add a{" "}

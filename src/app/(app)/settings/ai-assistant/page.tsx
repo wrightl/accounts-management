@@ -18,6 +18,7 @@ import { AssistantAccessSwitch } from "@/components/settings/assistant-access-sw
 import { AssistantSetup } from "@/components/settings/assistant-setup";
 import { AssistantConnections } from "@/components/settings/assistant-connections";
 import { CopyButton } from "@/components/ui/copy-button";
+import { cardClasses } from "@/components/ui/card";
 
 export const metadata: Metadata = { title: "AI assistant" };
 
@@ -154,7 +155,7 @@ export default async function AiAssistantSettingsPage() {
             <p className="text-sm text-muted">
               Copy one into a chat with your assistant. Or just ask in your own words.
             </p>
-            <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
+            <ul className={cardClasses("p-0 divide-y divide-border overflow-hidden")}>
               {prompts.map((p) => (
                 <li key={p.name} className="flex items-start gap-4 px-5 py-4">
                   <span className="min-w-0 flex-1">

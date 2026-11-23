@@ -119,10 +119,8 @@ export function ReimbursementActions({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
-        <a href={`/api/reimbursements/${id}/export`}>
-          <Button type="button" variant="secondary">
-            Export CSV
-          </Button>
+        <a href={`/api/reimbursements/${id}/export`} className={buttonClasses("ghost")}>
+          Export CSV
         </a>
         {canWrite && status === "pending" && (
           <>

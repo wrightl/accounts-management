@@ -6,6 +6,8 @@ import { visibleSettingsPages, type SettingsPage } from "@/components/dashboard/
 import { NAV_ICONS } from "@/components/dashboard/nav-icons";
 import { ReopenDataOnboardingButton } from "@/components/data-onboarding/reopen-data-onboarding-button";
 import { getDataOnboardingRow } from "@/lib/data-onboarding/queries";
+import { PageHeader } from "@/components/ui/page-header";
+import { cardClasses, Card } from "@/components/ui/card";
 
 const SECTIONS: { id: SettingsPage["section"]; label: string }[] = [
   { id: "you", label: "You" },
@@ -24,10 +26,10 @@ export default async function SettingsHubPage() {
 
   return (
     <div>
-      <h1 className="mb-2 font-display text-2xl font-semibold">Settings</h1>
-      <p className="mb-8 text-muted">
-        Your own preferences, and the details and people behind the business.
-      </p>
+      <PageHeader
+        title="Settings"
+        className="mb-8"
+      />
       <div className="max-w-2xl space-y-8">
         {SECTIONS.map((section) => {
           const items = pages.filter((page) => page.section === section.id);
@@ -40,7 +42,7 @@ export default async function SettingsHubPage() {
               >
                 {section.label}
               </h2>
-              <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
+              <ul className={cardClasses("p-0 divide-y divide-border overflow-hidden")}>
                 {items.map((page) => {
                   const Icon = NAV_ICONS[page.icon];
                   return (
@@ -72,13 +74,13 @@ export default async function SettingsHubPage() {
             <h2 id="settings-history" className="mb-3 font-display text-lg font-semibold">
               History setup
             </h2>
-            <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-border bg-surface px-5 py-4">
+            <Card className="flex flex-wrap items-center gap-4">
               <p className="min-w-0 flex-1 text-sm text-muted">
                 The checklist for loading past bank statements, invoices, expenses and
                 balances. Open it again on your dashboard.
               </p>
               <ReopenDataOnboardingButton />
-            </div>
+            </Card>
           </section>
         ) : null}
       </div>

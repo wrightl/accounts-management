@@ -4,6 +4,7 @@ import { useTransition } from "react";
 import { updateSubscriptionTier } from "@/actions/platform";
 import { buttonClasses } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { cardClasses } from "@/components/ui/card";
 
 type Tier = {
   slug: string;
@@ -24,7 +25,7 @@ export function SubscriptionTiersForm({ tiers }: { tiers: Tier[] }) {
       {tiers.map((tier) => (
         <form
           key={tier.slug}
-          className="rounded-2xl border border-border bg-white p-5"
+          className={cardClasses()}
           action={(fd) => {
             start(async () => {
               await updateSubscriptionTier(fd);
@@ -44,7 +45,7 @@ export function SubscriptionTiersForm({ tiers }: { tiers: Tier[] }) {
                 min={0}
                 max={1000}
                 defaultValue={tier.maxUsers}
-                className="mt-1 w-full rounded-lg border border-border px-3 py-2"
+                className="mt-1 w-full rounded-xl border border-border px-3 py-2"
               />
             </label>
             <div className="space-y-2 text-sm">

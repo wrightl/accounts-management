@@ -3,13 +3,8 @@ import { redirect } from "next/navigation";
 import { AgedReceivablesChart } from "@/components/dashboard/aged-receivables-chart";
 import { AttentionPanel } from "@/components/dashboard/attention-panel";
 import { CashVsInvoicedChart } from "@/components/dashboard/cash-vs-invoiced-chart";
-import { ExpenseMixChart } from "@/components/dashboard/expense-mix-chart";
 import { HeroKpis } from "@/components/dashboard/hero-kpis";
-import { IncomeExpenseChart } from "@/components/dashboard/income-expense-chart";
 import { PeriodChips } from "@/components/dashboard/period-chips";
-import { QuoteToCashFunnel } from "@/components/dashboard/quote-to-cash-funnel";
-import { SpendingSnapshot } from "@/components/dashboard/spending-snapshot";
-import { TopClientsChart } from "@/components/dashboard/top-clients-chart";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/roles";
 import { getDashboardOverview } from "@/lib/dashboard/queries";
@@ -34,6 +29,7 @@ import { todayIsoDate } from "@/lib/dates";
 import { DataOnboardingCard } from "@/components/data-onboarding/data-onboarding-card";
 import { getDataOnboarding, type DataOnboardingView } from "@/lib/data-onboarding/queries";
 import { stepsFor } from "@/lib/data-onboarding/steps";
+import { PageHeader } from "@/components/ui/page-header";
 
 type MenuPrompt =
   | { kind: "questions" }
@@ -80,14 +76,10 @@ export default async function DashboardOverview({
   if (user.role === "pending") {
     return (
       <div>
-        <h1 className="font-display text-2xl font-semibold">
-          Welcome{user.name ? `, ${user.name.split(" ")[0]}` : ""}
-        </h1>
-        <p className="mt-2 text-muted">
-          Your account is waiting for an administrator to assign a role in Clerk
-          (admin, co-founder, or accountant). You cannot view or change the books
-          until then.
-        </p>
+        <PageHeader
+          title={`Welcome${user.name ? `, ${user.name.split(" ")[0]}` : ""}`}
+          description="An administrator needs to give you a role before you can see the books."
+        />
       </div>
     );
   }
@@ -163,12 +155,10 @@ export default async function DashboardOverview({
 
   return (
     <div>
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-semibold">
-            Welcome{user.name ? `, ${user.name.split(" ")[0]}` : ""}
-          </h1>
-          <p className="mt-1 text-muted">
+      <PageHeader
+        title={`Welcome${user.name ? `, ${user.name.split(" ")[0]}` : ""}`}
+        description={
+          <>
             {overview ? <DisplayDate value={todayIsoDate()} /> : "Business overview"}
             {" · "}
             <Link
@@ -177,10 +167,14 @@ export default async function DashboardOverview({
             >
               How to use this app
             </Link>
-          </p>
-        </div>
-        {overview ? <PeriodChips current={overview.periodKey} pastYears={overview.pastYears} /> : null}
-      </div>
+          </>
+        }
+        actions={
+          overview ? (
+            <PeriodChips current={overview.periodKey} pastYears={overview.pastYears} />
+          ) : null
+        }
+      />
 
       {showDataOnboarding && dataOnboarding ? (
         <DataOnboardingCard
@@ -215,76 +209,45 @@ export default async function DashboardOverview({
           ) : null}
           <HeroKpis heroes={overview.heroes} />
 
-          <section className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="space-y-6">
-              <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-                <CashVsInvoicedChart
-                  data={overview.cashSeries}
-                  windowLabel={overview.chartWindowLabel}
-                />
-                <QuoteToCashFunnel
-                  stages={overview.funnel}
-                  periodLabel={overview.periodLabel}
-                />
-              </div>
+          <section
+            className={
+              safeToPay
+                ? "mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]"
+                : "mt-6"
+            }
+          >
+            <AttentionPanel items={overview.attention} />
+            {safeToPay ? (
+              <Card className="self-start">
+                <CardTitle>Safe to pay yourself</CardTitle>
+                <CardValue>{formatGBP(safeToPay.result.safeNowPence)}</CardValue>
+                <p className="mt-2 text-sm text-muted">
+                  {safeToPay.cash.known
+                    ? `${formatGBP(safeToPay.result.safeLaterPence)} in 30 days if clients pay on time.`
+                    : "Import a bank statement to work this out."}
+                </p>
+                <Link href="/safe-to-pay" className="mt-2 inline-block text-sm underline">
+                  How it&apos;s worked out
+                </Link>
+              </Card>
+            ) : null}
+          </section>
 
-              <div className="grid gap-6 lg:grid-cols-2">
-                <AgedReceivablesChart
-                  raw={overview.agedReceivables.raw}
-                  formatted={{
-                    current: overview.agedReceivables.current,
-                    d30: overview.agedReceivables.d30,
-                    d60: overview.agedReceivables.d60,
-                    d90: overview.agedReceivables.d90,
-                  }}
-                  overduePercent={overview.agedReceivables.overduePercent}
-                />
-                <IncomeExpenseChart
-                  data={overview.incomeExpenseSeries}
-                  windowLabel={overview.chartWindowLabel}
-                  vatRegistered={overview.vatRegistered}
-                />
-              </div>
-
-              <div className="grid gap-6 lg:grid-cols-3">
-                <TopClientsChart
-                  clients={overview.topClients}
-                  periodLabel={overview.periodLabel}
-                  includesPreCutover={overview.periodBeforeCutover}
-                  vatRegistered={overview.vatRegistered}
-                />
-                <ExpenseMixChart
-                  slices={overview.expenseMix}
-                  periodLabel={overview.periodLabel}
-                  vatRegistered={overview.vatRegistered}
-                />
-                <SpendingSnapshot
-                  summary={overview.spending.summary}
-                  series={overview.spending.series}
-                  periodLabel={overview.spending.periodLabel}
-                  compareLabel={overview.spending.compareLabel}
-                  buckets={overview.spending.buckets}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-6">
-              {safeToPay ? (
-                <Card>
-                  <CardTitle>Safe to pay yourself</CardTitle>
-                  <CardValue>{formatGBP(safeToPay.result.safeNowPence)}</CardValue>
-                  <p className="mt-1 text-xs text-muted">
-                    {safeToPay.cash.known
-                      ? `${formatGBP(safeToPay.result.safeLaterPence)} in 30 days if clients pay on time.`
-                      : "Import a bank statement to work this out."}{" "}
-                    <Link href="/safe-to-pay" className="underline">
-                      How it&apos;s worked out
-                    </Link>
-                  </p>
-                </Card>
-              ) : null}
-              <AttentionPanel items={overview.attention} />
-            </div>
+          <section className="mt-6 grid gap-6 lg:grid-cols-2">
+            <CashVsInvoicedChart
+              data={overview.cashSeries}
+              windowLabel={overview.chartWindowLabel}
+            />
+            <AgedReceivablesChart
+              raw={overview.agedReceivables.raw}
+              formatted={{
+                current: overview.agedReceivables.current,
+                d30: overview.agedReceivables.d30,
+                d60: overview.agedReceivables.d60,
+                d90: overview.agedReceivables.d90,
+              }}
+              overduePercent={overview.agedReceivables.overduePercent}
+            />
           </section>
         </>
       )}

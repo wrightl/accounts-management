@@ -65,7 +65,7 @@ export function MemberActions({
             () => setRoleValue(previous),
           );
         }}
-        className="rounded-lg border border-border bg-white px-2 py-1 text-xs"
+        className="rounded-xl border border-border bg-white px-2 py-1 text-xs"
       >
         {TENANT_ROLES.map((r) => (
           <option key={r} value={r}>
@@ -108,7 +108,7 @@ export function MemberActions({
         <Button
           type="button"
           variant="ghost"
-          className="!px-3 !py-1 text-xs text-red-700"
+          className="!px-3 !py-1 text-xs text-destructive"
           disabled={pending}
           onClick={async () => {
             const ok = await confirm({

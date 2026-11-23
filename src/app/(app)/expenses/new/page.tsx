@@ -3,7 +3,7 @@ import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { listClients } from "@/lib/clients/queries";
 import { listFounders } from "@/lib/expenses/queries";
 import { ExpenseForm } from "@/components/expenses/expense-form";
-import { BackLink } from "@/components/ui/back-link";
+import { PageHeader } from "@/components/ui/page-header";
 import { EXPENSE_LIST_COOKIE, expenseListReturnHref } from "@/lib/expenses/list-params";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { getReceiptOcrSettings } from "@/lib/platform-settings";
@@ -12,6 +12,7 @@ import { getBankTransactionById } from "@/lib/bank/queries";
 import { bankDebitLinkError } from "@/lib/bank/expense-link";
 import { bankReturnHref } from "@/lib/bank/list-position";
 import { formatGBP } from "@/lib/money";
+import { Callout } from "@/components/ui/callout";
 
 export default async function NewExpensePage({
   searchParams,
@@ -55,16 +56,17 @@ export default async function NewExpensePage({
 
   return (
     <div>
-      <div className="mb-6">
-        <BackLink href={returnHref ?? listHref} scroll={!returnHref}>
-          {returnHref ? "Transactions" : "Expenses"}
-        </BackLink>
-      </div>
-      <h1 className="mb-6 font-display text-2xl font-semibold">Create expense</h1>
+      <PageHeader
+        backHref={returnHref ?? listHref}
+        backLabel={returnHref ? "Transactions" : "Expenses"}
+        backScroll={!returnHref}
+        title="Create expense"
+        className="mb-6"
+      />
       {bankLinkError ? (
-        <div className="mb-6 max-w-2xl rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <Callout tone="warning" className="mb-6 max-w-2xl">
           This expense won&apos;t be linked to the bank transaction. {bankLinkError}
-        </div>
+        </Callout>
       ) : null}
       <ExpenseForm
         listHref={listHref}

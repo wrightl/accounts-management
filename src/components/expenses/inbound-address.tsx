@@ -59,7 +59,7 @@ export function InboundAddress({
     return (
       <form
         onSubmit={onSave}
-        className="mt-4 rounded-lg border border-border bg-wash/50 px-4 py-3 text-sm"
+        className="mt-4 rounded-xl border border-border bg-wash/50 px-4 py-3 text-sm"
       >
         <Label htmlFor="inbound-alias">Your address for emailing receipts</Label>
         <div className="flex flex-wrap items-center gap-2">
@@ -105,7 +105,7 @@ export function InboundAddress({
   }
 
   return (
-    <div className="mt-4 rounded-lg border border-border bg-wash/50 px-4 py-3 text-sm">
+    <div className="mt-4 rounded-xl border border-border bg-wash/50 px-4 py-3 text-sm">
       <div className="flex flex-wrap items-center gap-3">
         <span className="min-w-0 flex-1 text-muted">
           Email receipts to{" "}

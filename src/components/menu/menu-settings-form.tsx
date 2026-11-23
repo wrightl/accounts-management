@@ -14,6 +14,8 @@ import {
   type MenuBundle,
   type MenuFeature,
 } from "@/lib/menu/features";
+import { Callout } from "@/components/ui/callout";
+import { Card, cardClasses } from "@/components/ui/card";
 
 export interface MenuOption {
   feature: MenuFeature;
@@ -41,7 +43,7 @@ function BundleCheckbox({
   return (
     <fieldset
       aria-labelledby={headingId}
-      className="rounded-2xl border border-border bg-surface px-5 py-4"
+      className={cardClasses()}
     >
       <label className="flex items-start gap-3">
         <input
@@ -167,13 +169,13 @@ export function MenuSettingsForm({
       className="max-w-2xl space-y-6"
     >
       {initialEnabled === null ? (
-        <p className="rounded-xl bg-wash px-4 py-3 text-sm">
+        <Callout>
           You are seeing every page. Untick anything you don&apos;t use to keep
           your menu short.
-        </p>
+        </Callout>
       ) : null}
 
-      <div className="rounded-2xl border border-border bg-surface px-5 py-4">
+      <Card>
         {showQuestions ? (
           <div className="space-y-4">
             <div>
@@ -221,7 +223,7 @@ export function MenuSettingsForm({
             </Button>
           </div>
         )}
-      </div>
+      </Card>
 
       <div className="space-y-3">
         {groups.map(({ bundle, options: bundleOptions }) => (

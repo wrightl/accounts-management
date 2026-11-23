@@ -14,6 +14,7 @@ import { formatChartTooltipDate } from "@/lib/dates";
 import { penceToPounds } from "@/lib/money";
 import type { SpendingSeriesPoint } from "@/lib/spending/series";
 import { useDateFormat } from "@/components/date-format-provider";
+import { Card } from "@/components/ui/card";
 
 function formatAxis(value: number): string {
   if (value >= 1000) return `£${(value / 1000).toFixed(value % 1000 === 0 ? 0 : 1)}k`;
@@ -102,14 +103,14 @@ export function SpendingChart({
 
   if (chartData.length === 0) {
     return (
-      <div className="flex h-64 items-center justify-center rounded-2xl border border-border bg-surface text-sm text-muted">
+      <Card className="flex h-64 items-center justify-center text-sm text-muted">
         No spending data for this period.
-      </div>
+      </Card>
     );
   }
 
   return (
-    <div className="h-72 w-full rounded-2xl border border-border bg-surface p-4">
+    <Card className="h-72 w-full">
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
@@ -158,6 +159,6 @@ export function SpendingChart({
           />
         </ComposedChart>
       </ResponsiveContainer>
-    </div>
+    </Card>
   );
 }

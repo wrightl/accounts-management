@@ -171,7 +171,7 @@ export function CompanyNavBrand({
           role="listbox"
           aria-label="Companies"
           className={cn(
-            "absolute z-50 mt-1 max-h-64 overflow-auto rounded-md border border-white/15 bg-navy py-1 shadow-xl",
+            "absolute z-50 mt-1 max-h-64 overflow-auto rounded-xl border border-white/15 bg-navy py-1 shadow-xl",
             collapsed
               ? "left-0 w-56"
               : "left-0 right-0 min-w-[12rem]",

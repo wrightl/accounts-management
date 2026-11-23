@@ -58,7 +58,7 @@ export function EmailBodyPanel({
           src={`/api/expenses/${expenseId}/email-body?format=${format}`}
           sandbox=""
           title="Original email"
-          className="h-[32rem] w-full rounded-lg border border-border bg-white"
+          className="h-[32rem] w-full rounded-xl border border-border bg-white"
         />
       ) : (
         <p className="text-sm text-muted">The email body wasn’t kept for this expense.</p>

@@ -10,11 +10,11 @@ import { listBankSettlements } from "@/lib/bank/settlements";
 import { BankSettlements } from "@/components/bank/bank-settlements";
 import { ReimbursementActions } from "@/components/reimbursements/actions";
 import { buttonClasses } from "@/components/ui/button";
-import { BackLink } from "@/components/ui/back-link";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { DisplayDate } from "@/components/date-format-provider";
 import { formatExpenseRef, formatReimbursementRef } from "@/lib/references";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function ReimbursementDetailPage({
   params,
@@ -33,49 +33,50 @@ export default async function ReimbursementDetailPage({
 
   return (
     <div>
-      <div className="mb-6">
-        <BackLink href="/reimbursements">Reimbursements</BackLink>
-      </div>
-
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="font-display text-2xl font-semibold">
-              {detail.payee.name || detail.payee.email}
-            </h1>
-            {canWrite && canEditReimbursement(detail.reimbursement.status) ? (
-              <Link
-                href={`/reimbursements/${detail.reimbursement.id}/edit`}
-                className={buttonClasses("ghost", "size-9 shrink-0 px-0")}
-                aria-label="Edit reimbursement run"
-              >
-                <Pencil className="h-4 w-4" />
-              </Link>
+      <PageHeader
+        backHref="/reimbursements"
+        backLabel="Reimbursements"
+        title={detail.payee.name || detail.payee.email}
+        titleAddon={
+          canWrite && canEditReimbursement(detail.reimbursement.status) ? (
+            <Link
+              href={`/reimbursements/${detail.reimbursement.id}/edit`}
+              className={buttonClasses("ghost", "size-9 shrink-0 px-0")}
+              aria-label="Edit reimbursement run"
+            >
+              <Pencil className="h-4 w-4" />
+            </Link>
+          ) : null
+        }
+        description={
+          <>
+            <p>
+              {formatReimbursementRef(detail.reimbursement.refNumber)} ·{" "}
+              <span className="capitalize">{detail.reimbursement.status}</span>
+              {detail.reimbursement.paidAt
+                ? <> · Paid <DisplayDate value={detail.reimbursement.paidAt} /></>
+                : detail.reimbursement.reimbursementDate
+                  ? <> · Reimbursement date <DisplayDate value={detail.reimbursement.reimbursementDate} /></>
+                  : null}
+            </p>
+            {detail.reimbursement.reference ? (
+              <p className="mt-2 text-sm">
+                Bank reference:{" "}
+                <span className="font-medium text-foreground">
+                  {detail.reimbursement.reference}
+                </span>
+              </p>
+            ) : detail.reimbursement.status === "pending" ? (
+              <p className="mt-2 text-sm">
+                Add a bank payment reference when creating the run, then use it on the transfer.
+              </p>
             ) : null}
-          </div>
-          <p className="mt-1 text-muted">
-            {formatReimbursementRef(detail.reimbursement.refNumber)} ·{" "}
-            <span className="capitalize">{detail.reimbursement.status}</span>
-            {detail.reimbursement.paidAt
-              ? <> · Paid <DisplayDate value={detail.reimbursement.paidAt} /></>
-              : detail.reimbursement.reimbursementDate
-                ? <> · Reimbursement date <DisplayDate value={detail.reimbursement.reimbursementDate} /></>
-                : null}
-          </p>
-          {detail.reimbursement.reference ? (
-            <p className="mt-2 text-sm">
-              Bank reference:{" "}
-              <span className="font-medium text-foreground">
-                {detail.reimbursement.reference}
-              </span>
-            </p>
-          ) : detail.reimbursement.status === "pending" ? (
-            <p className="mt-2 text-sm text-muted">
-              Add a bank payment reference when creating the run, then use it on the transfer.
-            </p>
-          ) : null}
-        </div>
-        <Card className="min-w-[140px]">
+          </>
+        }
+      />
+
+      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Card>
           <CardTitle>Total</CardTitle>
           <CardValue>{detail.totalFormatted}</CardValue>
         </Card>

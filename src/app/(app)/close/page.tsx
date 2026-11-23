@@ -1,3 +1,4 @@
+import { Card } from "@/components/ui/card";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { CheckCircle2, Circle } from "lucide-react";
@@ -13,6 +14,7 @@ import { DIGEST_DEADLINE_DAYS } from "@/lib/close/digest";
 import { getUpcomingDeadlines } from "@/lib/deadlines/queries";
 import { formatGBP } from "@/lib/money";
 import { DisplayDate } from "@/components/date-format-provider";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const metadata: Metadata = { title: "Weekly close" };
 
@@ -33,18 +35,13 @@ export default async function WeeklyClosePage() {
 
   return (
     <div className="max-w-3xl">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-semibold">Weekly close</h1>
-          <p className="mt-1 text-muted">
-            Fifteen minutes a week keeps the books up to date. Work down the list, then close
-            the week.
-          </p>
-        </div>
-        {canWrite ? <CloseWeekButton outstanding={checklist.outstanding} /> : null}
-      </div>
+      <PageHeader
+        title="Weekly close"
+        description="Work down the list, then close the week."
+        actions={canWrite ? <CloseWeekButton outstanding={checklist.outstanding} /> : null}
+      />
 
-      <div className="mt-6 rounded-2xl border border-border bg-surface p-5">
+      <Card className="mt-6">
         <p className="font-display text-lg font-semibold">
           {checklist.bankReconciledThrough
             ? <>Bank reconciled to <DisplayDate value={checklist.bankReconciledThrough} /></>
@@ -64,7 +61,7 @@ export default async function WeeklyClosePage() {
             </>
           ) : null}
         </p>
-      </div>
+      </Card>
 
       <ol className="mt-6 space-y-3">
         {checklist.items.map((item) => {
@@ -117,7 +114,7 @@ export default async function WeeklyClosePage() {
                 ) : null}
               </div>
               {!done ? (
-                <Link href={item.href} className="shrink-0 text-sm text-brand underline">
+                <Link href={item.href} className="shrink-0 text-sm text-foreground underline">
                   Open
                 </Link>
               ) : null}
@@ -140,7 +137,7 @@ export default async function WeeklyClosePage() {
               </li>
             ))}
           </ul>
-          <Link href="/deadlines" className="mt-2 inline-block text-sm text-brand underline">
+          <Link href="/deadlines" className="mt-2 inline-block text-sm text-foreground underline">
             All deadlines
           </Link>
         </section>

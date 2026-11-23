@@ -83,7 +83,7 @@ export default async function InboundEmailJobPage({
                       <li key={expense.id} className="flex flex-wrap gap-x-2">
                         <Link
                           href={`/expenses/${expense.id}`}
-                          className="font-medium text-brand hover:underline"
+                          className="font-medium text-foreground underline underline-offset-2"
                         >
                           {expense.description}
                         </Link>
@@ -101,9 +101,9 @@ export default async function InboundEmailJobPage({
                 <dd>
                   <Link
                     href={`/expenses/${job.expenseId}`}
-                    className="font-medium text-brand hover:underline"
+                    className="font-medium text-foreground underline underline-offset-2"
                   >
-                    View expense →
+                    View expense
                   </Link>
                 </dd>
               </div>

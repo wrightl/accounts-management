@@ -9,6 +9,7 @@ import { ClearFilters } from "@/components/platform/pager";
 import { ListPagination } from "@/components/ui/list-pagination";
 import { listPageHref, parseListPaging, fetchPage } from "@/lib/list-paging";
 import { DisplayDate } from "@/components/date-format-provider";
+import { EmptyState } from "@/components/ui/empty-state";
 
 
 export default async function PlatformLogsPage({
@@ -52,7 +53,7 @@ export default async function PlatformLogsPage({
         <select
           name="level"
           defaultValue={params.level ?? "all"}
-          className="rounded-lg border border-border bg-white px-3 py-2 text-sm"
+          className="rounded-xl border border-border bg-white px-3 py-2 text-sm"
         >
           <option value="all">Errors + warnings</option>
           <option value="error">Errors only</option>
@@ -63,13 +64,13 @@ export default async function PlatformLogsPage({
           name="source"
           defaultValue={params.source ?? ""}
           placeholder="Source contains…"
-          className="rounded-lg border border-border px-3 py-2 text-sm"
+          className="rounded-xl border border-border px-3 py-2 text-sm"
         />
         <input
           name="q"
           defaultValue={params.q ?? ""}
           placeholder="Message contains…"
-          className="rounded-lg border border-border px-3 py-2 text-sm"
+          className="rounded-xl border border-border px-3 py-2 text-sm"
         />
         <label className="flex items-center gap-2 text-sm text-muted">
           Last
@@ -79,7 +80,7 @@ export default async function PlatformLogsPage({
             min={1}
             max={168}
             defaultValue={hours}
-            className="w-20 rounded-lg border border-border px-3 py-2 text-sm text-foreground"
+            className="w-20 rounded-xl border border-border px-3 py-2 text-sm text-foreground"
           />
           hours
         </label>
@@ -97,7 +98,7 @@ export default async function PlatformLogsPage({
 
       <div className="mt-6">
         {rows.length === 0 ? (
-          <p className="text-sm text-muted">No log entries.</p>
+          <EmptyState description="No log entries." />
         ) : (
           <Table>
             <THead>

@@ -37,7 +37,6 @@ export default async function ClientsPage({
       <SetupStepBanner stepId="clients" entityType={entityType} from={sp.from} />
       <PageHeader
         title="Clients"
-        description="People and companies you invoice."
         actions={
           canWrite ? (
             <>

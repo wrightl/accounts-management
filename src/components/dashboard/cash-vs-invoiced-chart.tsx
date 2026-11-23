@@ -51,17 +51,15 @@ export function CashVsInvoicedChart({
 
   return (
     <Card className="h-full">
-      <CardTitle>Cash vs invoiced</CardTitle>
-      <p className="mt-1 text-xs text-muted">
-        {windowLabel} · bars are invoices raised; line is cash collected
-      </p>
+      <CardTitle>Invoiced and collected</CardTitle>
+      <p className="mt-1 text-xs text-muted">{windowLabel}</p>
       {!hasData ? (
         <div className="mt-6 space-y-2">
           <p className="text-sm text-muted">
             No invoicing or payments in this period.
           </p>
-          <Link href="/quotes/new" className="text-sm text-brand hover:underline">
-            Send a quote →
+          <Link href="/quotes/new" className="text-sm underline">
+            Send a quote
           </Link>
         </div>
       ) : (

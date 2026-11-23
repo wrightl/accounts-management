@@ -13,7 +13,7 @@ import {
 } from "@/lib/invoices/status";
 import { listBankSettlements } from "@/lib/bank/settlements";
 import { BankSettlements } from "@/components/bank/bank-settlements";
-import { Card, CardTitle, CardValue } from "@/components/ui/card";
+import { Card, CardTitle, CardValue, cardClasses } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { buttonClasses } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -42,6 +42,7 @@ import { getLatePaymentClaims } from "@/lib/invoices/late-payment-queries";
 import { latePaymentCharge } from "@/lib/late-payment";
 import { todayIsoDate } from "@/lib/dates";
 import { DisplayDate } from "@/components/date-format-provider";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export default async function InvoiceDetailPage({
   params,
@@ -108,19 +109,17 @@ export default async function InvoiceDetailPage({
         actions={
           <InvoiceStatusSelect invoiceId={invoice.id} status={status} canWrite={canWrite} />
         }
-        title={
-          <span className="flex items-center gap-2">
-            {invoice.number}
-            {canWrite && canEditInvoice(status) ? (
-              <Link
-                href={`/invoices/${invoice.id}/edit`}
-                className={buttonClasses("ghost", "size-9 shrink-0 px-0")}
-                aria-label="Edit invoice"
-              >
-                <Pencil className="h-4 w-4" />
-              </Link>
-            ) : null}
-          </span>
+        title={invoice.number}
+        titleAddon={
+          canWrite && canEditInvoice(status) ? (
+            <Link
+              href={`/invoices/${invoice.id}/edit`}
+              className={buttonClasses("ghost", "size-9 shrink-0 px-0")}
+              aria-label="Edit invoice"
+            >
+              <Pencil className="h-4 w-4" />
+            </Link>
+          ) : null
         }
         description={
           <>
@@ -194,7 +193,7 @@ export default async function InvoiceDetailPage({
                 {canCredit ? (
                   <Link
                     href={`/invoices/${invoice.id}/credit-notes/new`}
-                    className={buttonClasses("secondary")}
+                    className={buttonClasses("ghost")}
                   >
                     <FilePlus className="h-4 w-4" />
                     Raise credit note
@@ -205,7 +204,7 @@ export default async function InvoiceDetailPage({
           />
         ) : (
           <>
-            <a href={`/api/invoices/${invoice.id}/pdf`} className={buttonClasses("secondary")}>
+            <a href={`/api/invoices/${invoice.id}/pdf`} className={buttonClasses("ghost")}>
               <Download className="h-4 w-4" />
               Download PDF
             </a>
@@ -295,7 +294,7 @@ export default async function InvoiceDetailPage({
       <section className="mt-8">
         <h2 className="mb-3 font-display text-lg font-semibold">Payments</h2>
         {payments.length === 0 ? (
-          <p className="text-sm text-muted">No payments recorded.</p>
+          <EmptyState description="No payments recorded." />
         ) : (
           <>
             <Table>
@@ -383,7 +382,7 @@ export default async function InvoiceDetailPage({
       ) : null}
 
       {lateCharge ? (
-        <section className="mt-8 rounded-2xl border border-border bg-surface p-5">
+        <section className={cardClasses("mt-8")}>
           <h2 className="font-display text-lg font-semibold">Late payment charges</h2>
           <p className="mt-1 max-w-2xl text-sm text-muted">
             If {clientDisplayName(client)} is a business, you can claim statutory interest and

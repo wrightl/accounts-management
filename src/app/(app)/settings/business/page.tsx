@@ -62,7 +62,6 @@ export default async function BusinessSettingsPage() {
         header={
           <SettingsPageHeader
             title="Business settings"
-            description="Company details, Companies House, VAT, financial year, bank details, numbering, and income categories."
           />
         }
       >
@@ -70,7 +69,7 @@ export default async function BusinessSettingsPage() {
           settings={settings}
           members={members.map((m) => ({ id: m.id, name: m.name?.trim() || m.email }))}
         />
-        <Card id="bank-balances" className="mt-10 scroll-mt-8 p-6">
+        <Card id="bank-balances" className="mt-10 scroll-mt-8">
           <h2 className="font-display text-lg font-semibold">Bank balances</h2>
           <p className="mt-1 text-sm text-muted">
             For each bank account, enter one balance from a statement and the date it is from.
@@ -84,7 +83,7 @@ export default async function BusinessSettingsPage() {
           <BankOpeningBalances accounts={accounts} />
         </Card>
         {limited ? (
-          <Card id="companies-house" className="mt-10 scroll-mt-8 p-6">
+          <Card id="companies-house" className="mt-10 scroll-mt-8">
             <h2 className="font-display text-lg font-semibold">Companies House</h2>
             <p className="mt-1 text-sm text-muted">
               Directors appear on board minutes and dividend vouchers. The dates

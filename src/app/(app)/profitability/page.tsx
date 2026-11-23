@@ -12,6 +12,9 @@ import { cn } from "@/lib/utils";
 import { Table, THead, TBody, TR, TD } from "@/components/ui/table";
 import { sortHeaders } from "@/components/ui/sortable-th";
 import { defineTableSort, parseTableSort, setTableSortParams, sortRows } from "@/lib/table-sort";
+import { Callout } from "@/components/ui/callout";
+import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
 
 /** "created" is the loaded order (newest first) and has no header. */
 const ORDER_SORT = defineTableSort({
@@ -37,7 +40,7 @@ const PERIODS = [
 
 function MarginCell({ m }: { m: Margin }) {
   return (
-    <TD className={cn("text-right", m.marginPence < 0 && "text-red-700")}>
+    <TD className={cn("text-right", m.marginPence < 0 && "text-destructive")}>
       {formatGBP(m.marginPence)}
       <span className="ml-2 text-xs text-muted">{marginLabel(m)}</span>
     </TD>
@@ -101,17 +104,21 @@ export default async function ProfitabilityPage({
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-semibold">Profitability</h1>
-      <p className="mt-1 max-w-2xl text-muted">
-        What each order and client earns once the costs you spent on them are taken off.
-        {company.vatRegistered ? " All figures are net of VAT." : null}
-      </p>
+      <PageHeader
+        title="Profitability"
+        description={
+          <>
+            What each order and client earns once the costs you spent on them are taken off.
+            {company.vatRegistered ? " All figures are net of VAT." : null}
+          </>
+        }
+      />
 
       {!anyCosts ? (
-        <p className="mt-6 max-w-2xl rounded-xl bg-wash px-4 py-3 text-sm">
+        <Callout className="mt-6 max-w-2xl">
           No costs are tagged yet, so every margin is 100%. Open an expense and choose its client
           or order, or use <span className="font-medium">Add a cost</span> on an order.
-        </p>
+        </Callout>
       ) : null}
 
       {toRebill.length > 0 ? (
@@ -128,7 +135,7 @@ export default async function ProfitabilityPage({
                       href={`/invoices/new?clientId=${c.clientId}`}
                       className="font-medium text-foreground underline-offset-2 hover:underline"
                     >
-                      Create invoice →
+                      Create invoice
                     </Link>
                   ) : null}
                 </span>
@@ -146,7 +153,7 @@ export default async function ProfitabilityPage({
           invoiced.
         </p>
         {activeOrders.length === 0 ? (
-          <p className="text-sm text-muted">No orders yet.</p>
+          <EmptyState description="No orders yet." />
         ) : (
           <Table>
             <THead>
@@ -209,7 +216,7 @@ export default async function ProfitabilityPage({
           </nav>
         </div>
         {clients.length === 0 ? (
-          <p className="text-sm text-muted">No invoices or tagged costs in this period.</p>
+          <EmptyState description="No invoices or tagged costs in this period." />
         ) : (
           <Table>
             <THead>

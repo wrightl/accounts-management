@@ -153,7 +153,7 @@ export function QuotesSummaryPanel({ summary }: { summary: QuotesSummaryData }) 
           {summary.expiringSoonCount > 0 ? (
             <div className="flex justify-between gap-2">
               <dt className="text-muted">Expiring within 30 days</dt>
-              <dd className="tabular-nums text-brand">{summary.expiringSoonCount}</dd>
+              <dd className="tabular-nums text-warning">{summary.expiringSoonCount}</dd>
             </div>
           ) : null}
           {summary.largestQuote ? (

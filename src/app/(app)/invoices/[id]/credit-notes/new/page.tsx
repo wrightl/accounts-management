@@ -5,7 +5,7 @@ import { storedStatus } from "@/lib/invoices/status";
 import { todayIsoDate } from "@/lib/dates";
 import { formatGBP, penceToPounds } from "@/lib/money";
 import { CreditNoteForm } from "@/components/credit-notes/credit-note-form";
-import { BackLink } from "@/components/ui/back-link";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function NewCreditNotePage({
   params,
@@ -40,14 +40,18 @@ export default async function NewCreditNotePage({
 
   return (
     <div>
-      <div className="mb-6 flex items-center gap-3">
-        <BackLink href={`/invoices/${id}`}>{invoice.number}</BackLink>
-      </div>
-      <h1 className="font-display text-2xl font-semibold">Credit note for {invoice.number}</h1>
-      <p className="mt-1 mb-6 text-muted">
-        Invoice total {invoice.grossFormatted}
-        {creditedPence > 0 ? ` · ${formatGBP(creditedPence)} already credited` : null}
-      </p>
+      <PageHeader
+        backHref={`/invoices/${id}`}
+        backLabel={invoice.number}
+        title={<>Credit note for {invoice.number}</>}
+        description={
+          <>
+            The invoice total is {invoice.grossFormatted}
+            {creditedPence > 0 ? `, of which ${formatGBP(creditedPence)} is already credited` : null}.
+          </>
+        }
+        className="mb-6"
+      />
       {creditablePence <= 0 ? (
         <p className="text-sm text-muted">This invoice has been fully credited.</p>
       ) : (

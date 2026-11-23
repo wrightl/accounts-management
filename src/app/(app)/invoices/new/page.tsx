@@ -6,7 +6,7 @@ import { defaultLineVatRate } from "@/lib/vat";
 import { InvoiceForm } from "@/components/invoices/invoice-form";
 import { listRebillableExpenses } from "@/lib/profitability/queries";
 import { toRebillOptions } from "@/lib/profitability/rebill";
-import { BackLink } from "@/components/ui/back-link";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function NewInvoicePage({
   searchParams,
@@ -24,10 +24,12 @@ export default async function NewInvoicePage({
 
   return (
     <div>
-      <div className="mb-6 flex items-center gap-3">
-        <BackLink href="/invoices">Invoices</BackLink>
-      </div>
-      <h1 className="mb-6 font-display text-2xl font-semibold">Create invoice</h1>
+      <PageHeader
+        backHref="/invoices"
+        backLabel="Invoices"
+        title="Create invoice"
+        className="mb-6"
+      />
       {clients.length === 0 ? (
         <p className="text-sm text-muted">
           Add a{" "}

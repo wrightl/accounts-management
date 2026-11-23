@@ -4,12 +4,12 @@ import { getQuoteDetail } from "@/lib/quotes/queries";
 import { listClients } from "@/lib/clients/queries";
 import { canEditQuote } from "@/lib/quotes/status";
 import { QuoteForm } from "@/components/quotes/quote-form";
-import { BackLink } from "@/components/ui/back-link";
 import { penceToPounds } from "@/lib/money";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { defaultLineVatRate } from "@/lib/vat";
 import { onlinePaymentsStatus } from "@/lib/payments/online-status";
 import { PAGE_WIDTH } from "@/components/ui/page-width";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function EditQuotePage({
   params,
@@ -38,12 +38,12 @@ export default async function EditQuotePage({
 
   return (
     <div>
-      <div className="mb-6 flex items-center gap-3">
-        <BackLink href={`/quotes/${id}`}>{detail.quote.reference}</BackLink>
-      </div>
-      <h1 className="mb-6 font-display text-2xl font-semibold">
-        Edit {detail.quote.reference}
-      </h1>
+      <PageHeader
+        backHref={`/quotes/${id}`}
+        backLabel={detail.quote.reference}
+        title={<>Edit {detail.quote.reference}</>}
+        className="mb-6"
+      />
       <div className={PAGE_WIDTH.editor}>
         <QuoteForm
           mode="edit"

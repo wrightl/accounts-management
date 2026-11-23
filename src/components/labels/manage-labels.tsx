@@ -188,7 +188,7 @@ export function ManageLabelsButton({ labels }: { labels: LabelWithUsage[] }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button type="button" variant="secondary" onClick={() => setOpen(true)}>
+      <Button type="button" variant="ghost" onClick={() => setOpen(true)}>
         <Tag className="h-4 w-4" aria-hidden />
         Labels
       </Button>

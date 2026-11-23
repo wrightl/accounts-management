@@ -9,6 +9,9 @@ import { formatGBP } from "@/lib/money";
 import { getSafeToPay } from "@/lib/safe-to-pay/queries";
 import { DisplayDate } from "@/components/date-format-provider";
 import { getDateFormat } from "@/lib/date-format.server";
+import { Callout } from "@/components/ui/callout";
+import { PageHeader } from "@/components/ui/page-header";
+import { Card, cardClasses } from "@/components/ui/card";
 
 export const metadata: Metadata = { title: "Safe to pay yourself" };
 
@@ -43,9 +46,13 @@ function Parts({ parts }: { parts: Array<{ label: string; pence: number }> }) {
   const shown = parts.filter((p) => p.pence !== 0);
   if (shown.length < 2) return null;
   return (
-    <span className="block text-xs">
-      {shown.map((p) => `${p.label}: ${formatGBP(p.pence)}`).join(" · ")}
-    </span>
+    <ul className="text-xs">
+      {shown.map((p) => (
+        <li key={p.label}>
+          {p.label}: {formatGBP(p.pence)}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -61,14 +68,13 @@ export default async function SafeToPayPage() {
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-semibold">Safe to pay yourself</h1>
-      <p className="mt-1 max-w-2xl text-muted">
-        How much the company could pay out in dividends today without running short of cash or
-        paying more than its profits allow.
-      </p>
+      <PageHeader
+        title="Safe to pay yourself"
+        description="How much the company could pay out in dividends today without running short of cash or paying more than its profits allow."
+      />
 
       {!cash.known ? (
-        <p className="mt-6 max-w-2xl rounded-xl bg-wash px-4 py-3 text-sm">
+        <Callout className="mt-6 max-w-2xl">
           Alfa doesn&apos;t know the company&apos;s bank balance yet.{" "}
           <Link href="/transactions" className="underline">
             Import a bank statement
@@ -78,11 +84,11 @@ export default async function SafeToPayPage() {
             Settings
           </Link>
           .
-        </p>
+        </Callout>
       ) : null}
 
       <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:max-w-5xl">
-        <div className="rounded-2xl border border-border bg-surface p-5">
+        <Card>
           <p className="text-sm text-muted">Safe to pay today</p>
           <p className="mt-1 font-display text-4xl font-semibold tabular-nums">
             {formatGBP(result.safeNowPence)}
@@ -101,8 +107,8 @@ export default async function SafeToPayPage() {
               Declare a dividend
             </Link>
           ) : null}
-        </div>
-        <div className="rounded-2xl border border-border bg-surface p-5">
+        </Card>
+        <Card>
           <p className="text-sm text-muted">By <DisplayDate value={data.until} />, if clients pay on time</p>
           <p className="mt-1 font-display text-4xl font-semibold tabular-nums">
             {formatGBP(result.safeLaterPence)}
@@ -111,7 +117,7 @@ export default async function SafeToPayPage() {
             Adds {formatGBP(result.expectedInPence)} expected in.
             {result.laterLimitedBy === "reserves" ? " Limited by profits available." : ""}
           </p>
-        </div>
+        </Card>
       </section>
 
       {data.split.length > 1 ? (
@@ -190,7 +196,7 @@ export default async function SafeToPayPage() {
         </section>
 
         {canManage ? (
-          <section className="rounded-2xl border border-border bg-surface p-5">
+          <section className={cardClasses()}>
             <h2 className="mb-4 font-display text-lg font-semibold">Assumptions</h2>
             <SafeToPayAssumptionsForm
               vatRegistered={data.vatRegistered}

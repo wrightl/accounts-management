@@ -26,6 +26,7 @@ import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { Callout } from "@/components/ui/callout";
 
 /** Items shown per check on screen; the workbook's Notes for the accountant tab lists them all. */
 const ITEMS_SHOWN = 20;
@@ -39,7 +40,7 @@ const STATUS_LABEL: Record<YearStatus, string> = {
 
 const STATUS_STYLE: Record<YearStatus, string> = {
   not_started: "bg-wash text-muted",
-  checks_outstanding: "bg-amber-100 text-amber-900",
+  checks_outstanding: "bg-warning/15 text-warning",
   ready: "bg-accent/30 text-navy",
   exported: "bg-success/15 text-success",
 };
@@ -72,10 +73,10 @@ function CheckCard({ check }: { check: Check }) {
   const shown = check.items.slice(0, ITEMS_SHOWN);
   const more = check.items.length - shown.length;
   return (
-    <Card className={cn("p-5", check.blocking && "border-red-300")}>
+    <Card className={cn("p-5", check.blocking && "border-destructive/40")}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="font-medium">{check.title}</h3>
-        <span className={cn("text-sm", check.blocking ? "text-red-700" : "text-muted")}>
+        <span className={cn("text-sm", check.blocking ? "text-destructive" : "text-muted")}>
           {check.blocking
             ? "Fix before downloading"
             : `${check.items.length} to review`}
@@ -237,21 +238,21 @@ export default async function YearEndPage({
                   : ""}
             </p>
             {!standard ? (
-              <p className="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              <Callout tone="warning" className="mt-4">
                 This range is not one of your standard years
                 {isLimited ? "" : " (the tax year, or the year end set in Business settings)"}. Use
                 it only for a first or final period, and check the dates with your accountant.
-              </p>
+              </Callout>
             ) : null}
             {!isCompleted(selected, today) ? (
-              <p className="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              <Callout tone="warning" className="mt-4">
                 This period has not ended yet, so the figures will change.
-              </p>
+              </Callout>
             ) : null}
 
             <div className="mt-5 space-y-4">
               {failing.length === 0 ? (
-                <Card className="p-5 text-sm">
+                <Card className="text-sm">
                   All {passed} checks are clear for this period.
                 </Card>
               ) : (
@@ -301,7 +302,7 @@ export default async function YearEndPage({
                 Your role can&apos;t download the pack. Ask an admin or your accountant.
               </p>
             ) : blockers.length > 0 ? (
-              <p className="mt-3 text-sm text-red-700">
+              <p className="mt-3 text-sm text-destructive">
                 The pack can&apos;t be downloaded until the {blockers.length === 1 ? "detail" : "details"}{" "}
                 marked &quot;Fix before downloading&quot; above {blockers.length === 1 ? "is" : "are"} filled in.
               </p>
@@ -315,12 +316,12 @@ export default async function YearEndPage({
                     : ""}
                 </p>
                 {pack.notes.unconfirmed > 0 ? (
-                  <p className="mt-4 max-w-2xl rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  <Callout tone="warning" className="mt-4 max-w-2xl">
                     {pack.notes.unconfirmed}{" "}
                     {pack.notes.unconfirmed === 1 ? "item is" : "items are"} not confirmed in the
                     notes above. You can still download the pack: the workbook will show{" "}
                     {pack.notes.unconfirmed === 1 ? "it" : "each"} as &quot;Not confirmed&quot;.
-                  </p>
+                  </Callout>
                 ) : null}
                 <div className="mt-4 flex flex-wrap gap-3">
                   <a href={downloadHref("xlsx")} className={buttonClasses("primary")} download>

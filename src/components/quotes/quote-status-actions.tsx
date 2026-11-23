@@ -130,6 +130,8 @@ export function QuoteStatusActions({
     return (
         <>
             <SplitButton
+                // A draft's main job is sending it (Send PDF); after that it's the status.
+                variant={status === 'draft' ? 'ghost' : 'primary'}
                 primaryLabel={transitionLabel(primary, status)}
                 onPrimary={() => runTransition(primary)}
                 options={menuTransitions.map((target) => ({

@@ -2,7 +2,7 @@ import { SUB_PROCESSORS } from "@/lib/legal";
 
 export function SubProcessorTable() {
   return (
-    <div className="overflow-x-auto rounded-lg border border-border">
+    <div className="overflow-x-auto rounded-xl border border-border">
       <table className="w-full text-left text-sm">
         <caption className="sr-only">Sub-processors</caption>
         <thead className="bg-surface text-foreground">

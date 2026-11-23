@@ -12,6 +12,8 @@ import {
 } from "@/actions/notifications";
 import type { Notification } from "@/db/schema";
 import { DisplayDate } from "@/components/date-format-provider";
+import { cardClasses } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export function InboxClient({
   initial,
@@ -109,11 +111,11 @@ export function InboxClient({
         </div>
 
         {items.length === 0 ? (
-          <p className="rounded-2xl border border-border bg-surface px-6 py-12 text-center text-sm text-muted">
-            No notifications{filter === "unread" ? " unread" : ""}.
-          </p>
+          <EmptyState
+            description={filter === "unread" ? "No unread notifications." : "No notifications."}
+          />
         ) : (
-          <ul className="overflow-hidden rounded-2xl border border-border bg-surface">
+          <ul className={cardClasses("p-0 overflow-hidden")}>
             {items.map((n) => {
               const unread = !n.readAt;
               const active = n.id === selectedId;
@@ -152,7 +154,7 @@ export function InboxClient({
 
       <div className="min-w-0">
         {selected ? (
-          <article className="rounded-2xl border border-border bg-surface p-6">
+          <article className={cardClasses()}>
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="font-display text-xl font-semibold">
@@ -184,9 +186,7 @@ export function InboxClient({
             ) : null}
           </article>
         ) : (
-          <div className="rounded-2xl border border-dashed border-border px-6 py-16 text-center text-sm text-muted">
-            Select a notification to read it.
-          </div>
+          <EmptyState description="Select a notification to read it." />
         )}
       </div>
     </div>

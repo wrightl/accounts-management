@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import { queryStatusLabel, type QueryStatus } from "@/lib/queries/status";
 
 const styles: Record<QueryStatus, string> = {
-  open: "bg-amber-100 text-amber-900",
+  open: "bg-warning/15 text-warning",
   answered: "bg-accent/30 text-navy",
   closed: "bg-wash text-muted",
 };

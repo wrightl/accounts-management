@@ -183,7 +183,7 @@ export function ExpenseFilters({
         ) : null}
         {params.mine ? (
           <span id="expense-mine-hint" className="text-sm text-muted">
-            Showing your reimbursable expenses — status and payer are fixed.
+            Showing your reimbursable expenses, so status and payer are fixed.
           </span>
         ) : null}
       </div>

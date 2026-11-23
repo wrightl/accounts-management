@@ -35,7 +35,7 @@ export default async function OrdersPage({
     <div>
       <PageHeader
         title="Orders"
-        description="Accepted quotes and manually created work orders before invoicing."
+        description="Work agreed with clients, from an accepted quote or added by hand, before it's invoiced."
         actions={
           canWrite ? (
             <Link href="/orders/new" className={buttonClasses("primary")}>

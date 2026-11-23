@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { useAlert } from "@/components/ui/alert-dialog";
 import { FieldError, Label } from "@/components/ui/form";
 import { MAX_RECEIPT_BYTES } from "@/lib/expenses/receipt-file";
+import { Callout } from "@/components/ui/callout";
 
 /** Attach the PDF the client actually received, for an imported invoice. */
 export function InvoiceOriginalDocument({
@@ -61,7 +62,7 @@ export function InvoiceOriginalDocument({
   }
 
   return (
-    <div className="mt-3 rounded-xl bg-wash px-4 py-3 text-sm">
+    <Callout className="mt-3">
       <p>
         {filename
           ? `Original attached: ${filename}. It's used wherever this invoice's PDF appears.`
@@ -90,6 +91,6 @@ export function InvoiceOriginalDocument({
         ) : null}
       </div>
       <FieldError id="invoice-original-error">{error}</FieldError>
-    </div>
+    </Callout>
   );
 }

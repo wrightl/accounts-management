@@ -57,7 +57,7 @@ export function PlatformAdminActions({
         <Button
           type="button"
           variant="ghost"
-          className="!px-3 !py-1 text-xs text-red-700"
+          className="!px-3 !py-1 text-xs text-destructive"
           disabled={pending}
           onClick={async () => {
             const ok = await confirm({

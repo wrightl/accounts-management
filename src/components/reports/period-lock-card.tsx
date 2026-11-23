@@ -10,6 +10,7 @@ import { FieldError, Input, Label } from "@/components/ui/form";
 import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
 import { useFieldErrors } from "@/components/ui/use-field-errors";
 import { DisplayDate } from "@/components/date-format-provider";
+import { cardClasses } from "@/components/ui/card";
 
 export function PeriodLockCard({
   lockedThrough,
@@ -53,7 +54,7 @@ export function PeriodLockCard({
   }
 
   return (
-    <section className="mt-10 rounded-2xl border border-border bg-surface p-5">
+    <section className={cardClasses("mt-10")}>
       <div className="flex items-start gap-3">
         {lockedThrough ? (
           <Lock className="mt-0.5 h-5 w-5 shrink-0 text-foreground" aria-hidden />

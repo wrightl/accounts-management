@@ -4,6 +4,7 @@ import { listPageHref, parseListPaging } from "@/lib/list-paging";
 import { ListPagination } from "@/components/ui/list-pagination";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { SettingsPageHeader } from "@/components/settings/settings-page-header";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export default async function AuditLogPage({
   searchParams,
@@ -18,12 +19,12 @@ export default async function AuditLogPage({
     <div>
       <SettingsPageHeader
         title="Audit log"
-        description="Sensitive changes to this company and who made them. Admins only."
+        description="Sensitive changes to this company and who made them."
       />
 
       <div>
         {rows.length === 0 ? (
-          <p className="text-sm text-muted">No audit entries yet.</p>
+          <EmptyState description="No audit entries yet." />
         ) : (
           <Table>
             <THead>

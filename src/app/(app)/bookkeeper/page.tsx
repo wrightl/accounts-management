@@ -12,6 +12,8 @@ import { DAILY_QUESTION_LIMIT, questionsAskedToday } from "@/lib/bookkeeper/ask"
 import { countUncategorisedOutgoing, listCategorySuggestions } from "@/lib/bookkeeper/categories";
 import { listAiReceiptMatches } from "@/lib/bookkeeper/receipts";
 import { getCompanySettings } from "@/lib/settings/queries";
+import { Callout } from "@/components/ui/callout";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const metadata: Metadata = { title: "AI bookkeeper" };
 
@@ -32,16 +34,15 @@ export default async function BookkeeperPage() {
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-semibold">AI bookkeeper</h1>
-      <p className="mt-1 max-w-2xl text-muted">
-        Suggestions to speed up the bookkeeping, and answers from your own figures. Nothing
-        changes until someone accepts it.
-      </p>
+      <PageHeader
+        title="AI bookkeeper"
+        description="Suggestions and answers from your own figures, which change nothing until someone accepts them."
+      />
       {!aiReady ? (
-        <p className="mt-4 max-w-2xl rounded-xl bg-wash px-4 py-3 text-sm">
+        <Callout className="mt-4 max-w-2xl">
           AI isn&apos;t set up on this deployment, so questions and AI suggestions are off.
           Categories learned from your own history still work.
-        </p>
+        </Callout>
       ) : null}
 
       {canAsk && aiReady ? (

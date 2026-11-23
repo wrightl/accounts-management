@@ -81,7 +81,6 @@ export default async function InvoicesPage({
     <div>
       <PageHeader
         title="Invoices"
-        description="Create, send and track client invoices."
         actions={
           <>
             <Link href="/credit-notes" className={buttonClasses("ghost")}>
@@ -125,7 +124,7 @@ export default async function InvoicesPage({
       <div className="mt-6">
         {rows.length === 0 ? (
           filtered ? (
-            <p className="text-sm text-muted">No invoices match these filters.</p>
+            <EmptyState description="No invoices match these filters." />
           ) : (
             <EmptyState
               title="No invoices yet"

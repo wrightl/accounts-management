@@ -32,7 +32,7 @@ export function CopyButton({
       type="button"
       onClick={onCopy}
       aria-label={label}
-      className={cn(buttonClasses("secondary", "text-xs shrink-0"), className)}
+      className={cn(buttonClasses("ghost", "text-xs shrink-0"), className)}
     >
       {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
       {copied ? "Copied" : label}

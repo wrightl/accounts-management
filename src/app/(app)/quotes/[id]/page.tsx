@@ -11,7 +11,6 @@ import { QuoteActions } from "@/components/quotes/quote-actions";
 import { QuoteStatusActions } from "@/components/quotes/quote-status-actions";
 import { QuoteHistory } from "@/components/quotes/quote-history";
 import { buttonClasses } from "@/components/ui/button";
-import { BackLink } from "@/components/ui/back-link";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import {
@@ -26,6 +25,7 @@ import { publicQuoteUrl } from "@/lib/quotes/public-token";
 import { getDateFormat } from "@/lib/date-format.server";
 import { formatInstantDateTime, type DateFormat } from "@/lib/dates";
 import { DisplayDate } from "@/components/date-format-provider";
+import { PageHeader } from "@/components/ui/page-header";
 
 function formatTs(d: Date | string | null | undefined, format: DateFormat): string | null {
   if (!d) return null;
@@ -70,65 +70,69 @@ export default async function QuoteDetailPage({
 
   return (
     <div>
-      <div className="mb-6">
-        <BackLink href="/quotes">Quotes</BackLink>
-      </div>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h1 className="font-display text-2xl font-semibold">
-              {detail.quote.reference}
-            </h1>
-            {canWrite && canEditQuote(detail.quote.status) ? (
-              <Link
-                href={`/quotes/${detail.quote.id}/edit`}
-                className={buttonClasses("ghost", "size-9 shrink-0 px-0")}
-                aria-label="Edit quote"
-              >
-                <Pencil className="h-4 w-4" />
-              </Link>
-            ) : null}
-          </div>
-          <p className="mt-1 text-muted">
-            {quoteStatusLabel(detail.quote.status as QuoteStatus)} · {clientDisplayName(detail.client)}
-          </p>
-          <p className="mt-1 text-xs text-muted">
-            {[
-              sentLabel ? `Sent ${sentLabel}` : null,
-              viewedLabel ? `Viewed ${viewedLabel}` : null,
-              acceptedLabel ? `Accepted ${acceptedLabel}` : null,
-              declinedLabel ? `Declined ${declinedLabel}` : null,
-            ]
-              .filter(Boolean)
-              .join(" · ") || "Not sent yet"}
-          </p>
-          {publicUrl ? (
-            <p className="mt-1 text-xs text-muted">
-              Client link:{" "}
-              <a href={publicUrl} className="underline" target="_blank" rel="noreferrer">
-                {publicUrl}
-              </a>
+      <PageHeader
+        backHref="/quotes"
+        backLabel="Quotes"
+        title={detail.quote.reference}
+        titleAddon={
+          canWrite && canEditQuote(detail.quote.status) ? (
+            <Link
+              href={`/quotes/${detail.quote.id}/edit`}
+              className={buttonClasses("ghost", "size-9 shrink-0 px-0")}
+              aria-label="Edit quote"
+            >
+              <Pencil className="h-4 w-4" />
+            </Link>
+          ) : null
+        }
+        description={
+          <>
+            <p>
+              {quoteStatusLabel(detail.quote.status as QuoteStatus)} ·{" "}
+              {clientDisplayName(detail.client)}
             </p>
-          ) : null}
-          {canWrite ? (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <QuoteStatusActions
-                quoteId={detail.quote.id}
-                status={detail.quote.status as QuoteStatus}
-                canWrite={canWrite}
-                declineCategories={declineCategories}
-              />
-              <QuoteActions
-                quoteId={detail.quote.id}
-                status={detail.quote.status}
-                canWrite={canWrite}
-                clientEmail={detail.client.email ?? ""}
-                defaultMessage={defaultMessage}
-              />
-            </div>
-          ) : null}
+            <p className="mt-1 text-sm">
+              {[
+                sentLabel ? `Sent ${sentLabel}` : null,
+                viewedLabel ? `Viewed ${viewedLabel}` : null,
+                acceptedLabel ? `Accepted ${acceptedLabel}` : null,
+                declinedLabel ? `Declined ${declinedLabel}` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ") || "Not sent yet"}
+            </p>
+            {publicUrl ? (
+              <p className="mt-1 text-sm">
+                Client link:{" "}
+                <a href={publicUrl} className="underline" target="_blank" rel="noreferrer">
+                  {publicUrl}
+                </a>
+              </p>
+            ) : null}
+          </>
+        }
+      />
+
+      {canWrite ? (
+        <div className="mt-4 flex flex-wrap items-start gap-2">
+          <QuoteStatusActions
+            quoteId={detail.quote.id}
+            status={detail.quote.status as QuoteStatus}
+            canWrite={canWrite}
+            declineCategories={declineCategories}
+          />
+          <QuoteActions
+            quoteId={detail.quote.id}
+            status={detail.quote.status}
+            canWrite={canWrite}
+            clientEmail={detail.client.email ?? ""}
+            defaultMessage={defaultMessage}
+          />
         </div>
-        <Card className="min-w-[140px]">
+      ) : null}
+
+      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Card>
           <CardTitle>Total</CardTitle>
           <CardValue>{detail.quote.grossFormatted}</CardValue>
         </Card>

@@ -126,7 +126,7 @@ export function SettingsWithRail({
                   aria-current={active === id ? "location" : undefined}
                   onClick={(event) => jumpTo(event, id)}
                   className={cn(
-                    "block whitespace-nowrap rounded-full px-3 py-1.5 text-sm transition-colors hover:bg-wash lg:rounded-lg",
+                    "block whitespace-nowrap rounded-full px-3 py-1.5 text-sm transition-colors hover:bg-wash lg:rounded-xl",
                     active === id
                       ? "bg-wash font-medium text-foreground"
                       : "text-muted hover:text-foreground",

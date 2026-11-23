@@ -1,10 +1,10 @@
 import { guardTenantPage } from "@/lib/auth";
 import { listClients } from "@/lib/clients/queries";
 import { OrderForm } from "@/components/orders/order-form";
-import { BackLink } from "@/components/ui/back-link";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { defaultLineVatRate } from "@/lib/vat";
 import { PAGE_WIDTH } from "@/components/ui/page-width";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function NewOrderPage() {
   const { companyId } = await guardTenantPage("accounts:write");
@@ -16,10 +16,12 @@ export default async function NewOrderPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <BackLink href="/orders">Orders</BackLink>
-      </div>
-      <h1 className="mb-6 font-display text-2xl font-semibold">Create order</h1>
+      <PageHeader
+        backHref="/orders"
+        backLabel="Orders"
+        title="Create order"
+        className="mb-6"
+      />
       <div className={PAGE_WIDTH.editor}>
         <OrderForm
           clients={clients}

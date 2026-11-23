@@ -7,7 +7,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const statusStyles: Record<InboundEmailJobStatus, string> = {
-  pending: "bg-amber-100 text-amber-900",
+  pending: "bg-warning/15 text-warning",
   processed: "bg-success/15 text-success",
   rejected: "bg-wash text-muted",
   failed: "bg-destructive/15 text-destructive",
@@ -49,7 +49,7 @@ export function InboundErrorDetail({
   return (
     <div
       className={cn(
-        "rounded-lg border border-border bg-wash/40 p-4 text-sm",
+        "rounded-xl border border-border bg-wash/40 p-4 text-sm",
         className,
       )}
     >
@@ -98,7 +98,7 @@ export function InboundErrorDetail({
           <summary className="cursor-pointer text-xs text-muted hover:text-foreground">
             Raw error
           </summary>
-          <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words rounded border border-border bg-background p-2 font-mono text-xs">
+          <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words rounded-xl border border-border bg-background p-2 font-mono text-xs">
             {lastError}
           </pre>
         </details>
