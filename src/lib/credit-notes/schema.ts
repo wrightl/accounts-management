@@ -35,7 +35,17 @@ export function parseCreditNoteInput(raw: unknown) {
 }
 
 export const creditNoteRefundSchema = z.object({
+  /** In the invoice's currency. */
   amountPounds: z.string().trim().min(1, "Enter the amount refunded"),
+  /**
+   * Foreign-currency invoices: the sterling that left the bank. Blank means
+   * estimate it at the Bank of England rate for the refund date.
+   */
+  sterlingPounds: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v ? v : null)),
   refundedAt: z
     .string()
     .trim()
@@ -53,6 +63,7 @@ export function creditNoteRefundRawFromFormData(
 ): Record<string, unknown> {
   return {
     amountPounds: formData.get("amountPounds") ?? "",
+    sterlingPounds: formData.get("sterlingPounds") ?? "",
     refundedAt: formData.get("refundedAt") || todayIsoDate(),
     reference: formData.get("reference") ?? "",
   };

@@ -8,6 +8,8 @@
  * £70 or £100 depending on the size of the debt.
  */
 
+import { toSterlingPence } from "@/lib/currency";
+
 export const STATUTORY_MARGIN_PERCENT = 8;
 
 /**
@@ -70,34 +72,47 @@ export type LatePaymentCharge = {
   basePercent: number;
   /** False when the reference rate isn't in the table yet. */
   rateKnown: boolean;
-  interestPence: number;
-  dailyInterestPence: number;
+  /** Amounts in the invoice's currency (minor units). */
+  interest: number;
+  dailyInterest: number;
+  compensation: number;
+  total: number;
+  /** The fixed compensation in sterling, as the Act sets it. */
   compensationPence: number;
-  totalPence: number;
 };
 
-/** Charges claimable on `amountDuePence` that was due on `dueDate`, as at `asOf`. */
+/**
+ * Charges claimable on `amountDue`, in the invoice's currency, that was due on
+ * `dueDate`, as at `asOf`. Interest runs on the debt in its own currency. The
+ * fixed compensation is set in sterling by the size of the debt, so for a
+ * foreign invoice the debt is valued, and the compensation converted, at
+ * `fxRate` (units of the currency per £1 on `asOf`; 1 for sterling).
+ */
 export function latePaymentCharge(params: {
-  amountDuePence: number;
+  amountDue: number;
   dueDate: string;
   asOf: string;
+  fxRate?: number;
 }): LatePaymentCharge | null {
   const daysLate = daysBetween(params.dueDate, params.asOf);
-  if (daysLate <= 0 || params.amountDuePence <= 0) return null;
+  if (daysLate <= 0 || params.amountDue <= 0) return null;
   if (!hasReferenceRate(params.dueDate)) return null;
+  const fxRate = params.fxRate ?? 1;
   const { basePercent, known } = referenceBaseRate(params.dueDate);
   const ratePercent = basePercent + STATUTORY_MARGIN_PERCENT;
-  const daily = (params.amountDuePence * ratePercent) / 100 / 365;
-  const interestPence = Math.round(daily * daysLate);
-  const compensationPence = fixedCompensationPence(params.amountDuePence);
+  const daily = (params.amountDue * ratePercent) / 100 / 365;
+  const interest = Math.round(daily * daysLate);
+  const compensationPence = fixedCompensationPence(toSterlingPence(params.amountDue, fxRate));
+  const compensation = fxRate === 1 ? compensationPence : Math.round(compensationPence * fxRate);
   return {
     daysLate,
     ratePercent,
     basePercent,
     rateKnown: known,
-    interestPence,
-    dailyInterestPence: Math.round(daily),
+    interest,
+    dailyInterest: Math.round(daily),
+    compensation,
+    total: interest + compensation,
     compensationPence,
-    totalPence: interestPence + compensationPence,
   };
 }

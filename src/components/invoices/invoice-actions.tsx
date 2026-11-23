@@ -18,6 +18,7 @@ import {
 } from "@/lib/payments/schema";
 import type { MatchScoreBreakdown } from "@/lib/bank/match";
 import { formatGBP, penceToPounds } from "@/lib/money";
+import { SterlingAmountField } from "@/components/documents/sterling-amount-field";
 import { DisplayDate, useDateFormat } from "@/components/date-format-provider";
 import { formatIsoDate } from "@/lib/dates";
 
@@ -168,6 +169,10 @@ export function InvoiceActions({
     });
   }
 
+  // Typed since the chosen receipt last changed (see inputsKey below).
+  const [typedAmount, setTypedAmount] = useState<{ key: string; value: string } | null>(null);
+  const [typedDate, setTypedDate] = useState<{ key: string; value: string } | null>(null);
+
   if (!canWrite) return null;
 
   function refresh() {
@@ -185,10 +190,15 @@ export function InvoiceActions({
         : ""
       : String(penceToPounds(selectedMatch!.amountPence))
     : "";
+  // The inputs reset (by key) when the chosen receipt changes; track what was
+  // typed since, for the pounds field's check.
+  const inputsKey = `${selectedMatchId ?? "manual"}-${manualEntry}`;
   const defaultReference =
     selectedMatch && !manualEntry ? (selectedMatch.reference ?? "") : "";
   const defaultReceivedAt =
     selectedMatch && !manualEntry ? selectedMatch.bookedAt : "";
+  const amountNow = typedAmount?.key === inputsKey ? typedAmount.value : defaultAmount;
+  const dateNow = typedDate?.key === inputsKey ? typedDate.value : defaultReceivedAt;
 
   return (
     <div className="min-w-0 flex-1 space-y-4">
@@ -342,7 +352,10 @@ export function InvoiceActions({
               aria-describedby={
                 fieldErrors.amountPounds ? "amountPounds-error" : undefined
               }
-              onChange={() => clearField("amountPounds")}
+              onChange={(e) => {
+                clearField("amountPounds");
+                setTypedAmount({ key: inputsKey, value: e.target.value });
+              }}
             />
             <FieldError id="amountPounds-error">{fieldErrors.amountPounds}</FieldError>
           </div>
@@ -353,27 +366,16 @@ export function InvoiceActions({
                 invoice&apos;s rate is booked as an exchange gain or loss.
               </p>
             ) : (
-              <div>
-                <Label htmlFor="sterlingPounds">Reached your bank (£)</Label>
-                <Input
-                  id="sterlingPounds"
-                  name="sterlingPounds"
-                  inputMode="decimal"
-                  disabled={pending}
-                  aria-invalid={Boolean(fieldErrors.sterlingPounds)}
-                  aria-describedby={
-                    fieldErrors.sterlingPounds
-                      ? "sterlingPounds-error sterlingPounds-hint"
-                      : "sterlingPounds-hint"
-                  }
-                  onChange={() => clearField("sterlingPounds")}
-                />
-                <FieldError id="sterlingPounds-error">{fieldErrors.sterlingPounds}</FieldError>
-                <p id="sterlingPounds-hint" className="mt-1 text-xs text-muted">
-                  Leave blank to estimate at the Bank of England rate. Linking the bank line
-                  later replaces the estimate.
-                </p>
-              </div>
+              <SterlingAmountField
+                id="sterlingPounds"
+                label="Reached your bank (£)"
+                currency={currency}
+                foreignAmount={amountNow}
+                date={dateNow}
+                disabled={pending}
+                error={fieldErrors.sterlingPounds}
+                onChange={() => clearField("sterlingPounds")}
+              />
             )
           ) : null}
           <div>
@@ -404,6 +406,7 @@ export function InvoiceActions({
               key={`date-${selectedMatchId ?? "manual"}-${manualEntry}`}
               defaultValue={defaultReceivedAt}
               disabled={pending}
+              onChange={(e) => setTypedDate({ key: inputsKey, value: e.target.value })}
             />
           </div>
           {manualEntry && selectedMatch ? (

@@ -1,6 +1,7 @@
 "use server";
 
-import { isForeignDocumentCurrency, sterlingTotals } from "@/lib/currency";
+import { documentTotals } from "@/lib/currency";
+import { documentRate } from "@/lib/document-rate";
 import { and, eq, ne } from "drizzle-orm";
 import { getDb } from "@/db";
 import { invoiceLineItems, invoices } from "@/db/schema";
@@ -11,7 +12,7 @@ import { allocateInvoiceNumber } from "@/lib/invoices/allocate";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
 import { defaultDueDate, storedStatus } from "@/lib/invoices/status";
 import { hasReferenceRate, latePaymentCharge } from "@/lib/late-payment";
-import { formatGBP } from "@/lib/money";
+import { formatGBP, formatMoney } from "@/lib/money";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import type { ActionResult } from "@/actions/result";
 
@@ -29,20 +30,24 @@ export async function raiseLatePaymentInvoice(invoiceId: string): Promise<Action
       if (invoice.latePaymentForInvoiceId) {
         return { ok: false, error: "This invoice is already a late payment claim" };
       }
-      if (isForeignDocumentCurrency(invoice.currency)) {
-        // Statutory charges are worked out in sterling; foreign invoices come later.
+      const today = todayIsoDate();
+      // The claim is a new invoice in the same currency, converted at today's
+      // rate like any invoice issued today. The same rate values the debt for
+      // the compensation band and converts the compensation.
+      const rate = await documentRate(invoice.currency, today);
+      if (!rate.ok) {
         return {
           ok: false,
-          error: `Late payment charges on ${invoice.currency} invoices aren't supported yet`,
+          error: `Couldn't get today's Bank of England ${invoice.currency} rate to work out the claim. Try again later.`,
         };
       }
-      const today = todayIsoDate();
       const charge =
         storedStatus(invoice.status) === "sent" && invoice.dueDate
           ? latePaymentCharge({
-              amountDuePence: detail.balanceMinor,
+              amountDue: detail.balanceMinor,
               dueDate: invoice.dueDate,
               asOf: today,
+              fxRate: rate.rate.fxRate,
             })
           : null;
       if (!charge) {
@@ -77,17 +82,20 @@ export async function raiseLatePaymentInvoice(invoiceId: string): Promise<Action
       const company = await getOrCreateCompanySettings(companyId);
       const lines = [
         {
-          description: `Statutory interest on invoice ${invoice.number}: ${formatGBP(detail.balanceMinor)} at ${charge.ratePercent}% a year for ${charge.daysLate} days from ${formatIsoDateUk(invoice.dueDate)}`,
+          description: `Statutory interest on invoice ${invoice.number}: ${formatMoney(detail.balanceMinor, invoice.currency)} at ${charge.ratePercent}% a year for ${charge.daysLate} days from ${formatIsoDateUk(invoice.dueDate)}`,
           quantity: 1,
-          unitPricePence: charge.interestPence,
+          unitPricePence: charge.interest,
           vatRate: 0,
           discountPercent: 0,
           position: 0,
         },
         {
-          description: `Fixed compensation for late payment of invoice ${invoice.number}`,
+          description:
+            charge.compensation === charge.compensationPence
+              ? `Fixed compensation for late payment of invoice ${invoice.number}`
+              : `Fixed compensation of ${formatGBP(charge.compensationPence)} for late payment of invoice ${invoice.number}`,
           quantity: 1,
-          unitPricePence: charge.compensationPence,
+          unitPricePence: charge.compensation,
           vatRate: 0,
           discountPercent: 0,
           position: 1,
@@ -107,11 +115,11 @@ export async function raiseLatePaymentInvoice(invoiceId: string): Promise<Action
             dueDate: defaultDueDate(today, company.invoicePaymentTermsDays),
             notes:
               "Claimed under the Late Payment of Commercial Debts (Interest) Act 1998. Interest and compensation are outside the scope of VAT.",
-            ...sterlingTotals({
-              netPence: charge.totalPence,
-              vatPence: 0,
-              grossPence: charge.totalPence,
-            }),
+            currency: rate.rate.currency,
+            fxRate: rate.rate.fxRate,
+            fxRateDate: rate.rate.fxRateDate,
+            fxRateSource: rate.rate.fxRateSource,
+            ...documentTotals(lines, rate.rate),
             latePaymentForInvoiceId: invoiceId,
             createdByUserId: localUserId,
           })
@@ -128,7 +136,9 @@ export async function raiseLatePaymentInvoice(invoiceId: string): Promise<Action
         entityId: newId,
         meta: {
           forInvoiceId: invoiceId,
-          interestPence: charge.interestPence,
+          currency: invoice.currency,
+          interest: charge.interest,
+          compensation: charge.compensation,
           compensationPence: charge.compensationPence,
           ratePercent: charge.ratePercent,
         },

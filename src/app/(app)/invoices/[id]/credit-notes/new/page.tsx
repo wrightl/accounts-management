@@ -60,6 +60,7 @@ export default async function NewCreditNotePage({
           invoiceNumber={invoice.number}
           initialLines={initialLines}
           creditablePence={creditableMinor}
+          currency={invoice.currency}
           vatEnabled={invoice.vatPence > 0}
           defaultIssueDate={defaultIssueDate}
         />

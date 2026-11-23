@@ -15,6 +15,7 @@ import type {
   LabelledValue,
   PdfClient,
   PdfCompany,
+  PdfCreditNote,
   PdfCreditNoteDetails,
   PdfInvoice,
   PdfLine,
@@ -114,13 +115,7 @@ export function quoteDesignData(quote: PdfQuote, parties: DesignParties): Design
 }
 
 export function creditNoteDesignData(
-  creditNote: {
-    number: string;
-    issueDate: string | null;
-    netPence: number;
-    vatPence: number;
-    grossPence: number;
-  },
+  creditNote: PdfCreditNote,
   details: PdfCreditNoteDetails,
   parties: DesignParties,
 ): DesignData {
@@ -133,12 +128,11 @@ export function creditNoteDesignData(
       issueDate: creditNote.issueDate,
       creditedInvoiceNumber: details.invoiceNumber,
       reason: details.reason,
-      netMinor: creditNote.netPence,
-      vatMinor: creditNote.vatPence,
-      grossMinor: creditNote.grossPence,
-      // Credit notes are issued in sterling until they follow their invoice's currency.
-      currency: STERLING,
-      sterlingVat: null,
+      netMinor: creditNote.netMinor,
+      vatMinor: creditNote.vatMinor,
+      grossMinor: creditNote.grossMinor,
+      currency: creditNote.currency,
+      sterlingVat: sterlingVatRow(creditNote),
     },
   };
 }

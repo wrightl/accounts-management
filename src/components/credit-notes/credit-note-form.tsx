@@ -8,7 +8,7 @@ import { FormStickyActions } from "@/components/ui/form-sticky-actions";
 import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
 import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
 import { useFieldErrors } from "@/components/ui/use-field-errors";
-import { formatGBP, invoiceTotals, poundsToPence } from "@/lib/money";
+import { expenseCurrencySymbol, formatMoney, invoiceTotals, poundsToPence } from "@/lib/money";
 import { createCreditNote } from "@/actions/credit-notes";
 import {
   creditNoteRawFromFormData,
@@ -49,6 +49,7 @@ export function CreditNoteForm({
   invoiceNumber,
   initialLines,
   creditablePence,
+  currency = "GBP",
   vatEnabled,
   defaultIssueDate,
 }: {
@@ -57,7 +58,10 @@ export function CreditNoteForm({
   /** Prefilled from the invoice so a full credit is one click. */
   initialLines: CreditNoteLineDraft[];
   /** Gross still available to credit on the invoice. */
+  /** In the invoice's currency. */
   creditablePence: number;
+  /** The credited invoice's currency; a credit note is always in it. */
+  currency?: string;
   /** Whether the invoice charged VAT (credit reverses it at the same rates). */
   vatEnabled: boolean;
   defaultIssueDate: string;
@@ -198,7 +202,10 @@ export function CreditNoteForm({
           <span aria-hidden="true" />
           <span>Description</span>
           <span>Qty</span>
-          <span>Unit Cost £{vatEnabled ? " (ex VAT)" : ""}</span>
+          <span>
+            Unit Cost {expenseCurrencySymbol(currency)}
+            {vatEnabled ? " (ex VAT)" : ""}
+          </span>
           <span>Disc %</span>
           {vatEnabled ? <span>VAT</span> : null}
           <span className="sr-only">Remove</span>
@@ -334,17 +341,17 @@ export function CreditNoteForm({
         <div className="space-y-1 text-right">
           {vatEnabled && totals.vatPence > 0 ? (
             <>
-              <p className="text-sm text-muted">Net {formatGBP(totals.netPence)}</p>
-              <p className="text-sm text-muted">VAT {formatGBP(totals.vatPence)}</p>
+              <p className="text-sm text-muted">Net {formatMoney(totals.netPence, currency)}</p>
+              <p className="text-sm text-muted">VAT {formatMoney(totals.vatPence, currency)}</p>
             </>
           ) : null}
           <p className="font-display text-lg font-semibold">
-            Total credit {formatGBP(totals.grossPence)}
+            Total credit {formatMoney(totals.grossPence, currency)}
           </p>
           <p className={`text-sm ${overLimit ? "text-destructive" : "text-muted"}`}>
             {overLimit
-              ? `More than the ${formatGBP(creditablePence)} left to credit on ${invoiceNumber}`
-              : `Up to ${formatGBP(creditablePence)} can be credited on ${invoiceNumber}`}
+              ? `More than the ${formatMoney(creditablePence, currency)} left to credit on ${invoiceNumber}`
+              : `Up to ${formatMoney(creditablePence, currency)} can be credited on ${invoiceNumber}`}
           </p>
         </div>
       </div>

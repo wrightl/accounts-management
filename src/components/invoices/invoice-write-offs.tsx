@@ -32,13 +32,17 @@ export function InvoiceWriteOffs({
   invoiceId,
   writeOffs,
   balancePence,
+  currency = "GBP",
   canWriteOff,
   canWrite,
   today,
 }: {
   invoiceId: string;
   writeOffs: InvoiceWriteOffRow[];
+  /** What's still owed, in the invoice's currency. */
   balancePence: number;
+  /** The invoice's currency; write-offs are entered in it. */
+  currency?: string;
   /** The invoice is sent and still has money owing. */
   canWriteOff: boolean;
   canWrite: boolean;
@@ -154,7 +158,7 @@ export function InvoiceWriteOffs({
             </div>
             <div>
               <Label htmlFor="writeOffAmount" required>
-                Amount (£)
+                {currency === "GBP" ? "Amount (£)" : `Amount (${currency})`}
               </Label>
               <Input
                 id="writeOffAmount"

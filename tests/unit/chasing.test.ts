@@ -24,20 +24,36 @@ describe("referenceBaseRate", () => {
 describe("latePaymentCharge", () => {
   it("charges simple daily interest at 8% over base, plus fixed compensation", () => {
     const charge = latePaymentCharge({
-      amountDuePence: 500_000,
+      amountDue: 500_000,
       dueDate: "2026-08-31",
       asOf: "2026-09-30",
     })!;
     expect(charge.daysLate).toBe(30);
     expect(charge.ratePercent).toBe(11.75);
     // £5,000 × 11.75% × 30 / 365
-    expect(charge.interestPence).toBe(4_829);
+    expect(charge.interest).toBe(4_829);
+    expect(charge.compensation).toBe(7_000);
     expect(charge.compensationPence).toBe(7_000);
-    expect(charge.totalPence).toBe(11_829);
+    expect(charge.total).toBe(11_829);
+  });
+
+  it("charges interest in the debt's currency and converts the sterling compensation", () => {
+    // $1,500 at 1.25 per £1 is £1,200: the £70 band, which is $87.50.
+    const charge = latePaymentCharge({
+      amountDue: 150_000,
+      dueDate: "2026-08-31",
+      asOf: "2026-09-30",
+      fxRate: 1.25,
+    })!;
+    // $1,500 × 11.75% × 30 / 365
+    expect(charge.interest).toBe(1_449);
+    expect(charge.compensationPence).toBe(7_000);
+    expect(charge.compensation).toBe(8_750);
+    expect(charge.total).toBe(10_199);
   });
 
   it("is nothing until the debt is late", () => {
-    expect(latePaymentCharge({ amountDuePence: 1000, dueDate: "2026-09-30", asOf: "2026-09-30" }))
+    expect(latePaymentCharge({ amountDue: 1000, dueDate: "2026-09-30", asOf: "2026-09-30" }))
       .toBeNull();
   });
 

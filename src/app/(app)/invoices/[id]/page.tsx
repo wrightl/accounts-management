@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { describeDocumentRate, isForeignDocumentCurrency } from "@/lib/currency";
+import { rateOrFallback } from "@/lib/document-rate";
 import { notFound } from "next/navigation";
 import { Download, FilePlus, Pencil } from "lucide-react";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
@@ -32,7 +33,7 @@ import { CopyButton } from "@/components/ui/copy-button";
 import { publicInvoiceUrl } from "@/lib/payments/online-status";
 import {
   formatDiscountPercent,
-  formatGBP,
+  formatDocumentAmount,
   formatMoney,
   formatQuantity,
   hasLineDiscount,
@@ -91,13 +92,14 @@ export default async function InvoiceDetailPage({
     scope === "all" &&
     stored === "sent" &&
     invoice.dueDate &&
-    !invoice.latePaymentForInvoiceId &&
-    // Statutory charges are in sterling; foreign invoices get them in a later change.
-    !isForeignDocumentCurrency(invoice.currency)
+    !invoice.latePaymentForInvoiceId
       ? latePaymentCharge({
-          amountDuePence: detail.balanceMinor,
+          amountDue: detail.balanceMinor,
           dueDate: invoice.dueDate,
           asOf: todayIsoDate(),
+          fxRate: isForeignDocumentCurrency(invoice.currency)
+            ? await rateOrFallback(invoice.currency, todayIsoDate(), invoice.fxRate)
+            : 1,
         })
       : null;
   // The link carries the client's payment token, which the pack doesn't include.
@@ -356,6 +358,7 @@ export default async function InvoiceDetailPage({
         invoiceId={invoice.id}
         writeOffs={writeOffs}
         balancePence={detail.balanceMinor}
+        currency={invoice.currency}
         canWriteOff={stored === "sent" && detail.balanceMinor > 0}
         canWrite={canWrite}
         today={todayIsoDate()}
@@ -406,18 +409,24 @@ export default async function InvoiceDetailPage({
             <dt className="text-muted">
               Interest at {lateCharge.ratePercent}% for {lateCharge.daysLate} days
             </dt>
-            <dd className="text-right tabular-nums">{formatGBP(lateCharge.interestPence)}</dd>
+            <dd className="text-right tabular-nums">{formatMoney(lateCharge.interest, invoice.currency)}</dd>
             <dt className="text-muted">Fixed compensation</dt>
-            <dd className="text-right tabular-nums">{formatGBP(lateCharge.compensationPence)}</dd>
+            <dd className="text-right tabular-nums">
+              {formatDocumentAmount(
+                lateCharge.compensation,
+                lateCharge.compensationPence,
+                invoice.currency,
+              )}
+            </dd>
             <dt className="font-medium">Claimable today</dt>
             <dd className="text-right font-medium tabular-nums">
-              {formatGBP(lateCharge.totalPence)}
+              {formatMoney(lateCharge.total, invoice.currency)}
             </dd>
           </dl>
           <p className="mt-2 text-xs text-muted">
             {lateCharge.ratePercent}% is the Bank of England base rate of {lateCharge.basePercent}%
             {lateCharge.rateKnown ? "" : " (latest known)"} plus 8%. Interest adds{" "}
-            {formatGBP(lateCharge.dailyInterestPence)} a day from <DisplayDate value={invoice.dueDate} />.
+            {formatMoney(lateCharge.dailyInterest, invoice.currency)} a day from <DisplayDate value={invoice.dueDate} />.
           </p>
           <div className="mt-4">
             {latePayment.claim ? (

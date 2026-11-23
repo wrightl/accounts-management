@@ -1,7 +1,8 @@
 "use server";
 
 import { and, eq, sql, sum } from "drizzle-orm";
-import { documentTotals, isForeignDocumentCurrency } from "@/lib/currency";
+import { documentTotals, isForeignDocumentCurrency, toSterlingPence } from "@/lib/currency";
+import { documentRate } from "@/lib/document-rate";
 import { getDb, type Database } from "@/db";
 import {
   creditNoteLineItems,
@@ -11,7 +12,7 @@ import {
 } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
 import { mutate } from "@/lib/mutate";
-import { formatGBP, formatMoney, poundsToPence } from "@/lib/money";
+import { formatMoney, poundsToPence } from "@/lib/money";
 import { parseVatRate } from "@/lib/vat";
 import { allocateCreditNoteNumber } from "@/lib/invoices/allocate";
 import { invoiceRefundDue, isInvoiceSettled, settlementMinor } from "@/lib/invoices/balance";
@@ -271,9 +272,10 @@ export async function recordCreditNoteRefund(
   if (!parsed.ok) {
     return { ok: false, error: parsed.error, fieldErrors: parsed.fieldErrors };
   }
-  let amountPence: number;
+  // In the invoice's currency.
+  let amountMinor: number;
   try {
-    amountPence = poundsToPence(parsed.data.amountPounds);
+    amountMinor = poundsToPence(parsed.data.amountPounds);
   } catch {
     return {
       ok: false,
@@ -281,18 +283,52 @@ export async function recordCreditNoteRefund(
       fieldErrors: { amountPounds: "Enter a valid amount" },
     };
   }
-  if (amountPence <= 0) {
+  if (amountMinor <= 0) {
     return {
       ok: false,
       error: FORM_FIELD_ERROR_SUMMARY,
-      fieldErrors: { amountPounds: "Refund amount must be more than £0.00" },
+      fieldErrors: { amountPounds: "The refund must be more than 0" },
     };
+  }
+  let typedPence: number | null = null;
+  if (parsed.data.sterlingPounds) {
+    try {
+      typedPence = poundsToPence(parsed.data.sterlingPounds);
+    } catch {
+      typedPence = 0;
+    }
+    if (typedPence <= 0) {
+      return {
+        ok: false,
+        error: FORM_FIELD_ERROR_SUMMARY,
+        fieldErrors: { sterlingPounds: "Enter the amount in pounds that left your bank" },
+      };
+    }
   }
 
   return mutate(
     "accounts:write",
     async ({ companyId, localUserId }) => {
       const db = getDb();
+      // The sterling the refund cost: what the user says left the bank, else
+      // an estimate at the day's Bank of England rate (fetched before the
+      // transaction so no network call holds a lock).
+      const [target] = await db
+        .select({ currency: invoices.currency, fxRate: invoices.fxRate })
+        .from(creditNotes)
+        .innerJoin(invoices, eq(invoices.id, creditNotes.invoiceId))
+        .where(and(eq(creditNotes.id, id), eq(creditNotes.companyId, companyId)))
+        .limit(1);
+      if (!target) return { ok: false, error: "Credit note not found" };
+      let amountPence = amountMinor;
+      if (isForeignDocumentCurrency(target.currency)) {
+        if (typedPence != null) {
+          amountPence = typedPence;
+        } else {
+          const rate = await documentRate(target.currency, parsed.data.refundedAt);
+          amountPence = toSterlingPence(amountMinor, rate.ok ? rate.rate.fxRate : target.fxRate);
+        }
+      }
       let invoiceId: string;
       try {
         invoiceId = await db.transaction(async (tx) => {
@@ -305,7 +341,7 @@ export async function recordCreditNoteRefund(
           if (note.status !== "issued") {
             throw new CreditNoteError("You can't refund a void credit note");
           }
-          if (note.refundedPence > 0) {
+          if (note.refundedMinor > 0) {
             throw new CreditNoteError("A refund is already recorded on this credit note");
           }
           if (parsed.data.refundedAt < note.issueDate) {
@@ -317,11 +353,8 @@ export async function recordCreditNoteRefund(
           );
           if (locked) throw new CreditNoteError(locked);
           const inv = await lockInvoice(tx, companyId, note.invoiceId);
-          if (isForeignDocumentCurrency(inv.currency)) {
-            // Needs the refund in both currencies; comes with foreign-currency credit notes.
-            throw new CreditNoteError(
-              `Refunds on ${inv.currency} invoices can't be recorded yet`,
-            );
+          if (inv.currency !== target.currency) {
+            throw new CreditNoteError("The invoice changed while you were recording this. Try again.");
           }
           const refundDue = invoiceRefundDue(
             settlementMinor(
@@ -330,23 +363,23 @@ export async function recordCreditNoteRefund(
               await creditAdjustmentForInvoice(tx, companyId, inv.id),
             ),
           );
-          const maxRefund = Math.min(refundDue, note.grossPence);
+          // In the invoice's currency.
+          const maxRefund = Math.min(refundDue, note.grossMinor);
           if (maxRefund <= 0) {
             throw new CreditNoteError(
               "Nothing is owed back to the client: the credit reduced an unpaid balance",
             );
           }
-          if (amountPence > maxRefund) {
+          if (amountMinor > maxRefund) {
             throw new CreditNoteError(
-              `The refund can't be more than the ${formatGBP(maxRefund)} owed to the client`,
+              `The refund can't be more than the ${formatMoney(maxRefund, inv.currency)} owed to the client`,
             );
           }
           await tx
             .update(creditNotes)
             .set({
               refundedPence: amountPence,
-              // Sterling invoice (checked above), so the two amounts are equal.
-              refundedMinor: amountPence,
+              refundedMinor: amountMinor,
               refundedAt: parsed.data.refundedAt,
               refundReference: parsed.data.reference,
             })
@@ -365,7 +398,7 @@ export async function recordCreditNoteRefund(
         action: "credit_note.refund",
         entityType: "credit_note",
         entityId: id,
-        meta: { invoiceId, amountPence },
+        meta: { invoiceId, amountPence, amountMinor },
       });
       return { ok: true, id };
     },
