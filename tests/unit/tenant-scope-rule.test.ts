@@ -65,6 +65,12 @@ describe("tenant-scope/require-company-scope", () => {
             .where(rowOfCompany(bankTransactions.bankAccountId, bankAccounts, companyId)),
         ));
       }`,
+      // Scoped through a join from another child table's scoped parent.
+      `async function f(db, companyId) {
+        await db.select().from(reconciliationMatches)
+          .innerJoin(payments, eq(payments.id, reconciliationMatches.paymentId))
+          .where(matchOfCompany(companyId));
+      }`,
       // Inserts have no WHERE.
       `async function f(db, id) { await db.insert(payments).values({ invoiceId: id }); }`,
       // Tables that aren't child tables.
@@ -193,6 +199,54 @@ describe("tenant-scope/require-company-scope", () => {
           await db.select().from(payments).where(inArray(payments.invoiceId, invoiceIds(companyId)));
         }`,
         errors: [error("payments")],
+      },
+      // A company filter on a table the statement doesn't read or inner-join.
+      {
+        code: `async function f(db, companyId) {
+          await db.select().from(payments).where(eq(clients.companyId, companyId));
+        }`,
+        errors: [error("payments")],
+      },
+      {
+        code: `async function f(db, companyId) {
+          await db.select().from(payments).leftJoin(invoices, eq(invoices.id, payments.invoiceId))
+            .where(eq(invoices.companyId, companyId));
+        }`,
+        errors: [error("payments")],
+      },
+      {
+        code: `async function f(db, companyId, someOtherId) {
+          await db.select().from(payments).innerJoin(invoices, eq(invoices.id, payments.invoiceId))
+            .where(eq(invoices.companyId, someOtherId));
+        }`,
+        errors: [error("payments")],
+      },
+      {
+        code: `async function f(db, companyId) {
+          await db.select().from(payments).where(sql\`\${clients.companyId} = \${companyId}\`);
+        }`,
+        errors: [error("payments")],
+      },
+      // A listed helper only scopes its own table; an unlisted one never counts.
+      {
+        code: `async function f(db, companyId) {
+          await db.select().from(payments).where(matchOfCompany(companyId));
+        }`,
+        errors: [error("payments")],
+      },
+      {
+        code: `async function f(db, companyId) {
+          await db.select().from(payments).where(paymentsWhere(companyId));
+        }`,
+        errors: [error("payments")],
+      },
+      // A scoped subquery must be matched against a column of the statement's table.
+      {
+        code: `async function f(tx, companyId, ids) {
+          await tx.delete(reconciliationMatches)
+            .where(inArray(payments.id, transactionIdsOfCompany(tx, companyId, ids)));
+        }`,
+        errors: [error("reconciliationMatches")],
       },
       // An outer join's condition doesn't remove rows.
       {
