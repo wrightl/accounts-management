@@ -13,6 +13,8 @@ export const NO_CATEGORY = "No category";
 export const WRITE_OFF_CATEGORY = {
   bank_charges: "Bank charges on customer payments",
   bad_debt: "Bad debts",
+  /** Signed: a gain reduces expenses. */
+  fx_difference: "Foreign exchange gains/losses",
 } as const;
 
 export function isPersonal(expense: PackExpense): boolean {

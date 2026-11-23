@@ -2,6 +2,7 @@
  * Idempotent fictional demo dataset for the promo video.
  * All entities use fixed document numbers (900x suffix) and fictional UK clients.
  */
+import { sterlingTotals } from "@/lib/currency";
 import { and, asc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import type { Database } from "@/db";
 import {
@@ -326,9 +327,7 @@ export async function seedPromoDemo(
       status: "active",
       issueDate: day(-13),
       notes: `Order from accepted quote ${PROMO_NUMBERS.quote}.`,
-      netPence: quoteNet,
-      vatPence: 0,
-      grossPence: quoteGross,
+      ...sterlingTotals({ netPence: quoteNet, vatPence: 0, grossPence: quoteGross }),
       createdByUserId: admin.id,
     })
     .returning();
@@ -355,9 +354,7 @@ export async function seedPromoDemo(
       issueDate: day(-29),
       validUntil: day(1),
       notes: "Payment: 40% on acceptance, 60% on delivery.",
-      netPence: quoteNet,
-      vatPence: 0,
-      grossPence: quoteGross,
+      ...sterlingTotals({ netPence: quoteNet, vatPence: 0, grossPence: quoteGross }),
       orderId: order.id,
       acceptedAt: at(-24, 10),
       createdByUserId: admin.id,
@@ -382,9 +379,7 @@ export async function seedPromoDemo(
     issueDate: day(-29),
     validUntil: day(1),
     notes: "Payment: 40% on acceptance, 60% on delivery.",
-    netPence: quoteNet,
-    vatPence: 0,
-    grossPence: quoteGross,
+    ...sterlingTotals({ netPence: quoteNet, vatPence: 0, grossPence: quoteGross }),
     lines: quoteLines.map((l) => ({
       description: l.description,
       quantity: l.quantity,
@@ -407,9 +402,7 @@ export async function seedPromoDemo(
       issueDate: day(-9),
       dueDate: day(5),
       notes: "Deposit of 40% on acceptance, as agreed in the quote.",
-      netPence: 108_000,
-      vatPence: 0,
-      grossPence: 108_000,
+      ...sterlingTotals({ netPence: 108_000, vatPence: 0, grossPence: 108_000 }),
       sentAt: at(-9),
       createdByUserId: admin.id,
     })
@@ -433,9 +426,7 @@ export async function seedPromoDemo(
       status: "paid",
       issueDate: day(-30),
       dueDate: day(-16),
-      netPence: 45_000,
-      vatPence: 0,
-      grossPence: 45_000,
+      ...sterlingTotals({ netPence: 45_000, vatPence: 0, grossPence: 45_000 }),
       sentAt: at(-30),
       paidAt: at(-4, 14),
       createdByUserId: admin.id,
@@ -454,6 +445,7 @@ export async function seedPromoDemo(
   await db.insert(payments).values({
     invoiceId: invoicePaid.id,
     amountPence: 45_000,
+    amountMinor: 45_000,
     method: "Bank transfer",
     reference: `NB-${monthRef(-4)}`,
     receivedAt: at(-4, 14),
@@ -468,9 +460,7 @@ export async function seedPromoDemo(
       status: "sent",
       issueDate: day(-43),
       dueDate: day(-29),
-      netPence: 32_000,
-      vatPence: 0,
-      grossPence: 32_000,
+      ...sterlingTotals({ netPence: 32_000, vatPence: 0, grossPence: 32_000 }),
       sentAt: at(-43),
       createdByUserId: admin.id,
     })

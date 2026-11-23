@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { documentTotals, STERLING_RATE } from "@/lib/currency";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
@@ -27,7 +28,6 @@ import {
   buildInvoiceLineValues,
   computePartAmountPence,
   getUsedMilestoneIds,
-  invoiceTotals,
   resolveInvoiceDueDate,
   resolveMilestoneAmountPence,
   sumInvoicedPenceForOrder,
@@ -71,7 +71,7 @@ export async function createOrder(formData: FormData): Promise<ActionResult> {
         return { ok: false, error: e instanceof Error ? e.message : "Invalid amount" };
       }
 
-      const totals = invoiceTotals(lineValues);
+      const totals = documentTotals(lineValues, STERLING_RATE);
       const milestones = parseMilestonesJson(String(formData.get("milestonesJson") ?? "[]"));
       const milestoneError = validateMilestones(milestones, totals.grossPence);
       if (milestoneError) return { ok: false, error: milestoneError };
@@ -226,7 +226,7 @@ export async function createInvoiceFromOrder(
         orderLines: detail.lines,
         priorInvoicedPence,
       });
-      const totals = invoiceTotals(lineValues);
+      const totals = documentTotals(lineValues, STERLING_RATE);
 
       const invoiceId = await db.transaction(async (tx) => {
         const number = await allocateInvoiceNumber(tx, companyId, issueDate);
@@ -240,9 +240,7 @@ export async function createInvoiceFromOrder(
             issueDate,
             dueDate,
             notes: detail.order.notes,
-            netPence: totals.netPence,
-            vatPence: totals.vatPence,
-            grossPence: totals.grossPence,
+            ...totals,
             orderId,
             paymentMilestoneId: milestoneId,
             createdByUserId: localUserId,

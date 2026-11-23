@@ -14,7 +14,7 @@ import { canPayInvoiceOnline } from "@/lib/payments/online-status";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import {
   formatDiscountPercent,
-  formatGBP,
+  formatMoney,
   formatQuantity,
   hasLineDiscount,
   invoiceTotals,
@@ -66,13 +66,15 @@ export default async function PublicInvoicePage({
   const { invoice, client, lines } = detail;
   const stored = storedStatus(invoice.status);
   const settings = await getOrCreateCompanySettings(invoice.companyId);
-  const amountDuePence = detail.balancePence;
+  const amountDue = detail.balanceMinor;
   // An imported invoice keeps its source totals, which whole-number rates may not reproduce.
+  // Line prices are in the invoice's currency, so compare with its own VAT.
   const showLineVat =
-    invoice.vatPence > 0 && invoiceTotals(lines).vatPence === invoice.vatPence;
+    invoice.vatMinor > 0 && invoiceTotals(lines).vatPence === invoice.vatMinor;
   const payable = canPayInvoiceOnline({
     status: invoice.status,
-    amountDuePence,
+    amountDuePence: amountDue,
+    currency: invoice.currency,
     onlinePayments: company.onlinePayments,
   });
   const hasBankDetails = Boolean(settings.sortCode && settings.accountNumber);
@@ -95,7 +97,7 @@ export default async function PublicInvoicePage({
         <Card className="min-w-[160px]">
           <CardTitle>{stored === "sent" ? "Amount due" : "Total"}</CardTitle>
           <CardValue>
-            {stored === "sent" ? formatGBP(amountDuePence) : invoice.grossFormatted}
+            {stored === "sent" ? formatMoney(amountDue, invoice.currency) : invoice.grossFormatted}
           </CardValue>
         </Card>
       </header>
@@ -113,7 +115,7 @@ export default async function PublicInvoicePage({
       <div className="mb-6">
         {stored === "void" ? (
           <Notice tone="muted">This invoice has been cancelled. Nothing is owed on it.</Notice>
-        ) : stored === "paid" || amountDuePence === 0 ? (
+        ) : stored === "paid" || amountDue === 0 ? (
           <Notice tone="success">This invoice is paid. Thank you.</Notice>
         ) : payment === "success" ? (
           <Notice tone="success">
@@ -147,29 +149,29 @@ export default async function PublicInvoicePage({
             <TR key={l.id}>
               <TD>{l.description}</TD>
               <TD className="text-right">{formatQuantity(l.quantity)}</TD>
-              <TD className="text-right">{formatGBP(l.unitPricePence)}</TD>
+              <TD className="text-right">{formatMoney(l.unitPricePence, invoice.currency)}</TD>
               {hasLineDiscount(lines) ? (
                 <TD className="text-right">{formatDiscountPercent(l.discountPercent)}</TD>
               ) : null}
               {showLineVat ? <TD className="text-right">{l.vatRate}%</TD> : null}
-              <TD className="text-right">{formatGBP(lineNetPence(l))}</TD>
+              <TD className="text-right">{formatMoney(lineNetPence(l), invoice.currency)}</TD>
             </TR>
           ))}
         </TBody>
       </Table>
 
       <div className="mt-4 space-y-1 text-right text-sm">
-        {invoice.vatPence > 0 ? (
+        {invoice.vatMinor > 0 ? (
           <>
             <p className="text-muted">Net {invoice.netFormatted}</p>
-            <p className="text-muted">VAT {formatGBP(invoice.vatPence)}</p>
+            <p className="text-muted">VAT {invoice.vatFormatted}</p>
           </>
         ) : null}
         <p className="font-display text-lg font-semibold">Total {invoice.grossFormatted}</p>
-        {detail.creditedPence > 0 ? (
+        {detail.creditedMinor > 0 ? (
           <p className="text-muted">Credited {detail.creditedFormatted}</p>
         ) : null}
-        {detail.paidPence > 0 ? <p className="text-muted">Paid {detail.paidFormatted}</p> : null}
+        {detail.paidMinor > 0 ? <p className="text-muted">Paid {detail.paidFormatted}</p> : null}
       </div>
 
       {invoice.notes ? (
@@ -184,10 +186,10 @@ export default async function PublicInvoicePage({
           {payable && payment !== "success" ? (
             <PublicInvoicePayButton
               token={token}
-              amountFormatted={formatGBP(amountDuePence)}
+              amountFormatted={formatMoney(amountDue, invoice.currency)}
             />
           ) : null}
-          {stored === "sent" && amountDuePence > 0 && hasBankDetails ? (
+          {stored === "sent" && amountDue > 0 && hasBankDetails ? (
             <div className={payable ? "mt-6 text-sm" : "text-sm"}>
               <h2 className="font-display text-base font-semibold">
                 {payable ? "Or pay by bank transfer" : "Pay by bank transfer"}

@@ -25,7 +25,7 @@ import {
   subtractByMonth,
   sumCreditNotesInPeriod,
 } from "@/lib/credit-notes/period";
-import { invoiceAmountDuePence } from "@/lib/invoices/balance";
+import { invoiceAmountDue, settlementPence } from "@/lib/invoices/balance";
 import { todayIsoDate } from "@/lib/invoices/status";
 import { getCompanySettings } from "@/lib/settings/queries";
 
@@ -99,7 +99,15 @@ export async function getProfitAndLoss(
     );
 
   const [writeOffTotal] = await db
-    .select({ total: sum(invoiceWriteOffs.amountPence).mapWith(Number) })
+    .select({
+      total: sql<number>`coalesce(sum(${invoiceWriteOffs.amountPence}) filter (where ${invoiceWriteOffs.kind} <> 'fx_difference'), 0)`.mapWith(
+        Number,
+      ),
+      // Signed: positive is an exchange loss, negative a gain.
+      fx: sql<number>`coalesce(sum(${invoiceWriteOffs.amountPence}) filter (where ${invoiceWriteOffs.kind} = 'fx_difference'), 0)`.mapWith(
+        Number,
+      ),
+    })
     .from(invoiceWriteOffs)
     .where(
       and(
@@ -114,7 +122,8 @@ export async function getProfitAndLoss(
   const incomePence = (income?.total ?? 0) - creditNotePence;
   const otherIncomePence = await sumOtherIncomePence(companyId, from, to);
   const writeOffPence = writeOffTotal?.total ?? 0;
-  const expensePence = (expenseTotal?.total ?? 0) + writeOffPence;
+  const fxDifferencePence = writeOffTotal?.fx ?? 0;
+  const expensePence = (expenseTotal?.total ?? 0) + writeOffPence + fxDifferencePence;
   const profitPence = incomePence + otherIncomePence - expensePence;
   return {
     incomePence,
@@ -122,12 +131,15 @@ export async function getProfitAndLoss(
     otherIncomePence,
     expensePence,
     writeOffPence,
+    /** Realised exchange differences: positive is a loss, negative a gain. */
+    fxDifferencePence,
     profitPence,
     incomeFormatted: formatGBP(incomePence),
     creditNoteFormatted: formatGBP(creditNotePence),
     otherIncomeFormatted: formatGBP(otherIncomePence),
     expenseFormatted: formatGBP(expensePence),
     writeOffFormatted: formatGBP(writeOffPence),
+    fxDifferenceFormatted: formatGBP(Math.abs(fxDifferencePence)),
     profitFormatted: formatGBP(profitPence),
     basis: "accrual" as const,
     basisNote: profitAndLossBasisNote(true),
@@ -285,11 +297,7 @@ export async function getAgedReceivables(companyId: string) {
     rows.map((r) => r.id),
   );
   for (const inv of rows) {
-    const balance = invoiceAmountDuePence({
-      grossPence: inv.grossPence,
-      paidPence: paidMap.get(inv.id) ?? 0,
-      ...credits.get(inv.id),
-    });
+    const balance = invoiceAmountDue(settlementPence(inv, paidMap.get(inv.id) ?? 0, credits.get(inv.id)));
     if (balance === 0) continue;
     const due = inv.dueDate ?? today;
     const days = Math.max(

@@ -1,5 +1,6 @@
 "use server";
 
+import { documentTotals, STERLING_RATE } from "@/lib/currency";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
@@ -9,7 +10,6 @@ import {
 } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
 import { mutate } from "@/lib/mutate";
-import { invoiceTotals } from "@/lib/money";
 import {
   canEditInvoice,
   canTransition,
@@ -84,7 +84,7 @@ export async function updateInvoice(
       } catch (e) {
         return { ok: false, error: e instanceof Error ? e.message : "Invalid amount" };
       }
-      const totals = invoiceTotals(lineValues);
+      const totals = documentTotals(lineValues, STERLING_RATE);
 
       const db = getDb();
       const [existing] = await db
@@ -114,9 +114,7 @@ export async function updateInvoice(
             issueDate,
             dueDate,
             notes: parsed.data.notes,
-            netPence: totals.netPence,
-            vatPence: totals.vatPence,
-            grossPence: totals.grossPence,
+            ...totals,
             pdfBlobPath: null,
           })
           .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)));

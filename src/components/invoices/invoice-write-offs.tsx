@@ -20,6 +20,8 @@ export type InvoiceWriteOffRow = {
   amountFormatted: string;
   writtenOffOn: string;
   note: string | null;
+  /** False for exchange differences, which follow the invoice's payments. */
+  removable: boolean;
 };
 
 /**
@@ -44,7 +46,8 @@ export function InvoiceWriteOffs({
 }) {
   const router = useRouter();
   const { confirm, alert } = useAlert();
-  const { fieldErrors, error, clearAll, clearField, applyActionResult } = useFieldErrors();
+  const { fieldErrors, error, clearAll, clearField, applyActionResult } =
+    useFieldErrors();
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
@@ -72,34 +75,44 @@ export function InvoiceWriteOffs({
                   <DisplayDate value={w.writtenOffOn} />
                 </TD>
                 <TD>{w.kindLabel}</TD>
-                <TD className="max-w-xs truncate text-muted">{w.note ?? "—"}</TD>
+                <TD className="max-w-xs truncate text-muted">
+                  {w.note ?? "—"}
+                </TD>
                 <TD className="text-right">{w.amountFormatted}</TD>
                 {canWrite ? (
                   <TD className="text-right">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      disabled={pending}
-                      onClick={async () => {
-                        const ok = await confirm({
-                          title: "Remove write-off",
-                          message: `${w.amountFormatted} will be owed on this invoice again.`,
-                          confirmLabel: "Remove",
-                        });
-                        if (!ok) return;
-                        startTransition(async () => {
-                          const result = await removeWriteOff(invoiceId, w.id);
-                          if (!result.ok) {
-                            await alert({ title: "Couldn't remove the write-off", message: result.error });
-                            return;
-                          }
-                          router.refresh();
-                        });
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Remove
-                    </Button>
+                    {w.removable ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        disabled={pending}
+                        onClick={async () => {
+                          const ok = await confirm({
+                            title: "Remove write-off",
+                            message: `${w.amountFormatted} will be owed on this invoice again.`,
+                            confirmLabel: "Remove",
+                          });
+                          if (!ok) return;
+                          startTransition(async () => {
+                            const result = await removeWriteOff(
+                              invoiceId,
+                              w.id,
+                            );
+                            if (!result.ok) {
+                              await alert({
+                                title: "Couldn't remove the write-off",
+                                message: result.error,
+                              });
+                              return;
+                            }
+                            router.refresh();
+                          });
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Remove
+                      </Button>
+                    ) : null}
                   </TD>
                 ) : null}
               </TR>
@@ -108,9 +121,9 @@ export function InvoiceWriteOffs({
         </Table>
       ) : (
         <p className="text-sm text-muted">
-          If the client paid slightly less than the invoice, or won&apos;t pay the rest, write off
-          what&apos;s left so the invoice is settled. For an agreed discount, raise a credit note
-          instead.
+          If the client paid slightly less than the invoice, or won&apos;t pay
+          the rest, write off what&apos;s left so the invoice is settled. For an
+          agreed discount, raise a credit note instead.
         </p>
       )}
 
@@ -128,7 +141,10 @@ export function InvoiceWriteOffs({
                   setOpen(false);
                   router.refresh();
                 } else if (!result.ok) {
-                  scheduleFocusFirstFieldError(formRef.current, result.fieldErrors);
+                  scheduleFocusFirstFieldError(
+                    formRef.current,
+                    result.fieldErrors,
+                  );
                 }
               });
             })}
@@ -144,8 +160,12 @@ export function InvoiceWriteOffs({
                 disabled={pending}
                 className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm"
               >
-                <option value="bank_charges">Bank charges (the client&apos;s bank kept a fee)</option>
-                <option value="bad_debt">Bad debt (the rest won&apos;t be paid)</option>
+                <option value="bank_charges">
+                  Bank charges (the client&apos;s bank kept a fee)
+                </option>
+                <option value="bad_debt">
+                  Bad debt (the rest won&apos;t be paid)
+                </option>
               </select>
             </div>
             <div>
@@ -158,10 +178,14 @@ export function InvoiceWriteOffs({
                 defaultValue={String(penceToPounds(balancePence))}
                 disabled={pending}
                 aria-invalid={Boolean(fieldErrors.amountPounds)}
-                aria-describedby={fieldErrors.amountPounds ? "writeOffAmount-error" : undefined}
+                aria-describedby={
+                  fieldErrors.amountPounds ? "writeOffAmount-error" : undefined
+                }
                 onChange={() => clearField("amountPounds")}
               />
-              <FieldError id="writeOffAmount-error">{fieldErrors.amountPounds}</FieldError>
+              <FieldError id="writeOffAmount-error">
+                {fieldErrors.amountPounds}
+              </FieldError>
             </div>
             <div>
               <Label htmlFor="writeOffDate" required>
@@ -201,7 +225,12 @@ export function InvoiceWriteOffs({
             <FieldError>{error}</FieldError>
           </form>
         ) : (
-          <Button type="button" variant="secondary" className="mt-3" onClick={() => setOpen(true)}>
+          <Button
+            type="button"
+            variant="secondary"
+            className="mt-3"
+            onClick={() => setOpen(true)}
+          >
             <CircleSlash className="h-4 w-4" />
             Write off balance
           </Button>

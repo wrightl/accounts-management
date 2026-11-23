@@ -95,8 +95,8 @@ describe("invoice write-offs", () => {
 
     const detail = await getInvoiceDetail(companyId, invoiceId);
     expect(detail?.invoice.status).toBe("paid");
-    expect(detail?.balancePence).toBe(0);
-    expect(detail?.refundDuePence).toBe(0);
+    expect(detail?.balanceMinor).toBe(0);
+    expect(detail?.refundDueMinor).toBe(0);
 
     const rows = await listInvoiceWriteOffs(companyId, invoiceId);
     expect(rows).toHaveLength(1);
@@ -115,7 +115,7 @@ describe("invoice write-offs", () => {
     await writeOff("1.00");
     const detail = await getInvoiceDetail(companyId, invoiceId);
     expect(detail?.invoice.status).not.toBe("paid");
-    expect(detail?.balancePence).toBe(50);
+    expect(detail?.balanceMinor).toBe(50);
   });
 
   it("refuses to write off more than is owed", async () => {
@@ -143,7 +143,7 @@ describe("invoice write-offs", () => {
 
     const detail = await getInvoiceDetail(companyId, invoiceId);
     expect(detail?.invoice.status).not.toBe("paid");
-    expect(detail?.balancePence).toBe(150);
+    expect(detail?.balanceMinor).toBe(150);
   });
 
   it("can't remove another company's write-off", async () => {

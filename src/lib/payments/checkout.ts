@@ -19,12 +19,13 @@ export async function createInvoiceCheckout(rawToken: string): Promise<InvoiceCh
     return { ok: false, error: "This invoice is no longer available" };
   }
   const { detail, company } = data;
-  const amountDuePence = detail.balancePence;
+  const amountDuePence = detail.balanceMinor;
   if (
     !company.stripeConnectAccountId ||
     !canPayInvoiceOnline({
       status: detail.invoice.status,
       amountDuePence,
+      currency: detail.invoice.currency,
       onlinePayments: company.onlinePayments,
     })
   ) {

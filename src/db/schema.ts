@@ -20,6 +20,39 @@ import {
 import type { GenericCsvMapping } from "@/lib/bank/types";
 import type { ParsedInvoice } from "@/lib/invoices/import/parse";
 
+/**
+ * Currency columns shared by client documents (invoices, quotes, orders).
+ * The `*_pence` totals are always sterling book values; the `*_minor` totals
+ * are what the client sees and owes, in `currency`. Line-item prices are in
+ * `currency`. For GBP documents the two sets are equal and `fx_rate` is 1.
+ */
+function documentCurrencyColumns() {
+  return {
+    currency: text("currency").notNull().default("GBP"),
+    /** Units of `currency` per £1 (same convention as `fx_rates`). */
+    fxRate: doublePrecision("fx_rate").notNull().default(1),
+    /** Bank of England observation date the rate came from, or the date it was set by hand. */
+    fxRateDate: date("fx_rate_date"),
+    fxRateSource: text("fx_rate_source").$type<"boe" | "manual">(),
+    netMinor: integer("net_minor").notNull().default(0),
+    vatMinor: integer("vat_minor").notNull().default(0),
+    grossMinor: integer("gross_minor").notNull().default(0),
+  };
+}
+
+/** A GBP document's document-currency totals equal its sterling totals. */
+function sterlingTotalsMatch(t: {
+  currency: AnyPgColumn;
+  netPence: AnyPgColumn;
+  vatPence: AnyPgColumn;
+  grossPence: AnyPgColumn;
+  netMinor: AnyPgColumn;
+  vatMinor: AnyPgColumn;
+  grossMinor: AnyPgColumn;
+}) {
+  return sql`${t.currency} <> 'GBP' OR (${t.netMinor} = ${t.netPence} AND ${t.vatMinor} = ${t.vatPence} AND ${t.grossMinor} = ${t.grossPence})`;
+}
+
 export const roleEnum = pgEnum("role", [
   "admin",
   "user",
@@ -452,6 +485,8 @@ export const clients = pgTable(
     email: text("email"),
     addressLines: text("address_lines"),
     notes: text("notes"),
+    /** Currency new documents for this client start in. Null means GBP. */
+    defaultCurrency: text("default_currency"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("idx_clients_company").on(t.companyId)],
@@ -469,13 +504,14 @@ export const invoices = pgTable(
       .notNull()
       .references(() => clients.id, { onDelete: "restrict" }),
     status: invoiceStatusEnum("status").notNull().default("draft"),
-    currency: text("currency").notNull().default("GBP"),
     issueDate: date("issue_date"),
     dueDate: date("due_date"),
     notes: text("notes"),
+    /** Sterling book values. */
     netPence: integer("net_pence").notNull().default(0),
     vatPence: integer("vat_pence").notNull().default(0),
     grossPence: integer("gross_pence").notNull().default(0),
+    ...documentCurrencyColumns(),
     createdByUserId: uuid("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -523,6 +559,7 @@ export const invoices = pgTable(
       "invoices_brought_forward_requires_import",
       sql`NOT ${t.broughtForward} OR ${t.source} = 'import'`,
     ),
+    check("invoices_sterling_totals_match", sterlingTotalsMatch(t)),
     uniqueIndex("uniq_invoices_company_number").on(t.companyId, t.number),
     /** One non-void invoice per payment milestone (matches drizzle/0012). */
     uniqueIndex("uniq_invoice_milestone_active")
@@ -647,6 +684,7 @@ export const invoiceLineItems = pgTable(
     quantity: numeric("quantity", { precision: 12, scale: 3, mode: "number" })
       .notNull()
       .default(1),
+    /** In the invoice's currency (minor units); pence only for GBP invoices. */
     unitPricePence: integer("unit_price_pence").notNull().default(0),
     vatRate: integer("vat_rate").notNull().default(0),
     /** Line discount percentage (0–100), applied before VAT. */
@@ -672,7 +710,12 @@ export const payments = pgTable(
     invoiceId: uuid("invoice_id")
       .notNull()
       .references(() => invoices.id, { onDelete: "cascade" }),
+    /** Sterling that reached the company (book value). */
     amountPence: integer("amount_pence").notNull(),
+    /** Amount paid in the invoice's currency; settles the invoice. */
+    amountMinor: integer("amount_minor").notNull(),
+    /** Sterling was estimated at the BoE rate because the actual figure wasn't known yet. */
+    amountPenceEstimated: boolean("amount_pence_estimated").notNull().default(false),
     method: text("method"),
     reference: text("reference"),
     receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
@@ -715,11 +758,18 @@ export const creditNotes = pgTable(
     status: creditNoteStatusEnum("status").notNull().default("issued"),
     issueDate: date("issue_date").notNull(),
     reason: text("reason").notNull(),
+    /** Sterling book values, converted at the invoice's rate. */
     netPence: integer("net_pence").notNull().default(0),
     vatPence: integer("vat_pence").notNull().default(0),
     grossPence: integer("gross_pence").notNull().default(0),
-    /** Money returned to the client against this credit note. */
+    /** Amounts in the invoice's currency. */
+    netMinor: integer("net_minor").notNull().default(0),
+    vatMinor: integer("vat_minor").notNull().default(0),
+    grossMinor: integer("gross_minor").notNull().default(0),
+    /** Money returned to the client against this credit note (sterling). */
     refundedPence: integer("refunded_pence").notNull().default(0),
+    /** The same refund in the invoice's currency. */
+    refundedMinor: integer("refunded_minor").notNull().default(0),
     refundedAt: date("refunded_at"),
     refundReference: text("refund_reference"),
     sentAt: timestamp("sent_at", { withTimezone: true }),
@@ -740,6 +790,7 @@ export const creditNotes = pgTable(
 export const invoiceWriteOffKindEnum = pgEnum("invoice_write_off_kind", [
   "bank_charges",
   "bad_debt",
+  "fx_difference",
 ]);
 
 /**
@@ -759,7 +810,13 @@ export const invoiceWriteOffs = pgTable(
       .notNull()
       .references(() => invoices.id, { onDelete: "restrict" }),
     kind: invoiceWriteOffKindEnum("kind").notNull(),
+    /**
+     * Sterling book value. For `fx_difference` it is signed: positive is an
+     * exchange loss, negative a gain.
+     */
     amountPence: integer("amount_pence").notNull(),
+    /** Amount in the invoice's currency; 0 for `fx_difference`. */
+    amountMinor: integer("amount_minor").notNull(),
     writtenOffOn: date("written_off_on").notNull(),
     note: text("note"),
     createdByUserId: uuid("created_by_user_id").references(() => users.id, {
@@ -1398,15 +1455,18 @@ export const orders = pgTable(
     status: orderStatusEnum("status").notNull().default("active"),
     issueDate: date("issue_date"),
     notes: text("notes"),
+    /** Sterling estimate at the order's rate. */
     netPence: integer("net_pence").notNull().default(0),
     vatPence: integer("vat_pence").notNull().default(0),
     grossPence: integer("gross_pence").notNull().default(0),
+    ...documentCurrencyColumns(),
     createdByUserId: uuid("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
+    check("orders_sterling_totals_match", sterlingTotalsMatch(t)),
     uniqueIndex("uniq_orders_company_number").on(t.companyId, t.number),
     index("idx_orders_company").on(t.companyId),
     index("idx_orders_client").on(t.clientId),
@@ -1471,9 +1531,11 @@ export const quotes = pgTable(
     issueDate: date("issue_date"),
     validUntil: date("valid_until"),
     notes: text("notes"),
+    /** Sterling estimate at the quote's rate. */
     netPence: integer("net_pence").notNull().default(0),
     vatPence: integer("vat_pence").notNull().default(0),
     grossPence: integer("gross_pence").notNull().default(0),
+    ...documentCurrencyColumns(),
     orderId: uuid("order_id")
       .unique()
       .references(() => orders.id, { onDelete: "set null" }),
@@ -1499,6 +1561,7 @@ export const quotes = pgTable(
     pdfBlobPath: text("pdf_blob_path"),
   },
   (t) => [
+    check("quotes_sterling_totals_match", sterlingTotalsMatch(t)),
     uniqueIndex("uniq_quotes_company_number").on(t.companyId, t.number),
     index("idx_quotes_company").on(t.companyId),
     uniqueIndex("uniq_quotes_public_token")
@@ -1519,9 +1582,11 @@ export const quoteVersions = pgTable(
     issueDate: date("issue_date"),
     validUntil: date("valid_until"),
     notes: text("notes"),
+    /** Sterling estimate at the quote version's rate. */
     netPence: integer("net_pence").notNull().default(0),
     vatPence: integer("vat_pence").notNull().default(0),
     grossPence: integer("gross_pence").notNull().default(0),
+    ...documentCurrencyColumns(),
     /** [{ description, quantity, unitPricePence, vatRate, discountPercent?, position }] */
     lines: jsonb("lines").notNull(),
     source: quoteVersionSourceEnum("source").notNull(),
@@ -1532,6 +1597,7 @@ export const quoteVersions = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
+    check("quote_versions_sterling_totals_match", sterlingTotalsMatch(t)),
     uniqueIndex("uniq_quote_versions_quote_version").on(t.quoteId, t.version),
     index("idx_quote_versions_quote").on(t.quoteId),
   ],
@@ -1664,6 +1730,8 @@ export const recurringInvoices = pgTable(
     /** Display name for the schedule (e.g. "Acme retainer"). */
     name: text("name").notNull(),
     /** JSON line template: [{description, quantity, unitPricePence, vatRate, discountPercent?}] */
+    /** Currency of generated invoices; template prices are in it. */
+    currency: text("currency").notNull().default("GBP"),
     lineTemplate: jsonb("line_template").notNull(),
     notes: text("notes"),
     /** Day of month to generate (1–28). */

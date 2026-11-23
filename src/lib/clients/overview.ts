@@ -4,7 +4,7 @@ import { getDb } from "@/db";
 import { clients, invoices, orders, payments, quotes } from "@/db/schema";
 import { formatGBP } from "@/lib/money";
 import { creditAdjustmentsByInvoice } from "@/lib/credit-notes/adjustments";
-import { invoiceAmountDuePence } from "@/lib/invoices/balance";
+import { invoiceAmountDue, settlementPence } from "@/lib/invoices/balance";
 import {
   effectiveStatus,
   todayIsoDate,
@@ -147,11 +147,7 @@ export async function getClientOverview(
     const credits = await creditAdjustmentsByInvoice(db, companyId, openIds);
 
     for (const inv of openInvoices) {
-      const balance = invoiceAmountDuePence({
-        grossPence: inv.grossPence,
-        paidPence: paidMap.get(inv.id) ?? 0,
-        ...credits.get(inv.id),
-      });
+      const balance = invoiceAmountDue(settlementPence(inv, paidMap.get(inv.id) ?? 0, credits.get(inv.id)));
       if (balance === 0) continue;
       outstandingPence += balance;
       const eff = effectiveStatus(inv.status as InvoiceStatus, inv.dueDate, today);

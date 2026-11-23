@@ -7,9 +7,11 @@ import type { ActionResult } from "@/actions/result";
 import { writeAudit } from "@/lib/audit";
 import { creditAdjustmentForInvoice } from "@/lib/credit-notes/adjustments";
 import type { Tx } from "@/lib/invoices/allocate";
-import { invoiceBalancePence, isInvoiceSettled } from "@/lib/invoices/balance";
-import { storedStatus } from "@/lib/invoices/status";
-import { formatGBP, poundsToPence } from "@/lib/money";
+import { isForeignDocumentCurrency } from "@/lib/currency";
+import { invoiceBalance, isInvoiceSettled, settlementMinor } from "@/lib/invoices/balance";
+import { syncFxDifference } from "@/lib/invoices/fx-difference";
+import { storedStatus, todayIsoDate } from "@/lib/invoices/status";
+import { formatGBP, formatMoney, poundsToPence } from "@/lib/money";
 import { checkPeriodOpen } from "@/lib/period-lock-queries";
 import { FORM_FIELD_ERROR_SUMMARY, parseWithFieldErrors } from "@/lib/validation/field-errors";
 
@@ -18,6 +20,7 @@ export type InvoiceWriteOffKind = (typeof invoiceWriteOffs.$inferSelect)["kind"]
 export const WRITE_OFF_KIND_LABELS: Record<InvoiceWriteOffKind, string> = {
   bank_charges: "Bank charges",
   bad_debt: "Bad debt",
+  fx_difference: "Exchange difference",
 };
 
 const writeOffSchema = z.object({
@@ -57,18 +60,19 @@ async function lockInvoice(tx: Tx, companyId: string, invoiceId: string) {
   return inv;
 }
 
+/** What the client still owes, in the invoice's currency. */
 async function balanceOf(tx: Tx, inv: typeof invoices.$inferSelect) {
   const [paid] = await tx
-    .select({ total: sum(payments.amountPence).mapWith(Number) })
+    .select({ total: sum(payments.amountMinor).mapWith(Number) })
     .from(payments)
     .innerJoin(invoices, eq(invoices.id, payments.invoiceId))
     .where(and(eq(payments.invoiceId, inv.id), eq(invoices.companyId, inv.companyId)));
-  const settlement = {
-    grossPence: inv.grossPence,
-    paidPence: paid?.total ?? 0,
-    ...(await creditAdjustmentForInvoice(tx, inv.companyId, inv.id)),
-  };
-  return { balancePence: invoiceBalancePence(settlement), settled: isInvoiceSettled(settlement) };
+  const settlement = settlementMinor(
+    inv,
+    paid?.total ?? 0,
+    await creditAdjustmentForInvoice(tx, inv.companyId, inv.id),
+  );
+  return { balanceMinor: invoiceBalance(settlement), settled: isInvoiceSettled(settlement) };
 }
 
 /**
@@ -118,10 +122,14 @@ export async function writeOffInvoiceBalance(
       if (inv.issueDate && writtenOffOn < inv.issueDate) {
         throw new WriteOffError("A write-off can't be dated before its invoice");
       }
-      const { balancePence } = await balanceOf(tx, inv);
-      if (amountPence > balancePence) {
+      if (isForeignDocumentCurrency(inv.currency)) {
+        // Needs the amount in both currencies; comes with foreign-currency write-offs.
+        throw new WriteOffError(`Write-offs on ${inv.currency} invoices can't be recorded yet`);
+      }
+      const { balanceMinor } = await balanceOf(tx, inv);
+      if (amountPence > balanceMinor) {
         throw new WriteOffError(
-          `Write-off is more than the ${formatGBP(Math.max(0, balancePence))} still owed`,
+          `Write-off is more than the ${formatGBP(Math.max(0, balanceMinor))} still owed`,
         );
       }
 
@@ -132,13 +140,15 @@ export async function writeOffInvoiceBalance(
           invoiceId,
           kind,
           amountPence,
+          // Sterling invoice (checked above), so the two amounts are equal.
+          amountMinor: amountPence,
           writtenOffOn,
           note,
           createdByUserId: localUserId,
         })
         .returning({ id: invoiceWriteOffs.id });
 
-      if (amountPence === balancePence) {
+      if (amountPence === balanceMinor) {
         await tx
           .update(invoices)
           .set({ status: "paid", paidAt: new Date(`${writtenOffOn}T12:00:00Z`) })
@@ -175,6 +185,12 @@ export async function removeInvoiceWriteOff(
     .where(and(eq(invoiceWriteOffs.id, writeOffId), eq(invoiceWriteOffs.companyId, companyId)))
     .limit(1);
   if (!existing) return { ok: false, error: "Write-off not found" };
+  if (existing.kind === "fx_difference") {
+    return {
+      ok: false,
+      error: "Exchange differences follow the invoice's payments and can't be removed by hand",
+    };
+  }
 
   const locked = await checkPeriodOpen(companyId, existing.writtenOffOn);
   if (locked) return { ok: false, error: locked };
@@ -195,6 +211,7 @@ export async function removeInvoiceWriteOff(
           .set({ status: "sent", paidAt: null })
           .where(and(eq(invoices.id, inv.id), eq(invoices.companyId, companyId)));
       }
+      await syncFxDifference(tx, companyId, inv.id, todayIsoDate());
     });
   } catch (e) {
     if (e instanceof WriteOffError) return { ok: false, error: e.message };
@@ -215,18 +232,30 @@ export async function removeInvoiceWriteOff(
 /** Write-offs on one invoice, oldest first, for the invoice page. */
 export async function listInvoiceWriteOffs(companyId: string, invoiceId: string) {
   const rows = await getDb()
-    .select()
+    .select({ writeOff: invoiceWriteOffs, currency: invoices.currency })
     .from(invoiceWriteOffs)
+    .innerJoin(invoices, eq(invoices.id, invoiceWriteOffs.invoiceId))
     .where(
       and(eq(invoiceWriteOffs.invoiceId, invoiceId), eq(invoiceWriteOffs.companyId, companyId)),
     )
     .orderBy(asc(invoiceWriteOffs.writtenOffOn), asc(invoiceWriteOffs.createdAt));
-  return rows.map((r) => ({
+  return rows.map(({ writeOff: r, currency }) => ({
     id: r.id,
     kind: r.kind,
-    kindLabel: WRITE_OFF_KIND_LABELS[r.kind],
+    kindLabel:
+      r.kind === "fx_difference"
+        ? r.amountPence < 0
+          ? "Exchange gain"
+          : "Exchange loss"
+        : WRITE_OFF_KIND_LABELS[r.kind],
+    /** Exchange differences are sterling only and are kept by the system. */
+    removable: r.kind !== "fx_difference",
     amountPence: r.amountPence,
-    amountFormatted: formatGBP(r.amountPence),
+    amountMinor: r.amountMinor,
+    amountFormatted:
+      r.kind === "fx_difference"
+        ? formatGBP(Math.abs(r.amountPence))
+        : formatMoney(r.amountMinor, currency),
     writtenOffOn: r.writtenOffOn,
     note: r.note,
   }));

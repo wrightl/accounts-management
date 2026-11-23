@@ -85,10 +85,13 @@ import { paymentCountsInAccounts } from '@/lib/invoices/accounts-scope';
 import { periodLockError } from '@/lib/period-lock';
 import { getBooksLockedThrough } from '@/lib/period-lock-queries';
 import {
-    invoiceAmountDuePence,
-    invoiceBalancePence,
+    invoiceAmountDue,
+    invoiceBalance,
     isInvoiceSettled,
+    settlementMinor,
+    settlementPence,
 } from '@/lib/invoices/balance';
+import { isForeignDocumentCurrency } from '@/lib/currency';
 import {
     resolveBankDisplayName,
     type BankProviderId,
@@ -373,14 +376,22 @@ export function bankListWhere(
     return conditions.length ? and(...conditions) : undefined;
 }
 
+/** Paid so far on a company invoice, in the invoice's currency. */
 async function paidTotalForInvoice(
     db: ReturnType<typeof getDb>,
+    companyId: string,
     invoiceId: string,
 ) {
     const [row] = await db
-        .select({ total: sum(payments.amountPence).mapWith(Number) })
+        .select({ total: sum(payments.amountMinor).mapWith(Number) })
         .from(payments)
-        .where(eq(payments.invoiceId, invoiceId));
+        .innerJoin(invoices, eq(invoices.id, payments.invoiceId))
+        .where(
+            and(
+                eq(payments.invoiceId, invoiceId),
+                eq(invoices.companyId, companyId),
+            ),
+        );
     return row?.total ?? 0;
 }
 
@@ -898,11 +909,7 @@ async function loadOpenInvoiceBalances(
     const paid = new Map(paidRows.map((r) => [r.invoiceId, r.total ?? 0]));
     return rows.map((inv) => ({
         ...inv,
-        balancePence: invoiceAmountDuePence({
-            grossPence: inv.grossPence,
-            paidPence: paid.get(inv.id) ?? 0,
-            ...credits.get(inv.id),
-        }),
+        balancePence: invoiceAmountDue(settlementPence(inv, paid.get(inv.id) ?? 0, credits.get(inv.id))),
     }));
 }
 
@@ -1429,13 +1436,16 @@ async function createPaymentFromBankMatch(
         );
     }
 
-    const alreadyPaid = await paidTotalForInvoice(tx, inv.id);
+    if (isForeignDocumentCurrency(inv.currency)) {
+        // The bank line is in pounds; record it from the invoice, giving both amounts.
+        throw new ReconciliationError(
+            `Invoice ${inv.number} is in ${inv.currency}. Record this payment from the invoice instead.`,
+        );
+    }
+
+    const alreadyPaid = await paidTotalForInvoice(tx, companyId, inv.id);
     const credits = await creditAdjustmentForInvoice(tx, companyId, inv.id);
-    const remaining = invoiceBalancePence({
-        grossPence: inv.grossPence,
-        paidPence: alreadyPaid,
-        ...credits,
-    });
+    const remaining = invoiceBalance(settlementMinor(inv, alreadyPaid, credits));
     // A receipt slightly over the balance is accepted; the extra becomes a refund due.
     if (remaining <= 0 || !canSettleInvoiceBalance(bankTx.amountPence, remaining)) {
         throw new ReconciliationError(
@@ -1449,6 +1459,8 @@ async function createPaymentFromBankMatch(
         .values({
             invoiceId: inv.id,
             amountPence: bankTx.amountPence,
+            // Sterling invoice (checked above), so the two amounts are equal.
+            amountMinor: bankTx.amountPence,
             method: 'bank_transfer',
             reference: bankTx.reference,
             receivedAt,
@@ -1456,7 +1468,7 @@ async function createPaymentFromBankMatch(
         .returning({ id: payments.id });
 
     const paidTotal = alreadyPaid + bankTx.amountPence;
-    if (isInvoiceSettled({ grossPence: inv.grossPence, paidPence: paidTotal, ...credits })) {
+    if (isInvoiceSettled(settlementMinor(inv, paidTotal, credits))) {
         await tx
             .update(invoices)
             .set({ status: 'paid', paidAt: receivedAt })
@@ -2014,11 +2026,15 @@ async function loadInvoiceTarget(companyId: string, invoiceId: string) {
     if (!rows[0]) return null;
 
     const { invoice, client } = rows[0];
-    const balancePence = invoiceAmountDuePence({
-        grossPence: invoice.grossPence,
-        paidPence: await paidTotalForInvoice(db, invoiceId),
-        ...(await creditAdjustmentForInvoice(db, companyId, invoiceId)),
-    });
+    // Bank lines are matched on exact pence, which only works for sterling invoices.
+    if (isForeignDocumentCurrency(invoice.currency)) return null;
+    const balancePence = invoiceAmountDue(
+        settlementMinor(
+            invoice,
+            await paidTotalForInvoice(db, companyId, invoiceId),
+            await creditAdjustmentForInvoice(db, companyId, invoiceId),
+        ),
+    );
     if (balancePence <= 0) return null;
 
     const referenceDate =

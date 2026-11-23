@@ -7,7 +7,7 @@ import { writeAudit } from "@/lib/audit";
 import { claimEvent, releaseEvent } from "@/lib/billing/webhook-events";
 import { getStripe } from "@/lib/billing/stripe";
 import { creditAdjustmentForInvoice } from "@/lib/credit-notes/adjustments";
-import { isInvoiceSettled } from "@/lib/invoices/balance";
+import { isInvoiceSettled, settlementMinor } from "@/lib/invoices/balance";
 import { storedStatus } from "@/lib/invoices/status";
 import { formatGBP } from "@/lib/money";
 import { INVOICE_PAYMENT_KIND } from "@/lib/payments/online-status";
@@ -75,6 +75,8 @@ export async function recordOnlineInvoicePayment(params: {
       .values({
         invoiceId: inv.id,
         amountPence: params.amountPence,
+        // Checkout charges sterling invoices only (see checkout.ts), so these match.
+        amountMinor: params.amountPence,
         method: "card",
         reference: params.paymentIntentId ?? params.checkoutSessionId,
         receivedAt: params.paidAt,
@@ -83,19 +85,22 @@ export async function recordOnlineInvoicePayment(params: {
       .returning({ id: payments.id });
 
     const [paidRow] = await tx
-      .select({ total: sum(payments.amountPence).mapWith(Number) })
+      .select({ total: sum(payments.amountMinor).mapWith(Number) })
       .from(payments)
-      .where(eq(payments.invoiceId, inv.id));
-    const settled = isInvoiceSettled({
-      grossPence: inv.grossPence,
-      paidPence: paidRow?.total ?? 0,
-      ...(await creditAdjustmentForInvoice(tx, params.companyId, inv.id)),
-    });
+      .innerJoin(invoices, eq(invoices.id, payments.invoiceId))
+      .where(and(eq(payments.invoiceId, inv.id), eq(invoices.companyId, params.companyId)));
+    const settled = isInvoiceSettled(
+      settlementMinor(
+        inv,
+        paidRow?.total ?? 0,
+        await creditAdjustmentForInvoice(tx, params.companyId, inv.id),
+      ),
+    );
     if (settled && storedStatus(inv.status) === "sent") {
       await tx
         .update(invoices)
         .set({ status: "paid", paidAt: params.paidAt })
-        .where(eq(invoices.id, inv.id));
+        .where(and(eq(invoices.id, inv.id), eq(invoices.companyId, params.companyId)));
     }
     return { recorded: true, paymentId: payment.id, inv };
   });

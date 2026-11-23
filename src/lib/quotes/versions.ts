@@ -1,4 +1,5 @@
 import "server-only";
+import { sterlingTotals } from "@/lib/currency";
 import type { Database } from "@/db";
 import { quoteVersions } from "@/db/schema";
 import type { QuoteVersionLine, QuoteVersionSource } from "@/lib/quotes/status";
@@ -34,9 +35,7 @@ export async function insertQuoteVersion(
     issueDate: params.snapshot.issueDate,
     validUntil: params.snapshot.validUntil,
     notes: params.snapshot.notes,
-    netPence: params.snapshot.netPence,
-    vatPence: params.snapshot.vatPence,
-    grossPence: params.snapshot.grossPence,
+    ...sterlingTotals(params.snapshot),
     lines: params.snapshot.lines,
     source: params.source,
     rolledBackFromVersion: params.rolledBackFromVersion ?? null,

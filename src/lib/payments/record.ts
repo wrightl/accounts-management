@@ -14,7 +14,8 @@ import {
 import { canSettleInvoiceBalance } from "@/lib/bank/match";
 import { creditAdjustmentForInvoice } from "@/lib/credit-notes/adjustments";
 import type { Tx } from "@/lib/invoices/allocate";
-import { invoiceBalancePence, isInvoiceSettled } from "@/lib/invoices/balance";
+import { isForeignDocumentCurrency } from "@/lib/currency";
+import { invoiceBalance, isInvoiceSettled, settlementMinor } from "@/lib/invoices/balance";
 import {
   effectiveStatus,
   todayIsoDate,
@@ -166,18 +167,19 @@ export async function recordInvoicePayment(
       if (status === "draft" || status === "void" || status === "paid") {
         throw new PaymentError(`Cannot record a payment against a ${status} invoice`);
       }
+      if (isForeignDocumentCurrency(inv.currency)) {
+        // Needs the amount in both currencies; the form for that comes later.
+        throw new PaymentError(`Payments on ${inv.currency} invoices can't be recorded here yet`);
+      }
 
       const [paidRow] = await tx
-        .select({ total: sum(payments.amountPence).mapWith(Number) })
+        .select({ total: sum(payments.amountMinor).mapWith(Number) })
         .from(payments)
-        .where(eq(payments.invoiceId, invoiceId));
+        .innerJoin(invoices, eq(invoices.id, payments.invoiceId))
+        .where(and(eq(payments.invoiceId, invoiceId), eq(invoices.companyId, companyId)));
       const alreadyPaid = paidRow?.total ?? 0;
       const credits = await creditAdjustmentForInvoice(tx, companyId, invoiceId);
-      const remaining = invoiceBalancePence({
-        grossPence: inv.grossPence,
-        paidPence: alreadyPaid,
-        ...credits,
-      });
+      const remaining = invoiceBalance(settlementMinor(inv, alreadyPaid, credits));
       // Money already in the bank can be a little more than the balance; the
       // extra then shows as a refund due on the invoice.
       const overBalance = bankTransactionId
@@ -210,6 +212,8 @@ export async function recordInvoicePayment(
         .values({
           invoiceId,
           amountPence,
+          // Sterling invoice (checked above), so the two amounts are equal.
+          amountMinor: amountPence,
           method: parsed.data.method ?? "bank_transfer",
           reference: parsed.data.reference,
           receivedAt,
@@ -228,7 +232,7 @@ export async function recordInvoicePayment(
       }
 
       const paidTotal = alreadyPaid + amountPence;
-      if (isInvoiceSettled({ grossPence: inv.grossPence, paidPence: paidTotal, ...credits })) {
+      if (isInvoiceSettled(settlementMinor(inv, paidTotal, credits))) {
         await tx
           .update(invoices)
           .set({ status: "paid", paidAt: receivedAt })

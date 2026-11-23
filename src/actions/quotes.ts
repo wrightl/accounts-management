@@ -1,11 +1,12 @@
 "use server";
 
 import { and, eq } from "drizzle-orm";
+import { documentTotals, STERLING_RATE, sterlingTotals } from "@/lib/currency";
 import { getDb } from "@/db";
 import { quoteLineItems, quotes } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
 import { mutate } from "@/lib/mutate";
-import { invoiceTotals, poundsToPence } from "@/lib/money";
+import { poundsToPence } from "@/lib/money";
 import { getQuoteDetail, getQuoteVersionSnapshot } from "@/lib/quotes/queries";
 import { createDraftQuoteRecord } from "@/lib/quotes/create";
 import { loadOrRenderQuotePdf } from "@/lib/quotes/pdf-cache";
@@ -102,7 +103,7 @@ export async function updateQuote(id: string, formData: FormData): Promise<Actio
       } catch {
         return { ok: false, error: "Enter a valid unit price on each line item" };
       }
-      const totals = invoiceTotals(lineValues);
+      const totals = documentTotals(lineValues, STERLING_RATE);
       const milestoneResult = parseAndValidateMilestones(formData, totals.grossPence);
       if (!milestoneResult.ok) return { ok: false, error: milestoneResult.error };
 
@@ -217,9 +218,7 @@ export async function rollbackQuote(
             issueDate: snapshot.issueDate,
             validUntil: snapshot.validUntil,
             notes: snapshot.notes,
-            netPence: snapshot.netPence,
-            vatPence: snapshot.vatPence,
-            grossPence: snapshot.grossPence,
+            ...sterlingTotals(snapshot),
             version: nextVersion,
             pdfBlobPath: null,
           })

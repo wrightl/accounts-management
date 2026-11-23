@@ -183,7 +183,7 @@ describe("bank reconciliation integration", () => {
 
       const detail = await getInvoiceDetail(companyId, invoice.id);
       expect(detail?.invoice.status).toBe("paid");
-      expect(detail?.refundDuePence).toBe(100);
+      expect(detail?.refundDueMinor).toBe(100);
     });
 
     it("links an underpayment and leaves the rest owed", async () => {
@@ -195,7 +195,7 @@ describe("bank reconciliation integration", () => {
 
       const detail = await getInvoiceDetail(companyId, invoice.id);
       expect(detail?.invoice.status).not.toBe("paid");
-      expect(detail?.balancePence).toBe(150);
+      expect(detail?.balanceMinor).toBe(150);
     });
 
     it("refuses a bank payment far above the balance", async () => {
@@ -221,7 +221,7 @@ describe("bank reconciliation integration", () => {
       await confirmMatch(companyId, suggestions[0].matchId);
       const detail = await getInvoiceDetail(companyId, invoice.id);
       expect(detail?.invoice.status).toBe("paid");
-      expect(detail?.refundDuePence).toBe(100);
+      expect(detail?.refundDueMinor).toBe(100);
     });
 
     it("doesn't suggest an overpaid invoice on the date alone", async () => {

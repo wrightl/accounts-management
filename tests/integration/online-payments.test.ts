@@ -194,7 +194,7 @@ describe("Connect webhook", () => {
 
     const detail = await getInvoiceDetail(companyId, invoiceId);
     expect(detail?.invoice.status).toBe("paid");
-    expect(detail?.balancePence).toBe(0);
+    expect(detail?.balanceMinor).toBe(0);
   });
 
   it("never records the same Checkout session twice", async () => {
@@ -214,7 +214,7 @@ describe("Connect webhook", () => {
     await processConnectEvent(checkoutEvent({ amount: 50000 }));
     const detail = await getInvoiceDetail(companyId, invoiceId);
     expect(detail?.invoice.status).toBe("overdue");
-    expect(detail?.balancePence).toBe(70000);
+    expect(detail?.balanceMinor).toBe(70000);
   });
 
   it("syncs charges_enabled from account.updated", async () => {

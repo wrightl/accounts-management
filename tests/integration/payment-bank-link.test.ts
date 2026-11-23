@@ -115,7 +115,7 @@ describe("linking an existing payment to a bank receipt", () => {
     const detail = await getInvoiceDetail(companyId, invoiceId);
     expect(detail?.payments[0].amountPence).toBe(25_100);
     expect(detail?.invoice.status).toBe("paid");
-    expect(detail?.refundDuePence).toBe(100);
+    expect(detail?.refundDueMinor).toBe(100);
     const [match] = await db
       .select()
       .from(reconciliationMatches)
@@ -129,7 +129,7 @@ describe("linking an existing payment to a bank receipt", () => {
 
     const detail = await getInvoiceDetail(companyId, invoiceId);
     expect(detail?.invoice.status).not.toBe("paid");
-    expect(detail?.balancePence).toBe(150);
+    expect(detail?.balanceMinor).toBe(150);
   });
 
   it("refuses a receipt far above the payment", async () => {

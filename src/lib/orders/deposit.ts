@@ -1,4 +1,5 @@
 import "server-only";
+import { documentTotals, STERLING_RATE } from "@/lib/currency";
 import { asc, eq } from "drizzle-orm";
 import {
   invoiceLineItems,
@@ -14,7 +15,6 @@ import {
   resolveMilestoneDueDate,
 } from "@/lib/orders/invoice-from-order";
 import { todayIsoDate } from "@/lib/invoices/status";
-import { invoiceTotals } from "@/lib/money";
 
 export type DepositInvoice = {
   invoiceId: string;
@@ -62,7 +62,7 @@ export async function raiseDepositInvoice(
     orderLines,
     priorInvoicedPence: 0,
   });
-  const totals = invoiceTotals(lineValues);
+  const totals = documentTotals(lineValues, STERLING_RATE);
 
   const number = await allocateInvoiceNumber(tx, params.companyId, issueDate);
   const [inv] = await tx

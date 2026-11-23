@@ -3,7 +3,7 @@ import { guardTenantPage } from "@/lib/auth";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
 import { storedStatus } from "@/lib/invoices/status";
 import { todayIsoDate } from "@/lib/dates";
-import { formatGBP, penceToPounds } from "@/lib/money";
+import { formatMoney, penceToPounds } from "@/lib/money";
 import { CreditNoteForm } from "@/components/credit-notes/credit-note-form";
 import { PageHeader } from "@/components/ui/page-header";
 
@@ -20,11 +20,11 @@ export default async function NewCreditNotePage({
   const status = storedStatus(detail.invoice.status);
   if (status !== "sent" && status !== "paid") notFound();
 
-  const { invoice, lines, creditablePence, creditedPence } = detail;
+  const { invoice, lines, creditableMinor, creditedMinor } = detail;
   // A full credit is the common case, so start from the invoice's lines when
   // nothing has been credited yet. After a partial credit, start blank.
   const initialLines =
-    creditedPence === 0
+    creditedMinor === 0
       ? lines.map((l) => ({
           key: l.id,
           description: l.description,
@@ -47,19 +47,19 @@ export default async function NewCreditNotePage({
         description={
           <>
             The invoice total is {invoice.grossFormatted}
-            {creditedPence > 0 ? `, of which ${formatGBP(creditedPence)} is already credited` : null}.
+            {creditedMinor > 0 ? `, of which ${formatMoney(creditedMinor, invoice.currency)} is already credited` : null}.
           </>
         }
         className="mb-6"
       />
-      {creditablePence <= 0 ? (
+      {creditableMinor <= 0 ? (
         <p className="text-sm text-muted">This invoice has been fully credited.</p>
       ) : (
         <CreditNoteForm
           invoiceId={invoice.id}
           invoiceNumber={invoice.number}
           initialLines={initialLines}
-          creditablePence={creditablePence}
+          creditablePence={creditableMinor}
           vatEnabled={invoice.vatPence > 0}
           defaultIssueDate={defaultIssueDate}
         />
