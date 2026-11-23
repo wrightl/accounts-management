@@ -45,6 +45,7 @@ export async function createClient(formData: FormData): Promise<ActionResult> {
           email: parsed.data.email,
           addressLines: parsed.data.addressLines,
           notes: parsed.data.notes,
+          defaultCurrency: parsed.data.defaultCurrency,
         })
         .returning({ id: clients.id });
       return { ok: true, id: row.id };
@@ -81,6 +82,7 @@ export async function updateClient(
           email: parsed.data.email,
           addressLines: parsed.data.addressLines,
           notes: parsed.data.notes,
+          defaultCurrency: parsed.data.defaultCurrency,
         })
         .where(and(eq(clients.id, id), eq(clients.companyId, companyId)));
       return { ok: true, id };

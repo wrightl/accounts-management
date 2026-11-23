@@ -11,6 +11,7 @@ import { loadOriginalInvoiceDocument } from "@/lib/invoices/original-document";
 import { getPublicInvoiceByToken } from "@/lib/invoices/public-queries";
 import { storedStatus } from "@/lib/invoices/status";
 import { canPayInvoiceOnline } from "@/lib/payments/online-status";
+import { invoiceRateNote, sterlingVatRow } from "@/lib/pdf/templates/views";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import {
   formatDiscountPercent,
@@ -67,13 +68,15 @@ export default async function PublicInvoicePage({
   const stored = storedStatus(invoice.status);
   const settings = await getOrCreateCompanySettings(invoice.companyId);
   const amountDue = detail.balanceMinor;
+  const sterlingVat = sterlingVatRow(invoice);
+  const rateNote = invoiceRateNote(invoice);
   // An imported invoice keeps its source totals, which whole-number rates may not reproduce.
   // Line prices are in the invoice's currency, so compare with its own VAT.
   const showLineVat =
     invoice.vatMinor > 0 && invoiceTotals(lines).vatPence === invoice.vatMinor;
   const payable = canPayInvoiceOnline({
     status: invoice.status,
-    amountDuePence: amountDue,
+    amountDueMinor: amountDue,
     currency: invoice.currency,
     onlinePayments: company.onlinePayments,
   });
@@ -167,11 +170,17 @@ export default async function PublicInvoicePage({
             <p className="text-muted">VAT {invoice.vatFormatted}</p>
           </>
         ) : null}
+        {sterlingVat ? (
+          <p className="text-muted">
+            {sterlingVat.label}: {sterlingVat.value}
+          </p>
+        ) : null}
         <p className="font-display text-lg font-semibold">Total {invoice.grossFormatted}</p>
         {detail.creditedMinor > 0 ? (
           <p className="text-muted">Credited {detail.creditedFormatted}</p>
         ) : null}
         {detail.paidMinor > 0 ? <p className="text-muted">Paid {detail.paidFormatted}</p> : null}
+        {rateNote ? <p className="text-xs text-muted">{rateNote}</p> : null}
       </div>
 
       {invoice.notes ? (

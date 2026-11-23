@@ -19,12 +19,13 @@ export async function createInvoiceCheckout(rawToken: string): Promise<InvoiceCh
     return { ok: false, error: "This invoice is no longer available" };
   }
   const { detail, company } = data;
-  const amountDuePence = detail.balanceMinor;
+  // In the invoice's currency, which is what the client is charged in.
+  const amountDueMinor = detail.balanceMinor;
   if (
     !company.stripeConnectAccountId ||
     !canPayInvoiceOnline({
       status: detail.invoice.status,
-      amountDuePence,
+      amountDueMinor,
       currency: detail.invoice.currency,
       onlinePayments: company.onlinePayments,
     })
@@ -32,7 +33,7 @@ export async function createInvoiceCheckout(rawToken: string): Promise<InvoiceCh
     return {
       ok: false,
       error:
-        amountDuePence <= 0
+        amountDueMinor <= 0
           ? "Nothing is left to pay on this invoice"
           : "This invoice can't be paid online. Use the bank details on the invoice instead.",
     };
@@ -54,8 +55,8 @@ export async function createInvoiceCheckout(rawToken: string): Promise<InvoiceCh
         {
           quantity: 1,
           price_data: {
-            currency: "gbp",
-            unit_amount: amountDuePence,
+            currency: detail.invoice.currency.toLowerCase(),
+            unit_amount: amountDueMinor,
             product_data: {
               name: `Invoice ${detail.invoice.number}`,
               description: `From ${company.name}`,

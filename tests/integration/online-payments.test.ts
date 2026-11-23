@@ -3,7 +3,9 @@ import type Stripe from "stripe";
 import { eq } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
-import { auditLog, clients, companies, invoices, payments } from "@/db/schema";
+import { and } from "drizzle-orm";
+import { auditLog, clients, companies, invoices, invoiceWriteOffs, payments } from "@/db/schema";
+import { resetFxFetchBackoff } from "@/lib/bank/fx";
 import { seedCompany } from "@/lib/test/seed-company";
 import { getPublicInvoiceByToken } from "@/lib/invoices/public-queries";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
@@ -15,6 +17,7 @@ import {
 } from "@/actions/public-invoices";
 
 const createSession = vi.fn();
+const retrieveIntent = vi.fn();
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/invoices/fx-difference", async (importOriginal) => {
@@ -32,7 +35,10 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 vi.mock("@/lib/billing/stripe", () => ({
-  getStripe: () => ({ checkout: { sessions: { create: createSession } } }),
+  getStripe: () => ({
+    checkout: { sessions: { create: createSession } },
+    paymentIntents: { retrieve: retrieveIntent },
+  }),
   appBaseUrl: () => "http://localhost:3001",
 }));
 
@@ -76,10 +82,15 @@ beforeEach(async () => {
   invoiceId = inv.id;
   token = inv.publicToken;
   createSession.mockReset();
+  retrieveIntent.mockReset();
+  resetFxFetchBackoff();
+  // Rates come from the invoice when the Bank of England can't be reached.
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("no network in tests")));
   createSession.mockResolvedValue({ id: "cs_test_1", url: "https://checkout.stripe.com/c/cs_test_1" });
 });
 
 afterEach(async () => {
+  vi.unstubAllGlobals();
   setTestDb(null);
   await ctx.client.close();
 });
@@ -167,6 +178,15 @@ describe("startInvoiceCheckout", () => {
     expect(params.payment_intent_data.application_fee_amount).toBeUndefined();
   });
 
+  it("charges a foreign invoice in its own currency", async () => {
+    await usdInvoice();
+    await expect(startInvoiceCheckout(token)).rejects.toMatchObject({
+      url: "https://checkout.stripe.com/c/cs_test_1",
+    });
+    const [params] = createSession.mock.calls[0]!;
+    expect(params.line_items[0].price_data).toMatchObject({ currency: "usd", unit_amount: 150000 });
+  });
+
   it("refuses when the company hasn't finished Stripe setup", async () => {
     await db
       .update(companies)
@@ -183,6 +203,65 @@ describe("startInvoiceCheckout", () => {
     const result = await startInvoiceCheckout(token);
     expect(result.ok).toBe(false);
     expect(createSession).not.toHaveBeenCalled();
+  });
+});
+
+/** Make the test invoice a $1,500 invoice booked at 1.25, so £1,200 in the books. */
+async function usdInvoice() {
+  await db
+    .update(invoices)
+    .set({
+      currency: "USD",
+      fxRate: 1.25,
+      fxRateSource: "boe",
+      netMinor: 125000,
+      vatMinor: 25000,
+      grossMinor: 150000,
+    })
+    .where(eq(invoices.id, invoiceId));
+}
+
+async function fxDifference() {
+  const [row] = await db
+    .select({ amountPence: invoiceWriteOffs.amountPence })
+    .from(invoiceWriteOffs)
+    .where(
+      and(eq(invoiceWriteOffs.invoiceId, invoiceId), eq(invoiceWriteOffs.kind, "fx_difference")),
+    );
+  return row?.amountPence ?? null;
+}
+
+describe("Connect webhook, foreign currency", () => {
+  it("records the dollars charged and the pounds Stripe settled", async () => {
+    await usdInvoice();
+    retrieveIntent.mockResolvedValue({
+      latest_charge: { balance_transaction: { currency: "gbp", amount: 118000 } },
+    });
+
+    await processConnectEvent(checkoutEvent({ id: "evt_usd", currency: "usd", amount: 150000 }));
+
+    expect(retrieveIntent).toHaveBeenCalledWith(
+      "pi_test_1",
+      { expand: ["latest_charge.balance_transaction"] },
+      { stripeAccount: ACCOUNT },
+    );
+    const [row] = await paymentRows();
+    expect(row).toMatchObject({ amountMinor: 150000, amountPence: 118000, amountPenceEstimated: false });
+    const detail = await getInvoiceDetail(companyId, invoiceId);
+    expect(detail?.invoice.status).toBe("paid");
+    // Booked at £1,200, settled £1,180: Stripe's conversion is a £20 loss.
+    expect(await fxDifference()).toBe(2000);
+  });
+
+  it("estimates the pounds, flagged, when Stripe hasn't settled the charge yet", async () => {
+    await usdInvoice();
+    retrieveIntent.mockResolvedValue({ latest_charge: { balance_transaction: null } });
+
+    await processConnectEvent(checkoutEvent({ id: "evt_usd_2", currency: "usd", amount: 150000 }));
+
+    const [row] = await paymentRows();
+    // No Bank of England rate to hand, so the invoice's own.
+    expect(row).toMatchObject({ amountMinor: 150000, amountPence: 120000, amountPenceEstimated: true });
   });
 });
 

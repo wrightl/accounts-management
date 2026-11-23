@@ -9,7 +9,19 @@ import { FormStickyActions } from "@/components/ui/form-sticky-actions";
 import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
 import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
 import { useFieldErrors } from "@/components/ui/use-field-errors";
-import { formatGBP, invoiceTotals, poundsToPence } from "@/lib/money";
+import {
+  expenseCurrencySymbol,
+  formatGBP,
+  formatMoney,
+  invoiceTotals,
+  poundsToPence,
+} from "@/lib/money";
+import { STERLING, toSterlingPence } from "@/lib/currency";
+import {
+  DocumentCurrencyFields,
+  parseManualRate,
+  useDocumentRate,
+} from "@/components/documents/document-currency-fields";
 import { createInvoice, updateInvoice } from "@/actions/invoices";
 import {
   invoiceRawFromFormData,
@@ -79,13 +91,21 @@ export function InvoiceForm({
   initialRebillIds = [],
 }: {
   mode: "create" | "edit";
-  clients: { id: string; name: string; companyName?: string | null }[];
+  clients: {
+    id: string;
+    name: string;
+    companyName?: string | null;
+    defaultCurrency?: string | null;
+  }[];
   invoice?: {
     id: string;
     clientId: string;
     issueDate: string | null;
     dueDate: string | null;
     notes: string | null;
+    currency: string;
+    fxRate: number;
+    fxRateSource: "boe" | "manual" | null;
   };
   initialLines?: LineDraft[];
   vatRegistered?: boolean;
@@ -109,6 +129,24 @@ export function InvoiceForm({
   const [pending, startTransition] = useTransition();
   const lineDefault = vatRegistered ? defaultVatRate : 0;
   const [clientId, setClientId] = useState(invoice?.clientId ?? defaultClientId ?? "");
+  // Clients created from the picker aren't in `clients` until the page reloads.
+  const [createdCurrencies, setCreatedCurrencies] = useState<Record<string, string | null>>({});
+  const clientCurrency = (id: string, created?: { defaultCurrency: string | null }) =>
+    (created ?? clients.find((c) => c.id === id))?.defaultCurrency ??
+    createdCurrencies[id] ??
+    STERLING;
+  const [currency, setCurrency] = useState(invoice?.currency ?? clientCurrency(clientId));
+  // Once the currency is picked by hand, changing the client no longer resets it.
+  const [currencyTouched, setCurrencyTouched] = useState(mode === "edit");
+  const [manualRate, setManualRate] = useState(
+    invoice?.fxRateSource === "manual" ? String(invoice.fxRate) : "",
+  );
+  const [issueDate, setIssueDate] = useState(
+    invoice?.issueDate ?? new Date().toISOString().slice(0, 10),
+  );
+  const foreign = currency !== STERLING;
+  const bankRate = useDocumentRate(currency, issueDate);
+  const effectiveRate = foreign ? (parseManualRate(manualRate) ?? bankRate?.fxRate ?? null) : 1;
   const [lines, setLines] = useState<LineDraft[]>(() => {
     if (initialLines && initialLines.length > 0) {
       return initialLines.map((l) => ({
@@ -116,16 +154,19 @@ export function InvoiceForm({
         vatRate: vatRegistered ? l.vatRate : 0,
       }));
     }
-    const starting = rebillable.filter(
-      (r) => r.clientId === clientId && initialRebillIds.includes(r.id),
-    );
+    // Recharged expenses only go on GBP invoices.
+    const starting =
+      currency === STERLING
+        ? rebillable.filter((r) => r.clientId === clientId && initialRebillIds.includes(r.id))
+        : [];
     const initial =
       starting.length > 0 ? starting.map((o) => rebillLine(o, lineDefault)) : [newLine(lineDefault)];
     // Keys feed DOM ids, so lines rendered on the server need keys that match
     // in the browser; a random key here fails hydration.
     return initial.map((l, i) => ({ ...l, key: `initial-${i}` }));
   });
-  const clientRebillable = rebillable.filter((r) => r.clientId === clientId);
+  // Expenses are recharged at their sterling cost, so only onto GBP invoices.
+  const clientRebillable = foreign ? [] : rebillable.filter((r) => r.clientId === clientId);
   const addedExpenseIds = new Set(lines.flatMap((l) => (l.expenseId ? [l.expenseId] : [])));
   const notAdded = clientRebillable.filter((r) => !addedExpenseIds.has(r.id));
 
@@ -138,14 +179,28 @@ export function InvoiceForm({
     });
   }
 
-  function changeClient(next: string) {
+  function changeClient(next: string, created?: { defaultCurrency: string | null }) {
     setClientId(next);
+    if (created) setCreatedCurrencies((prev) => ({ ...prev, [next]: created.defaultCurrency }));
+    if (!currencyTouched) changeCurrency(clientCurrency(next, created));
     // Recharges belong to one client, so drop another client's.
     const keep = new Set(rebillable.filter((r) => r.clientId === next).map((r) => r.id));
     setLines((prev) => {
       const kept = prev.filter((l) => !l.expenseId || keep.has(l.expenseId));
       return kept.length > 0 ? kept : [newLine(lineDefault)];
     });
+  }
+
+  function changeCurrency(next: string) {
+    setCurrency(next);
+    setManualRate("");
+    if (next !== STERLING) {
+      // Recharged expenses can't go on a foreign invoice.
+      setLines((prev) => {
+        const kept = prev.filter((l) => !l.expenseId);
+        return kept.length > 0 ? kept : [newLine(lineDefault)];
+      });
+    }
   }
 
   const totals = useMemo(() => {
@@ -229,9 +284,9 @@ export function InvoiceForm({
             disabled={pending}
             aria-invalid={Boolean(fieldErrors.clientId)}
             aria-describedby={fieldErrors.clientId ? "clientId-error" : undefined}
-            onChange={(id) => {
+            onChange={(id, created) => {
               clearField("clientId");
-              changeClient(id);
+              changeClient(id, created);
             }}
           />
           <FieldError id="clientId-error">{fieldErrors.clientId}</FieldError>
@@ -244,11 +299,14 @@ export function InvoiceForm({
             id="issueDate"
             name="issueDate"
             type="date"
-            defaultValue={invoice?.issueDate ?? new Date().toISOString().slice(0, 10)}
+            defaultValue={issueDate}
             disabled={pending}
             aria-invalid={Boolean(fieldErrors.issueDate)}
             aria-describedby={fieldErrors.issueDate ? "issueDate-error" : undefined}
-            onChange={() => clearField("issueDate")}
+            onChange={(e) => {
+              clearField("issueDate");
+              if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) setIssueDate(e.target.value);
+            }}
           />
           <FieldError id="issueDate-error">{fieldErrors.issueDate}</FieldError>
         </div>
@@ -267,6 +325,19 @@ export function InvoiceForm({
           <FieldError id="dueDate-error">{fieldErrors.dueDate}</FieldError>
           <p className="mt-1 text-xs text-muted">Defaults to issue date + 14 days if blank.</p>
         </div>
+        <DocumentCurrencyFields
+          currency={currency}
+          onCurrencyChange={(code) => {
+            setCurrencyTouched(true);
+            changeCurrency(code);
+          }}
+          manualRate={manualRate}
+          onManualRateChange={setManualRate}
+          bankRate={bankRate}
+          disabled={pending}
+          fieldErrors={fieldErrors}
+          clearField={clearField}
+        />
       </div>
 
       <div className="space-y-2">
@@ -282,7 +353,10 @@ export function InvoiceForm({
           <span aria-hidden="true" />
           <span>Description</span>
           <span>Qty</span>
-          <span>Unit Cost £{vatRegistered ? " (ex VAT)" : ""}</span>
+          <span>
+            Unit Cost {expenseCurrencySymbol(currency)}
+            {vatRegistered ? " (ex VAT)" : ""}
+          </span>
           <span>Disc %</span>
           {vatRegistered ? <span>VAT</span> : null}
           <span className="sr-only">Remove</span>
@@ -494,20 +568,36 @@ export function InvoiceForm({
             </ul>
           </div>
         ) : null}
+        {foreign && rebillable.some((r) => r.clientId === clientId) ? (
+          <p className="text-xs text-muted">
+            Recharged expenses can only go on a GBP invoice.
+          </p>
+        ) : null}
         <div className="space-y-1 text-right">
           {vatRegistered && totals.vatPence > 0 ? (
             <>
               <p className="text-sm text-muted">
-                Net {formatGBP(totals.netPence)}
+                Net {formatMoney(totals.netPence, currency)}
               </p>
               <p className="text-sm text-muted">
-                VAT {formatGBP(totals.vatPence)}
+                VAT {formatMoney(totals.vatPence, currency)}
               </p>
             </>
           ) : null}
           <p className="font-display text-lg font-semibold">
-            Total {formatGBP(totals.grossPence)}
+            Total {formatMoney(totals.grossPence, currency)}
           </p>
+          {foreign && effectiveRate ? (
+            <p className="text-sm text-muted">
+              {/* Converted as the server does: net and VAT separately. */}
+              About{" "}
+              {formatGBP(
+                toSterlingPence(totals.netPence, effectiveRate) +
+                  toSterlingPence(totals.vatPence, effectiveRate),
+              )}{" "}
+              in your books
+            </p>
+          ) : null}
         </div>
       </div>
 

@@ -1,8 +1,10 @@
 import { clientBillToLines } from "@/lib/clients/display";
 import { formatIsoDateUk } from "@/lib/dates";
+import { describeDocumentRate, isForeignDocumentCurrency, STERLING } from "@/lib/currency";
 import {
   formatDiscountPercent,
   formatGBP,
+  formatMoney,
   formatQuantity,
   hasLineDiscount,
   lineNetPence,
@@ -32,14 +34,45 @@ function labelled(label: string, value: string | null | undefined): LabelledValu
   return value ? [{ label, value }] : [];
 }
 
-function viewLines(lines: PdfLine[]): DocumentViewLine[] {
+/** Line prices are in the document's currency. */
+function viewLines(lines: PdfLine[], currency: string = STERLING): DocumentViewLine[] {
   return lines.map((line) => ({
     description: line.description,
     quantity: formatQuantity(line.quantity),
-    unitPrice: formatGBP(line.unitPricePence),
+    unitPrice: formatMoney(line.unitPricePence, currency),
     discount: formatDiscountPercent(line.discountPercent),
-    amount: formatGBP(lineNetPence(line)),
+    amount: formatMoney(lineNetPence(line), currency),
   }));
+}
+
+/**
+ * The sterling VAT on a foreign invoice that charges VAT, which HMRC requires
+ * a VAT invoice in another currency to show, or null.
+ */
+export function sterlingVatRow(invoice: PdfInvoice): LabelledValue | null {
+  if (
+    !isForeignDocumentCurrency(invoice.currency) ||
+    invoice.fxRate == null ||
+    invoice.vatPence == null ||
+    !invoice.vatMinor
+  ) {
+    return null;
+  }
+  return {
+    label: `VAT in GBP at ${invoice.fxRate} ${invoice.currency} = £1`,
+    value: formatGBP(invoice.vatPence),
+  };
+}
+
+/** How a foreign invoice was converted, for the small print; null for sterling. */
+export function invoiceRateNote(invoice: PdfInvoice): string | null {
+  if (!isForeignDocumentCurrency(invoice.currency) || invoice.fxRate == null) return null;
+  return `Amounts are in ${invoice.currency}. Converted to sterling at ${describeDocumentRate({
+    currency: invoice.currency,
+    fxRate: invoice.fxRate,
+    fxRateDate: invoice.fxRateDate ?? null,
+    fxRateSource: invoice.fxRateSource ?? null,
+  })}.`;
 }
 
 function recipient(label: string, client: PdfClient): DocumentView["recipient"] {
@@ -81,14 +114,15 @@ function footerParts(
 }
 
 function subtotals(
-  netPence: number | null | undefined,
-  vatPence: number | null | undefined,
+  net: number | null | undefined,
+  vatAmount: number | null | undefined,
   company: PdfCompany,
+  currency: string = STERLING,
 ): LabelledValue[] {
-  const vat = vatPence ?? 0;
+  const vat = vatAmount ?? 0;
   return [
-    ...(netPence != null ? [{ label: "Subtotal", value: formatGBP(netPence) }] : []),
-    ...(vat > 0 || company.vatNumber ? [{ label: "VAT", value: formatGBP(vat) }] : []),
+    ...(net != null ? [{ label: "Subtotal", value: formatMoney(net, currency) }] : []),
+    ...(vat > 0 || company.vatNumber ? [{ label: "VAT", value: formatMoney(vat, currency) }] : []),
   ];
 }
 
@@ -126,15 +160,20 @@ export function invoiceView(params: ViewBase & { invoice: PdfInvoice }): Documen
       : null,
     recipient: recipient("Bill to", client),
     sender: sender(company, contactEmail, showVatNumber),
-    lines: viewLines(lines),
+    lines: viewLines(lines, invoice.currency),
     showDiscount: hasLineDiscount(lines),
-    subtotals: subtotals(invoice.netPence, invoice.vatPence, company),
-    total: { label: "Total due", value: formatGBP(invoice.grossPence) },
+    subtotals: [
+      ...subtotals(invoice.netMinor, invoice.vatMinor, company, invoice.currency),
+      ...[sterlingVatRow(invoice)].filter((row): row is LabelledValue => row != null),
+    ],
+    total: { label: "Total due", value: formatMoney(invoice.grossMinor, invoice.currency) },
     notes: invoice.notes ? { title: "Notes", body: invoice.notes } : null,
     detail: {
       title: "Payment details",
       lines: bankLines(company),
-      footnote: `Please quote ${invoice.number} as the payment reference.`,
+      footnote: [`Please quote ${invoice.number} as the payment reference.`, invoiceRateNote(invoice)]
+        .filter(Boolean)
+        .join(" "),
     },
     footerParts: footerParts(company, contactEmail, showVatNumber),
   };

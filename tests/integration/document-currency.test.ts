@@ -284,18 +284,21 @@ describe("foreign-currency invoices", () => {
     expect(await fxRows(inv.id)).toHaveLength(1);
   });
 
-  it("doesn't take manual payments or card payments yet", async () => {
-    const inv = await usdInvoice();
-    const result = await recordInvoicePayment({ companyId, localUserId: actorId }, inv.id, {
-      amountPounds: "70.00",
-      method: "bank_transfer",
-    });
-    expect(result.ok).toBe(false);
+  it("can be paid online in its own currency", async () => {
     expect(
       canPayInvoiceOnline({
         status: "sent",
-        amountDuePence: 7_000,
+        amountDueMinor: 7_000,
         currency: "USD",
+        onlinePayments: "enabled",
+      }),
+    ).toBe(true);
+    // Not in a currency Checkout can't be given.
+    expect(
+      canPayInvoiceOnline({
+        status: "sent",
+        amountDueMinor: 7_000,
+        currency: "JPY",
         onlinePayments: "enabled",
       }),
     ).toBe(false);

@@ -210,8 +210,41 @@ describe("document views", () => {
     const view = invoiceView({
       ...base,
       company: { ...SAMPLE_COMPANY, vatNumber: null },
-      invoice: { ...SAMPLE_INVOICE, vatPence: 0, grossPence: SAMPLE_INVOICE.netPence },
+      invoice: { ...SAMPLE_INVOICE, vatMinor: 0, grossMinor: SAMPLE_INVOICE.netMinor },
     });
     expect(view.subtotals.map((row) => row.label)).toEqual(["Subtotal"]);
+  });
+
+  it("shows a foreign invoice in its currency, with the VAT in sterling and the rate", () => {
+    const view = invoiceView({
+      ...base,
+      invoice: {
+        ...SAMPLE_INVOICE,
+        currency: "USD",
+        fxRate: 1.25,
+        fxRateDate: "2026-01-13",
+        fxRateSource: "boe",
+        netMinor: 237000,
+        vatMinor: 47400,
+        grossMinor: 284400,
+        vatPence: 37920,
+      },
+    });
+    expect(view.lines[0]?.unitPrice).toBe("US$800.00");
+    expect(view.total.value).toBe("US$2,844.00");
+    expect(view.subtotals).toEqual([
+      { label: "Subtotal", value: "US$2,370.00" },
+      { label: "VAT", value: "US$474.00" },
+      { label: "VAT in GBP at 1.25 USD = £1", value: "£379.20" },
+    ]);
+    expect(view.detail?.footnote).toContain(
+      "Converted to sterling at 1 GBP = 1.25 USD (Bank of England, 13 January 2026).",
+    );
+  });
+
+  it("adds no sterling rows to a sterling invoice", () => {
+    const view = invoiceView({ ...base, invoice: SAMPLE_INVOICE });
+    expect(view.subtotals.map((row) => row.label)).toEqual(["Subtotal", "VAT"]);
+    expect(view.detail?.footnote).toBe(`Please quote ${SAMPLE_INVOICE.number} as the payment reference.`);
   });
 });

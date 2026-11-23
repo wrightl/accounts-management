@@ -3,6 +3,7 @@ import {
   documentLineSchema,
   parseDocumentLinesJson,
 } from "@/lib/documents/schema";
+import { DOCUMENT_CURRENCIES, STERLING } from "@/lib/currency";
 import { todayIsoDate } from "@/lib/dates";
 import { parseWithFieldErrors } from "@/lib/validation/field-errors";
 
@@ -11,6 +12,25 @@ const optionalNotes = z
   .optional()
   .or(z.literal(""))
   .transform((v) => (v === "" ? null : (v ?? null)));
+
+/** A document's currency: one of DOCUMENT_CURRENCIES, sterling when blank. */
+export const documentCurrencySchema = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .optional()
+  .transform((v) => v || STERLING)
+  .refine((v) => DOCUMENT_CURRENCIES.includes(v), "Choose one of the listed currencies");
+
+/**
+ * A rate typed by hand, in units of the document currency per £1. Blank means
+ * use the Bank of England rate for the issue date.
+ */
+export const manualFxRateSchema = z
+  .union([z.string(), z.number()])
+  .optional()
+  .transform((v) => (v == null || String(v).trim() === "" ? null : Number(String(v).trim())))
+  .refine((v) => v == null || (Number.isFinite(v) && v > 0), "Enter an exchange rate above 0");
 
 export const invoiceSchema = z.object({
   clientId: z
@@ -29,6 +49,8 @@ export const invoiceSchema = z.object({
     .optional()
     .or(z.literal("")),
   notes: optionalNotes,
+  currency: documentCurrencySchema,
+  fxRate: manualFxRateSchema,
   lines: z
     .array(
       documentLineSchema.extend({
@@ -47,6 +69,8 @@ export function invoiceRawFromFormData(formData: FormData): Record<string, unkno
     issueDate: formData.get("issueDate") || todayIsoDate(),
     dueDate: formData.get("dueDate") ?? "",
     notes: formData.get("notes") ?? "",
+    currency: formData.get("currency") ?? "",
+    fxRate: formData.get("fxRate") ?? "",
     lines: parseDocumentLinesJson(formData.get("linesJson")),
   };
 }

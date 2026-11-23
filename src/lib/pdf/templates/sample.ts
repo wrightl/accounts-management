@@ -40,9 +40,9 @@ export const SAMPLE_INVOICE: PdfInvoice = {
   issueDate: "2026-01-13",
   dueDate: "2026-02-12",
   notes: "Thank you for your business.",
-  netPence: 237000,
-  vatPence: 47400,
-  grossPence: 284400,
+  netMinor: 237000,
+  vatMinor: 47400,
+  grossMinor: 284400,
   currency: "GBP",
 };
 

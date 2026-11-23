@@ -6,6 +6,7 @@ import { rowOfCompany } from "@/lib/tenant-scope";
 import { invoices, payments, reconciliationMatches } from "@/db/schema";
 import type { ActionResult } from "@/actions/result";
 import { writeAudit } from "@/lib/audit";
+import { bankAmountWithinFxBand, gbpAmountBand } from "@/lib/bank/fx";
 import { canSettleInvoiceBalance, dateDiffDays } from "@/lib/bank/match";
 import {
   getBankTransactionById,
@@ -61,11 +62,20 @@ async function invoiceSettlement(
 }
 
 /**
- * The most a bank receipt can be when linked to this payment: the payment plus
- * whatever is still owed, with the usual overpayment allowance on top.
+ * Whether a bank receipt could be this payment. On a sterling invoice it can
+ * be up to the payment plus whatever is still owed, with the usual overpayment
+ * allowance on top. On a foreign invoice the client's payment is fixed in its
+ * own currency and only the sterling it became is uncertain, so the receipt
+ * must be within the usual ±10% of the sterling the payment is expected to be.
  */
-function receiptFits(amountPence: number, paymentPence: number, owedPence: number): boolean {
-  return canSettleInvoiceBalance(amountPence, paymentPence + Math.max(0, owedPence));
+function receiptFits(
+  amountPence: number,
+  payment: { amountPence: number },
+  owedMinor: number,
+  foreign: boolean,
+): boolean {
+  if (foreign) return amountPence > 0 && bankAmountWithinFxBand(amountPence, gbpAmountBand(payment.amountPence));
+  return canSettleInvoiceBalance(amountPence, payment.amountPence + Math.max(0, owedMinor));
 }
 
 /** Whether a confirmed bank match already settles this payment. */
@@ -100,20 +110,24 @@ export async function listReceiptsForPayment(
   const db = getDb();
   const row = await loadPayment(db, companyId, paymentId);
   if (!row || row.payment.stripeCheckoutSessionId) return [];
-  // Foreign-currency receipts are matched on a rate band, which comes later.
-  if (isForeignDocumentCurrency(row.invoice.currency)) return [];
+  const foreign = isForeignDocumentCurrency(row.invoice.currency);
   const owed = invoiceBalance(await invoiceSettlement(db, row.invoice));
   const paidOn = row.payment.receivedAt.toISOString().slice(0, 10);
 
   const unmatched = await listUnmatchedIncomingTransactions(companyId);
   return unmatched
     .map(({ tx }) => tx)
-    .filter((tx) => receiptFits(tx.amountPence, row.payment.amountPence, owed))
+    .filter((tx) => receiptFits(tx.amountPence, row.payment, owed, foreign))
     .sort((a, b) => {
-      const exactA = a.amountPence === row.payment.amountPence ? 0 : 1;
-      const exactB = b.amountPence === row.payment.amountPence ? 0 : 1;
+      // Sterling amounts match exactly; a foreign payment's sterling only roughly.
+      const nearA = foreign
+        ? Math.abs(a.amountPence - row.payment.amountPence)
+        : a.amountPence === row.payment.amountPence ? 0 : 1;
+      const nearB = foreign
+        ? Math.abs(b.amountPence - row.payment.amountPence)
+        : b.amountPence === row.payment.amountPence ? 0 : 1;
       return (
-        exactA - exactB ||
+        nearA - nearB ||
         Math.abs(dateDiffDays(a.bookedAt, paidOn)) - Math.abs(dateDiffDays(b.bookedAt, paidOn))
       );
     })
@@ -151,15 +165,9 @@ export async function linkPaymentToBankTransaction(
   if (bankTx.amountPence <= 0) {
     return { ok: false, error: "Only incoming bank transactions can be linked" };
   }
-  if (isForeignDocumentCurrency(found.invoice.currency)) {
-    return {
-      ok: false,
-      error: `Linking bank lines to ${found.invoice.currency} payments isn't supported yet`,
-    };
-  }
-
   const before = found.payment.amountPence;
-  const amountChanges = bankTx.amountPence !== before;
+  // The bank line is the sterling actually received, so it also confirms an estimate.
+  const amountChanges = bankTx.amountPence !== before || found.payment.amountPenceEstimated;
   if (amountChanges) {
     const locked = await checkPeriodOpen(companyId, found.payment.receivedAt);
     if (locked) return { ok: false, error: locked };
@@ -198,8 +206,9 @@ export async function linkPaymentToBankTransaction(
         throw new LinkError("Bank transaction is already reconciled");
       }
 
+      const foreign = isForeignDocumentCurrency(inv.currency);
       const owed = invoiceBalance(await invoiceSettlement(tx, inv));
-      if (!receiptFits(bankTx.amountPence, current.payment.amountPence, owed)) {
+      if (!receiptFits(bankTx.amountPence, current.payment, owed, foreign)) {
         throw new LinkError(
           `${formatGBP(bankTx.amountPence)} is too far from the ${formatGBP(current.payment.amountPence)} payment to link`,
         );
@@ -219,8 +228,14 @@ export async function linkPaymentToBankTransaction(
       if (amountChanges) {
         await tx
           .update(payments)
-          // Sterling invoice (checked above), so the two amounts move together.
-          .set({ amountPence: bankTx.amountPence, amountMinor: bankTx.amountPence })
+          // A sterling payment settles the invoice by what was received. A
+          // foreign one settled it in the client's currency, which stays; only
+          // the sterling it became changes.
+          .set(
+            foreign
+              ? { amountPence: bankTx.amountPence, amountPenceEstimated: false }
+              : { amountPence: bankTx.amountPence, amountMinor: bankTx.amountPence },
+          )
           .where(
             and(
               eq(payments.id, paymentId),
@@ -234,9 +249,10 @@ export async function linkPaymentToBankTransaction(
         paymentId,
         invoiceId: inv.id,
         confirmed: true,
-        note: amountChanges
-          ? `Payment changed from ${formatGBP(before)} to the ${formatGBP(bankTx.amountPence)} received.`
-          : null,
+        note:
+          bankTx.amountPence !== before
+            ? `Payment changed from ${formatGBP(before)} to the ${formatGBP(bankTx.amountPence)} received.`
+            : null,
       });
 
       const settled = isInvoiceSettled(await invoiceSettlement(tx, inv));

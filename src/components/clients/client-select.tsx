@@ -39,7 +39,8 @@ export function ClientSelect({
   name?: string;
   value?: string;
   defaultValue?: string;
-  onChange?: (clientId: string) => void;
+  /** `created` is set when the client was just created from the picker. */
+  onChange?: (clientId: string, created?: CreatedClient) => void;
   /** Options listed before the clients, such as "No client". */
   leadingOptions?: SelectOption[];
   placeholder?: string;
@@ -81,7 +82,7 @@ export function ClientSelect({
   function onCreated(client: CreatedClient) {
     setCreated((prev) => [...prev, client]);
     setOwn(client.id);
-    onChange?.(client.id);
+    onChange?.(client.id, client);
     router.refresh();
   }
 

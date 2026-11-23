@@ -30,7 +30,8 @@ import {
 } from "@/db/schema";
 import { rowOfCompany } from "@/lib/tenant-scope";
 import { clientDisplayNameSql } from "@/lib/clients/sql";
-import { formatGBP, formatMoney } from "@/lib/money";
+import { formatDocumentAmount, formatGBP, formatMoney } from "@/lib/money";
+import { isForeignDocumentCurrency } from "@/lib/currency";
 import { creditAdjustmentsByInvoice } from "@/lib/credit-notes/adjustments";
 import { invoiceAmountDue, invoiceRefundDue, settlementMinor, settlementPence } from "@/lib/invoices/balance";
 import { invoiceInPack, type RecordScope } from "@/lib/accountant/record-scope";
@@ -54,6 +55,8 @@ export async function listInvoices(companyId: string, scope: RecordScope = "all"
       issueDate: invoices.issueDate,
       dueDate: invoices.dueDate,
       grossPence: invoices.grossPence,
+      grossMinor: invoices.grossMinor,
+      currency: invoices.currency,
       clientId: invoices.clientId,
       clientName: clientDisplayNameSql.as("client_name"),
       orderId: invoices.orderId,
@@ -71,7 +74,7 @@ export async function listInvoices(companyId: string, scope: RecordScope = "all"
   return rows.map((r) => ({
     ...r,
     status: effectiveStatus(r.status as InvoiceStatus, r.dueDate, today),
-    grossFormatted: formatGBP(r.grossPence),
+    grossFormatted: formatDocumentAmount(r.grossMinor, r.grossPence, r.currency),
   }));
 }
 
@@ -196,6 +199,8 @@ export async function listInvoicePage(companyId: string, filters: InvoiceListFil
       issueDate: invoices.issueDate,
       dueDate: invoices.dueDate,
       grossPence: invoices.grossPence,
+      grossMinor: invoices.grossMinor,
+      currency: invoices.currency,
       clientId: invoices.clientId,
       clientName: clientDisplayNameSql.as("client_name"),
       orderId: invoices.orderId,
@@ -213,7 +218,7 @@ export async function listInvoicePage(companyId: string, filters: InvoiceListFil
     rows: rows.map((r) => ({
       ...r,
       status: effectiveStatus(r.status as InvoiceStatus, r.dueDate, today),
-      grossFormatted: formatGBP(r.grossPence),
+      grossFormatted: formatDocumentAmount(r.grossMinor, r.grossPence, r.currency),
     })),
     total,
     page,
@@ -350,13 +355,18 @@ export async function getInvoiceDetail(
       grossFormatted: money(inv.grossMinor),
       netFormatted: money(inv.netMinor),
       vatFormatted: money(inv.vatMinor),
+      /** Sterling book values; differ from the above only for a foreign invoice. */
+      grossSterlingFormatted: formatGBP(inv.grossPence),
+      vatSterlingFormatted: formatGBP(inv.vatPence),
       importFilename: rows[0].importFilename,
     },
     client: rows[0].client,
     lines,
     payments: paymentRows.map((p) => ({
       ...p,
-      amountFormatted: money(p.amountMinor),
+      amountFormatted: isForeignDocumentCurrency(inv.currency)
+        ? `${formatDocumentAmount(p.amountMinor, p.amountPence, inv.currency)}${p.amountPenceEstimated ? " est." : ""}`
+        : money(p.amountMinor),
     })),
     creditNotes: creditNoteRows.map((c) => ({
       ...c,

@@ -34,6 +34,11 @@ export interface InvoiceMatchTarget extends ClientNameFields {
   issueDate?: string | null;
   /** An open imported invoice, which can be paid long after its due date. */
   oldDebt?: boolean;
+  /**
+   * Foreign-currency invoices: the sterling a receipt can be, ±10% around the
+   * balance at the day's rate. `balancePence` is then that expected sterling.
+   */
+  fxBand?: { minGbpPence: number; maxGbpPence: number };
 }
 
 export type MatchScoreBreakdown = {
@@ -170,13 +175,21 @@ export function canSettleInvoiceBalance(amountPence: number, balancePence: numbe
   return amountPence > 0 && amountPence <= balancePence + overpaymentAllowancePence(balancePence);
 }
 
+/** Whether a bank receipt could pay this invoice: see canSettleInvoiceBalance and `fxBand`. */
+export function receiptFitsInvoice(amountPence: number, invoice: InvoiceMatchTarget): boolean {
+  if (invoice.fxBand) {
+    return amountPence >= invoice.fxBand.minGbpPence && amountPence <= invoice.fxBand.maxGbpPence;
+  }
+  return canSettleInvoiceBalance(amountPence, invoice.balancePence);
+}
+
 /** Score a bank transaction against an unpaid invoice (invoice page lookup). */
 export function scoreBankTxForInvoice(
   tx: BankTxLike,
   invoice: InvoiceMatchTarget,
   referenceDate: string,
 ): MatchScoreBreakdown {
-  if (!canSettleInvoiceBalance(tx.amountPence, invoice.balancePence)) {
+  if (!receiptFitsInvoice(tx.amountPence, invoice)) {
     return {
       dateScore: 0,
       invoiceRefScore: 0,
@@ -210,8 +223,8 @@ export function scoreBankTxForInvoice(
     Math.round((invoiceRefScore / 100) * 50) +
     Math.round((cpScore / 100) * 40);
 
-  // Prefer exact balance match
-  if (tx.amountPence === invoice.balancePence) {
+  // Prefer exact balance match (a foreign invoice's sterling is never exact)
+  if (!invoice.fxBand && tx.amountPence === invoice.balancePence) {
     total += 15;
   }
 

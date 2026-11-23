@@ -178,7 +178,7 @@ function LineItemsView({
                 color: element.rowColour,
               }}
             >
-              {lineItemCell(line, column.key)}
+              {lineItemCell(line, column.key, data.document.currency)}
             </div>
           ))}
         </div>

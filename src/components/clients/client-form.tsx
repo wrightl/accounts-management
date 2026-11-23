@@ -30,6 +30,7 @@ export function ClientForm({
     email: string | null;
     addressLines: string | null;
     notes: string | null;
+    defaultCurrency: string | null;
   };
   canWrite: boolean;
 }) {

@@ -1,6 +1,6 @@
 import {
   formatDiscountPercent,
-  formatGBP,
+  formatMoney,
   formatQuantity,
   hasLineDiscount,
   lineNetPence,
@@ -16,28 +16,32 @@ import type { PdfLine } from "@/lib/pdf/templates/types";
 
 /** Totals rows a design shows; shared with the editor so both list the same rows. */
 export function designTotalsRows(data: DesignData): { label: string; value: string; total: boolean }[] {
-  const { netPence, vatPence, grossPence } = data.document;
+  const { netMinor, vatMinor, grossMinor, currency, sterlingVat } = data.document;
   return [
-    ...(netPence != null ? [{ label: "Subtotal", value: formatGBP(netPence), total: false }] : []),
-    ...(vatPence > 0 || data.company.vatNumber
-      ? [{ label: "VAT", value: formatGBP(vatPence), total: false }]
+    ...(netMinor != null
+      ? [{ label: "Subtotal", value: formatMoney(netMinor, currency), total: false }]
       : []),
-    { label: TOTAL_LABELS[data.kind], value: formatGBP(grossPence), total: true },
+    ...(vatMinor > 0 || data.company.vatNumber
+      ? [{ label: "VAT", value: formatMoney(vatMinor, currency), total: false }]
+      : []),
+    ...(sterlingVat ? [{ ...sterlingVat, total: false }] : []),
+    { label: TOTAL_LABELS[data.kind], value: formatMoney(grossMinor, currency), total: true },
   ];
 }
 
-export function lineItemCell(line: PdfLine, key: LineItemColumnKey): string {
+/** One cell of the line-items table; prices are in the document's `currency`. */
+export function lineItemCell(line: PdfLine, key: LineItemColumnKey, currency: string): string {
   switch (key) {
     case "description":
       return line.description;
     case "quantity":
       return formatQuantity(line.quantity);
     case "unitPrice":
-      return formatGBP(line.unitPricePence);
+      return formatMoney(line.unitPricePence, currency);
     case "discount":
       return formatDiscountPercent(line.discountPercent);
     case "amount":
-      return formatGBP(lineNetPence(line));
+      return formatMoney(lineNetPence(line), currency);
   }
 }
 

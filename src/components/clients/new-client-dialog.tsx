@@ -13,7 +13,13 @@ import { useFieldErrors } from "@/components/ui/use-field-errors";
 import { clientDisplayName } from "@/lib/clients/display";
 import { clientRawFromFormData, parseClientInput } from "@/lib/clients/schema";
 
-export type CreatedClient = { id: string; name: string; companyName: string | null; label: string };
+export type CreatedClient = {
+  id: string;
+  name: string;
+  companyName: string | null;
+  label: string;
+  defaultCurrency: string | null;
+};
 
 /**
  * Create a client without leaving the current form. Rendered into the body so
@@ -59,6 +65,7 @@ export function NewClientDialog({
         name: parsed.data.name,
         companyName: parsed.data.companyName,
         label: clientDisplayName(parsed.data),
+        defaultCurrency: parsed.data.defaultCurrency,
       });
       formRef.current?.reset();
       onClose();

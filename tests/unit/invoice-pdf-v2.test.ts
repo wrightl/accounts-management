@@ -47,8 +47,8 @@ const invoice: PdfInvoice = {
   issueDate: "2026-03-01",
   dueDate: "2026-03-31",
   notes: "Thank you for your business.",
-  netPence: 150000,
-  grossPence: 150000,
+  netMinor: 150000,
+  grossMinor: 150000,
   currency: "GBP",
 };
 
@@ -136,7 +136,7 @@ describe("renderInvoicePdfV2", () => {
     expect(text).toContain("INV-2026-0001");
   });
 
-  it("renders a VAT row when vatPence is positive", async () => {
+  it("renders a VAT row when vatMinor is positive", async () => {
     getMock.mockResolvedValue({
       body: TINY_PNG,
       contentType: "image/png",
@@ -145,9 +145,9 @@ describe("renderInvoicePdfV2", () => {
     const bytes = await renderInvoicePdfV2({
       invoice: {
         ...invoice,
-        netPence: 100000,
-        vatPence: 20000,
-        grossPence: 120000,
+        netMinor: 100000,
+        vatMinor: 20000,
+        grossMinor: 120000,
       },
       client,
       lines,

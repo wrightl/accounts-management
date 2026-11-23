@@ -1,6 +1,5 @@
 "use server";
 
-import { documentTotals, STERLING_RATE } from "@/lib/currency";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
@@ -22,6 +21,7 @@ import { getInvoiceDetail } from "@/lib/invoices/queries";
 import {
   buildLineValues,
   createDraftInvoiceRecord,
+  invoiceCurrencyFields,
   rebilledExpenseIds,
 } from "@/lib/invoices/create";
 import {
@@ -85,8 +85,6 @@ export async function updateInvoice(
       } catch (e) {
         return { ok: false, error: e instanceof Error ? e.message : "Invalid amount" };
       }
-      const totals = documentTotals(lineValues, STERLING_RATE);
-
       const db = getDb();
       const [existing] = await db
         .select()
@@ -106,6 +104,8 @@ export async function updateInvoice(
         id,
       );
       if (rebillError) return { ok: false, error: rebillError };
+      const priced = await invoiceCurrencyFields(parsed.data, issueDate, lineValues);
+      if (!priced.ok) return priced;
 
       await db.transaction(async (tx) => {
         await tx
@@ -115,7 +115,7 @@ export async function updateInvoice(
             issueDate,
             dueDate,
             notes: parsed.data.notes,
-            ...totals,
+            ...priced.fields,
             pdfBlobPath: null,
           })
           .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)));

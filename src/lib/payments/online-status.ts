@@ -1,4 +1,4 @@
-import { isForeignDocumentCurrency } from "@/lib/currency";
+import { isDocumentCurrency } from "@/lib/currency";
 import { storedStatus } from "@/lib/invoices/status";
 
 /** Checkout metadata `kind` for client invoice payments on connected accounts. */
@@ -18,16 +18,16 @@ export function onlinePaymentsStatus(company: {
 export function canPayInvoiceOnline(params: {
   status: string;
   /** In the invoice's currency. */
-  amountDuePence: number;
+  amountDueMinor: number;
   currency: string;
   onlinePayments: OnlinePaymentsStatus;
 }): boolean {
   return (
     params.onlinePayments === "enabled" &&
-    // Card payments in other currencies come with foreign-currency checkout.
-    !isForeignDocumentCurrency(params.currency) &&
+    // Checkout charges in the invoice's own currency.
+    isDocumentCurrency(params.currency) &&
     storedStatus(params.status) === "sent" &&
-    params.amountDuePence > 0
+    params.amountDueMinor > 0
   );
 }
 
