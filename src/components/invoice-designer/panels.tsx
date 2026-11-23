@@ -232,7 +232,7 @@ export function Palette({
                 disabled={pending}
                 onClick={() => removeAsset(asset)}
                 aria-label={`Remove ${asset.filename}`}
-                className="absolute right-0.5 top-0.5 rounded bg-surface/90 p-0.5 text-muted opacity-0 hover:text-red-700 focus:opacity-100 group-hover:opacity-100"
+                className="absolute right-0.5 top-0.5 rounded bg-surface/90 p-0.5 text-muted opacity-0 hover:text-destructive focus:opacity-100 group-hover:opacity-100"
               >
                 <Trash2 className="h-3.5 w-3.5" aria-hidden />
               </button>
@@ -241,7 +241,7 @@ export function Palette({
         </ul>
       ) : null}
       {error ? (
-        <p role="alert" className="mt-2 text-xs text-red-700">
+        <p role="alert" className="mt-2 text-xs text-destructive">
           {error}
         </p>
       ) : null}

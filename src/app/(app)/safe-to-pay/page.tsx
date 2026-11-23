@@ -9,6 +9,7 @@ import { formatGBP } from "@/lib/money";
 import { getSafeToPay } from "@/lib/safe-to-pay/queries";
 import { DisplayDate } from "@/components/date-format-provider";
 import { getDateFormat } from "@/lib/date-format.server";
+import { Callout } from "@/components/ui/callout";
 
 export const metadata: Metadata = { title: "Safe to pay yourself" };
 
@@ -68,7 +69,7 @@ export default async function SafeToPayPage() {
       </p>
 
       {!cash.known ? (
-        <p className="mt-6 max-w-2xl rounded-xl bg-wash px-4 py-3 text-sm">
+        <Callout className="mt-6 max-w-2xl">
           Alfa doesn&apos;t know the company&apos;s bank balance yet.{" "}
           <Link href="/transactions" className="underline">
             Import a bank statement
@@ -78,7 +79,7 @@ export default async function SafeToPayPage() {
             Settings
           </Link>
           .
-        </p>
+        </Callout>
       ) : null}
 
       <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:max-w-5xl">

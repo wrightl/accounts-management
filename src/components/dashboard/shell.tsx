@@ -20,6 +20,7 @@ import {
 } from "./nav-mobile-drawer";
 import { NavUserProfile } from "./nav-user-profile";
 import { NavNotificationsBell } from "@/components/notifications/nav-notifications-bell";
+import { calloutTones } from "@/components/ui/callout";
 
 function persistNavCollapsed(collapsed: boolean) {
   document.cookie = `${NAV_COLLAPSED_COOKIE}=${collapsed ? "1" : "0"}; Path=/; Max-Age=31536000; SameSite=Lax`;
@@ -192,12 +193,12 @@ export function DashboardShell({
         {(maintenanceBanner || suspendedReason || billingBanner) && (
           <div className="shrink-0 space-y-0 border-b border-border">
             {maintenanceBanner ? (
-              <div className="bg-amber-50 px-6 py-2 text-sm text-amber-950">
+              <div className={cn("px-6 py-2 text-sm text-foreground", calloutTones.warning)}>
                 {maintenanceBanner}
               </div>
             ) : null}
             {suspendedReason ? (
-              <div className="bg-red-50 px-6 py-2 text-sm text-red-900">
+              <div className={cn("px-6 py-2 text-sm text-foreground", calloutTones.danger)}>
                 {suspendedReason}
               </div>
             ) : null}
@@ -205,10 +206,8 @@ export function DashboardShell({
               <div
                 data-billing-banner
                 className={cn(
-                  "flex flex-wrap items-center justify-between gap-2 px-6 py-2 text-sm",
-                  billingBanner.tone === "danger" && "bg-red-50 text-red-900",
-                  billingBanner.tone === "warn" && "bg-amber-50 text-amber-950",
-                  billingBanner.tone === "info" && "bg-sky-50 text-sky-950",
+                  "flex flex-wrap items-center justify-between gap-2 px-6 py-2 text-sm text-foreground",
+                  calloutTones[billingBanner.tone === "warn" ? "warning" : billingBanner.tone],
                 )}
               >
                 <span>{billingBanner.message}</span>

@@ -27,7 +27,7 @@ export function PlatformShell({
 
   return (
     <div className="flex h-dvh flex-col overflow-clip bg-wash md:flex-row">
-      <aside className="flex shrink-0 flex-col border-b border-white/10 bg-slate-900 text-white md:h-full md:w-56 md:border-b-0 md:border-r">
+      <aside className="flex shrink-0 flex-col border-b border-white/10 bg-navy text-white md:h-full md:w-56 md:border-b-0 md:border-r">
         <div className="shrink-0 px-5 py-5">
           <p className="font-display text-lg font-semibold tracking-tight">
             Platform

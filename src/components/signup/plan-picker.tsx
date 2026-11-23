@@ -253,7 +253,7 @@ export function SignupPlanPicker({
         <p
           className={cn(
             "text-center text-sm",
-            dark ? "text-red-200" : "text-red-700",
+            dark ? "text-destructive-on-dark" : "text-destructive",
           )}
           role="alert"
         >

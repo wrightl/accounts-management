@@ -14,6 +14,7 @@ import {
   type MenuBundle,
   type MenuFeature,
 } from "@/lib/menu/features";
+import { Callout } from "@/components/ui/callout";
 
 export interface MenuOption {
   feature: MenuFeature;
@@ -167,10 +168,10 @@ export function MenuSettingsForm({
       className="max-w-2xl space-y-6"
     >
       {initialEnabled === null ? (
-        <p className="rounded-xl bg-wash px-4 py-3 text-sm">
+        <Callout>
           You are seeing every page. Untick anything you don&apos;t use to keep
           your menu short.
-        </p>
+        </Callout>
       ) : null}
 
       <div className="rounded-2xl border border-border bg-surface px-5 py-4">

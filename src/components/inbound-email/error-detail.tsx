@@ -7,7 +7,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const statusStyles: Record<InboundEmailJobStatus, string> = {
-  pending: "bg-amber-100 text-amber-900",
+  pending: "bg-warning/15 text-warning",
   processed: "bg-success/15 text-success",
   rejected: "bg-wash text-muted",
   failed: "bg-destructive/15 text-destructive",

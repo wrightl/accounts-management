@@ -38,6 +38,7 @@ import { EmailBodyPanel } from "@/components/expenses/email-body-panel";
 import { PossibleDuplicateList } from "@/components/expenses/possible-duplicates";
 import { DisplayDate } from "@/components/date-format-provider";
 import { getDateFormat } from "@/lib/date-format.server";
+import { Callout } from "@/components/ui/callout";
 
 export default async function ExpenseDetailPage({
   params,
@@ -106,8 +107,8 @@ export default async function ExpenseDetailPage({
       </div>
 
       {detail.expense.status === "pending" && (
-        <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Submitted by email — review the details and attachments, then approve or reject.
+        <Callout tone="warning" className="mb-6">
+          Submitted by email. Review the details and attachments, then approve or reject.
           {detail.submitter ? (
             <span className="mt-1 block">
               {externalSender
@@ -123,17 +124,11 @@ export default async function ExpenseDetailPage({
             </span>
           ) : null}
           <PossibleDuplicateList matches={duplicates?.get(id) ?? []} />
-        </div>
+        </Callout>
       )}
 
       {paymentSource && (paymentSource.notes.length > 0 || askedHowPaid) ? (
-        <div
-          className={
-            paymentSource.conflict
-              ? "mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
-              : "mb-6 rounded-lg border border-border bg-wash/50 px-4 py-3 text-sm"
-          }
-        >
+        <Callout tone={paymentSource.conflict ? "warning" : "info"} className="mb-6">
           <p className="font-medium">
             {paymentSource.conflict
               ? "The clues about how this was paid disagree. Check before approving."
@@ -155,26 +150,26 @@ export default async function ExpenseDetailPage({
               We emailed the sender to ask how they paid. Their answer will show here.
             </p>
           ) : null}
-        </div>
+        </Callout>
       ) : null}
 
       {originalAmount && detail.expense.status === "pending" ? (
-        <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <Callout tone="warning" className="mb-6">
           {needsAmountCheck(detail.expense)
             ? `The receipt is in ${originalAmount.currency}, and this expense was saved with one amount for both the receipt and GBP. Check both amounts before approving. If the receipt is actually in sterling, set the currency to GBP.`
             : `The receipt is in ${originalAmount.currency}. The GBP amount is converted at the Bank of England rate; change it to what your bank charged if you know it. If the receipt is actually in sterling, set the currency to GBP.`}
-        </div>
+        </Callout>
       ) : null}
 
       {receiptUploadFailed && (
-        <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <Callout tone="warning" className="mb-6">
           Expense saved, but receipt upload failed: {decodeURIComponent(receiptUploadFailed)}.
           Upload the receipt below.
-        </div>
+        </Callout>
       )}
 
       {detail.expense.status === "reimbursable" && !linkedRun && payeeId && (
-        <div className="mb-6 rounded-lg border border-border bg-wash/50 px-4 py-3 text-sm">
+        <Callout className="mb-6">
           This expense is owed back to the founder.{" "}
           <Link
             href={`/reimbursements?payee=${payeeId}&expense=${detail.expense.id}`}
@@ -182,11 +177,11 @@ export default async function ExpenseDetailPage({
           >
             Add to a reimbursement run →
           </Link>
-        </div>
+        </Callout>
       )}
 
       {linkedRun && (
-        <div className="mb-6 rounded-lg border border-border bg-wash/50 px-4 py-3 text-sm">
+        <Callout className="mb-6">
           On reimbursement run for {linkedRun.payeeLabel}
           {linkedRun.status === "paid" && linkedRun.paidAt
             ? <> · paid <DisplayDate value={linkedRun.paidAt} /></>
@@ -198,13 +193,13 @@ export default async function ExpenseDetailPage({
           >
             View run ({linkedRun.totalFormatted}) →
           </Link>
-        </div>
+        </Callout>
       )}
 
       {bankLinkFailed && (
-        <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <Callout tone="warning" className="mb-6">
           Expense saved, but it couldn&apos;t be linked to the bank transaction: {bankLinkFailed}
-        </div>
+        </Callout>
       )}
 
       <BankSettlements
@@ -215,10 +210,10 @@ export default async function ExpenseDetailPage({
       />
 
       {canLinkBank && (
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-wash/50 px-4 py-3 text-sm">
+        <Callout className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <span className="text-muted">Not linked to a bank transaction yet.</span>
           <LinkBankTransactionButton expenseId={detail.expense.id} />
-        </div>
+        </Callout>
       )}
 
       <ExpenseSummaryProvider

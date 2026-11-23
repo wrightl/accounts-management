@@ -154,7 +154,7 @@ export function InvoiceImportReview({
     needs_review: {
       Icon: CircleDashed,
       label: batch.kind === "pdf" ? "Not approved yet" : "Has problems",
-      className: "text-amber-600",
+      className: "text-warning",
     },
     skipped: { Icon: CircleMinus, label: "Left out", className: "text-muted" },
   } satisfies Record<Draft["status"], unknown>;

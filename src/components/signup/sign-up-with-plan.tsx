@@ -87,7 +87,7 @@ export function SignUpWithPlan({
   if (persistError) {
     return (
       <div className="mx-auto w-full max-w-4xl space-y-4">
-        <p className="text-center text-sm text-red-200" role="alert">
+        <p className="text-center text-sm text-destructive-on-dark" role="alert">
           {persistError}
         </p>
         <SignupPlanPicker

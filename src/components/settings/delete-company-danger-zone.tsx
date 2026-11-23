@@ -68,12 +68,12 @@ export function DeleteCompanyDangerZone({
   return (
     <section
       ref={formRef}
-      className="mt-10 rounded-2xl border border-red-200 bg-red-50/40 p-5"
+      className="mt-10 rounded-2xl border border-destructive/25 bg-destructive/5 p-5"
     >
-      <h2 className="font-display text-lg font-semibold text-red-900">
+      <h2 className="font-display text-lg font-semibold text-destructive">
         Delete company
       </h2>
-      <p className="mt-1 text-sm text-red-900/80">
+      <p className="mt-1 text-sm text-muted">
         Permanently remove this company, its data, and member accounts (including
         yours). You will be signed out. Type{" "}
         <span className="font-semibold">{companyName}</span> to confirm.

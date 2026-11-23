@@ -10,6 +10,7 @@ import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { DisplayDate } from "@/components/date-format-provider";
+import { Callout } from "@/components/ui/callout";
 
 export const metadata: Metadata = { title: "Deadlines" };
 
@@ -56,14 +57,14 @@ export default async function DeadlinesPage() {
       </p>
 
       {missingCompaniesHouse ? (
-        <p className="mt-6 rounded-xl bg-wash px-4 py-3 text-sm">
+        <Callout className="mt-6">
           Your confirmation statement isn&apos;t shown because Alfa doesn&apos;t know your
           incorporation date.{" "}
           <Link href={companiesHouseHref} className="underline">
             {canManage ? "Add your Companies House details" : "See Companies House details"}
           </Link>
           .
-        </p>
+        </Callout>
       ) : null}
 
       <div className="mt-6 grid gap-4 sm:grid-cols-3">

@@ -23,8 +23,8 @@ export function PossibleDuplicateChip({ matches }: { matches: PossibleDuplicate[
   const [first, ...rest] = matches;
   if (!first) return null;
   return (
-    <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-red-900">
-      <span className="rounded-full bg-red-100 px-2 py-0.5 font-medium ring-1 ring-inset ring-red-700/30">
+    <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-destructive">
+      <span className="rounded-full bg-destructive/10 px-2 py-0.5 font-medium ring-1 ring-inset ring-destructive/30">
         Possible duplicate
       </span>
       <span>

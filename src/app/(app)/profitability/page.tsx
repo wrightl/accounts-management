@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { Table, THead, TBody, TR, TD } from "@/components/ui/table";
 import { sortHeaders } from "@/components/ui/sortable-th";
 import { defineTableSort, parseTableSort, setTableSortParams, sortRows } from "@/lib/table-sort";
+import { Callout } from "@/components/ui/callout";
 
 /** "created" is the loaded order (newest first) and has no header. */
 const ORDER_SORT = defineTableSort({
@@ -37,7 +38,7 @@ const PERIODS = [
 
 function MarginCell({ m }: { m: Margin }) {
   return (
-    <TD className={cn("text-right", m.marginPence < 0 && "text-red-700")}>
+    <TD className={cn("text-right", m.marginPence < 0 && "text-destructive")}>
       {formatGBP(m.marginPence)}
       <span className="ml-2 text-xs text-muted">{marginLabel(m)}</span>
     </TD>
@@ -108,10 +109,10 @@ export default async function ProfitabilityPage({
       </p>
 
       {!anyCosts ? (
-        <p className="mt-6 max-w-2xl rounded-xl bg-wash px-4 py-3 text-sm">
+        <Callout className="mt-6 max-w-2xl">
           No costs are tagged yet, so every margin is 100%. Open an expense and choose its client
           or order, or use <span className="font-medium">Add a cost</span> on an order.
-        </p>
+        </Callout>
       ) : null}
 
       {toRebill.length > 0 ? (

@@ -2,6 +2,7 @@ import { guardTenantPage } from "@/lib/auth";
 import { getBillingPageData } from "@/lib/billing/queries";
 import { BillingSettingsPanel } from "@/components/settings/billing-settings";
 import { SettingsPageHeader, SETTINGS_FORM_WIDTH } from "@/components/settings/settings-page-header";
+import { Callout } from "@/components/ui/callout";
 
 export default async function BillingSettingsPage({
   searchParams,
@@ -19,14 +20,14 @@ export default async function BillingSettingsPage({
         description="Manage your organisation plan, trial, and payment method."
       />
       {sp.checkout === "success" ? (
-        <p className="mb-6 rounded-xl bg-green-50 px-4 py-3 text-sm text-green-900">
+        <Callout tone="success" className="mb-6">
           Checkout complete. Your plan will update in a moment.
-        </p>
+        </Callout>
       ) : null}
       {sp.checkout === "cancel" ? (
-        <p className="mb-6 rounded-xl bg-wash px-4 py-3 text-sm text-muted">
+        <Callout className="mb-6">
           Checkout cancelled. No changes were made.
-        </p>
+        </Callout>
       ) : null}
       <div className={SETTINGS_FORM_WIDTH}>
         <BillingSettingsPanel data={data} />

@@ -15,6 +15,7 @@ import {
 } from "@/lib/ledger/queries";
 import { formatGBP } from "@/lib/money";
 import { DisplayDate } from "@/components/date-format-provider";
+import { Callout } from "@/components/ui/callout";
 
 export const metadata: Metadata = { title: "Tax & reserves" };
 
@@ -66,12 +67,12 @@ export default async function ReservesPage({
       </p>
 
       {!position.hasOpeningBalances ? (
-        <p className="mt-6 max-w-2xl rounded-xl bg-wash px-4 py-3 text-sm">
+        <Callout className="mt-6 max-w-2xl">
           These figures start from the first records in Alfa. If the company traded before
           then, add the retained earnings from its last balance sheet below
           {canSetOpening ? "" : " (an admin or your accountant can do this)"}, or reserves
           will be understated.
-        </p>
+        </Callout>
       ) : null}
 
       <div className="mt-6 grid gap-4 sm:grid-cols-3">

@@ -28,7 +28,7 @@ export const DATA_ONBOARDING_ANCHOR = "data-setup";
 const STATE_ICON: Record<StepState, { Icon: typeof CircleCheck; className: string; label: string }> = {
   todo: { Icon: CircleDashed, className: "text-muted", label: "To do" },
   in_progress: { Icon: CircleDot, className: "text-navy", label: "In progress" },
-  done: { Icon: CircleCheck, className: "text-green-700", label: "Done" },
+  done: { Icon: CircleCheck, className: "text-success", label: "Done" },
   skipped: { Icon: CircleMinus, className: "text-muted", label: "Skipped" },
   not_applicable: { Icon: CircleMinus, className: "text-muted", label: "Doesn't apply" },
 };

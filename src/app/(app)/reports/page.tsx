@@ -25,6 +25,7 @@ import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
 import { DisplayDate } from "@/components/date-format-provider";
 import { PageHeader } from '@/components/ui/page-header';
 import { LinkMenuButton } from '@/components/ui/link-menu-button';
+import { Callout } from "@/components/ui/callout";
 
 export default async function ReportsPage({
     searchParams,
@@ -132,10 +133,10 @@ export default async function ReportsPage({
 
             <ReportPeriodForm from={from} to={to} />
             {from > to ? (
-                <p className="mt-2 rounded-xl bg-wash px-4 py-3 text-sm">
+                <Callout className="mt-2">
                     The From date is after the To date, so every figure below is
                     zero. Swap the dates to see the period.
-                </p>
+                </Callout>
             ) : null}
             <p className="mt-2 text-sm text-muted">
                 Financial year ends in {yearEndLabel}.

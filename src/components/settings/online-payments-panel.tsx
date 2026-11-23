@@ -11,6 +11,7 @@ import { Button, buttonClasses } from "@/components/ui/button";
 import { useAlert } from "@/components/ui/alert-dialog";
 import { FieldError } from "@/components/ui/form";
 import type { OnlinePaymentsStatus } from "@/lib/payments/online-status";
+import { Callout } from "@/components/ui/callout";
 
 const STATUS_COPY: Record<OnlinePaymentsStatus, { title: string; body: string }> = {
   not_connected: {
@@ -78,9 +79,9 @@ export function OnlinePaymentsPanel({
 
   if (!configured) {
     return (
-      <p className="rounded-xl bg-wash px-4 py-3 text-sm text-muted">
+      <Callout>
         Online payments aren&apos;t available on this installation yet.
-      </p>
+      </Callout>
     );
   }
 

@@ -29,6 +29,7 @@ import {
   type TemplateKey,
 } from "@/lib/pdf/templates/registry";
 import { cn } from "@/lib/utils";
+import { Callout } from "@/components/ui/callout";
 
 /** Tabs in the order the documents are raised: an invoice, a quote, then a credit note. */
 const TABS: DocumentKind[] = ["invoice", "quote", "credit-note"];
@@ -198,9 +199,9 @@ export function DocumentTemplates({
         </p>
 
         {error ? (
-          <p role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">
+          <Callout role="alert" tone="danger" className="mt-3">
             {error}
-          </p>
+          </Callout>
         ) : null}
 
         <fieldset className="mt-4" disabled={pending}>

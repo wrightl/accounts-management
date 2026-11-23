@@ -3,9 +3,9 @@ import { cn } from "@/lib/utils";
 type Tone = "danger" | "warning" | "success" | "neutral" | "info";
 
 const toneClasses: Record<Tone, string> = {
-  danger: "bg-red-100 text-red-800",
-  warning: "bg-amber-100 text-amber-800",
-  success: "bg-green-100 text-green-800",
+  danger: "bg-destructive/15 text-destructive",
+  warning: "bg-warning/15 text-warning",
+  success: "bg-success/15 text-success",
   info: "bg-accent/30 text-navy",
   neutral: "bg-wash text-muted",
 };

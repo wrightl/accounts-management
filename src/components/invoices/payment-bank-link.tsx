@@ -91,7 +91,7 @@ export function PaymentBankLink({
             </select>
           </div>
           {diff !== 0 ? (
-            <p className="text-xs text-amber-700">
+            <p className="text-xs text-warning">
               The payment will change to the {chosen?.amountFormatted} received (
               {diff > 0 ? `${formatGBP(diff)} more` : `${formatGBP(-diff)} less`}).
               {diff > 0

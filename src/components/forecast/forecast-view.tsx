@@ -23,6 +23,7 @@ import {
 } from "@/lib/forecast/engine";
 import { formatGBP, poundsToPence } from "@/lib/money";
 import { DisplayDate } from "@/components/date-format-provider";
+import { Callout } from "@/components/ui/callout";
 
 function shortDate(iso: string): string {
   return new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-GB", {
@@ -122,9 +123,9 @@ export function ForecastView({
           <DisplayDate value={forecast.lowest.start} />).
         </p>
       ) : (
-        <p role="status" className="rounded-xl bg-wash px-4 py-3 text-sm">
+        <Callout role="status">
           Cash stays above {formatGBP(forecast.lowCashPence)} for the next 13 weeks.
-        </p>
+        </Callout>
       )}
 
       <div className="grid gap-4 sm:grid-cols-3">

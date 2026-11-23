@@ -49,8 +49,8 @@ function ConfigCheck({ ok, label }: { ok: boolean; label: string }) {
       <span
         className={
           ok
-            ? "rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-800"
-            : "rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800"
+            ? "rounded-full bg-success/15 px-2 py-0.5 text-xs text-success"
+            : "rounded-full bg-warning/15 px-2 py-0.5 text-xs text-warning"
         }
       >
         {ok ? "Configured" : "Missing"}

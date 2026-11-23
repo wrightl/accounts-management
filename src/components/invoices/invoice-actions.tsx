@@ -40,7 +40,7 @@ function AmountDifference({
   const diff = receivedPence - balancePence;
   if (diff === 0) return null;
   return (
-    <p className="mt-2 text-sm text-amber-700">
+    <p className="mt-2 text-sm text-warning">
       {diff > 0
         ? `${formatGBP(diff)} more than the balance due. The extra will show as a refund due to the client.`
         : `${formatGBP(-diff)} less than the balance due. The rest will stay owed on the invoice.`}

@@ -15,6 +15,7 @@ import { formatCatalogPounds } from "@/lib/billing/catalog-format";
 import { formatGBP } from "@/lib/money";
 import { toast } from "@/components/ui/toast";
 import { DisplayDate } from "@/components/date-format-provider";
+import { Callout } from "@/components/ui/callout";
 
 function planLabel(plan: string): string {
   switch (plan) {
@@ -191,9 +192,9 @@ export function BillingSettingsPanel({ data }: { data: BillingPageData }) {
               : null}
           </p>
           {!stripeConfigured ? (
-            <p className="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <Callout tone="warning" className="mt-4">
               Billing checkout is not configured yet. Contact support to upgrade.
-            </p>
+            </Callout>
           ) : !catalog ? (
             <p className="mt-4 text-sm text-muted">
               Pricing temporarily unavailable. Try again shortly.

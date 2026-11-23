@@ -4,6 +4,7 @@ import { refreshConnectAccount } from "@/lib/payments/online";
 import { onlinePaymentsStatus } from "@/lib/payments/online-status";
 import { OnlinePaymentsPanel } from "@/components/settings/online-payments-panel";
 import { SettingsPageHeader } from "@/components/settings/settings-page-header";
+import { Callout } from "@/components/ui/callout";
 
 export default async function OnlinePaymentsSettingsPage({
   searchParams,
@@ -39,9 +40,9 @@ export default async function OnlinePaymentsSettingsPage({
         description="Let clients pay invoices by card from the invoice link."
       />
       {sp.connect === "return" && status === "enabled" ? (
-        <p className="mb-6 rounded-xl bg-green-50 px-4 py-3 text-sm text-green-900">
+        <Callout tone="success" className="mb-6">
           Stripe is connected. Clients can now pay invoices online.
-        </p>
+        </Callout>
       ) : null}
       <OnlinePaymentsPanel
         status={status}

@@ -95,20 +95,20 @@ export default async function PlatformOverviewPage() {
             href={card.href}
             className={cn(
               "rounded-2xl border bg-white p-5 shadow-sm transition hover:border-navy/30",
-              "alert" in card && card.alert ? "border-red-300" : "border-border",
+              "alert" in card && card.alert ? "border-destructive/40" : "border-border",
             )}
           >
             <p className="text-sm text-muted">{card.label}</p>
             <p
               className={cn(
                 "mt-2 font-display text-3xl font-semibold",
-                "alert" in card && card.alert && "text-red-700",
+                "alert" in card && card.alert && "text-destructive",
               )}
             >
               {card.value}
             </p>
             {card.note ? (
-              <p className="mt-1 text-xs text-amber-700">{card.note}</p>
+              <p className="mt-1 text-xs text-warning">{card.note}</p>
             ) : null}
           </Link>
         ))}

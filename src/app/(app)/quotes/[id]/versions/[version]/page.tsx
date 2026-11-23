@@ -13,6 +13,7 @@ import {
 } from "@/lib/money";
 import { clientDisplayName } from "@/lib/clients/display";
 import { DisplayDate } from "@/components/date-format-provider";
+import { Callout } from "@/components/ui/callout";
 
 export default async function QuoteVersionPage({
   params,
@@ -36,10 +37,10 @@ export default async function QuoteVersionPage({
         <BackLink href={`/quotes/${id}`}>Current quote</BackLink>
       </div>
 
-      <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-        Viewing {detail.quote.versionLabel} — not the current version (
-        {detail.currentVersion ? `v${detail.currentVersion}` : "unknown"}).
-      </div>
+      <Callout tone="warning" className="mb-4">
+        You&apos;re viewing {detail.quote.versionLabel}, not the current version
+        {detail.currentVersion ? ` (v${detail.currentVersion})` : ""}.
+      </Callout>
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>

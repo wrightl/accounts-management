@@ -252,7 +252,7 @@ export default async function ExpensesPage({
               {rows.map((e) => (
                 <TR
                   key={e.id}
-                  className={e.status === "pending" ? "bg-amber-100 hover:bg-amber-200/70" : undefined}
+                  className={e.status === "pending" ? "bg-warning/10 hover:bg-warning/15" : undefined}
                 >
                   <TD
                     className={
@@ -291,7 +291,7 @@ export default async function ExpensesPage({
                       </span>
                     ) : null}
                     {e.status === "pending" && e.externalSenderEmail ? (
-                      <span className="block text-xs text-amber-800">
+                      <span className="block text-xs text-warning">
                         Sent by {e.externalSenderEmail}, check before approving
                       </span>
                     ) : null}

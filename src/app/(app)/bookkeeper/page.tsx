@@ -12,6 +12,7 @@ import { DAILY_QUESTION_LIMIT, questionsAskedToday } from "@/lib/bookkeeper/ask"
 import { countUncategorisedOutgoing, listCategorySuggestions } from "@/lib/bookkeeper/categories";
 import { listAiReceiptMatches } from "@/lib/bookkeeper/receipts";
 import { getCompanySettings } from "@/lib/settings/queries";
+import { Callout } from "@/components/ui/callout";
 
 export const metadata: Metadata = { title: "AI bookkeeper" };
 
@@ -38,10 +39,10 @@ export default async function BookkeeperPage() {
         changes until someone accepts it.
       </p>
       {!aiReady ? (
-        <p className="mt-4 max-w-2xl rounded-xl bg-wash px-4 py-3 text-sm">
+        <Callout className="mt-4 max-w-2xl">
           AI isn&apos;t set up on this deployment, so questions and AI suggestions are off.
           Categories learned from your own history still work.
-        </p>
+        </Callout>
       ) : null}
 
       {canAsk && aiReady ? (
