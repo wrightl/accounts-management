@@ -4,13 +4,14 @@ import { getDb, type Database } from "@/db";
 import { matchOfCompany } from "@/lib/bank/match-scope";
 import { invoices, payments, reconciliationMatches } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
-import { poundsToPence } from "@/lib/money";
+import { formatGBP, formatMoney, poundsToPence } from "@/lib/money";
 import {
   getBankTransactionById,
   isBankTransactionAvailable,
   lockBankTransaction,
   ReconciliationError,
 } from "@/lib/bank/queries";
+import { bankAmountWithinFxBand, gbpAmountBand } from "@/lib/bank/fx";
 import { canSettleInvoiceBalance } from "@/lib/bank/match";
 import { creditAdjustmentForInvoice } from "@/lib/credit-notes/adjustments";
 import type { Tx } from "@/lib/invoices/allocate";
@@ -149,6 +150,15 @@ export async function recordInvoicePayment(
   let amountPenceEstimated = false;
   if (foreign) {
     if (bankTx) {
+      // The same ±10% band every other bank link for a foreign payment uses.
+      const rate = await documentRate(target.currency, todayIsoDate(receivedAt));
+      const expected = toSterlingPence(amountMinor, rate.ok ? rate.rate.fxRate : target.fxRate);
+      if (!bankAmountWithinFxBand(bankTx.amountPence, gbpAmountBand(expected))) {
+        return {
+          ok: false,
+          error: `${formatGBP(bankTx.amountPence)} is too far from the ${formatGBP(expected)} expected for ${formatMoney(amountMinor, target.currency)} to link`,
+        };
+      }
       amountPence = bankTx.amountPence;
     } else if (parsed.data.sterlingPounds) {
       try {

@@ -254,6 +254,18 @@ describe("recording a payment on a foreign invoice", () => {
     expect(await fxDifference(inv.id)).toBe(100);
   });
 
+  it("won't take a bank line far from the dollars' value in pounds", async () => {
+    await usdRate("2026-05-20", 1.25);
+    const inv = await sentUsdInvoice();
+    const tx = await credit(await bankAccount(), 500_000);
+    const result = await recordInvoicePayment(ctxFor(), inv.id, {
+      amountPounds: "70.00",
+      bankTransactionId: tx.id,
+    });
+    expect(result).toMatchObject({ ok: false, error: expect.stringMatching(/too far from the £56.00/) });
+    expect(await db.select().from(payments).where(eq(payments.invoiceId, inv.id))).toHaveLength(0);
+  });
+
   it("won't take more than is owed in the invoice's currency", async () => {
     const inv = await sentUsdInvoice();
     const result = await recordInvoicePayment(ctxFor(), inv.id, {
