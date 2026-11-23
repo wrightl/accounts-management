@@ -193,7 +193,7 @@ export default async function InvoiceDetailPage({
                 {canCredit ? (
                   <Link
                     href={`/invoices/${invoice.id}/credit-notes/new`}
-                    className={buttonClasses("secondary")}
+                    className={buttonClasses("ghost")}
                   >
                     <FilePlus className="h-4 w-4" />
                     Raise credit note
@@ -204,7 +204,7 @@ export default async function InvoiceDetailPage({
           />
         ) : (
           <>
-            <a href={`/api/invoices/${invoice.id}/pdf`} className={buttonClasses("secondary")}>
+            <a href={`/api/invoices/${invoice.id}/pdf`} className={buttonClasses("ghost")}>
               <Download className="h-4 w-4" />
               Download PDF
             </a>

@@ -83,6 +83,7 @@ export default async function ReportsPage({
                 actions={
                     canExport ? (
                         <LinkMenuButton
+                            variant="ghost"
                             label="Download"
                             icon={<Download className="h-4 w-4" />}
                             items={[

@@ -23,11 +23,11 @@ export function InvoiceDueDate({
     return (
       <span
         className={cn(
-          "inline-flex items-center gap-1.5 rounded-full bg-brand/20 px-2 py-0.5 text-sm font-medium text-navy",
+          "inline-flex items-center gap-1.5 rounded-full bg-destructive/10 px-2 py-0.5 text-sm font-medium text-destructive",
           className,
         )}
       >
-        <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden />
+        <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-destructive" aria-hidden />
         {label}
       </span>
     );

@@ -114,7 +114,7 @@ export default async function WeeklyClosePage() {
                 ) : null}
               </div>
               {!done ? (
-                <Link href={item.href} className="shrink-0 text-sm text-brand underline">
+                <Link href={item.href} className="shrink-0 text-sm text-foreground underline">
                   Open
                 </Link>
               ) : null}
@@ -137,7 +137,7 @@ export default async function WeeklyClosePage() {
               </li>
             ))}
           </ul>
-          <Link href="/deadlines" className="mt-2 inline-block text-sm text-brand underline">
+          <Link href="/deadlines" className="mt-2 inline-block text-sm text-foreground underline">
             All deadlines
           </Link>
         </section>

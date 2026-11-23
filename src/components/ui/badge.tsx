@@ -6,7 +6,7 @@ const styles: Record<InvoiceStatus, string> = {
   draft: "bg-wash text-muted",
   sent: "bg-accent/30 text-navy",
   paid: "bg-success/15 text-success",
-  overdue: "bg-brand text-navy",
+  overdue: "bg-destructive/15 text-destructive",
   void: "bg-wash text-muted line-through",
 };
 

@@ -70,7 +70,7 @@ export default async function UsersPage({
                     <div className="flex flex-wrap items-center gap-3">
                       <Link
                         href={`/users/${u.id}/edit`}
-                        className="text-sm text-brand hover:underline"
+                        className="text-sm text-foreground underline underline-offset-2"
                       >
                         Edit
                       </Link>

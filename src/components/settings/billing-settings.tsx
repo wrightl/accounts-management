@@ -340,7 +340,7 @@ export function BillingSettingsPanel({ data }: { data: BillingPageData }) {
                           href={href}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-brand underline-offset-2 hover:underline"
+                          className="text-foreground underline underline-offset-2"
                         >
                           View
                         </a>

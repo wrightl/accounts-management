@@ -97,7 +97,7 @@ export function CreditNoteActions({
       <div className="flex flex-wrap gap-2">
         <a
           href={`/api/credit-notes/${creditNoteId}/pdf`}
-          className={buttonClasses("secondary")}
+          className={buttonClasses("ghost")}
         >
           <Download className="h-4 w-4" />
           Download PDF
@@ -105,6 +105,7 @@ export function CreditNoteActions({
         {canWrite && canSend ? (
           <Button
             type="button"
+            variant={sent ? "ghost" : "primary"}
             disabled={pending}
             onClick={() => run(() => sendCreditNote(creditNoteId))}
           >
@@ -115,7 +116,7 @@ export function CreditNoteActions({
         {canWrite && refundablePence > 0 ? (
           <Button
             type="button"
-            variant="secondary"
+            variant={sent || !canSend ? "primary" : "ghost"}
             disabled={pending}
             onClick={() => {
               clearAll();

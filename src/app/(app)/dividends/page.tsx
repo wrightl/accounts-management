@@ -150,7 +150,7 @@ export default async function DividendsPage({
                     {inPack ? null : (
                       <a
                         href={`/api/dividends/${d.id}/paperwork`}
-                        className={buttonClasses("secondary")}
+                        className={buttonClasses("ghost")}
                       >
                         <Download className="h-4 w-4" />
                         Minutes and vouchers (PDF)

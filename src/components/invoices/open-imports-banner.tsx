@@ -28,7 +28,7 @@ export function OpenImportsBanner({ imports }: { imports: ImportBatchSummary[] }
         </p>
         <Link
           href={single ? `/invoices/import/${only.id}` : "/invoices/import"}
-          className="font-medium text-brand underline underline-offset-2"
+          className="font-medium text-foreground underline underline-offset-2"
         >
           {single ? "Review and save →" : "View imports →"}
         </Link>

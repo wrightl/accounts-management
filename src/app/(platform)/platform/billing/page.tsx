@@ -102,7 +102,7 @@ export default async function PlatformBillingPage({
                     <TD>
                       <Link
                         href={`/platform/companies/${c.companyId}`}
-                        className="text-brand underline-offset-2 hover:underline"
+                        className="text-foreground underline underline-offset-2"
                       >
                         {c.companyName}
                       </Link>
