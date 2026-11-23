@@ -240,7 +240,7 @@ export async function voidCreditNote(id: string): Promise<ActionResult> {
           await tx
             .update(creditNotes)
             .set({ status: "void", voidedAt: new Date() })
-            .where(eq(creditNotes.id, id));
+            .where(and(eq(creditNotes.id, id), eq(creditNotes.companyId, companyId)));
           await syncInvoiceSettlement(tx, inv);
           return inv.id;
         });
@@ -317,7 +317,13 @@ export async function recordCreditNoteRefund(
         .select({ currency: invoices.currency, fxRate: invoices.fxRate })
         .from(creditNotes)
         .innerJoin(invoices, eq(invoices.id, creditNotes.invoiceId))
-        .where(and(eq(creditNotes.id, id), eq(creditNotes.companyId, companyId)))
+        .where(
+          and(
+            eq(creditNotes.id, id),
+            eq(creditNotes.companyId, companyId),
+            eq(invoices.companyId, companyId),
+          ),
+        )
         .limit(1);
       if (!target) return { ok: false, error: "Credit note not found" };
       let amountPence = amountMinor;
@@ -383,7 +389,7 @@ export async function recordCreditNoteRefund(
               refundedAt: parsed.data.refundedAt,
               refundReference: parsed.data.reference,
             })
-            .where(eq(creditNotes.id, id));
+            .where(and(eq(creditNotes.id, id), eq(creditNotes.companyId, companyId)));
           await syncInvoiceSettlement(tx, inv);
           return inv.id;
         });
@@ -453,7 +459,7 @@ export async function sendCreditNote(id: string): Promise<ActionResult> {
       await db
         .update(creditNotes)
         .set({ sentAt: creditNote.sentAt ?? new Date() })
-        .where(eq(creditNotes.id, id));
+        .where(and(eq(creditNotes.id, id), eq(creditNotes.companyId, companyId)));
 
       await writeAudit({
         companyId,
