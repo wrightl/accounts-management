@@ -253,6 +253,24 @@ describe("Connect webhook, foreign currency", () => {
     expect(await fxDifference()).toBe(2000);
   });
 
+  it("records a replayed foreign session once", async () => {
+    await usdInvoice();
+    retrieveIntent.mockResolvedValue({
+      latest_charge: { balance_transaction: { currency: "gbp", amount: 118000 } },
+    });
+    await processConnectEvent(checkoutEvent({ id: "evt_usd_a", currency: "usd", amount: 150000 }));
+    // The same Checkout session under a new event id, as a retry or replay would be.
+    await processConnectEvent(checkoutEvent({ id: "evt_usd_b", currency: "usd", amount: 150000 }));
+    expect(await paymentRows()).toHaveLength(1);
+    expect(await fxDifference()).toBe(2000);
+  });
+
+  it("doesn't record a charge in another foreign currency", async () => {
+    await usdInvoice();
+    await processConnectEvent(checkoutEvent({ id: "evt_eur", currency: "eur", amount: 150000 }));
+    expect(await paymentRows()).toHaveLength(0);
+  });
+
   it("estimates the pounds, flagged, when Stripe hasn't settled the charge yet", async () => {
     await usdInvoice();
     retrieveIntent.mockResolvedValue({ latest_charge: { balance_transaction: null } });
