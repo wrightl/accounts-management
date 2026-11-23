@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, sql, sum } from "drizzle-orm";
+import { and, eq, inArray, sql, sum } from "drizzle-orm";
 import { getDb } from "@/db";
 import { matchOfCompany } from "@/lib/bank/match-scope";
 import { invoices, payments, reconciliationMatches } from "@/db/schema";
@@ -220,7 +220,15 @@ export async function linkPaymentToBankTransaction(
           .update(payments)
           // Sterling invoice (checked above), so the two amounts move together.
           .set({ amountPence: bankTx.amountPence, amountMinor: bankTx.amountPence })
-          .where(eq(payments.id, paymentId));
+          .where(
+            and(
+              eq(payments.id, paymentId),
+              inArray(
+                payments.invoiceId,
+                tx.select({ id: invoices.id }).from(invoices).where(eq(invoices.companyId, companyId)),
+              ),
+            ),
+          );
       }
       await tx.insert(reconciliationMatches).values({
         bankTransactionId,
