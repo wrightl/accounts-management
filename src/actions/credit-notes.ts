@@ -1,6 +1,7 @@
 "use server";
 
 import { and, eq, sql, sum } from "drizzle-orm";
+import { documentTotals, isForeignDocumentCurrency } from "@/lib/currency";
 import { getDb, type Database } from "@/db";
 import {
   creditNoteLineItems,
@@ -10,14 +11,12 @@ import {
 } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
 import { mutate } from "@/lib/mutate";
-import { formatGBP, invoiceTotals, poundsToPence } from "@/lib/money";
+import { formatGBP, formatMoney, poundsToPence } from "@/lib/money";
 import { parseVatRate } from "@/lib/vat";
 import { allocateCreditNoteNumber } from "@/lib/invoices/allocate";
-import {
-  invoiceRefundDuePence,
-  isInvoiceSettled,
-} from "@/lib/invoices/balance";
-import { storedStatus } from "@/lib/invoices/status";
+import { invoiceRefundDue, isInvoiceSettled, settlementMinor } from "@/lib/invoices/balance";
+import { syncFxDifference } from "@/lib/invoices/fx-difference";
+import { storedStatus, todayIsoDate } from "@/lib/invoices/status";
 import { creditAdjustmentForInvoice } from "@/lib/credit-notes/adjustments";
 import { getCreditNoteDetail } from "@/lib/credit-notes/queries";
 import { canVoidCreditNote } from "@/lib/credit-notes/status";
@@ -68,11 +67,13 @@ async function lockInvoice(tx: Tx, companyId: string, invoiceId: string) {
   return inv;
 }
 
-async function paidTotal(tx: Tx, invoiceId: string): Promise<number> {
+/** Paid so far on a company invoice, in the invoice's currency. */
+async function paidTotal(tx: Tx, companyId: string, invoiceId: string): Promise<number> {
   const [row] = await tx
-    .select({ total: sum(payments.amountPence).mapWith(Number) })
+    .select({ total: sum(payments.amountMinor).mapWith(Number) })
     .from(payments)
-    .where(eq(payments.invoiceId, invoiceId));
+    .innerJoin(invoices, eq(invoices.id, payments.invoiceId))
+    .where(and(eq(payments.invoiceId, invoiceId), eq(invoices.companyId, companyId)));
   return row?.total ?? 0;
 }
 
@@ -84,23 +85,26 @@ async function syncInvoiceSettlement(
   tx: Tx,
   inv: typeof invoices.$inferSelect,
 ): Promise<void> {
-  const settled = isInvoiceSettled({
-    grossPence: inv.grossPence,
-    paidPence: await paidTotal(tx, inv.id),
-    ...(await creditAdjustmentForInvoice(tx, inv.companyId, inv.id)),
-  });
+  const settled = isInvoiceSettled(
+    settlementMinor(
+      inv,
+      await paidTotal(tx, inv.companyId, inv.id),
+      await creditAdjustmentForInvoice(tx, inv.companyId, inv.id),
+    ),
+  );
   const status = storedStatus(inv.status);
   if (settled && status === "sent") {
     await tx
       .update(invoices)
       .set({ status: "paid", paidAt: new Date() })
-      .where(eq(invoices.id, inv.id));
+      .where(and(eq(invoices.id, inv.id), eq(invoices.companyId, inv.companyId)));
   } else if (!settled && status === "paid") {
     await tx
       .update(invoices)
       .set({ status: "sent", paidAt: null })
-      .where(eq(invoices.id, inv.id));
+      .where(and(eq(invoices.id, inv.id), eq(invoices.companyId, inv.companyId)));
   }
+  await syncFxDifference(tx, inv.companyId, inv.id, todayIsoDate());
 }
 
 export async function createCreditNote(
@@ -149,16 +153,19 @@ export async function createCreditNote(
           } catch {
             throw new CreditNoteError("Enter a valid unit price on each line item");
           }
-          const totals = invoiceTotals(lineValues);
-          if (totals.grossPence <= 0) {
-            throw new CreditNoteError("The credit note total must be more than £0.00");
+          const totals = documentTotals(lineValues, { currency: inv.currency, fxRate: inv.fxRate });
+          if (totals.grossMinor <= 0) {
+            throw new CreditNoteError(
+              `The credit note total must be more than ${formatMoney(0, inv.currency)}`,
+            );
           }
 
-          const { creditedPence } = await creditAdjustmentForInvoice(tx, companyId, inv.id);
-          const creditable = inv.grossPence - creditedPence;
-          if (totals.grossPence > creditable) {
+          // Credit notes are in the invoice's currency.
+          const { creditedMinor } = await creditAdjustmentForInvoice(tx, companyId, inv.id);
+          const creditable = inv.grossMinor - creditedMinor;
+          if (totals.grossMinor > creditable) {
             throw new CreditNoteError(
-              `The credit note total (${formatGBP(totals.grossPence)}) is more than the ${formatGBP(creditable)} left to credit on this invoice`,
+              `The credit note total (${formatMoney(totals.grossMinor, inv.currency)}) is more than the ${formatMoney(creditable, inv.currency)} left to credit on this invoice`,
             );
           }
 
@@ -310,11 +317,19 @@ export async function recordCreditNoteRefund(
           );
           if (locked) throw new CreditNoteError(locked);
           const inv = await lockInvoice(tx, companyId, note.invoiceId);
-          const refundDue = invoiceRefundDuePence({
-            grossPence: inv.grossPence,
-            paidPence: await paidTotal(tx, inv.id),
-            ...(await creditAdjustmentForInvoice(tx, companyId, inv.id)),
-          });
+          if (isForeignDocumentCurrency(inv.currency)) {
+            // Needs the refund in both currencies; comes with foreign-currency credit notes.
+            throw new CreditNoteError(
+              `Refunds on ${inv.currency} invoices can't be recorded yet`,
+            );
+          }
+          const refundDue = invoiceRefundDue(
+            settlementMinor(
+              inv,
+              await paidTotal(tx, companyId, inv.id),
+              await creditAdjustmentForInvoice(tx, companyId, inv.id),
+            ),
+          );
           const maxRefund = Math.min(refundDue, note.grossPence);
           if (maxRefund <= 0) {
             throw new CreditNoteError(
@@ -330,6 +345,8 @@ export async function recordCreditNoteRefund(
             .update(creditNotes)
             .set({
               refundedPence: amountPence,
+              // Sterling invoice (checked above), so the two amounts are equal.
+              refundedMinor: amountPence,
               refundedAt: parsed.data.refundedAt,
               refundReference: parsed.data.reference,
             })

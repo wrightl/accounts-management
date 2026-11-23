@@ -272,7 +272,10 @@ export function buildWorkbook(
       : data.writeOffs.map((w): Keyed => keyed(null, {
           date: day(w.writtenOffOn),
           ref: linkTo(w.invoiceNumber, toInvoice(w.invoiceNumber)),
-          description: `Unpaid balance of invoice ${w.invoiceNumber} (${w.clientName}) written off${w.note ? `: ${w.note}` : ""}`,
+          description:
+            w.kind === "fx_difference"
+              ? `Exchange ${w.amountPence < 0 ? "gain" : "loss"} on settling invoice ${w.invoiceNumber} (${w.clientName})`
+              : `Unpaid balance of invoice ${w.invoiceNumber} (${w.clientName}) written off${w.note ? `: ${w.note}` : ""}`,
           category: WRITE_OFF_CATEGORY[w.kind],
           status: "Written off",
           gross: vat ? money(w.amountPence) : null,

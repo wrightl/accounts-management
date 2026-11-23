@@ -1,11 +1,12 @@
 import "server-only";
+import { documentTotals, STERLING_RATE } from "@/lib/currency";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { clients, invoiceLineItems, invoices } from "@/db/schema";
 import { allocateInvoiceNumber } from "@/lib/invoices/allocate";
 import { defaultDueDate } from "@/lib/invoices/status";
 import type { InvoiceParsed } from "@/lib/invoices/schema";
-import { invoiceTotals, poundsToPence } from "@/lib/money";
+import { poundsToPence } from "@/lib/money";
 import { periodLockError } from "@/lib/period-lock";
 import { checkRebillExpenses } from "@/lib/profitability/queries";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
@@ -64,7 +65,7 @@ export async function createDraftInvoiceRecord(
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Invalid amount" };
   }
-  const totals = invoiceTotals(lineValues);
+  const totals = documentTotals(lineValues, STERLING_RATE);
   const rebillError = await checkRebillExpenses(
     companyId,
     data.clientId,
@@ -85,9 +86,7 @@ export async function createDraftInvoiceRecord(
         issueDate,
         dueDate,
         notes: data.notes,
-        netPence: totals.netPence,
-        vatPence: totals.vatPence,
-        grossPence: totals.grossPence,
+        ...totals,
         createdByUserId: localUserId,
       })
       .returning({ id: invoices.id });

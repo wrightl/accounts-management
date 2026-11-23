@@ -15,7 +15,7 @@ import { listMilestonesReadyToBill } from "@/lib/close/checklist";
 import { creditAdjustmentsByInvoice } from "@/lib/credit-notes/adjustments";
 import { DEFAULT_DATE_FORMAT, formatIsoDate, todayIsoDate, type DateFormat } from "@/lib/dates";
 import { splitDividendPence } from "@/lib/dividends/split";
-import { invoiceAmountDuePence } from "@/lib/invoices/balance";
+import { invoiceAmountDue, settlementPence } from "@/lib/invoices/balance";
 import { addDays, ctPaymentDueDate } from "@/lib/ledger/corporation-tax";
 import { getReservesPosition } from "@/lib/ledger/queries";
 import { invoiceTotals, type LineItem } from "@/lib/money";
@@ -162,11 +162,7 @@ async function invoicesDueSoonPence(companyId: string, today: string, until: str
   return open.reduce(
     (t, inv) =>
       t +
-      invoiceAmountDuePence({
-        grossPence: inv.grossPence,
-        paidPence: paid.get(inv.id) ?? 0,
-        ...credits.get(inv.id),
-      }),
+      invoiceAmountDue(settlementPence(inv, paid.get(inv.id) ?? 0, credits.get(inv.id))),
     0,
   );
 }

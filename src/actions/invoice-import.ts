@@ -1,5 +1,6 @@
 "use server";
 
+import { sterlingTotals } from "@/lib/currency";
 import { and, asc, eq, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 import { getDb } from "@/db";
 import { matchOfCompany } from "@/lib/bank/match-scope";
@@ -621,9 +622,7 @@ export async function commitInvoiceImportChunk(
               status: parsed.status,
               issueDate: parsed.issueDate,
               dueDate: parsed.dueDate,
-              netPence: parsed.netPence,
-              vatPence: parsed.vatPence,
-              grossPence: parsed.grossPence,
+              ...sterlingTotals(parsed),
               paidAt:
                 parsed.status === "paid" && paymentDate
                   ? new Date(`${paymentDate}T12:00:00Z`)
@@ -658,6 +657,8 @@ export async function commitInvoiceImportChunk(
               .values({
                 invoiceId: invoice.id,
                 amountPence: parsed.amountPaidPence,
+                // Imports are sterling only for now.
+                amountMinor: parsed.amountPaidPence,
                 receivedAt: new Date(`${paymentDate}T12:00:00Z`),
                 reference: parsed.paymentReference,
                 method: "import",

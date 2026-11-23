@@ -155,9 +155,9 @@ describe("credit notes", () => {
     const detail = await getInvoiceDetail(companyId, invoiceId);
     // Still open; the due date has passed, so it displays as overdue.
     expect(detail?.invoice.status).toBe("overdue");
-    expect(detail?.creditedPence).toBe(30000);
-    expect(detail?.balancePence).toBe(90000);
-    expect(detail?.creditablePence).toBe(90000);
+    expect(detail?.creditedMinor).toBe(30000);
+    expect(detail?.balanceMinor).toBe(90000);
+    expect(detail?.creditableMinor).toBe(90000);
 
     const pnl = await getProfitAndLoss(companyId, "2026-03-01", "2026-03-31");
     expect(pnl.incomePence).toBe(75000);
@@ -208,7 +208,7 @@ describe("credit notes", () => {
     expect(exact.ok).toBe(true);
     const detail = await getInvoiceDetail(companyId, invoiceId);
     expect(detail?.invoice.status).toBe("paid");
-    expect(detail?.balancePence).toBe(0);
+    expect(detail?.balanceMinor).toBe(0);
   });
 
   it("settles a fully credited invoice and reopens it when the credit is voided", async () => {
@@ -222,8 +222,8 @@ describe("credit notes", () => {
 
     let detail = await getInvoiceDetail(companyId, invoiceId);
     expect(detail?.invoice.status).toBe("paid");
-    expect(detail?.balancePence).toBe(0);
-    expect(detail?.refundDuePence).toBe(0);
+    expect(detail?.balanceMinor).toBe(0);
+    expect(detail?.refundDueMinor).toBe(0);
 
     const voided = await voidCreditNote(full.id!);
     expect(voided.ok).toBe(true);
@@ -231,7 +231,7 @@ describe("credit notes", () => {
     // Still open; the due date has passed, so it displays as overdue.
     expect(detail?.invoice.status).toBe("overdue");
     expect(detail?.invoice.paidAt).toBeNull();
-    expect(detail?.balancePence).toBe(120000);
+    expect(detail?.balanceMinor).toBe(120000);
 
     const pnl = await getProfitAndLoss(companyId, "2026-03-01", "2026-03-31");
     expect(pnl.incomePence).toBe(100000);
@@ -250,7 +250,7 @@ describe("credit notes", () => {
 
     let detail = await getInvoiceDetail(companyId, invoiceId);
     expect(detail?.invoice.status).toBe("paid");
-    expect(detail?.refundDuePence).toBe(30000);
+    expect(detail?.refundDueMinor).toBe(30000);
 
     const over = await recordCreditNoteRefund(credit.id!, refundForm("400"));
     expect(over.ok).toBe(false);
@@ -261,8 +261,8 @@ describe("credit notes", () => {
     const refunded = await recordCreditNoteRefund(credit.id!, refundForm("300"));
     expect(refunded.ok).toBe(true);
     detail = await getInvoiceDetail(companyId, invoiceId);
-    expect(detail?.refundDuePence).toBe(0);
-    expect(detail?.balancePence).toBe(0);
+    expect(detail?.refundDueMinor).toBe(0);
+    expect(detail?.balanceMinor).toBe(0);
 
     const again = await recordCreditNoteRefund(credit.id!, refundForm("1"));
     expect(again.ok).toBe(false);

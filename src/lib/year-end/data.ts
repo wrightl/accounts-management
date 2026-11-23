@@ -152,7 +152,7 @@ export type PackLateExpense = {
 export type PackWriteOff = {
   id: string;
   writtenOffOn: string;
-  kind: "bank_charges" | "bad_debt";
+  kind: "bank_charges" | "bad_debt" | "fx_difference";
   amountPence: number;
   note: string | null;
   invoiceNumber: string;

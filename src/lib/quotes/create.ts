@@ -1,9 +1,10 @@
 import "server-only";
+import { documentTotals, STERLING_RATE } from "@/lib/currency";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { clients, quoteLineItems, quotes } from "@/db/schema";
 import { allocateQuoteNumber } from "@/lib/invoices/allocate";
-import { invoiceTotals, poundsToPence } from "@/lib/money";
+import { poundsToPence } from "@/lib/money";
 import { replaceQuotePaymentMilestones } from "@/lib/orders/copy-from-quote";
 import { validateMilestones, type PaymentMilestoneInput } from "@/lib/quotes/payment-schedule";
 import type { QuoteParsed } from "@/lib/quotes/schema";
@@ -46,7 +47,7 @@ export async function createDraftQuoteRecord(
   } catch {
     return { ok: false, error: "Enter a valid unit price on each line item" };
   }
-  const totals = invoiceTotals(lineValues);
+  const totals = documentTotals(lineValues, STERLING_RATE);
   const milestoneError = validateMilestones(milestones, totals.grossPence);
   if (milestoneError) return { ok: false, error: milestoneError };
 

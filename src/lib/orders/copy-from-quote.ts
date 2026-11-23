@@ -1,4 +1,5 @@
 import "server-only";
+import { sterlingTotals } from "@/lib/currency";
 import { eq } from "drizzle-orm";
 import {
   orderLineItems,
@@ -59,9 +60,7 @@ export async function createOrderFromQuote(
       status: "active",
       issueDate,
       notes: source.quote.notes,
-      netPence: source.quote.netPence,
-      vatPence: source.quote.vatPence,
-      grossPence: source.quote.grossPence,
+      ...sterlingTotals(source.quote),
       createdByUserId,
     })
     .returning({ id: orders.id });

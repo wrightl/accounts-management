@@ -1,4 +1,5 @@
 import { and, desc, eq, isNull } from "drizzle-orm";
+import { documentTotals, STERLING_RATE } from "@/lib/currency";
 import { getDb, hasDatabaseClient } from "@/db";
 import {
   clients,
@@ -8,7 +9,7 @@ import {
   recurringInvoices,
 } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
-import { invoiceTotals } from "@/lib/money";
+
 import { allocateInvoiceNumber } from "@/lib/invoices/allocate";
 import {
   computeNextRunOn,
@@ -239,13 +240,14 @@ async function generateFromTemplateRow(
   const lines = tmpl.lineTemplate as RecurringLineTemplate[];
   if (!Array.isArray(lines) || lines.length === 0) return "skipped_empty";
 
-  const totals = invoiceTotals(
+  const totals = documentTotals(
     lines.map((l) => ({
       quantity: l.quantity,
       unitPricePence: l.unitPricePence,
       vatRate: l.vatRate ?? 0,
       discountPercent: l.discountPercent ?? 0,
     })),
+    STERLING_RATE,
   );
 
   const dueDate = defaultDueDate(today, tmpl.paymentTermsDays ?? 14);

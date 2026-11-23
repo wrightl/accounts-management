@@ -34,6 +34,31 @@ export function formatCurrencyAmount(
   }
 }
 
+/** Format minor units in a document's currency, e.g. 7000 + "USD" -> "US$70.00". */
+export function formatMoney(minorUnits: number, currency: string | null | undefined): string {
+  return formatCurrencyAmount(minorUnits, currency);
+}
+
+/**
+ * A document amount in its own currency, followed by the sterling book value
+ * when the currency is foreign, e.g. "US$70.00 (£55.12)".
+ */
+export function formatDocumentAmount(
+  minorUnits: number,
+  pence: number,
+  currency: string | null | undefined,
+): string {
+  const code = currency?.trim().toUpperCase();
+  if (!code || code === DEFAULT_CURRENCY) return formatGBP(pence);
+  return `${formatCurrencyAmount(minorUnits, code)} (${formatGBP(pence)})`;
+}
+
+/** Parse a user-entered amount in any two-decimal currency into minor units. */
+export function parseMoneyToMinor(input: string | number): number {
+  if (typeof input === "number") return poundsToPence(input);
+  return poundsToPence(input.replace(/[^\d.\-]/g, ""));
+}
+
 /**
  * An expense's sterling amount, followed by the amount paid when that was in
  * another currency, e.g. "£9.60 (US$12.00)".

@@ -1,5 +1,6 @@
 "use server";
 
+import { isForeignDocumentCurrency, sterlingTotals } from "@/lib/currency";
 import { and, eq, ne } from "drizzle-orm";
 import { getDb } from "@/db";
 import { invoiceLineItems, invoices } from "@/db/schema";
@@ -28,11 +29,18 @@ export async function raiseLatePaymentInvoice(invoiceId: string): Promise<Action
       if (invoice.latePaymentForInvoiceId) {
         return { ok: false, error: "This invoice is already a late payment claim" };
       }
+      if (isForeignDocumentCurrency(invoice.currency)) {
+        // Statutory charges are worked out in sterling; foreign invoices come later.
+        return {
+          ok: false,
+          error: `Late payment charges on ${invoice.currency} invoices aren't supported yet`,
+        };
+      }
       const today = todayIsoDate();
       const charge =
         storedStatus(invoice.status) === "sent" && invoice.dueDate
           ? latePaymentCharge({
-              amountDuePence: detail.balancePence,
+              amountDuePence: detail.balanceMinor,
               dueDate: invoice.dueDate,
               asOf: today,
             })
@@ -69,7 +77,7 @@ export async function raiseLatePaymentInvoice(invoiceId: string): Promise<Action
       const company = await getOrCreateCompanySettings(companyId);
       const lines = [
         {
-          description: `Statutory interest on invoice ${invoice.number}: ${formatGBP(detail.balancePence)} at ${charge.ratePercent}% a year for ${charge.daysLate} days from ${formatIsoDateUk(invoice.dueDate)}`,
+          description: `Statutory interest on invoice ${invoice.number}: ${formatGBP(detail.balanceMinor)} at ${charge.ratePercent}% a year for ${charge.daysLate} days from ${formatIsoDateUk(invoice.dueDate)}`,
           quantity: 1,
           unitPricePence: charge.interestPence,
           vatRate: 0,
@@ -99,9 +107,11 @@ export async function raiseLatePaymentInvoice(invoiceId: string): Promise<Action
             dueDate: defaultDueDate(today, company.invoicePaymentTermsDays),
             notes:
               "Claimed under the Late Payment of Commercial Debts (Interest) Act 1998. Interest and compensation are outside the scope of VAT.",
-            netPence: charge.totalPence,
-            vatPence: 0,
-            grossPence: charge.totalPence,
+            ...sterlingTotals({
+              netPence: charge.totalPence,
+              vatPence: 0,
+              grossPence: charge.totalPence,
+            }),
             latePaymentForInvoiceId: invoiceId,
             createdByUserId: localUserId,
           })

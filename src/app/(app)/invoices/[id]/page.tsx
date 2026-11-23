@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { isForeignDocumentCurrency } from "@/lib/currency";
 import { notFound } from "next/navigation";
 import { Download, FilePlus, Pencil } from "lucide-react";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
@@ -32,6 +33,7 @@ import { publicInvoiceUrl } from "@/lib/payments/online-status";
 import {
   formatDiscountPercent,
   formatGBP,
+  formatMoney,
   formatQuantity,
   hasLineDiscount,
   lineNetPence,
@@ -65,17 +67,17 @@ export default async function InvoiceDetailPage({
     paidFormatted,
     balanceFormatted,
     creditNotes,
-    creditedPence,
+    creditedMinor,
     creditedFormatted,
-    creditablePence,
-    refundDuePence,
+    creditableMinor,
+    refundDueMinor,
     refundDueFormatted,
   } = detail;
 
   const status = invoice.status as InvoiceStatus;
   const stored = storedStatus(invoice.status);
   const canCredit =
-    canWrite && (stored === "sent" || stored === "paid") && creditablePence > 0;
+    canWrite && (stored === "sent" || stored === "paid") && creditableMinor > 0;
   const [recurring, settlements, latePayment, writeOffs, linkedPayments] = await Promise.all([
     getRecurringTemplateForInvoice(companyId, invoice.recurringInvoiceId),
     listBankSettlements(companyId, { invoiceId: invoice.id }),
@@ -83,11 +85,17 @@ export default async function InvoiceDetailPage({
     listInvoiceWriteOffs(companyId, invoice.id),
     linkedPaymentIds(companyId, invoice.id),
   ]);
-  const writtenOffPence = writeOffs.reduce((acc, w) => acc + w.amountPence, 0);
+  // In the invoice's currency; exchange differences are sterling-only and listed below.
+  const writtenOffMinor = writeOffs.reduce((acc, w) => acc + w.amountMinor, 0);
   const lateCharge =
-    scope === "all" && stored === "sent" && invoice.dueDate && !invoice.latePaymentForInvoiceId
+    scope === "all" &&
+    stored === "sent" &&
+    invoice.dueDate &&
+    !invoice.latePaymentForInvoiceId &&
+    // Statutory charges are in sterling; foreign invoices get them in a later change.
+    !isForeignDocumentCurrency(invoice.currency)
       ? latePaymentCharge({
-          amountDuePence: detail.balancePence,
+          amountDuePence: detail.balanceMinor,
           dueDate: invoice.dueDate,
           asOf: todayIsoDate(),
         })
@@ -183,7 +191,7 @@ export default async function InvoiceDetailPage({
             status={invoice.status}
             canWrite={canWrite}
             balanceFormatted={balanceFormatted}
-            balancePence={detail.balancePence}
+            balancePence={detail.balanceMinor}
             clientName={client.name}
             companyName={client.companyName}
             isImported={invoice.source === "import"}
@@ -222,21 +230,21 @@ export default async function InvoiceDetailPage({
           <CardTitle>Paid</CardTitle>
           <CardValue>{paidFormatted}</CardValue>
         </Card>
-        {creditedPence > 0 ? (
+        {creditedMinor > 0 ? (
           <Card>
             <CardTitle>Credited</CardTitle>
             <CardValue>{creditedFormatted}</CardValue>
           </Card>
         ) : null}
-        {writtenOffPence > 0 ? (
+        {writtenOffMinor > 0 ? (
           <Card>
             <CardTitle>Written off</CardTitle>
-            <CardValue>{formatGBP(writtenOffPence)}</CardValue>
+            <CardValue>{formatMoney(writtenOffMinor, invoice.currency)}</CardValue>
           </Card>
         ) : null}
         <Card>
-          <CardTitle>{refundDuePence > 0 ? "Refund due" : "Balance due"}</CardTitle>
-          <CardValue>{refundDuePence > 0 ? refundDueFormatted : balanceFormatted}</CardValue>
+          <CardTitle>{refundDueMinor > 0 ? "Refund due" : "Balance due"}</CardTitle>
+          <CardValue>{refundDueMinor > 0 ? refundDueFormatted : balanceFormatted}</CardValue>
         </Card>
       </div>
 
@@ -259,13 +267,13 @@ export default async function InvoiceDetailPage({
               <TR key={line.id}>
                 <TD>{line.description}</TD>
                 <TD className="text-right">{formatQuantity(line.quantity)}</TD>
-                <TD className="text-right">{formatGBP(line.unitPricePence)}</TD>
+                <TD className="text-right">{formatMoney(line.unitPricePence, invoice.currency)}</TD>
                 {hasLineDiscount(lines) ? (
                   <TD className="text-right">
                     {formatDiscountPercent(line.discountPercent)}
                   </TD>
                 ) : null}
-                <TD className="text-right">{formatGBP(lineNetPence(line))}</TD>
+                <TD className="text-right">{formatMoney(lineNetPence(line), invoice.currency)}</TD>
               </TR>
             ))}
           </TBody>
@@ -341,8 +349,8 @@ export default async function InvoiceDetailPage({
       <InvoiceWriteOffs
         invoiceId={invoice.id}
         writeOffs={writeOffs}
-        balancePence={detail.balancePence}
-        canWriteOff={stored === "sent" && detail.balancePence > 0}
+        balancePence={detail.balanceMinor}
+        canWriteOff={stored === "sent" && detail.balanceMinor > 0}
         canWrite={canWrite}
         today={todayIsoDate()}
       />

@@ -20,6 +20,8 @@ export type InvoiceWriteOffRow = {
   amountFormatted: string;
   writtenOffOn: string;
   note: string | null;
+  /** False for exchange differences, which follow the invoice's payments. */
+  removable: boolean;
 };
 
 /**
@@ -76,30 +78,32 @@ export function InvoiceWriteOffs({
                 <TD className="text-right">{w.amountFormatted}</TD>
                 {canWrite ? (
                   <TD className="text-right">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      disabled={pending}
-                      onClick={async () => {
-                        const ok = await confirm({
-                          title: "Remove write-off",
-                          message: `${w.amountFormatted} will be owed on this invoice again.`,
-                          confirmLabel: "Remove",
-                        });
-                        if (!ok) return;
-                        startTransition(async () => {
-                          const result = await removeWriteOff(invoiceId, w.id);
-                          if (!result.ok) {
-                            await alert({ title: "Couldn't remove the write-off", message: result.error });
-                            return;
-                          }
-                          router.refresh();
-                        });
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Remove
-                    </Button>
+                    {w.removable ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        disabled={pending}
+                        onClick={async () => {
+                          const ok = await confirm({
+                            title: "Remove write-off",
+                            message: `${w.amountFormatted} will be owed on this invoice again.`,
+                            confirmLabel: "Remove",
+                          });
+                          if (!ok) return;
+                          startTransition(async () => {
+                            const result = await removeWriteOff(invoiceId, w.id);
+                            if (!result.ok) {
+                              await alert({ title: "Couldn't remove the write-off", message: result.error });
+                              return;
+                            }
+                            router.refresh();
+                          });
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Remove
+                      </Button>
+                    ) : null}
                   </TD>
                 ) : null}
               </TR>

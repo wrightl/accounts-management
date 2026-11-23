@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, sql, sum } from "drizzle-orm";
+import { and, eq, inArray, sql, sum } from "drizzle-orm";
 import { getDb } from "@/db";
 import { matchOfCompany } from "@/lib/bank/match-scope";
 import { invoices, payments, reconciliationMatches } from "@/db/schema";
@@ -14,7 +14,9 @@ import {
 } from "@/lib/bank/queries";
 import { creditAdjustmentForInvoice } from "@/lib/credit-notes/adjustments";
 import type { Tx } from "@/lib/invoices/allocate";
-import { invoiceBalancePence, isInvoiceSettled } from "@/lib/invoices/balance";
+import { isForeignDocumentCurrency } from "@/lib/currency";
+import { invoiceBalance, isInvoiceSettled, settlementMinor } from "@/lib/invoices/balance";
+import { syncFxDifference } from "@/lib/invoices/fx-difference";
 import { storedStatus } from "@/lib/invoices/status";
 import { formatGBP } from "@/lib/money";
 import { checkPeriodOpen } from "@/lib/period-lock-queries";
@@ -46,15 +48,15 @@ async function invoiceSettlement(
   inv: typeof invoices.$inferSelect,
 ) {
   const [paid] = await tx
-    .select({ total: sum(payments.amountPence).mapWith(Number) })
+    .select({ total: sum(payments.amountMinor).mapWith(Number) })
     .from(payments)
     .innerJoin(invoices, eq(invoices.id, payments.invoiceId))
     .where(and(eq(payments.invoiceId, inv.id), eq(invoices.companyId, inv.companyId)));
-  return {
-    grossPence: inv.grossPence,
-    paidPence: paid?.total ?? 0,
-    ...(await creditAdjustmentForInvoice(tx, inv.companyId, inv.id)),
-  };
+  return settlementMinor(
+    inv,
+    paid?.total ?? 0,
+    await creditAdjustmentForInvoice(tx, inv.companyId, inv.id),
+  );
 }
 
 /**
@@ -97,7 +99,9 @@ export async function listReceiptsForPayment(
   const db = getDb();
   const row = await loadPayment(db, companyId, paymentId);
   if (!row || row.payment.stripeCheckoutSessionId) return [];
-  const owed = invoiceBalancePence(await invoiceSettlement(db, row.invoice));
+  // Foreign-currency receipts are matched on a rate band, which comes later.
+  if (isForeignDocumentCurrency(row.invoice.currency)) return [];
+  const owed = invoiceBalance(await invoiceSettlement(db, row.invoice));
   const paidOn = row.payment.receivedAt.toISOString().slice(0, 10);
 
   const unmatched = await listUnmatchedIncomingTransactions(companyId);
@@ -146,6 +150,12 @@ export async function linkPaymentToBankTransaction(
   if (bankTx.amountPence <= 0) {
     return { ok: false, error: "Only incoming bank transactions can be linked" };
   }
+  if (isForeignDocumentCurrency(found.invoice.currency)) {
+    return {
+      ok: false,
+      error: `Linking bank lines to ${found.invoice.currency} payments isn't supported yet`,
+    };
+  }
 
   const before = found.payment.amountPence;
   const amountChanges = bankTx.amountPence !== before;
@@ -187,7 +197,7 @@ export async function linkPaymentToBankTransaction(
         throw new LinkError("Bank transaction is already reconciled");
       }
 
-      const owed = invoiceBalancePence(await invoiceSettlement(tx, inv));
+      const owed = invoiceBalance(await invoiceSettlement(tx, inv));
       if (!receiptFits(bankTx.amountPence, current.payment.amountPence, owed)) {
         throw new LinkError(
           `${formatGBP(bankTx.amountPence)} is too far from the ${formatGBP(current.payment.amountPence)} payment to link`,
@@ -208,8 +218,17 @@ export async function linkPaymentToBankTransaction(
       if (amountChanges) {
         await tx
           .update(payments)
-          .set({ amountPence: bankTx.amountPence })
-          .where(eq(payments.id, paymentId));
+          // Sterling invoice (checked above), so the two amounts move together.
+          .set({ amountPence: bankTx.amountPence, amountMinor: bankTx.amountPence })
+          .where(
+            and(
+              eq(payments.id, paymentId),
+              inArray(
+                payments.invoiceId,
+                tx.select({ id: invoices.id }).from(invoices).where(eq(invoices.companyId, companyId)),
+              ),
+            ),
+          );
       }
       await tx.insert(reconciliationMatches).values({
         bankTransactionId,
@@ -235,6 +254,8 @@ export async function linkPaymentToBankTransaction(
           .set({ status: "sent", paidAt: null })
           .where(and(eq(invoices.id, inv.id), eq(invoices.companyId, companyId)));
       }
+      // The sterling received may have changed, and with it any exchange difference.
+      await syncFxDifference(tx, companyId, inv.id, bankTx.bookedAt);
     });
   } catch (e) {
     if (e instanceof LinkError || e instanceof ReconciliationError) {

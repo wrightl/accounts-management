@@ -166,9 +166,16 @@ export default async function ReportsPage({
                             label: `Expenses${exVat}`,
                             value: pnl.expenseFormatted,
                             note:
-                                pnl.writeOffPence > 0
-                                    ? `Includes ${pnl.writeOffFormatted} of invoices written off`
-                                    : undefined,
+                                [
+                                    pnl.writeOffPence > 0
+                                        ? `Includes ${pnl.writeOffFormatted} of invoices written off`
+                                        : null,
+                                    pnl.fxDifferencePence !== 0
+                                        ? `${pnl.writeOffPence > 0 ? 'and' : 'Includes'} a ${pnl.fxDifferenceFormatted} exchange ${pnl.fxDifferencePence > 0 ? 'loss' : 'gain'}`
+                                        : null,
+                                ]
+                                    .filter(Boolean)
+                                    .join(' ') || undefined,
                         },
                     ]}
                     total={{ label: 'Profit / (loss)', value: pnl.profitFormatted }}

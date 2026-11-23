@@ -1,17 +1,18 @@
 import "server-only";
+import { isForeignDocumentCurrency } from "@/lib/currency";
 import { and, eq, inArray, isNotNull, isNull, lt, or, sql, sum } from "drizzle-orm";
 import { getDb } from "@/db";
 import { clients, companies, invoices, payments, sendJobs } from "@/db/schema";
 import { sendClientEmail } from "@/lib/email/client-email";
 import { resolveClientEmailSender } from "@/lib/email/resolve-client-sender";
 import { escapeHtml } from "@/lib/html";
-import { formatGBP } from "@/lib/money";
+import { formatGBP, formatMoney } from "@/lib/money";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
 import { getCompanySettings } from "@/lib/settings/queries";
 import { loadOrRenderInvoicePdf } from "@/lib/invoices/pdf-cache";
 import { storedStatus, todayIsoDate } from "@/lib/invoices/status";
 import { onlinePaymentsStatus, publicInvoiceUrl } from "@/lib/payments/online-status";
-import { invoiceAmountDuePence } from "@/lib/invoices/balance";
+import { invoiceAmountDue, settlementMinor } from "@/lib/invoices/balance";
 import {
   creditAdjustmentsByInvoice,
   type CreditAdjustment,
@@ -192,6 +193,36 @@ export async function drainSendJobs(limit = 20): Promise<{ processed: number; se
   return { processed: jobs.length, sent, failed };
 }
 
+/**
+ * Paid so far on invoices from many companies, in each invoice's currency. One
+ * query per company, each scoped to that company through the invoice.
+ */
+async function paidMinorByCompany(
+  db: ReturnType<typeof getDb>,
+  list: { id: string; companyId: string }[],
+) {
+  const byCompany = Map.groupBy(list, (i) => i.companyId);
+  const paid = new Map<string, number>();
+  for (const [companyId, rows] of byCompany) {
+    const totals = await db
+      .select({ invoiceId: payments.invoiceId, total: sum(payments.amountMinor).mapWith(Number) })
+      .from(payments)
+      .innerJoin(invoices, eq(invoices.id, payments.invoiceId))
+      .where(
+        and(
+          inArray(
+            payments.invoiceId,
+            rows.map((r) => r.id),
+          ),
+          eq(invoices.companyId, companyId),
+        ),
+      )
+      .groupBy(payments.invoiceId);
+    for (const r of totals) paid.set(r.invoiceId, r.total ?? 0);
+  }
+  return paid;
+}
+
 /** Credit and write-off totals for invoices from many companies, one query set per company. */
 async function creditAdjustmentsByCompany(
   db: ReturnType<typeof getDb>,
@@ -225,7 +256,7 @@ export async function enqueueOverdueReminders(): Promise<number> {
       status: invoices.status,
       issueDate: invoices.issueDate,
       dueDate: invoices.dueDate,
-      grossPence: invoices.grossPence,
+      grossMinor: invoices.grossMinor,
       schedule: companies.reminderScheduleDays,
     })
     .from(invoices)
@@ -256,12 +287,8 @@ export async function enqueueOverdueReminders(): Promise<number> {
   if (due.length === 0) return 0;
 
   const ids = due.map((i) => i.id);
-  const [paidRows, credits, existing] = await Promise.all([
-    db
-      .select({ invoiceId: payments.invoiceId, total: sum(payments.amountPence).mapWith(Number) })
-      .from(payments)
-      .where(inArray(payments.invoiceId, ids))
-      .groupBy(payments.invoiceId),
+  const [paid, credits, existing] = await Promise.all([
+    paidMinorByCompany(db, due),
     creditAdjustmentsByCompany(db, due),
     db
       .select({ invoiceId: sendJobs.invoiceId, step: sendJobs.reminderStep })
@@ -274,17 +301,13 @@ export async function enqueueOverdueReminders(): Promise<number> {
         ),
       ),
   ]);
-  const paid = new Map(paidRows.map((r) => [r.invoiceId, r.total ?? 0]));
   const done = new Set(existing.map((r) => `${r.invoiceId}:${r.step}`));
 
   let queued = 0;
   for (const inv of due) {
     if (done.has(`${inv.id}:${inv.step}`)) continue;
-    const balance = invoiceAmountDuePence({
-      grossPence: inv.grossPence,
-      paidPence: paid.get(inv.id) ?? 0,
-      ...credits.get(inv.id),
-    });
+    // What the client owes, in the invoice's currency.
+    const balance = invoiceAmountDue(settlementMinor(inv, paid.get(inv.id) ?? 0, credits.get(inv.id)));
     if (balance <= 0) continue;
     await enqueueSendJob("invoice_remind", inv.companyId, inv.id, null, inv.step);
     queued++;
@@ -380,12 +403,14 @@ async function deliverReminder(
 
   const company = await getCompanySettings(row.invoice.companyId);
   const detail = await getInvoiceDetail(row.invoice.companyId, invoiceId);
-  const amountDuePence = detail?.balancePence ?? row.invoice.grossPence;
-  if (amountDuePence <= 0) return false;
+  // In the invoice's currency.
+  const amountDue = detail?.balanceMinor ?? row.invoice.grossMinor;
+  if (amountDue <= 0) return false;
+  const currency = row.invoice.currency;
   const link = invoiceLink(row.invoice.publicToken, company);
   const name = escapeHtml(row.clientName);
   const number = escapeHtml(row.invoice.number);
-  const amount = escapeHtml(formatGBP(amountDuePence));
+  const amount = escapeHtml(formatMoney(amountDue, currency));
   const dueDate = row.invoice.dueDate ?? todayIsoDate();
   const due = escapeHtml(formatIsoDateUk(dueDate) ?? dueDate);
   const sender = await resolveClientEmailSender({
@@ -402,10 +427,10 @@ async function deliverReminder(
       step === 0
         ? `Invoice ${row.invoice.number} is due today`
         : `Invoice ${row.invoice.number} is due on ${formatIsoDateUk(dueDate)}`;
-    lead = `Just a reminder that invoice ${row.invoice.number} for ${formatGBP(amountDuePence)} is due ${step === 0 ? "today" : `on ${formatIsoDateUk(dueDate)}`}.`;
+    lead = `Just a reminder that invoice ${row.invoice.number} for ${formatMoney(amountDue, currency)} is due ${step === 0 ? "today" : `on ${formatIsoDateUk(dueDate)}`}.`;
   } else {
     subject = `Reminder: invoice ${row.invoice.number} is overdue`;
-    lead = `Invoice ${row.invoice.number} was due on ${formatIsoDateUk(dueDate)} and ${formatGBP(amountDuePence)} remains unpaid.`;
+    lead = `Invoice ${row.invoice.number} was due on ${formatIsoDateUk(dueDate)} and ${formatMoney(amountDue, currency)} remains unpaid.`;
   }
   const leadHtml = beforeDue
     ? `Just a reminder that invoice <strong>${number}</strong> for ${amount} is due ${step === 0 ? "today" : `on ${due}`}.`
@@ -413,8 +438,12 @@ async function deliverReminder(
 
   const charge =
     // Payment history on imports can be incomplete, so interest could be wrong.
-    !beforeDue && company.latePaymentCharges && row.invoice.source !== "import"
-      ? latePaymentCharge({ amountDuePence, dueDate, asOf: todayIsoDate() })
+    // Statutory charges are worked out in sterling; foreign invoices get them in a later change.
+    !beforeDue &&
+    company.latePaymentCharges &&
+    row.invoice.source !== "import" &&
+    !isForeignDocumentCurrency(currency)
+      ? latePaymentCharge({ amountDuePence: amountDue, dueDate, asOf: todayIsoDate() })
       : null;
   const chargeText = charge
     ? `Under the Late Payment of Commercial Debts (Interest) Act 1998 we're entitled to statutory interest at ${charge.ratePercent}% a year (Bank of England base rate of ${charge.basePercent}% plus 8%) and fixed compensation of ${formatGBP(charge.compensationPence)}. Interest to date is ${formatGBP(charge.interestPence)} and is adding up at ${formatGBP(charge.dailyInterestPence)} a day until the invoice is paid.`

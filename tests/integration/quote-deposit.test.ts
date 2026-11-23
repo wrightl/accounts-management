@@ -185,7 +185,7 @@ describe("deposit on accept", () => {
     expect(createSession).not.toHaveBeenCalled();
 
     const detail = await getInvoiceDetail(companyId, invoice!.id);
-    expect(detail?.balancePence).toBe(36000);
+    expect(detail?.balanceMinor).toBe(36000);
   });
 
   it("still accepts if Stripe fails, sending the client to the invoice page", async () => {

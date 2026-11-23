@@ -39,7 +39,7 @@ export default async function CreditNoteDetailPage({
   const invoiceDetail = await getInvoiceDetail(companyId, invoice.id);
   const refundablePence =
     creditNote.status === "issued" && creditNote.refundedPence === 0
-      ? Math.min(invoiceDetail?.refundDuePence ?? 0, creditNote.grossPence)
+      ? Math.min(invoiceDetail?.refundDueMinor ?? 0, creditNote.grossMinor)
       : 0;
 
   return (

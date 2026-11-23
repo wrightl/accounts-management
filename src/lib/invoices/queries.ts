@@ -29,12 +29,9 @@ import {
   payments,
 } from "@/db/schema";
 import { clientDisplayNameSql } from "@/lib/clients/sql";
-import { formatGBP } from "@/lib/money";
+import { formatGBP, formatMoney } from "@/lib/money";
 import { creditAdjustmentsByInvoice } from "@/lib/credit-notes/adjustments";
-import {
-  invoiceAmountDuePence,
-  invoiceRefundDuePence,
-} from "@/lib/invoices/balance";
+import { invoiceAmountDue, invoiceRefundDue, settlementMinor, settlementPence } from "@/lib/invoices/balance";
 import { invoiceInPack, type RecordScope } from "@/lib/accountant/record-scope";
 import {
   effectiveStatus,
@@ -246,11 +243,7 @@ export async function invoiceAmountsDue(
   for (const inv of list) {
     due.set(
       inv.id,
-      invoiceAmountDuePence({
-        grossPence: inv.grossPence,
-        paidPence: paid.get(inv.id) ?? 0,
-        ...credits.get(inv.id),
-      }),
+      invoiceAmountDue(settlementPence(inv, paid.get(inv.id) ?? 0, credits.get(inv.id))),
     );
   }
   return due;
@@ -308,32 +301,34 @@ export async function getInvoiceDetail(
       issueDate: creditNotes.issueDate,
       reason: creditNotes.reason,
       grossPence: creditNotes.grossPence,
+      grossMinor: creditNotes.grossMinor,
       refundedPence: creditNotes.refundedPence,
+      refundedMinor: creditNotes.refundedMinor,
     })
     .from(creditNotes)
     .where(and(eq(creditNotes.invoiceId, id), eq(creditNotes.companyId, companyId)))
     .orderBy(desc(creditNotes.createdAt));
 
   const [writeOffRow] = await db
-    .select({ total: sum(invoiceWriteOffs.amountPence).mapWith(Number) })
+    .select({ total: sum(invoiceWriteOffs.amountMinor).mapWith(Number) })
     .from(invoiceWriteOffs)
     .where(and(eq(invoiceWriteOffs.invoiceId, id), eq(invoiceWriteOffs.companyId, companyId)));
-  const writtenOffPence = writeOffRow?.total ?? 0;
+  const writtenOffMinor = writeOffRow?.total ?? 0;
 
-  const paidPence = paymentRows.reduce((acc, p) => acc + p.amountPence, 0);
+  // Everything the client sees is in the invoice's currency.
+  const paidMinor = paymentRows.reduce((acc, p) => acc + p.amountMinor, 0);
   const issuedCredits = creditNoteRows.filter((c) => c.status === "issued");
-  const creditedPence = issuedCredits.reduce((acc, c) => acc + c.grossPence, 0);
-  const refundedPence = issuedCredits.reduce((acc, c) => acc + c.refundedPence, 0);
+  const creditedMinor = issuedCredits.reduce((acc, c) => acc + c.grossMinor, 0);
+  const refundedMinor = issuedCredits.reduce((acc, c) => acc + c.refundedMinor, 0);
   const inv = rows[0].invoice;
-  const settlement = {
-    grossPence: inv.grossPence,
-    paidPence,
-    creditedPence,
-    refundedPence,
-    writtenOffPence,
-  };
-  const balancePence = invoiceAmountDuePence(settlement);
-  const refundDuePence = invoiceRefundDuePence(settlement);
+  const settlement = settlementMinor(inv, paidMinor, {
+    creditedMinor,
+    refundedMinor,
+    writtenOffMinor,
+  });
+  const balanceMinor = invoiceAmountDue(settlement);
+  const refundDueMinor = invoiceRefundDue(settlement);
+  const money = (minor: number) => formatMoney(minor, inv.currency);
   const today = todayIsoDate();
   const status = effectiveStatus(inv.status as InvoiceStatus, inv.dueDate, today);
 
@@ -341,32 +336,33 @@ export async function getInvoiceDetail(
     invoice: {
       ...inv,
       status,
-      grossFormatted: formatGBP(inv.grossPence),
-      netFormatted: formatGBP(inv.netPence),
-      vatFormatted: formatGBP(inv.vatPence),
+      grossFormatted: money(inv.grossMinor),
+      netFormatted: money(inv.netMinor),
+      vatFormatted: money(inv.vatMinor),
       importFilename: rows[0].importFilename,
     },
     client: rows[0].client,
     lines,
     payments: paymentRows.map((p) => ({
       ...p,
-      amountFormatted: formatGBP(p.amountPence),
+      amountFormatted: money(p.amountMinor),
     })),
     creditNotes: creditNoteRows.map((c) => ({
       ...c,
-      grossFormatted: formatGBP(c.grossPence),
+      grossFormatted: money(c.grossMinor),
     })),
-    paidPence,
-    paidFormatted: formatGBP(paidPence),
-    creditedPence,
-    creditedFormatted: formatGBP(creditedPence),
+    // Settlement figures below are in the invoice's currency.
+    paidMinor,
+    paidFormatted: money(paidMinor),
+    creditedMinor,
+    creditedFormatted: money(creditedMinor),
     /** Gross still available to credit (gross less issued credit notes). */
-    creditablePence: Math.max(0, inv.grossPence - creditedPence),
-    refundedPence,
-    balancePence,
-    balanceFormatted: formatGBP(balancePence),
-    refundDuePence,
-    refundDueFormatted: formatGBP(refundDuePence),
+    creditableMinor: Math.max(0, inv.grossMinor - creditedMinor),
+    refundedMinor,
+    balanceMinor,
+    balanceFormatted: money(balanceMinor),
+    refundDueMinor,
+    refundDueFormatted: money(refundDueMinor),
   };
 }
 
@@ -419,11 +415,7 @@ export async function getDashboardKpis(companyId: string): Promise<DashboardKpis
     const credits = await creditAdjustmentsByInvoice(db, companyId, ids);
 
     for (const inv of open) {
-      const balance = invoiceAmountDuePence({
-        grossPence: inv.grossPence,
-        paidPence: paidMap.get(inv.id) ?? 0,
-        ...credits.get(inv.id),
-      });
+      const balance = invoiceAmountDue(settlementPence(inv, paidMap.get(inv.id) ?? 0, credits.get(inv.id)));
       if (balance === 0) continue;
       outstandingPence += balance;
       const eff = effectiveStatus(inv.status as InvoiceStatus, inv.dueDate, today);
@@ -495,11 +487,7 @@ export async function getUnchasedImports(companyId: string) {
   const owed = open
     .map((inv) => ({
       ...inv,
-      balancePence: invoiceAmountDuePence({
-        grossPence: inv.grossPence,
-        paidPence: paid.get(inv.id) ?? 0,
-        ...credits.get(inv.id),
-      }),
+      balancePence: invoiceAmountDue(settlementPence(inv, paid.get(inv.id) ?? 0, credits.get(inv.id))),
     }))
     .filter((inv) => inv.balancePence > 0);
   return {
@@ -552,11 +540,7 @@ export async function countOverdueInvoices(
 
   let count = 0;
   for (const inv of open) {
-    const balance = invoiceAmountDuePence({
-      grossPence: inv.grossPence,
-      paidPence: paidMap.get(inv.id) ?? 0,
-      ...credits.get(inv.id),
-    });
+    const balance = invoiceAmountDue(settlementPence(inv, paidMap.get(inv.id) ?? 0, credits.get(inv.id)));
     if (balance === 0) continue;
     const eff = effectiveStatus(inv.status as InvoiceStatus, inv.dueDate, today);
     if (eff === "overdue") count += 1;
@@ -621,11 +605,7 @@ export async function listOverdueInvoices(
 
   return open
     .map((inv) => {
-      const balancePence = invoiceAmountDuePence({
-        grossPence: inv.grossPence,
-        paidPence: paidMap.get(inv.id) ?? 0,
-        ...credits.get(inv.id),
-      });
+      const balancePence = invoiceAmountDue(settlementPence(inv, paidMap.get(inv.id) ?? 0, credits.get(inv.id)));
       const eff = effectiveStatus(inv.status as InvoiceStatus, inv.dueDate, today);
       return {
         id: inv.id,

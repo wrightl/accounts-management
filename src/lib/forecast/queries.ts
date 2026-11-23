@@ -22,7 +22,7 @@ import {
   weekStart,
   type ForecastEvent,
 } from "@/lib/forecast/engine";
-import { invoiceAmountDuePence } from "@/lib/invoices/balance";
+import { invoiceAmountDue, settlementPence } from "@/lib/invoices/balance";
 import { addDays, addMonths, ctPaymentDueDate, daysInclusive } from "@/lib/ledger/corporation-tax";
 import { getReservesPosition } from "@/lib/ledger/queries";
 import { invoiceTotals, type LineItem } from "@/lib/money";
@@ -58,11 +58,7 @@ async function invoiceEvents(companyId: string, today: string): Promise<Forecast
   ]);
   const paid = new Map(paidRows.map((r) => [r.invoiceId, r.total ?? 0]));
   return open.flatMap((inv) => {
-    const balance = invoiceAmountDuePence({
-      grossPence: inv.grossPence,
-      paidPence: paid.get(inv.id) ?? 0,
-      ...credits.get(inv.id),
-    });
+    const balance = invoiceAmountDue(settlementPence(inv, paid.get(inv.id) ?? 0, credits.get(inv.id)));
     if (balance <= 0) return [];
     const date = inv.dueDate ?? today;
     return [
@@ -325,11 +321,7 @@ export async function getBroughtForwardDebtsPence(companyId: string): Promise<nu
   return open.reduce(
     (acc, inv) =>
       acc +
-      invoiceAmountDuePence({
-        grossPence: inv.grossPence,
-        paidPence: paid.get(inv.id) ?? 0,
-        ...credits.get(inv.id),
-      }),
+      invoiceAmountDue(settlementPence(inv, paid.get(inv.id) ?? 0, credits.get(inv.id))),
     0,
   );
 }

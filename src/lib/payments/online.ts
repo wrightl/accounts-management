@@ -7,9 +7,11 @@ import { writeAudit } from "@/lib/audit";
 import { claimEvent, releaseEvent } from "@/lib/billing/webhook-events";
 import { getStripe } from "@/lib/billing/stripe";
 import { creditAdjustmentForInvoice } from "@/lib/credit-notes/adjustments";
-import { isInvoiceSettled } from "@/lib/invoices/balance";
-import { storedStatus } from "@/lib/invoices/status";
-import { formatGBP } from "@/lib/money";
+import { isForeignDocumentCurrency, STERLING } from "@/lib/currency";
+import { isInvoiceSettled, settlementMinor } from "@/lib/invoices/balance";
+import { syncFxDifference } from "@/lib/invoices/fx-difference";
+import { storedStatus, todayIsoDate } from "@/lib/invoices/status";
+import { formatGBP, formatMoney } from "@/lib/money";
 import { INVOICE_PAYMENT_KIND } from "@/lib/payments/online-status";
 
 /** Store whether the connected account can take card payments yet. */
@@ -42,17 +44,23 @@ export async function refreshConnectAccount(accountId: string): Promise<void> {
 /**
  * Record a completed Checkout payment against its invoice. Idempotent on the
  * Checkout session, so webhook retries never double-count. Money Stripe has
- * already taken is always recorded, even if the invoice changed meanwhile;
- * an overpayment then shows as a refund due on the invoice.
+ * already taken is recorded even if the invoice changed meanwhile; an
+ * overpayment then shows as a refund due on the invoice.
+ *
+ * Only sterling charges on sterling invoices are recorded here. Anything else
+ * would need the amount in two currencies, so it is left for the company to
+ * record by hand: logged, audited and notified, never stored wrongly.
  */
 export async function recordOnlineInvoicePayment(params: {
   companyId: string;
   invoiceId: string;
   amountPence: number;
+  /** The currency Stripe charged in (the session's `currency`). */
+  currency: string;
   checkoutSessionId: string;
   paymentIntentId: string | null;
   paidAt: Date;
-}): Promise<{ recorded: boolean; paymentId?: string }> {
+}): Promise<{ recorded: boolean; paymentId?: string; unsupportedCurrency?: boolean }> {
   const db = getDb();
   const result = await db.transaction(async (tx) => {
     await tx.execute(sql`select id from invoices where id = ${params.invoiceId} for update`);
@@ -66,15 +74,30 @@ export async function recordOnlineInvoicePayment(params: {
     const [existing] = await tx
       .select({ id: payments.id })
       .from(payments)
-      .where(eq(payments.stripeCheckoutSessionId, params.checkoutSessionId))
+      .innerJoin(invoices, eq(invoices.id, payments.invoiceId))
+      .where(
+        and(
+          eq(payments.stripeCheckoutSessionId, params.checkoutSessionId),
+          eq(invoices.companyId, params.companyId),
+        ),
+      )
       .limit(1);
     if (existing) return { recorded: false, paymentId: existing.id, inv };
+
+    // Checked here, at the money boundary, not only when Checkout was created:
+    // an invoice's currency can change, and events can be replayed.
+    // The charge must be in pounds, not merely "not foreign": a missing currency isn't sterling.
+    if (isForeignDocumentCurrency(inv.currency) || params.currency !== STERLING) {
+      return { recorded: false, unsupportedCurrency: true, inv };
+    }
 
     const [payment] = await tx
       .insert(payments)
       .values({
         invoiceId: inv.id,
         amountPence: params.amountPence,
+        // A sterling charge on a sterling invoice (checked above), so these match.
+        amountMinor: params.amountPence,
         method: "card",
         reference: params.paymentIntentId ?? params.checkoutSessionId,
         receivedAt: params.paidAt,
@@ -83,22 +106,76 @@ export async function recordOnlineInvoicePayment(params: {
       .returning({ id: payments.id });
 
     const [paidRow] = await tx
-      .select({ total: sum(payments.amountPence).mapWith(Number) })
+      .select({ total: sum(payments.amountMinor).mapWith(Number) })
       .from(payments)
-      .where(eq(payments.invoiceId, inv.id));
-    const settled = isInvoiceSettled({
-      grossPence: inv.grossPence,
-      paidPence: paidRow?.total ?? 0,
-      ...(await creditAdjustmentForInvoice(tx, params.companyId, inv.id)),
-    });
+      .innerJoin(invoices, eq(invoices.id, payments.invoiceId))
+      .where(and(eq(payments.invoiceId, inv.id), eq(invoices.companyId, params.companyId)));
+    const settled = isInvoiceSettled(
+      settlementMinor(
+        inv,
+        paidRow?.total ?? 0,
+        await creditAdjustmentForInvoice(tx, params.companyId, inv.id),
+      ),
+    );
     if (settled && storedStatus(inv.status) === "sent") {
       await tx
         .update(invoices)
         .set({ status: "paid", paidAt: params.paidAt })
-        .where(eq(invoices.id, inv.id));
+        .where(and(eq(invoices.id, inv.id), eq(invoices.companyId, params.companyId)));
     }
+    await syncFxDifference(tx, params.companyId, inv.id, todayIsoDate(params.paidAt));
     return { recorded: true, paymentId: payment.id, inv };
   });
+
+  if (result.unsupportedCurrency) {
+    const charged = formatMoney(params.amountPence, params.currency);
+    console.error(
+      JSON.stringify({
+        level: "error",
+        msg: "online_payment_currency_unsupported",
+        companyId: params.companyId,
+        invoiceId: params.invoiceId,
+        invoiceCurrency: result.inv.currency,
+        chargedCurrency: params.currency,
+        checkoutSessionId: params.checkoutSessionId,
+      }),
+    );
+    await writeAudit({
+      companyId: params.companyId,
+      actorUserId: null,
+      action: "payment.online_unrecorded",
+      entityType: "invoice",
+      entityId: params.invoiceId,
+      meta: {
+        reason: "currency",
+        invoiceCurrency: result.inv.currency,
+        chargedCurrency: params.currency,
+        amountMinor: params.amountPence,
+        checkoutSessionId: params.checkoutSessionId,
+      },
+    });
+    try {
+      const { notify } = await import("@/lib/notifications");
+      await notify({
+        companyId: params.companyId,
+        type: "invoice.paid",
+        title: `Record the card payment on invoice ${result.inv.number}`,
+        body: `${charged} was paid by card, but Alfa couldn't record it automatically. Check your Stripe dashboard and record it on the invoice.`,
+        href: `/invoices/${params.invoiceId}`,
+        entityType: "invoice",
+        entityId: params.invoiceId,
+      });
+    } catch (err) {
+      console.warn(
+        JSON.stringify({
+          level: "warn",
+          msg: "online_payment_notify_failed",
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
+    return { recorded: false, unsupportedCurrency: true };
+  }
 
   if (result.recorded) {
     await writeAudit({
@@ -174,6 +251,7 @@ async function handleCheckoutSession(
     companyId,
     invoiceId,
     amountPence: session.amount_total,
+    currency: (session.currency ?? "").toUpperCase(),
     checkoutSessionId: session.id,
     paymentIntentId:
       typeof session.payment_intent === "string"

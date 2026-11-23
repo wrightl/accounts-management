@@ -2,17 +2,11 @@ import "server-only";
 import { and, eq, inArray, sum } from "drizzle-orm";
 import type { Database } from "@/db";
 import { creditNotes, invoiceWriteOffs } from "@/db/schema";
+import { NO_CREDIT_ADJUSTMENT, type CreditAdjustment } from "@/lib/invoices/balance";
 
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
-export type CreditAdjustment = {
-  creditedPence: number;
-  refundedPence: number;
-  /** Shortfall written off as bank charges or bad debt. */
-  writtenOffPence: number;
-};
-
-const NONE: CreditAdjustment = { creditedPence: 0, refundedPence: 0, writtenOffPence: 0 };
+export type { CreditAdjustment };
 
 /** Credited, refunded and written-off totals per invoice of the company. */
 export async function creditAdjustmentsByInvoice(
@@ -26,8 +20,10 @@ export async function creditAdjustmentsByInvoice(
     db
       .select({
         invoiceId: creditNotes.invoiceId,
-        credited: sum(creditNotes.grossPence).mapWith(Number),
-        refunded: sum(creditNotes.refundedPence).mapWith(Number),
+        creditedPence: sum(creditNotes.grossPence).mapWith(Number),
+        refundedPence: sum(creditNotes.refundedPence).mapWith(Number),
+        creditedMinor: sum(creditNotes.grossMinor).mapWith(Number),
+        refundedMinor: sum(creditNotes.refundedMinor).mapWith(Number),
       })
       .from(creditNotes)
       .where(
@@ -41,7 +37,8 @@ export async function creditAdjustmentsByInvoice(
     db
       .select({
         invoiceId: invoiceWriteOffs.invoiceId,
-        total: sum(invoiceWriteOffs.amountPence).mapWith(Number),
+        totalPence: sum(invoiceWriteOffs.amountPence).mapWith(Number),
+        totalMinor: sum(invoiceWriteOffs.amountMinor).mapWith(Number),
       })
       .from(invoiceWriteOffs)
       .where(
@@ -55,17 +52,23 @@ export async function creditAdjustmentsByInvoice(
   const entry = (id: string) => {
     let e = map.get(id);
     if (!e) {
-      e = { ...NONE };
+      e = { ...NO_CREDIT_ADJUSTMENT };
       map.set(id, e);
     }
     return e;
   };
   for (const r of creditRows) {
     const e = entry(r.invoiceId);
-    e.creditedPence = r.credited ?? 0;
-    e.refundedPence = r.refunded ?? 0;
+    e.creditedPence = r.creditedPence ?? 0;
+    e.refundedPence = r.refundedPence ?? 0;
+    e.creditedMinor = r.creditedMinor ?? 0;
+    e.refundedMinor = r.refundedMinor ?? 0;
   }
-  for (const r of writeOffRows) entry(r.invoiceId).writtenOffPence = r.total ?? 0;
+  for (const r of writeOffRows) {
+    const e = entry(r.invoiceId);
+    e.writtenOffPence = r.totalPence ?? 0;
+    e.writtenOffMinor = r.totalMinor ?? 0;
+  }
   return map;
 }
 
@@ -76,5 +79,5 @@ export async function creditAdjustmentForInvoice(
   invoiceId: string,
 ): Promise<CreditAdjustment> {
   const map = await creditAdjustmentsByInvoice(db, companyId, [invoiceId]);
-  return map.get(invoiceId) ?? NONE;
+  return map.get(invoiceId) ?? NO_CREDIT_ADJUSTMENT;
 }

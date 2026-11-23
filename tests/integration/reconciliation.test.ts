@@ -20,9 +20,15 @@ import {
 } from "@/lib/bank/queries";
 import { seedCompany } from "@/lib/test/seed-company";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
+import { syncFxDifference } from "@/lib/invoices/fx-difference";
 import { recordInvoicePayment } from "@/lib/payments/record";
 
 vi.mock("server-only", () => ({}));
+vi.mock("@/lib/invoices/fx-difference", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/invoices/fx-difference")>();
+  // Pass-through spy: every payment path must keep exchange differences in step.
+  return { ...actual, syncFxDifference: vi.fn(actual.syncFxDifference) };
+});
 
 let ctx: Awaited<ReturnType<typeof createTestDb>>;
 let db: TestDatabase;
@@ -109,6 +115,12 @@ describe("bank reconciliation integration", () => {
     expect(suggestions).toHaveLength(1);
 
     await confirmMatch(companyId, suggestions[0].matchId);
+    expect(syncFxDifference).toHaveBeenCalledWith(
+      expect.anything(),
+      companyId,
+      invoice.id,
+      tx.bookedAt,
+    );
 
     const paymentRows = await db
       .select()
@@ -183,7 +195,7 @@ describe("bank reconciliation integration", () => {
 
       const detail = await getInvoiceDetail(companyId, invoice.id);
       expect(detail?.invoice.status).toBe("paid");
-      expect(detail?.refundDuePence).toBe(100);
+      expect(detail?.refundDueMinor).toBe(100);
     });
 
     it("links an underpayment and leaves the rest owed", async () => {
@@ -195,7 +207,7 @@ describe("bank reconciliation integration", () => {
 
       const detail = await getInvoiceDetail(companyId, invoice.id);
       expect(detail?.invoice.status).not.toBe("paid");
-      expect(detail?.balancePence).toBe(150);
+      expect(detail?.balanceMinor).toBe(150);
     });
 
     it("refuses a bank payment far above the balance", async () => {
@@ -221,7 +233,7 @@ describe("bank reconciliation integration", () => {
       await confirmMatch(companyId, suggestions[0].matchId);
       const detail = await getInvoiceDetail(companyId, invoice.id);
       expect(detail?.invoice.status).toBe("paid");
-      expect(detail?.refundDuePence).toBe(100);
+      expect(detail?.refundDueMinor).toBe(100);
     });
 
     it("doesn't suggest an overpaid invoice on the date alone", async () => {
