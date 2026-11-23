@@ -1,9 +1,10 @@
 import "server-only";
-import { and, count, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, count, eq, ne, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { bankAccounts, bankSpendingCategories, bankTransactions } from "@/db/schema";
 import { isKnownBankCategory } from "@/lib/bank/categories";
 import { isUniqueViolation } from "@/lib/db-errors";
+import { rowOfCompany } from "@/lib/tenant-scope";
 
 const MAX_CATEGORY_LENGTH = 120;
 
@@ -202,11 +203,6 @@ export async function renameBankSpendingCategory(
     .limit(1);
   if (clash) return { ok: false, error: `A category called "${normalized}" already exists` };
 
-  const companyAccountIds = db
-    .select({ id: bankAccounts.id })
-    .from(bankAccounts)
-    .where(eq(bankAccounts.companyId, companyId));
-
   try {
     await db.transaction(async (tx) => {
       await tx
@@ -218,7 +214,7 @@ export async function renameBankSpendingCategory(
         .set({ spendingCategory: normalized })
         .where(
           and(
-            inArray(bankTransactions.bankAccountId, companyAccountIds),
+            rowOfCompany(bankTransactions.bankAccountId, bankAccounts, companyId),
             sql`lower(${bankTransactions.spendingCategory}) = ${category.name.toLowerCase()}`,
           ),
         );

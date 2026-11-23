@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { expenseReceipts, expenses, reimbursementItems } from "@/db/schema";
+import { expenseReceipts, expenses, reimbursementItems, reimbursements } from "@/db/schema";
+import { rowOfCompany } from "@/lib/tenant-scope";
 import { writeAudit } from "@/lib/audit";
 import { mutate, mutateWide } from "@/lib/mutate";
 import { getStorage } from "@/lib/storage";
@@ -463,7 +464,12 @@ export async function deleteExpense(id: string): Promise<ActionResult> {
       const linked = await db
         .select({ id: reimbursementItems.id })
         .from(reimbursementItems)
-        .where(eq(reimbursementItems.expenseId, id))
+        .where(
+          and(
+            eq(reimbursementItems.expenseId, id),
+            rowOfCompany(reimbursementItems.reimbursementId, reimbursements, companyId),
+          ),
+        )
         .limit(1);
       if (linked[0]) {
         return { ok: false, error: "Expense is part of a reimbursement run" };
@@ -472,7 +478,12 @@ export async function deleteExpense(id: string): Promise<ActionResult> {
       const receipts = await db
         .select()
         .from(expenseReceipts)
-        .where(eq(expenseReceipts.expenseId, id));
+        .where(
+          and(
+            eq(expenseReceipts.expenseId, id),
+            rowOfCompany(expenseReceipts.expenseId, expenses, companyId),
+          ),
+        );
       const storage = getStorage();
       for (const r of receipts) {
         try {
@@ -528,7 +539,12 @@ export async function deleteReceipt(receiptId: string): Promise<ActionResult> {
       } catch {
         /* ignore */
       }
-      await db.delete(expenseReceipts).where(eq(expenseReceipts.id, receipt.id));
+      await db.delete(expenseReceipts).where(
+        and(
+          eq(expenseReceipts.id, receipt.id),
+          rowOfCompany(expenseReceipts.expenseId, expenses, companyId),
+        ),
+      );
 
       revalidatePath(`/expenses/${receipt.expenseId}`);
       return { ok: true };

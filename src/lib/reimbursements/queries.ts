@@ -10,6 +10,7 @@ import {
   reimbursements,
   users,
 } from "@/db/schema";
+import { rowOfCompany } from "@/lib/tenant-scope";
 import { type ListPaging, fetchPage } from "@/lib/list-paging";
 import { formatExpenseAmount, formatGBP } from "@/lib/money";
 import { sortExpr, sortRank, sortText } from "@/lib/sql-paging";
@@ -193,7 +194,12 @@ export async function getReimbursementDetail(
     })
     .from(reimbursementItems)
     .innerJoin(expenses, eq(reimbursementItems.expenseId, expenses.id))
-    .where(eq(reimbursementItems.reimbursementId, id));
+    .where(
+      and(
+        eq(reimbursementItems.reimbursementId, id),
+        rowOfCompany(reimbursementItems.reimbursementId, reimbursements, companyId),
+      ),
+    );
 
   return {
     ...run,

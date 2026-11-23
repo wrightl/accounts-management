@@ -7,6 +7,7 @@ import {
   reimbursementItems,
   reimbursements,
 } from "@/db/schema";
+import { rowOfCompany } from "@/lib/tenant-scope";
 import { writeAudit } from "@/lib/audit";
 import { mutate } from "@/lib/mutate";
 import { canEditReimbursement } from "@/lib/reimbursements/status";
@@ -79,7 +80,12 @@ export async function createReimbursementRun(
           const alreadyLinked = await tx
             .select({ id: reimbursementItems.id })
             .from(reimbursementItems)
-            .where(inArray(reimbursementItems.expenseId, ids))
+            .where(
+              and(
+                inArray(reimbursementItems.expenseId, ids),
+                rowOfCompany(reimbursementItems.reimbursementId, reimbursements, companyId),
+              ),
+            )
             .limit(1);
           if (alreadyLinked[0]) {
             throw new ReimburseError("An expense is already on a reimbursement run");
@@ -197,6 +203,7 @@ export async function updateReimbursementRun(
               and(
                 inArray(reimbursementItems.expenseId, ids),
                 ne(reimbursementItems.reimbursementId, id),
+                rowOfCompany(reimbursementItems.reimbursementId, reimbursements, companyId),
               ),
             )
             .limit(1);
@@ -208,7 +215,12 @@ export async function updateReimbursementRun(
 
           await tx
             .delete(reimbursementItems)
-            .where(eq(reimbursementItems.reimbursementId, id));
+            .where(
+              and(
+                eq(reimbursementItems.reimbursementId, id),
+                rowOfCompany(reimbursementItems.reimbursementId, reimbursements, companyId),
+              ),
+            );
           await tx.insert(reimbursementItems).values(
             selected.map((e) => ({
               reimbursementId: id,

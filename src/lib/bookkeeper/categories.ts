@@ -4,6 +4,7 @@ import { z } from "zod";
 import { and, desc, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { bankAccounts, bankTransactions } from "@/db/schema";
+import { rowOfCompany } from "@/lib/tenant-scope";
 import { BULK_MODEL, aiGatewayConfigured } from "@/lib/ai/models";
 import { BANK_SPENDING_CATEGORIES, formatBankCategory } from "@/lib/bank/categories";
 import { listBankSpendingCategoryNames } from "@/lib/bank/spending-categories";
@@ -21,7 +22,7 @@ async function companyAccountIds(companyId: string) {
 }
 
 /** Uncategorised money out with no suggestion yet and none dismissed. */
-async function rowsNeedingSuggestions(accountIds: string[]) {
+async function rowsNeedingSuggestions(companyId: string, accountIds: string[]) {
   if (accountIds.length === 0) return [];
   return getDb()
     .select({
@@ -40,12 +41,13 @@ async function rowsNeedingSuggestions(accountIds: string[]) {
         isNull(bankTransactions.spendingCategory),
         isNull(bankTransactions.suggestedCategory),
         eq(bankTransactions.categorySuggestionDismissed, false),
+        rowOfCompany(bankTransactions.bankAccountId, bankAccounts, companyId),
       ),
     )
     .orderBy(desc(bankTransactions.bookedAt));
 }
 
-async function categorisedHistory(accountIds: string[]) {
+async function categorisedHistory(companyId: string, accountIds: string[]) {
   if (accountIds.length === 0) return [];
   return getDb()
     .select({
@@ -58,6 +60,7 @@ async function categorisedHistory(accountIds: string[]) {
         inArray(bankTransactions.bankAccountId, accountIds),
         isNotNull(bankTransactions.spendingCategory),
         lt(bankTransactions.amountPence, 0),
+        rowOfCompany(bankTransactions.bankAccountId, bankAccounts, companyId),
       ),
     );
 }
@@ -123,8 +126,8 @@ export async function suggestBankCategories(companyId: string): Promise<{
 }> {
   const accountIds = (await companyAccountIds(companyId)).map((a) => a.id);
   const [rows, history, custom] = await Promise.all([
-    rowsNeedingSuggestions(accountIds),
-    categorisedHistory(accountIds),
+    rowsNeedingSuggestions(companyId, accountIds),
+    categorisedHistory(companyId, accountIds),
     listBankSpendingCategoryNames(companyId),
   ]);
   if (rows.length === 0) return { fromHistory: 0, fromAi: 0, aiUnavailable: false };
@@ -146,7 +149,12 @@ export async function suggestBankCategories(companyId: string): Promise<{
         suggestedCategoryReason: hit.reason,
         suggestedCategorySource: "history",
       })
-      .where(eq(bankTransactions.id, row.id));
+      .where(
+        and(
+          eq(bankTransactions.id, row.id),
+          rowOfCompany(bankTransactions.bankAccountId, bankAccounts, companyId),
+        ),
+      );
     fromHistory++;
   }
 
@@ -167,7 +175,13 @@ export async function suggestBankCategories(companyId: string): Promise<{
         suggestedCategoryReason: s.reason,
         suggestedCategorySource: "ai",
       })
-      .where(and(eq(bankTransactions.id, s.id), isNull(bankTransactions.spendingCategory)));
+      .where(
+        and(
+          eq(bankTransactions.id, s.id),
+          isNull(bankTransactions.spendingCategory),
+          rowOfCompany(bankTransactions.bankAccountId, bankAccounts, companyId),
+        ),
+      );
   }
   return { fromHistory, fromAi: suggestions.length, aiUnavailable: false };
 }

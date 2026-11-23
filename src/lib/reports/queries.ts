@@ -15,6 +15,7 @@ import {
   reconciliationMatches,
   invoiceWriteOffs,
 } from "@/db/schema";
+import { rowOfCompany } from "@/lib/tenant-scope";
 import { clientDisplayNameSql } from "@/lib/clients/sql";
 import { defaultReportPeriod as fyDefaultReportPeriod } from "@/lib/dates";
 import { type ListPaging, fetchPage } from "@/lib/list-paging";
@@ -281,9 +282,12 @@ export async function getAgedReceivables(companyId: string) {
       })
       .from(payments)
       .where(
-        inArray(
-          payments.invoiceId,
-          rows.map((r) => r.id),
+        and(
+          inArray(
+            payments.invoiceId,
+            rows.map((r) => r.id),
+          ),
+          rowOfCompany(payments.invoiceId, invoices, companyId),
         ),
       )
       .groupBy(payments.invoiceId);

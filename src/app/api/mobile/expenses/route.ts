@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
       page,
     );
     const [receipts, paymentSources] = await Promise.all([
-      receiptsByExpense(rows.map((row) => row.id)),
+      receiptsByExpense(user.companyId, rows.map((row) => row.id)),
       pendingPaymentSources(user.companyId, rows),
     ]);
 

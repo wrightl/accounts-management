@@ -2,6 +2,7 @@ import "server-only";
 import { and, asc, count, desc, eq, type SQL } from "drizzle-orm";
 import { getDb } from "@/db";
 import { clients, quoteLineItems, quotePaymentMilestones, quoteVersions, quotes, users } from "@/db/schema";
+import { rowOfCompany } from "@/lib/tenant-scope";
 import { clientDisplayNameSql } from "@/lib/clients/sql";
 import { type ListPaging, fetchPage } from "@/lib/list-paging";
 import { formatGBP } from "@/lib/money";
@@ -137,13 +138,23 @@ export async function getQuoteDetail(companyId: string, id: string) {
   const lines = await db
     .select()
     .from(quoteLineItems)
-    .where(eq(quoteLineItems.quoteId, id))
+    .where(
+      and(
+        eq(quoteLineItems.quoteId, id),
+        rowOfCompany(quoteLineItems.quoteId, quotes, companyId),
+      ),
+    )
     .orderBy(quoteLineItems.position);
 
   const milestones = await db
     .select()
     .from(quotePaymentMilestones)
-    .where(eq(quotePaymentMilestones.quoteId, id))
+    .where(
+      and(
+        eq(quotePaymentMilestones.quoteId, id),
+        rowOfCompany(quotePaymentMilestones.quoteId, quotes, companyId),
+      ),
+    )
     .orderBy(quotePaymentMilestones.position);
 
   const quote = rows[0].quote;
@@ -176,7 +187,12 @@ export async function listQuoteVersionHistory(companyId: string, quoteId: string
     })
     .from(quoteVersions)
     .leftJoin(users, eq(quoteVersions.createdByUserId, users.id))
-    .where(eq(quoteVersions.quoteId, quoteId))
+    .where(
+      and(
+        eq(quoteVersions.quoteId, quoteId),
+        rowOfCompany(quoteVersions.quoteId, quotes, companyId),
+      ),
+    )
     .orderBy(desc(quoteVersions.version));
 
   if (rows.length === 0) {
@@ -209,7 +225,12 @@ export async function listQuoteVersionHistory(companyId: string, quoteId: string
       })
       .from(quoteVersions)
       .leftJoin(users, eq(quoteVersions.createdByUserId, users.id))
-      .where(eq(quoteVersions.quoteId, quoteId))
+      .where(
+        and(
+          eq(quoteVersions.quoteId, quoteId),
+          rowOfCompany(quoteVersions.quoteId, quotes, companyId),
+        ),
+      )
       .orderBy(desc(quoteVersions.version));
   }
 
@@ -222,6 +243,7 @@ export async function listQuoteVersionHistory(companyId: string, quoteId: string
 }
 
 export async function getQuoteVersionSnapshot(
+  companyId: string,
   quoteId: string,
   version: number,
 ): Promise<QuoteSnapshot | null> {
@@ -229,7 +251,13 @@ export async function getQuoteVersionSnapshot(
   const [row] = await db
     .select()
     .from(quoteVersions)
-    .where(and(eq(quoteVersions.quoteId, quoteId), eq(quoteVersions.version, version)))
+    .where(
+      and(
+        eq(quoteVersions.quoteId, quoteId),
+        eq(quoteVersions.version, version),
+        rowOfCompany(quoteVersions.quoteId, quotes, companyId),
+      ),
+    )
     .limit(1);
   if (!row) return null;
 
@@ -262,7 +290,7 @@ export async function getQuoteVersionDetail(
     };
   }
 
-  const snapshot = await getQuoteVersionSnapshot(quoteId, version);
+  const snapshot = await getQuoteVersionSnapshot(companyId, quoteId, version);
   if (!snapshot) return null;
 
   const db = getDb();

@@ -2,6 +2,7 @@ import "server-only";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { expenseReceipts, expenses } from "@/db/schema";
+import { rowOfCompany } from "@/lib/tenant-scope";
 import { writeAudit } from "@/lib/audit";
 import { refreshExpenseBankSuggestion } from "@/lib/bank/expense-match";
 import { sterlingFromForeign } from "@/lib/expenses/convert";
@@ -198,7 +199,12 @@ export async function rejectPendingExpense(
   const receipts = await db
     .select()
     .from(expenseReceipts)
-    .where(eq(expenseReceipts.expenseId, id));
+    .where(
+      and(
+        eq(expenseReceipts.expenseId, id),
+        rowOfCompany(expenseReceipts.expenseId, expenses, companyId),
+      ),
+    );
   const storage = getStorage();
   for (const r of receipts) {
     try {

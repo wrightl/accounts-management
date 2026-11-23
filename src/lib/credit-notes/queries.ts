@@ -2,6 +2,7 @@ import "server-only";
 import { and, asc, count, desc, eq, type SQL } from "drizzle-orm";
 import { getDb } from "@/db";
 import { clients, creditNoteLineItems, creditNotes, invoices } from "@/db/schema";
+import { rowOfCompany } from "@/lib/tenant-scope";
 import { clientDisplayNameSql } from "@/lib/clients/sql";
 import { creditNoteInPack, type RecordScope } from "@/lib/accountant/record-scope";
 import { type ListPaging, fetchPage } from "@/lib/list-paging";
@@ -117,7 +118,12 @@ export async function getCreditNoteDetail(
   const lines = await db
     .select()
     .from(creditNoteLineItems)
-    .where(eq(creditNoteLineItems.creditNoteId, id))
+    .where(
+      and(
+        eq(creditNoteLineItems.creditNoteId, id),
+        rowOfCompany(creditNoteLineItems.creditNoteId, creditNotes, companyId),
+      ),
+    )
     .orderBy(creditNoteLineItems.position);
 
   const { creditNote, invoice, client } = rows[0];

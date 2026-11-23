@@ -2,6 +2,7 @@ import "server-only";
 import { and, asc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { companies, dividendDeclarations, dividendPayouts } from "@/db/schema";
+import { rowOfCompany } from "@/lib/tenant-scope";
 import { splitDirectorNames } from "@/lib/companies-house/schema";
 import { totalSharesFromPayouts, type DividendPaperwork } from "@/lib/dividends/paperwork";
 
@@ -33,7 +34,12 @@ export async function getDividendPaperwork(
       amountPence: dividendPayouts.amountPence,
     })
     .from(dividendPayouts)
-    .where(eq(dividendPayouts.declarationId, declarationId))
+    .where(
+      and(
+        eq(dividendPayouts.declarationId, declarationId),
+        rowOfCompany(dividendPayouts.declarationId, dividendDeclarations, companyId),
+      ),
+    )
     .orderBy(asc(dividendPayouts.shareholderName));
 
   const d = row.declaration;

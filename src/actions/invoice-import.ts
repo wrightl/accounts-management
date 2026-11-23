@@ -22,6 +22,7 @@ import {
   reconciliationMatches,
   sendJobs,
 } from "@/db/schema";
+import { rowOfCompany } from "@/lib/tenant-scope";
 import type { ActionResult } from "@/actions/result";
 import { todayIsoDate } from "@/lib/dates";
 import { advanceInvoiceSequences } from "@/lib/invoices/allocate";
@@ -784,7 +785,12 @@ export async function undoInvoiceImport(batchId: string): Promise<UndoResult> {
         const [paymentRows, creditRows, matchRows, jobRows, claimRows] = none
           ? [[], [], [], [], []]
           : await Promise.all([
-              tx.select({ id: payments.id, invoiceId: payments.invoiceId, method: payments.method, receivedAt: payments.receivedAt }).from(payments).where(inArray(payments.invoiceId, ids)),
+              tx.select({ id: payments.id, invoiceId: payments.invoiceId, method: payments.method, receivedAt: payments.receivedAt }).from(payments).where(
+                and(
+                  inArray(payments.invoiceId, ids),
+                  rowOfCompany(payments.invoiceId, invoices, companyId),
+                ),
+              ),
               tx.select({ invoiceId: creditNotes.invoiceId }).from(creditNotes).where(inArray(creditNotes.invoiceId, ids)),
               tx
                 .select({

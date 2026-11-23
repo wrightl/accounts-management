@@ -4,6 +4,7 @@ import { z } from "zod";
 import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { auditLog, companies, creditNotes, invoices, payments } from "@/db/schema";
+import { rowOfCompany } from "@/lib/tenant-scope";
 import { todayIsoDate } from "@/lib/dates";
 import {
   cutoverImpact,
@@ -76,7 +77,12 @@ async function loadImpact(
         date: sql<string>`to_char(${payments.receivedAt} AT TIME ZONE 'Europe/London', 'YYYY-MM-DD')`,
       })
       .from(payments)
-      .where(inArray(payments.invoiceId, ids)),
+      .where(
+        and(
+          inArray(payments.invoiceId, ids),
+          rowOfCompany(payments.invoiceId, invoices, companyId),
+        ),
+      ),
     db
       .select({
         invoiceId: creditNotes.invoiceId,

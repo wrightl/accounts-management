@@ -1,6 +1,6 @@
 import "server-only";
 import { sterlingTotals } from "@/lib/currency";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   orderLineItems,
   orderPaymentMilestones,
@@ -8,6 +8,7 @@ import {
   quotePaymentMilestones,
   quotes,
 } from "@/db/schema";
+import { rowOfCompany } from "@/lib/tenant-scope";
 import type { Tx } from "@/lib/invoices/allocate";
 import { allocateOrderNumber } from "@/lib/invoices/allocate";
 import { todayIsoDate } from "@/lib/invoices/status";
@@ -94,12 +95,24 @@ export async function createOrderFromQuote(
 
 export async function replaceQuotePaymentMilestones(
   tx: Tx,
+  companyId: string,
   quoteId: string,
   milestones: PaymentMilestoneInput[],
 ) {
+  // The insert below has no WHERE, so check the quote is the company's first.
+  const [own] = await tx
+    .select({ id: quotes.id })
+    .from(quotes)
+    .where(and(eq(quotes.id, quoteId), eq(quotes.companyId, companyId)));
+  if (!own) throw new Error("Quote not found");
   await tx
     .delete(quotePaymentMilestones)
-    .where(eq(quotePaymentMilestones.quoteId, quoteId));
+    .where(
+      and(
+        eq(quotePaymentMilestones.quoteId, quoteId),
+        rowOfCompany(quotePaymentMilestones.quoteId, quotes, companyId),
+      ),
+    );
   if (milestones.length === 0) return;
   await tx
     .insert(quotePaymentMilestones)
@@ -108,12 +121,24 @@ export async function replaceQuotePaymentMilestones(
 
 export async function replaceOrderPaymentMilestones(
   tx: Tx,
+  companyId: string,
   orderId: string,
   milestones: PaymentMilestoneInput[],
 ) {
+  // The insert below has no WHERE, so check the order is the company's first.
+  const [own] = await tx
+    .select({ id: orders.id })
+    .from(orders)
+    .where(and(eq(orders.id, orderId), eq(orders.companyId, companyId)));
+  if (!own) throw new Error("Order not found");
   await tx
     .delete(orderPaymentMilestones)
-    .where(eq(orderPaymentMilestones.orderId, orderId));
+    .where(
+      and(
+        eq(orderPaymentMilestones.orderId, orderId),
+        rowOfCompany(orderPaymentMilestones.orderId, orders, companyId),
+      ),
+    );
   if (milestones.length === 0) return;
   await tx
     .insert(orderPaymentMilestones)
