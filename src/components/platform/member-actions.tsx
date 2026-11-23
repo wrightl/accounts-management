@@ -65,7 +65,7 @@ export function MemberActions({
             () => setRoleValue(previous),
           );
         }}
-        className="rounded-lg border border-border bg-white px-2 py-1 text-xs"
+        className="rounded-xl border border-border bg-white px-2 py-1 text-xs"
       >
         {TENANT_ROLES.map((r) => (
           <option key={r} value={r}>

@@ -109,7 +109,7 @@ export function EditReimbursementForm({
             No reimbursable expenses available for this founder.
           </p>
         ) : (
-          <ul className="mt-2 max-h-64 space-y-2 overflow-y-auto rounded-lg border border-border p-3">
+          <ul className="mt-2 max-h-64 space-y-2 overflow-y-auto rounded-xl border border-border p-3">
             {expenses.map((e) => (
               <li key={e.id} className="flex items-center gap-3 text-sm">
                 <input

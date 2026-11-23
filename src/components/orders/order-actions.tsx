@@ -145,7 +145,7 @@ export function OrderActions({
             {availableMilestones.map((m) => (
               <label
                 key={m.id}
-                className="flex cursor-pointer items-start gap-2 rounded-lg border border-border p-3 has-[:checked]:border-navy has-[:checked]:bg-wash/50"
+                className="flex cursor-pointer items-start gap-2 rounded-xl border border-border p-3 has-[:checked]:border-navy has-[:checked]:bg-wash/50"
               >
                 <input
                   type="radio"
@@ -171,7 +171,7 @@ export function OrderActions({
               </label>
             ))}
 
-            <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border p-3 has-[:checked]:border-navy has-[:checked]:bg-wash/50">
+            <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-border p-3 has-[:checked]:border-navy has-[:checked]:bg-wash/50">
               <input
                 type="radio"
                 name="invoice-mode"
@@ -186,7 +186,7 @@ export function OrderActions({
               </span>
             </label>
 
-            <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border p-3 has-[:checked]:border-navy has-[:checked]:bg-wash/50">
+            <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-border p-3 has-[:checked]:border-navy has-[:checked]:bg-wash/50">
               <input
                 type="radio"
                 name="invoice-mode"

@@ -138,7 +138,7 @@ export function CreditNoteActions({
           ref={formRef}
           noValidate
           onSubmit={preventResetSubmit(onRefund)}
-          className="max-w-xl space-y-3 rounded-lg border border-border bg-surface p-4"
+          className="max-w-xl space-y-3 rounded-xl border border-border bg-surface p-4"
         >
           <p className="text-sm text-muted">
             Record the money you paid back to the client for this credit.

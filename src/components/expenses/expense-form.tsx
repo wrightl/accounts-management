@@ -644,7 +644,7 @@ export function ExpenseForm({
   return (
     <form ref={formRef} noValidate onSubmit={preventResetSubmit(onSubmit)} className={`${PAGE_WIDTH.reading} space-y-4`}>
       {mode === "create" && fromBankTransaction && (
-        <div className="rounded-lg border border-border bg-wash/50 px-4 py-3 text-sm">
+        <div className="rounded-xl border border-border bg-wash/50 px-4 py-3 text-sm">
           <p className="font-medium">From bank transaction</p>
           <p className="mt-0.5 text-muted">
             {fromBankTransaction.summary}. Saving links the expense to this payment.
@@ -726,7 +726,7 @@ export function ExpenseForm({
       </div>
 
       {category === "Travel" && !isEmailSubmission && !fromBankTransaction && !linkedToBank && (
-        <div className="space-y-3 rounded-lg border border-border p-4">
+        <div className="space-y-3 rounded-xl border border-border p-4">
           <div className="flex items-center gap-2">
             <input
               id="useMileage"

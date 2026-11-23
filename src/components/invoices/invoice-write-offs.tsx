@@ -142,7 +142,7 @@ export function InvoiceWriteOffs({
                 name="kind"
                 defaultValue="bank_charges"
                 disabled={pending}
-                className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm"
               >
                 <option value="bank_charges">Bank charges (the client&apos;s bank kept a fee)</option>
                 <option value="bad_debt">Bad debt (the rest won&apos;t be paid)</option>

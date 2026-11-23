@@ -54,7 +54,7 @@ export default async function InboundEmailPage({
       />
 
       {issueCount > 0 ? (
-        <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
+        <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
           <span className="font-medium text-destructive">{issueCount}</span> job
           {issueCount === 1 ? "" : "s"} need attention — usually attachment download or OCR
           failures. Retry after fixing network or Resend configuration.

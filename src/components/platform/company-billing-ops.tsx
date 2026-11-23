@@ -195,7 +195,7 @@ export function CompanyBillingOpsForm({
               <span className="text-muted">Note</span>
               <input
                 name="note"
-                className="mt-1 w-full rounded-lg border border-border px-3 py-2"
+                className="mt-1 w-full rounded-xl border border-border px-3 py-2"
                 placeholder="Optional reason"
               />
             </label>
@@ -204,7 +204,7 @@ export function CompanyBillingOpsForm({
               <input
                 type="date"
                 name="expiresAt"
-                className="mt-1 w-full rounded-lg border border-border px-3 py-2"
+                className="mt-1 w-full rounded-xl border border-border px-3 py-2"
               />
             </label>
             <button
@@ -240,7 +240,7 @@ export function CompanyBillingOpsForm({
                 min={1}
                 max={90}
                 defaultValue={7}
-                className="mt-1 w-24 rounded-lg border border-border px-3 py-2"
+                className="mt-1 w-24 rounded-xl border border-border px-3 py-2"
               />
             </label>
             <button

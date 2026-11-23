@@ -163,7 +163,7 @@ export default async function ExpensesPage({
       ) : null}
 
       {scope === "all" && reimbSummary.count > 0 && (
-        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-wash/50 px-4 py-3 text-sm">
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-wash/50 px-4 py-3 text-sm">
           <span>
             <span className="font-medium text-foreground">{reimbSummary.count}</span>{" "}
             reimbursable expenses totalling{" "}

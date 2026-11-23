@@ -47,6 +47,8 @@
  *   rounded-full  buttons, chips, badges, pills
  *   rounded-xl    inputs, callouts, menus, small panels inside a card
  *   rounded-2xl   cards and dialogs
+ * Tiny controls (kbd hints, icon hit areas, colour swatches) may use plain
+ * `rounded`.
  */
 
 @theme inline {

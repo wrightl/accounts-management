@@ -222,7 +222,7 @@ export function DocumentTemplates({
                       onChange={() => choose({ type: "standard", key: template.key })}
                       className="sr-only"
                     />
-                    <span className="block overflow-hidden rounded-lg border border-border bg-white">
+                    <span className="block overflow-hidden rounded-xl border border-border bg-white">
                       <Image
                         src={templateThumbnail(template.key, kind)}
                         alt={`${template.name} ${label} with sample details`}
@@ -263,7 +263,7 @@ export function DocumentTemplates({
                       onChange={() => choose({ type: "custom", id: template.id })}
                       className="sr-only"
                     />
-                    <span className="block overflow-hidden rounded-lg border border-border bg-white">
+                    <span className="block overflow-hidden rounded-xl border border-border bg-white">
                       <DesignThumbnail
                         design={template.design}
                         data={sampleData[kind]}

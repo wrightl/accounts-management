@@ -97,7 +97,7 @@ export function AttentionPanel({
                 <li key={invoice.id}>
                   <Link
                     href={`/invoices/${invoice.id}`}
-                    className="group block rounded-lg border border-border px-3 py-2 transition-colors hover:bg-wash/30"
+                    className="group block rounded-xl border border-border px-3 py-2 transition-colors hover:bg-wash/30"
                   >
                     <span className="font-medium group-hover:underline">
                       {invoice.number}
@@ -128,7 +128,7 @@ export function AttentionPanel({
                 <li key={quote.id}>
                   <Link
                     href={`/quotes/${quote.id}`}
-                    className="group block rounded-lg border border-border px-3 py-2 transition-colors hover:bg-wash/30"
+                    className="group block rounded-xl border border-border px-3 py-2 transition-colors hover:bg-wash/30"
                   >
                     <span className="font-medium group-hover:underline">
                       {quote.number}
@@ -156,7 +156,7 @@ export function AttentionPanel({
           >
             <Link
               href="/transactions"
-              className="block rounded-lg border border-border px-3 py-2 text-sm transition-colors hover:bg-wash/30"
+              className="block rounded-xl border border-border px-3 py-2 text-sm transition-colors hover:bg-wash/30"
             >
               <span className="font-display text-2xl tabular-nums text-navy">
                 {items.unreconciledCount}
@@ -183,7 +183,7 @@ export function AttentionPanel({
                 <li key={expense.id}>
                   <Link
                     href={`/expenses/${expense.id}`}
-                    className="group block rounded-lg border border-border px-3 py-2 transition-colors hover:bg-wash/30"
+                    className="group block rounded-xl border border-border px-3 py-2 transition-colors hover:bg-wash/30"
                   >
                     <span className="font-medium group-hover:underline">
                       {expense.description}
@@ -213,7 +213,7 @@ export function AttentionPanel({
                   <li key={job.id}>
                     <Link
                       href={`/inbound-email/${job.id}`}
-                      className="group block rounded-lg border border-destructive/30 px-3 py-2 transition-colors hover:bg-destructive/5"
+                      className="group block rounded-xl border border-destructive/30 px-3 py-2 transition-colors hover:bg-destructive/5"
                     >
                       <span className="font-medium group-hover:underline">
                         {job.subject || "(no subject)"}
@@ -246,20 +246,20 @@ export function AttentionPanel({
 
       {/* Compact secondary founder / ops stats */}
       <div className="mt-5 grid grid-cols-2 gap-2 border-t border-border pt-4 text-xs">
-        <Link href="/reimbursements" className="rounded-lg bg-wash/50 px-2.5 py-2 hover:bg-wash">
+        <Link href="/reimbursements" className="rounded-xl bg-wash/50 px-2.5 py-2 hover:bg-wash">
           <span className="block text-muted">Owed to me</span>
           <span className="mt-0.5 block tabular-nums font-medium">
             {items.owedToMeFormatted}
           </span>
         </Link>
-        <Link href="/expenses" className="rounded-lg bg-wash/50 px-2.5 py-2 hover:bg-wash">
+        <Link href="/expenses" className="rounded-xl bg-wash/50 px-2.5 py-2 hover:bg-wash">
           <span className="block text-muted">Reimbursable</span>
           <span className="mt-0.5 block tabular-nums font-medium">
             {items.reimbursableFormatted}
           </span>
         </Link>
         {items.unbilledFormatted !== "£0.00" ? (
-          <Link href="/orders" className="rounded-lg bg-wash/50 px-2.5 py-2 hover:bg-wash">
+          <Link href="/orders" className="rounded-xl bg-wash/50 px-2.5 py-2 hover:bg-wash">
             <span className="block text-muted">Unbilled orders</span>
             <span className="mt-0.5 block tabular-nums font-medium">
               {items.unbilledFormatted}
@@ -267,7 +267,7 @@ export function AttentionPanel({
           </Link>
         ) : null}
         {items.recurringUpcomingFormatted !== "£0.00" ? (
-          <Link href="/recurring-invoices" className="rounded-lg bg-wash/50 px-2.5 py-2 hover:bg-wash">
+          <Link href="/recurring-invoices" className="rounded-xl bg-wash/50 px-2.5 py-2 hover:bg-wash">
             <span className="block text-muted">Recurring / month</span>
             <span className="mt-0.5 block tabular-nums font-medium">
               {items.recurringUpcomingFormatted}
@@ -275,7 +275,7 @@ export function AttentionPanel({
           </Link>
         ) : null}
         {items.winRatePercent != null ? (
-          <div className="rounded-lg bg-wash/50 px-2.5 py-2">
+          <div className="rounded-xl bg-wash/50 px-2.5 py-2">
             <span className="block text-muted">Quote win rate</span>
             <span className="mt-0.5 block tabular-nums font-medium">
               {items.winRatePercent}%
@@ -283,7 +283,7 @@ export function AttentionPanel({
           </div>
         ) : null}
         {items.dsoDays != null ? (
-          <div className="rounded-lg bg-wash/50 px-2.5 py-2">
+          <div className="rounded-xl bg-wash/50 px-2.5 py-2">
             <span className="block text-muted">Avg DSO</span>
             <span className="mt-0.5 block tabular-nums font-medium">
               {items.dsoDays} days

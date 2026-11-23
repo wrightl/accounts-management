@@ -16,7 +16,7 @@ export function ExpandableText({
       <summary className={`cursor-pointer truncate ${font}`} title={text}>
         {text}
       </summary>
-      <pre className="mt-1 whitespace-pre-wrap break-words rounded-lg bg-wash p-2 font-mono">
+      <pre className="mt-1 whitespace-pre-wrap break-words rounded-xl bg-wash p-2 font-mono">
         {text}
       </pre>
     </details>

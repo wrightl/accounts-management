@@ -52,7 +52,7 @@ export default async function PlatformLogsPage({
         <select
           name="level"
           defaultValue={params.level ?? "all"}
-          className="rounded-lg border border-border bg-white px-3 py-2 text-sm"
+          className="rounded-xl border border-border bg-white px-3 py-2 text-sm"
         >
           <option value="all">Errors + warnings</option>
           <option value="error">Errors only</option>
@@ -63,13 +63,13 @@ export default async function PlatformLogsPage({
           name="source"
           defaultValue={params.source ?? ""}
           placeholder="Source contains…"
-          className="rounded-lg border border-border px-3 py-2 text-sm"
+          className="rounded-xl border border-border px-3 py-2 text-sm"
         />
         <input
           name="q"
           defaultValue={params.q ?? ""}
           placeholder="Message contains…"
-          className="rounded-lg border border-border px-3 py-2 text-sm"
+          className="rounded-xl border border-border px-3 py-2 text-sm"
         />
         <label className="flex items-center gap-2 text-sm text-muted">
           Last
@@ -79,7 +79,7 @@ export default async function PlatformLogsPage({
             min={1}
             max={168}
             defaultValue={hours}
-            className="w-20 rounded-lg border border-border px-3 py-2 text-sm text-foreground"
+            className="w-20 rounded-xl border border-border px-3 py-2 text-sm text-foreground"
           />
           hours
         </label>

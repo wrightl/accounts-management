@@ -118,7 +118,7 @@ export function InvoiceActions({
         <Label htmlFor={id}>{label}</Label>
         <select
           id={id}
-          className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+          className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm"
           value={placeholder === null ? (selectedMatchId ?? "") : ""}
           onChange={(e) => chooseReceipt(e.target.value)}
         >
@@ -266,7 +266,7 @@ export function InvoiceActions({
           {loadingMatches ? (
             <p className="text-sm text-muted">Searching bank transactions…</p>
           ) : selectedMatch && !manualEntry ? (
-            <div className="rounded-lg border border-border bg-wash/40 p-3">
+            <div className="rounded-xl border border-border bg-wash/40 p-3">
               <p className="text-sm font-medium">
                 {selectedIsSuggested ? "Identified bank payment" : "Chosen bank payment"}
               </p>

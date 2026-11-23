@@ -253,7 +253,7 @@ export function InvoiceDraftEditor({
         <div className="space-y-3">
           <p className="font-medium">Lines</p>
           {lines.map((line, i) => (
-            <div key={i} className="space-y-2 rounded-lg border border-border p-3">
+            <div key={i} className="space-y-2 rounded-xl border border-border p-3">
               <div>
                 <Label htmlFor={`${draftId}-line-${i}-description`}>Line {i + 1} description</Label>
                 <Input

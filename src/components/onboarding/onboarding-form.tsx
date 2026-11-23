@@ -471,7 +471,7 @@ export function OnboardingForm({
           <img
             src={logoPreview}
             alt="Company logo preview"
-            className="max-h-24 rounded-md border border-border bg-surface object-contain p-2"
+            className="max-h-24 rounded-xl border border-border bg-surface object-contain p-2"
           />
         ) : null}
         <Input

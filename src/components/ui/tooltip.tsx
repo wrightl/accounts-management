@@ -117,7 +117,7 @@ export function Tooltip({
                 left: position?.left ?? 0,
                 visibility: position ? "visible" : "hidden",
               }}
-              className="fixed z-50 max-h-80 w-max max-w-xs overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-surface px-3 py-2 text-left text-sm font-normal normal-case tracking-normal text-foreground shadow-lg"
+              className="fixed z-50 max-h-80 w-max max-w-xs overflow-y-auto whitespace-pre-wrap break-words rounded-xl border border-border bg-surface px-3 py-2 text-left text-sm font-normal normal-case tracking-normal text-foreground shadow-lg"
             >
               {content}
             </div>,

@@ -102,7 +102,7 @@ export function PaymentScheduleEditor({
       {milestones.map((milestone, index) => (
         <div
           key={milestone.key}
-          className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-2"
+          className="grid gap-2 rounded-xl border border-border p-3 sm:grid-cols-2"
         >
           <div className="sm:col-span-2">
             <Label>Label</Label>

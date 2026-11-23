@@ -44,7 +44,7 @@ export function SubscriptionTiersForm({ tiers }: { tiers: Tier[] }) {
                 min={0}
                 max={1000}
                 defaultValue={tier.maxUsers}
-                className="mt-1 w-full rounded-lg border border-border px-3 py-2"
+                className="mt-1 w-full rounded-xl border border-border px-3 py-2"
               />
             </label>
             <div className="space-y-2 text-sm">

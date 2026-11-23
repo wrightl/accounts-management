@@ -45,7 +45,7 @@ export function PlatformShell({
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "whitespace-nowrap rounded-lg px-3 py-2 text-sm transition-colors",
+                  "whitespace-nowrap rounded-xl px-3 py-2 text-sm transition-colors",
                   active
                     ? "bg-white/15 text-white"
                     : "text-white/70 hover:bg-white/10 hover:text-white",
@@ -62,7 +62,7 @@ export function PlatformShell({
             aria-current={profileActive ? "page" : undefined}
             title={userName ?? "Profile"}
             className={cn(
-              "flex items-center gap-3 rounded-lg px-2 py-2 transition-colors",
+              "flex items-center gap-3 rounded-xl px-2 py-2 transition-colors",
               profileActive
                 ? "bg-white/15 text-white"
                 : "text-white/80 hover:bg-white/10 hover:text-white",

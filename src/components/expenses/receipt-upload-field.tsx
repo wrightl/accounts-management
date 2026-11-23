@@ -105,7 +105,7 @@ export function ReceiptUploadField({
   }
 
   return (
-    <div className="space-y-3 rounded-lg border border-border p-4">
+    <div className="space-y-3 rounded-xl border border-border p-4">
       <div>
         <h2 className="font-display text-lg font-semibold">Receipt</h2>
         <p className="mt-1 text-xs text-muted">
@@ -119,7 +119,7 @@ export function ReceiptUploadField({
         <img
           src={previewUrl}
           alt="Receipt preview"
-          className="max-h-40 rounded-md border border-border object-contain"
+          className="max-h-40 rounded-xl border border-border object-contain"
         />
       )}
 

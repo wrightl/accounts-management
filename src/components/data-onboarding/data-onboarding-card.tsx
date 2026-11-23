@@ -367,7 +367,7 @@ function MenuItem({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="rounded-lg px-3 py-2 text-left text-sm text-foreground hover:bg-wash disabled:opacity-50"
+      className="rounded-xl px-3 py-2 text-left text-sm text-foreground hover:bg-wash disabled:opacity-50"
     >
       {children}
     </button>

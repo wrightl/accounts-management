@@ -400,7 +400,7 @@ export function SettingsForm({
             <img
               src={`/api/company/logo?v=${encodeURIComponent(settings.logoUrl)}`}
               alt="Company logo"
-              className="max-h-24 rounded-md border border-border bg-surface object-contain p-2"
+              className="max-h-24 rounded-xl border border-border bg-surface object-contain p-2"
             />
           ) : (
             <p className="text-sm text-muted">No logo uploaded yet.</p>
