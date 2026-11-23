@@ -42,6 +42,7 @@ import { getLatePaymentClaims } from "@/lib/invoices/late-payment-queries";
 import { latePaymentCharge } from "@/lib/late-payment";
 import { todayIsoDate } from "@/lib/dates";
 import { DisplayDate } from "@/components/date-format-provider";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export default async function InvoiceDetailPage({
   params,
@@ -293,7 +294,7 @@ export default async function InvoiceDetailPage({
       <section className="mt-8">
         <h2 className="mb-3 font-display text-lg font-semibold">Payments</h2>
         {payments.length === 0 ? (
-          <p className="text-sm text-muted">No payments recorded.</p>
+          <EmptyState description="No payments recorded." />
         ) : (
           <>
             <Table>

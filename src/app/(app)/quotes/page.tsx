@@ -110,7 +110,7 @@ export default async function QuotesPage({
           <div className="mt-6">
             {rows.length === 0 ? (
               filtersActive ? (
-                <p className="text-sm text-muted">No quotes match these filters.</p>
+                <EmptyState description="No quotes match these filters." />
               ) : (
                 <EmptyState
                   title="No quotes yet"

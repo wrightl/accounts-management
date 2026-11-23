@@ -21,6 +21,7 @@ import {
 import type { InvoiceStatus } from '@/lib/invoices/status';
 import { DisplayDate } from "@/components/date-format-provider";
 import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export default async function RecurringInvoiceDetailPage({
     params,
@@ -155,9 +156,7 @@ export default async function RecurringInvoiceDetailPage({
                     Generated invoices
                 </h2>
                 {generatedInvoices.length === 0 ? (
-                    <p className="text-sm text-muted">
-                        No invoices generated yet.
-                    </p>
+                    <EmptyState description="No invoices generated yet." />
                 ) : (
                     <Table>
                         <THead>

@@ -21,6 +21,7 @@ import { SettingsPageHeader } from "@/components/settings/settings-page-header";
 import { DisplayDate } from "@/components/date-format-provider";
 import { ListPagination } from "@/components/ui/list-pagination";
 import { listPageHref, parseListPaging } from "@/lib/list-paging";
+import { EmptyState } from "@/components/ui/empty-state";
 
 const FILTERS: { value: InboundEmailJobListFilter; label: string }[] = [
   { value: "attention", label: "Needs attention" },
@@ -76,7 +77,7 @@ export default async function InboundEmailPage({
 
       <div className="mt-6">
         {rows.length === 0 ? (
-          <p className="text-sm text-muted">No inbound email jobs match this filter.</p>
+          <EmptyState description="No inbound email jobs match this filter." />
         ) : (
           <Table>
             <THead>

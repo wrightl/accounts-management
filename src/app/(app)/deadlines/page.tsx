@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { DisplayDate } from "@/components/date-format-provider";
 import { Callout } from "@/components/ui/callout";
 import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export const metadata: Metadata = { title: "Deadlines" };
 
@@ -99,9 +100,7 @@ export default async function DeadlinesPage() {
       <section className="mt-10">
         <h2 className="font-display text-lg font-semibold">Calendar</h2>
         {deadlines.length === 0 ? (
-          <p className="mt-4 text-sm text-muted">
-            Nothing due in the next year. Register for VAT in Settings to see VAT returns here.
-          </p>
+          <EmptyState className="mt-4" description="Nothing due in the next year. Register for VAT in Settings to see VAT returns here." />
         ) : (
           <div className="mt-4">
             <Table>

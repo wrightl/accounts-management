@@ -177,9 +177,7 @@ export default async function TransactionsPage({
             <div className="mt-4">
               {rows.length === 0 ? (
                 hasActiveBankFilters(params) ? (
-                  <p className="text-sm text-muted">
-                    No transactions match these filters.
-                  </p>
+                  <EmptyState description="No transactions match these filters." />
                 ) : (
                   <EmptyState
                     title="No transactions imported yet"

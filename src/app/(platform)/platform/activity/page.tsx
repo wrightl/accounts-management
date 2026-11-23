@@ -12,6 +12,7 @@ import { ClearFilters } from "@/components/platform/pager";
 import { ListPagination } from "@/components/ui/list-pagination";
 import { listPageHref, parseListPaging, fetchPage } from "@/lib/list-paging";
 import { DisplayDate } from "@/components/date-format-provider";
+import { EmptyState } from "@/components/ui/empty-state";
 
 
 export default async function PlatformActivityPage({
@@ -84,7 +85,7 @@ export default async function PlatformActivityPage({
 
       <div className="mt-6">
         {rows.length === 0 ? (
-          <p className="text-sm text-muted">No activity matching filters.</p>
+          <EmptyState description="No activity matching filters." />
         ) : (
           <Table>
             <THead>

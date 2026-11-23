@@ -25,6 +25,7 @@ import { StatusPill } from "@/components/platform/status-pill";
 import { stripeDashboardUrl } from "@/lib/billing/stripe-dashboard";
 import { DisplayDate } from "@/components/date-format-provider";
 import { cardClasses } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export default async function PlatformCompanyDetailPage({
   params,
@@ -267,7 +268,7 @@ export default async function PlatformCompanyDetailPage({
         </div>
         <div className="mt-3">
           {recentAudit.length === 0 ? (
-            <p className="text-sm text-muted">No audit entries.</p>
+            <EmptyState description="No audit entries." />
           ) : (
             <Table>
               <THead>

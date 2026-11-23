@@ -14,6 +14,7 @@ import { sortHeaders } from "@/components/ui/sortable-th";
 import { defineTableSort, parseTableSort, setTableSortParams, sortRows } from "@/lib/table-sort";
 import { Callout } from "@/components/ui/callout";
 import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
 
 /** "created" is the loaded order (newest first) and has no header. */
 const ORDER_SORT = defineTableSort({
@@ -152,7 +153,7 @@ export default async function ProfitabilityPage({
           invoiced.
         </p>
         {activeOrders.length === 0 ? (
-          <p className="text-sm text-muted">No orders yet.</p>
+          <EmptyState description="No orders yet." />
         ) : (
           <Table>
             <THead>
@@ -215,7 +216,7 @@ export default async function ProfitabilityPage({
           </nav>
         </div>
         {clients.length === 0 ? (
-          <p className="text-sm text-muted">No invoices or tagged costs in this period.</p>
+          <EmptyState description="No invoices or tagged costs in this period." />
         ) : (
           <Table>
             <THead>

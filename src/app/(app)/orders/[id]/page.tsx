@@ -22,6 +22,7 @@ import { getOrderProfitability, listProjectExpenses } from "@/lib/profitability/
 import { MarginCards, ProjectExpenses, marginLabel } from "@/components/profitability/project-costs";
 import { DisplayDate } from "@/components/date-format-provider";
 import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export default async function OrderDetailPage({
   params,
@@ -215,7 +216,7 @@ export default async function OrderDetailPage({
       <div className="mt-8">
         <h2 className="mb-3 font-display text-lg font-semibold">Invoices</h2>
         {detail.invoices.length === 0 ? (
-          <p className="text-sm text-muted">No invoices for this order yet.</p>
+          <EmptyState description="No invoices for this order yet." />
         ) : (
           <Table>
             <THead>

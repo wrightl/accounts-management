@@ -1,4 +1,4 @@
-import { ArrowRight, Upload } from "lucide-react";
+import { Upload } from "lucide-react";
 import Link from "next/link";
 import { guardTenantPage } from "@/lib/auth";
 import { isPeriodPreset, resolvePeriod } from "@/lib/dates";
@@ -19,6 +19,7 @@ import { buttonClasses } from "@/components/ui/button";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { getDateFormat } from "@/lib/date-format.server";
 import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export default async function SpendingPage({
   searchParams,
@@ -89,16 +90,13 @@ export default async function SpendingPage({
       </div>
 
       {!hasData ? (
-        <div className="mt-8 rounded-2xl border border-dashed border-border bg-surface p-8 text-center">
-          <p className="text-muted">No outflows in {resolved.label.toLowerCase()}.</p>
-          <p className="mt-2 text-sm text-muted">
-            Import a bank CSV on the Transactions page to see spending here.
-          </p>
-          <Link href="/transactions" className={`${buttonClasses("primary")} mt-4 inline-flex`}>
-            Go to Transactions
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
+        <EmptyState
+          className="mt-8"
+          title={`No outflows in ${resolved.label.toLowerCase()}`}
+          description="Import a bank CSV on the Transactions page to see spending here."
+          actionHref="/transactions"
+          actionLabel="Go to Transactions"
+        />
       ) : (
         <>
           <div className="mt-6">
@@ -129,7 +127,7 @@ export default async function SpendingPage({
             </div>
             <div className="mt-4">
               {topRows.length === 0 ? (
-                <p className="text-sm text-muted">No categorised outflows in this period.</p>
+                <EmptyState description="No categorised outflows in this period." />
               ) : (
                 <Table>
                   <THead>

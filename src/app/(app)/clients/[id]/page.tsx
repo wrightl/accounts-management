@@ -16,6 +16,7 @@ import { MarginCards, ProjectExpenses } from "@/components/profitability/project
 import { DisplayDate } from "@/components/date-format-provider";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export default async function ClientDetailPage({
   params,
@@ -71,7 +72,7 @@ export default async function ClientDetailPage({
           <section>
             <h2 className="mb-3 font-display text-lg font-semibold">Quotes</h2>
             {quotes.length === 0 ? (
-              <p className="text-sm text-muted">No quotes for this client.</p>
+              <EmptyState description="No quotes for this client." />
             ) : (
               <Table>
                 <THead>
@@ -106,7 +107,7 @@ export default async function ClientDetailPage({
           <section>
             <h2 className="mb-3 font-display text-lg font-semibold">Orders</h2>
             {orders.length === 0 ? (
-              <p className="text-sm text-muted">No orders for this client.</p>
+              <EmptyState description="No orders for this client." />
             ) : (
               <Table>
                 <THead>
@@ -139,7 +140,7 @@ export default async function ClientDetailPage({
           <section>
             <h2 className="mb-3 font-display text-lg font-semibold">Invoices</h2>
             {invoiceRows.length === 0 ? (
-              <p className="text-sm text-muted">No invoices for this client.</p>
+              <EmptyState description="No invoices for this client." />
             ) : (
               <Table>
                 <THead>

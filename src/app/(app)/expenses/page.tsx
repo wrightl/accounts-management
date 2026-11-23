@@ -214,7 +214,7 @@ export default async function ExpensesPage({
       <div className="mt-6">
         {rows.length === 0 ? (
           filtered || myReimbursable ? (
-            <p className="text-sm text-muted">No expenses match these filters.</p>
+            <EmptyState description="No expenses match these filters." />
           ) : (
             <EmptyState
               title="No expenses yet"
