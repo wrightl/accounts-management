@@ -3,7 +3,7 @@ import type Stripe from "stripe";
 import { eq } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
-import { clients, companies, invoices, payments } from "@/db/schema";
+import { auditLog, clients, companies, invoices, payments } from "@/db/schema";
 import { seedCompany } from "@/lib/test/seed-company";
 import { getPublicInvoiceByToken } from "@/lib/invoices/public-queries";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
@@ -90,6 +90,7 @@ function checkoutEvent(overrides: {
   account?: string;
   amount?: number;
   invoiceId?: string;
+  currency?: string;
 } = {}): Stripe.Event {
   return {
     id: overrides.id ?? "evt_1",
@@ -103,6 +104,7 @@ function checkoutEvent(overrides: {
         mode: "payment",
         payment_status: "paid",
         amount_total: overrides.amount ?? 120000,
+        currency: overrides.currency ?? "gbp",
         payment_intent: "pi_test_1",
         created: Math.floor(new Date("2026-03-20T09:55:00Z").getTime() / 1000),
         metadata: {
@@ -206,6 +208,37 @@ describe("Connect webhook", () => {
       companyId,
       invoiceId,
       "2026-03-20",
+    );
+  });
+
+  it("doesn't record a charge on a foreign-currency invoice, and says so", async () => {
+    // The invoice became a dollar invoice after Checkout started (or the event is replayed).
+    await db
+      .update(invoices)
+      .set({ currency: "USD", fxRate: 1.25, netMinor: 150000, grossMinor: 150000 })
+      .where(eq(invoices.id, invoiceId));
+
+    await processConnectEvent(checkoutEvent({ id: "evt_usd_invoice" }));
+
+    expect(await paymentRows()).toHaveLength(0);
+    const detail = await getInvoiceDetail(companyId, invoiceId);
+    expect(detail?.invoice.status).not.toBe("paid");
+    const [audit] = await db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.action, "payment.online_unrecorded"));
+    expect(audit).toMatchObject({ companyId, entityId: invoiceId });
+    expect(audit.meta).toMatchObject({ invoiceCurrency: "USD", chargedCurrency: "GBP" });
+  });
+
+  it("doesn't record a charge in another currency on a sterling invoice", async () => {
+    await processConnectEvent(checkoutEvent({ id: "evt_usd_charge", currency: "usd" }));
+    expect(await paymentRows()).toHaveLength(0);
+    expect(syncFxDifference).not.toHaveBeenCalledWith(
+      expect.anything(),
+      companyId,
+      invoiceId,
+      expect.anything(),
     );
   });
 
