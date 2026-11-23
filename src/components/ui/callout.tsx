@@ -10,9 +10,9 @@ export type CalloutTone = "info" | "warning" | "danger" | "success";
  */
 export const calloutTones: Record<CalloutTone, string> = {
   info: "border-transparent bg-wash",
-  warning: "border-warning/25 bg-warning/10",
-  danger: "border-destructive/25 bg-destructive/10",
-  success: "border-success/25 bg-success/10",
+  warning: "border-warning/25 bg-warning-wash",
+  danger: "border-destructive/25 bg-destructive-wash",
+  success: "border-success/25 bg-success-wash",
 };
 
 /**

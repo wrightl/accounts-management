@@ -41,7 +41,13 @@ export function Statement({
       </div>
       <dl className="mt-3 text-sm">
         {rows.map((row, i) => (
-          <div key={i} className="flex items-baseline justify-between gap-4 border-b border-border py-2">
+          <div
+            key={i}
+            className={cn(
+              "flex items-baseline justify-between gap-4 py-2",
+              (total || i < rows.length - 1) && "border-b border-border",
+            )}
+          >
             <dt>
               {row.label}
               {row.note ? <span className="block text-xs text-muted">{row.note}</span> : null}
@@ -50,7 +56,7 @@ export function Statement({
           </div>
         ))}
         {total ? (
-          <div className={cn("flex items-baseline justify-between gap-4 pt-3 font-semibold")}>
+          <div className="flex items-baseline justify-between gap-4 pt-3 font-semibold">
             <dt>
               {total.label}
               {total.note ? (

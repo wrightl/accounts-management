@@ -38,6 +38,10 @@
   --success: #1a7a55;
   /* Deep amber: reads as "check this" without leaving the navy/pink palette. */
   --warning: #8a4b08;
+  /* Solid tints for notes. Solid, not alpha, so the lavender page doesn't muddy them. */
+  --warning-wash: #fdf1dc;
+  --destructive-wash: #fbe8ed;
+  --success-wash: #e2f3eb;
   /* Error text on navy (auth frame, pricing), where --destructive is too dark. */
   --destructive-on-dark: #ffb3c4;
 }
@@ -61,6 +65,9 @@
   --color-destructive: var(--destructive);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --color-warning-wash: var(--warning-wash);
+  --color-destructive-wash: var(--destructive-wash);
+  --color-success-wash: var(--success-wash);
   --color-destructive-on-dark: var(--destructive-on-dark);
 
   --color-navy: var(--navy);

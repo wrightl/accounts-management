@@ -218,7 +218,7 @@ export default async function DashboardOverview({
           >
             <AttentionPanel items={overview.attention} />
             {safeToPay ? (
-              <Card>
+              <Card className="self-start">
                 <CardTitle>Safe to pay yourself</CardTitle>
                 <CardValue>{formatGBP(safeToPay.result.safeNowPence)}</CardValue>
                 <p className="mt-2 text-sm text-muted">
