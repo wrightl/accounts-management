@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DOCUMENT_CURRENCIES, STERLING } from "@/lib/currency";
 import { parseWithFieldErrors } from "@/lib/validation/field-errors";
 
 const optionalText = z
@@ -25,6 +26,14 @@ export const clientSchema = z.object({
     .transform((v) => (v === "" ? null : v)),
   addressLines: optionalText,
   notes: optionalText,
+  /** Currency new invoices for this client start in; null means GBP. */
+  defaultCurrency: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .optional()
+    .refine((v) => !v || DOCUMENT_CURRENCIES.includes(v), "Choose one of the listed currencies")
+    .transform((v) => (!v || v === STERLING ? null : v)),
 });
 
 export type ClientParsed = z.infer<typeof clientSchema>;
@@ -36,6 +45,7 @@ export function clientRawFromFormData(formData: FormData): Record<string, unknow
     email: formData.get("email") ?? "",
     addressLines: formData.get("addressLines") ?? "",
     notes: formData.get("notes") ?? "",
+    defaultCurrency: formData.get("defaultCurrency") ?? "",
   };
 }
 

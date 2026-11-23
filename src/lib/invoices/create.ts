@@ -1,5 +1,6 @@
 import "server-only";
-import { documentTotals, STERLING_RATE } from "@/lib/currency";
+import { documentTotals, isForeignDocumentCurrency, type DocumentTotals } from "@/lib/currency";
+import { documentRate, type DocumentRateDetails } from "@/lib/document-rate";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { clients, invoiceLineItems, invoices } from "@/db/schema";
@@ -29,6 +30,50 @@ export function buildLineValues(
       expenseId: l.expenseId ?? null,
     };
   });
+}
+
+/** The columns an invoice stores for its currency, rate and totals. */
+export type InvoiceCurrencyFields = DocumentTotals & {
+  currency: string;
+  fxRate: number;
+  fxRateDate: string | null;
+  fxRateSource: DocumentRateDetails["fxRateSource"];
+};
+
+/**
+ * The currency, rate and both sets of totals for an invoice's lines. A foreign
+ * invoice uses the rate typed on the form, or else the Bank of England rate for
+ * the issue date, fetched again on every save so it follows the date until the
+ * invoice is sent and can no longer be edited.
+ */
+export async function invoiceCurrencyFields(
+  data: Pick<InvoiceParsed, "currency" | "fxRate">,
+  issueDate: string,
+  lineValues: ReturnType<typeof buildLineValues>,
+  fetchImpl: typeof fetch = fetch,
+): Promise<
+  | { ok: true; fields: InvoiceCurrencyFields }
+  | { ok: false; error: string; fieldErrors?: Record<string, string> }
+> {
+  const foreign = isForeignDocumentCurrency(data.currency);
+  if (foreign && lineValues.some((l) => l.expenseId)) {
+    // Expenses are recharged at their sterling cost; converting them would
+    // bury an exchange difference in the recharge.
+    const error = "Recharged expenses can only go on a GBP invoice";
+    return { ok: false, error, fieldErrors: { lines: error } };
+  }
+  const rate = await documentRate(data.currency, issueDate, fetchImpl, foreign ? data.fxRate : null);
+  if (!rate.ok) return { ok: false, error: rate.error, fieldErrors: { fxRate: rate.error } };
+  return {
+    ok: true,
+    fields: {
+      currency: rate.rate.currency,
+      fxRate: rate.rate.fxRate,
+      fxRateDate: rate.rate.fxRateDate,
+      fxRateSource: rate.rate.fxRateSource,
+      ...documentTotals(lineValues, rate.rate),
+    },
+  };
 }
 
 export function rebilledExpenseIds(lines: Array<{ expenseId: string | null }>): string[] {
@@ -65,7 +110,8 @@ export async function createDraftInvoiceRecord(
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Invalid amount" };
   }
-  const totals = documentTotals(lineValues, STERLING_RATE);
+  const priced = await invoiceCurrencyFields(data, issueDate, lineValues);
+  if (!priced.ok) return priced;
   const rebillError = await checkRebillExpenses(
     companyId,
     data.clientId,
@@ -86,7 +132,7 @@ export async function createDraftInvoiceRecord(
         issueDate,
         dueDate,
         notes: data.notes,
-        ...totals,
+        ...priced.fields,
         createdByUserId: localUserId,
       })
       .returning({ id: invoices.id });

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { isForeignDocumentCurrency } from "@/lib/currency";
+import { describeDocumentRate, isForeignDocumentCurrency } from "@/lib/currency";
 import { notFound } from "next/navigation";
 import { Download, FilePlus, Pencil } from "lucide-react";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
@@ -192,6 +192,7 @@ export default async function InvoiceDetailPage({
             canWrite={canWrite}
             balanceFormatted={balanceFormatted}
             balancePence={detail.balanceMinor}
+            currency={invoice.currency}
             clientName={client.name}
             companyName={client.companyName}
             isImported={invoice.source === "import"}
@@ -247,6 +248,11 @@ export default async function InvoiceDetailPage({
           <CardValue>{refundDueMinor > 0 ? refundDueFormatted : balanceFormatted}</CardValue>
         </Card>
       </div>
+      {isForeignDocumentCurrency(invoice.currency) ? (
+        <p className="mt-2 text-sm text-muted">
+          {invoice.grossSterlingFormatted} in your books, at {describeDocumentRate(invoice)}.
+        </p>
+      ) : null}
 
       <section className="mt-8">
         <h2 className="mb-3 font-display text-lg font-semibold">Line items</h2>

@@ -14,7 +14,8 @@ import {
 import { canSettleInvoiceBalance } from "@/lib/bank/match";
 import { creditAdjustmentForInvoice } from "@/lib/credit-notes/adjustments";
 import type { Tx } from "@/lib/invoices/allocate";
-import { isForeignDocumentCurrency } from "@/lib/currency";
+import { isForeignDocumentCurrency, toSterlingPence } from "@/lib/currency";
+import { documentRate } from "@/lib/document-rate";
 import { invoiceBalance, isInvoiceSettled, settlementMinor } from "@/lib/invoices/balance";
 import { syncFxDifference } from "@/lib/invoices/fx-difference";
 import {
@@ -86,9 +87,10 @@ export async function recordInvoicePayment(
     };
   }
 
-  let amountPence: number;
+  // In the invoice's currency.
+  let amountMinor: number;
   try {
-    amountPence = poundsToPence(parsed.data.amountPounds);
+    amountMinor = poundsToPence(parsed.data.amountPounds);
   } catch (e) {
     return {
       ok: false,
@@ -98,7 +100,7 @@ export async function recordInvoicePayment(
       },
     };
   }
-  if (amountPence <= 0) {
+  if (amountMinor <= 0) {
     return {
       ok: false,
       error: FORM_FIELD_ERROR_SUMMARY,
@@ -106,9 +108,19 @@ export async function recordInvoicePayment(
     };
   }
 
+  const [target] = await getDb()
+    .select({ currency: invoices.currency, fxRate: invoices.fxRate })
+    .from(invoices)
+    .where(and(eq(invoices.id, invoiceId), eq(invoices.companyId, companyId)))
+    .limit(1);
+  if (!target) return { ok: false, error: "Invoice not found" };
+  const foreign = isForeignDocumentCurrency(target.currency);
+
   const bankTransactionId = parsed.data.bankTransactionId;
+  const bankTx = bankTransactionId
+    ? await getBankTransactionById(companyId, bankTransactionId)
+    : null;
   if (bankTransactionId) {
-    const bankTx = await getBankTransactionById(companyId, bankTransactionId);
     if (!bankTx) return { ok: false, error: "Bank transaction not found" };
     if (bankTx.amountPence <= 0) {
       return { ok: false, error: "Only incoming bank transactions can be linked" };
@@ -116,20 +128,51 @@ export async function recordInvoicePayment(
     if (!(await isBankTransactionAvailable(companyId, bankTransactionId))) {
       return { ok: false, error: "Bank transaction is already reconciled" };
     }
-    if (bankTx.amountPence !== amountPence) {
+    // A foreign payment's sterling is the bank line, whatever the client paid in their currency.
+    if (!foreign && bankTx.amountPence !== amountMinor) {
       return { ok: false, error: "Amount must match the selected bank transaction" };
     }
   }
 
   const receivedAt = parsed.data.receivedAt
     ? new Date(parsed.data.receivedAt)
-    : bankTransactionId
-      ? new Date(
-          `${(await getBankTransactionById(companyId, bankTransactionId))!.bookedAt}T12:00:00Z`,
-        )
+    : bankTx
+      ? new Date(`${bankTx.bookedAt}T12:00:00Z`)
       : new Date();
   const locked = await checkPeriodOpen(companyId, receivedAt);
   if (locked) return { ok: false, error: locked };
+
+  // The sterling the payment brought in: the bank line when linked, else what
+  // the user says reached the bank, else an estimate at the Bank of England
+  // rate for the day, flagged until a bank line confirms it.
+  let amountPence = amountMinor;
+  let amountPenceEstimated = false;
+  if (foreign) {
+    if (bankTx) {
+      amountPence = bankTx.amountPence;
+    } else if (parsed.data.sterlingPounds) {
+      try {
+        amountPence = poundsToPence(parsed.data.sterlingPounds);
+      } catch (e) {
+        return {
+          ok: false,
+          error: FORM_FIELD_ERROR_SUMMARY,
+          fieldErrors: { sterlingPounds: e instanceof Error ? e.message : "Invalid amount" },
+        };
+      }
+      if (amountPence <= 0) {
+        return {
+          ok: false,
+          error: FORM_FIELD_ERROR_SUMMARY,
+          fieldErrors: { sterlingPounds: "Enter the amount in pounds that reached your bank" },
+        };
+      }
+    } else {
+      const rate = await documentRate(target.currency, todayIsoDate(receivedAt));
+      amountPence = toSterlingPence(amountMinor, rate.ok ? rate.rate.fxRate : target.fxRate);
+      amountPenceEstimated = true;
+    }
+  }
 
   const db = getDb();
   let paymentId: string;
@@ -168,9 +211,8 @@ export async function recordInvoicePayment(
       if (status === "draft" || status === "void" || status === "paid") {
         throw new PaymentError(`Cannot record a payment against a ${status} invoice`);
       }
-      if (isForeignDocumentCurrency(inv.currency)) {
-        // Needs the amount in both currencies; the form for that comes later.
-        throw new PaymentError(`Payments on ${inv.currency} invoices can't be recorded here yet`);
+      if (inv.currency !== target.currency) {
+        throw new PaymentError("The invoice changed while you were recording this. Try again.");
       }
 
       const [paidRow] = await tx
@@ -184,8 +226,8 @@ export async function recordInvoicePayment(
       // Money already in the bank can be a little more than the balance; the
       // extra then shows as a refund due on the invoice.
       const overBalance = bankTransactionId
-        ? remaining <= 0 || !canSettleInvoiceBalance(amountPence, remaining)
-        : amountPence > remaining;
+        ? remaining <= 0 || !canSettleInvoiceBalance(amountMinor, remaining)
+        : amountMinor > remaining;
       if (overBalance) {
         throw new PaymentError(
           `Payment exceeds remaining balance of ${(remaining / 100).toFixed(2)}`,
@@ -213,8 +255,8 @@ export async function recordInvoicePayment(
         .values({
           invoiceId,
           amountPence,
-          // Sterling invoice (checked above), so the two amounts are equal.
-          amountMinor: amountPence,
+          amountMinor,
+          amountPenceEstimated,
           method: parsed.data.method ?? "bank_transfer",
           reference: parsed.data.reference,
           receivedAt,
@@ -232,7 +274,7 @@ export async function recordInvoicePayment(
         });
       }
 
-      const paidTotal = alreadyPaid + amountPence;
+      const paidTotal = alreadyPaid + amountMinor;
       if (isInvoiceSettled(settlementMinor(inv, paidTotal, credits))) {
         await tx
           .update(invoices)
@@ -257,7 +299,7 @@ export async function recordInvoicePayment(
     action: "payment.record",
     entityType: "payment",
     entityId: paymentId,
-    meta: { invoiceId, amountPence, bankTransactionId },
+    meta: { invoiceId, amountPence, amountMinor, bankTransactionId },
   });
 
   return { ok: true, id: paymentId };

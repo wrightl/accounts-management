@@ -1,6 +1,7 @@
 "use client";
 
-import { FieldError, Input, Label, Textarea } from "@/components/ui/form";
+import { FieldError, Input, Label, Select, Textarea } from "@/components/ui/form";
+import { DOCUMENT_CURRENCIES, STERLING } from "@/lib/currency";
 
 export type ClientFieldValues = {
   name: string;
@@ -8,6 +9,7 @@ export type ClientFieldValues = {
   email: string | null;
   addressLines: string | null;
   notes: string | null;
+  defaultCurrency?: string | null;
 };
 
 /**
@@ -90,6 +92,32 @@ export function ClientFields({
           onChange={() => clearField("addressLines")}
         />
         <FieldError id={`${id("addressLines")}-error`}>{fieldErrors.addressLines}</FieldError>
+      </div>
+      <div>
+        <Label htmlFor={id("defaultCurrency")}>Invoice currency</Label>
+        <Select
+          id={id("defaultCurrency")}
+          name="defaultCurrency"
+          defaultValue={client?.defaultCurrency ?? STERLING}
+          disabled={disabled}
+          aria-invalid={Boolean(fieldErrors.defaultCurrency)}
+          aria-describedby={
+            fieldErrors.defaultCurrency
+              ? `${id("defaultCurrency")}-error ${id("defaultCurrency")}-hint`
+              : `${id("defaultCurrency")}-hint`
+          }
+          onChange={() => clearField("defaultCurrency")}
+        >
+          {DOCUMENT_CURRENCIES.map((code) => (
+            <option key={code} value={code}>
+              {code}
+            </option>
+          ))}
+        </Select>
+        <FieldError id={`${id("defaultCurrency")}-error`}>{fieldErrors.defaultCurrency}</FieldError>
+        <p id={`${id("defaultCurrency")}-hint`} className="mt-1 text-xs text-muted">
+          New invoices for this client start in this currency.
+        </p>
       </div>
       <div>
         <Label htmlFor={id("notes")}>Notes (optional)</Label>

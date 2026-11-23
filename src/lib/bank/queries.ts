@@ -62,6 +62,7 @@ import { resolveIncomeCategory } from '@/lib/bank/income-category-catalog';
 import {
     pickBestMatch,
     canSettleInvoiceBalance,
+    receiptFitsInvoice,
     MIN_SUGGEST_SCORE,
     scoreBankTxForInvoice,
     type MatchScoreBreakdown,
@@ -93,7 +94,9 @@ import {
     settlementPence,
 } from '@/lib/invoices/balance';
 import { syncFxDifference } from '@/lib/invoices/fx-difference';
-import { isForeignDocumentCurrency } from '@/lib/currency';
+import { isForeignDocumentCurrency, toSterlingPence } from '@/lib/currency';
+import { documentRate } from '@/lib/document-rate';
+import { gbpAmountBand } from '@/lib/bank/fx';
 import {
     resolveBankDisplayName,
     type BankProviderId,
@@ -905,6 +908,9 @@ async function loadOpenInvoiceBalances(
             and(
                 eq(invoices.companyId, companyId),
                 or(eq(invoices.status, 'sent'), eq(invoices.status, 'overdue')),
+                // Matched on exact sterling, which a foreign invoice's receipt
+                // never is; those are linked from the invoice instead.
+                eq(invoices.currency, 'GBP'),
             ),
         );
     if (rows.length === 0) return [];
@@ -2030,7 +2036,7 @@ export async function listLinkableReceiptsForInvoice(
         .filter(
             (tx) =>
                 !excludeIds.has(tx.id) &&
-                canSettleInvoiceBalance(tx.amountPence, invoiceTarget.balancePence),
+                receiptFitsInvoice(tx.amountPence, invoiceTarget),
         )
         .sort((a, b) => b.bookedAt.localeCompare(a.bookedAt))
         .slice(0, limit)
@@ -2067,16 +2073,24 @@ async function loadInvoiceTarget(companyId: string, invoiceId: string) {
     if (!rows[0]) return null;
 
     const { invoice, client } = rows[0];
-    // Bank lines are matched on exact pence, which only works for sterling invoices.
-    if (isForeignDocumentCurrency(invoice.currency)) return null;
-    const balancePence = invoiceAmountDue(
+    // In the invoice's currency.
+    const balanceMinor = invoiceAmountDue(
         settlementMinor(
             invoice,
             await paidTotalForInvoice(db, companyId, invoiceId),
             await creditAdjustmentForInvoice(db, companyId, invoiceId),
         ),
     );
-    if (balancePence <= 0) return null;
+    if (balanceMinor <= 0) return null;
+    // A foreign balance reaches the bank as sterling at whatever rate applied,
+    // so receipts are matched on a band around it at today's rate.
+    let balancePence = balanceMinor;
+    let fxBand: { minGbpPence: number; maxGbpPence: number } | undefined;
+    if (isForeignDocumentCurrency(invoice.currency)) {
+        const rate = await documentRate(invoice.currency, todayIsoDate());
+        balancePence = toSterlingPence(balanceMinor, rate.ok ? rate.rate.fxRate : invoice.fxRate);
+        fxBand = gbpAmountBand(balancePence);
+    }
 
     const referenceDate =
         invoice.dueDate ?? invoice.issueDate ?? todayIsoDate();
@@ -2086,6 +2100,7 @@ async function loadInvoiceTarget(companyId: string, invoiceId: string) {
         name: client.name,
         companyName: client.companyName,
         balancePence,
+        fxBand,
         dueDate: invoice.dueDate,
         issueDate: invoice.issueDate,
         oldDebt: invoice.source === 'import',
@@ -2145,7 +2160,7 @@ async function rankIncomingForInvoice(
     const scored: InvoiceBankMatch[] = [];
 
     for (const { tx } of unmatched) {
-        if (!canSettleInvoiceBalance(tx.amountPence, invoiceTarget.balancePence)) continue;
+        if (!receiptFitsInvoice(tx.amountPence, invoiceTarget)) continue;
         if (opts.accept && !opts.accept(tx)) continue;
         const breakdown = scoreBankTxForInvoice(
             txLikeFromRow(tx),

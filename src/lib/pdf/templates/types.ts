@@ -24,10 +24,19 @@ export interface PdfInvoice {
   issueDate: string | null;
   dueDate: string | null;
   notes: string | null;
-  netPence: number;
-  vatPence?: number;
-  grossPence: number;
+  /** Totals in `currency`'s minor units: what the client owes. */
+  netMinor: number;
+  vatMinor?: number;
+  grossMinor: number;
   currency: string;
+  /**
+   * Foreign invoices only: the rate the invoice was converted at and its VAT
+   * in sterling, which a VAT invoice in another currency has to show.
+   */
+  fxRate?: number;
+  fxRateDate?: string | null;
+  fxRateSource?: "boe" | "manual" | null;
+  vatPence?: number;
   /** "import" marks the PDF as a record of an invoice issued elsewhere. */
   source?: "alfa" | "import";
 }

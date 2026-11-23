@@ -1,4 +1,5 @@
 import "server-only";
+import { toSterlingPence } from "@/lib/currency";
 import { 
   creditNoteCountsInAccounts,
   invoiceCountsInAccounts,
@@ -267,6 +268,7 @@ export async function listOrderProfitability(
         quantity: invoiceLineItems.quantity,
         unitPricePence: invoiceLineItems.unitPricePence,
         discountPercent: invoiceLineItems.discountPercent,
+        fxRate: invoices.fxRate,
       })
       .from(invoiceLineItems)
       .innerJoin(invoices, eq(invoiceLineItems.invoiceId, invoices.id))
@@ -298,7 +300,8 @@ export async function listOrderProfitability(
   const rebillOwn = new Map<string, number>();
   const rebillElsewhere = new Map<string, number>();
   for (const l of rebillLines) {
-    const net = lineNetPence(l);
+    // Line prices are in the invoice's currency.
+    const net = toSterlingPence(lineNetPence(l), l.fxRate);
     if (l.invoiceOrderId && l.invoiceOrderId === l.expenseOrderId) {
       rebillOwn.set(l.invoiceOrderId, (rebillOwn.get(l.invoiceOrderId) ?? 0) + net);
     } else if (l.expenseOrderId) {

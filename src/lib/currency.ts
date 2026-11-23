@@ -4,6 +4,7 @@
  * sterling book values for the accounts, converted at the document's rate.
  * Safe to import from client components.
  */
+import { formatIsoDateLong } from "@/lib/dates";
 import { BOE_SERIES_BY_CURRENCY } from "@/lib/expenses/currency";
 import { invoiceTotals, type InvoiceTotals, type LineItem } from "@/lib/money";
 
@@ -39,6 +40,21 @@ export interface DocumentTotals extends InvoiceTotals {
   netMinor: number;
   vatMinor: number;
   grossMinor: number;
+}
+
+/**
+ * The rate a foreign document was converted at, as HMRC asks for on a VAT
+ * invoice in another currency: "1 GBP = 1.2731 USD (Bank of England, 20 November 2026)".
+ */
+export function describeDocumentRate(doc: {
+  currency: string;
+  fxRate: number;
+  fxRateDate: string | null;
+  fxRateSource: "boe" | "manual" | null;
+}): string {
+  const source = doc.fxRateSource === "boe" ? "Bank of England" : "agreed rate";
+  const dated = doc.fxRateDate ? `, ${formatIsoDateLong(doc.fxRateDate)}` : "";
+  return `1 GBP = ${doc.fxRate} ${doc.currency} (${source}${dated})`;
 }
 
 /** Sterling pence for an amount in a document currency at `fxRate` per £1. */

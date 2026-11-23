@@ -242,7 +242,15 @@ function ElementNode({
   }
 }
 
-function LineItemsTable({ table, lines }: { table: LineItemsElement; lines: PdfLine[] }) {
+function LineItemsTable({
+  table,
+  lines,
+  currency,
+}: {
+  table: LineItemsElement;
+  lines: PdfLine[];
+  currency: string;
+}) {
   const columns = visibleColumns(table, lines);
   const cell = (key: LineItemColumnKey, width: number): Style => ({
     flexGrow: width,
@@ -301,7 +309,7 @@ function LineItemsTable({ table, lines }: { table: LineItemsElement; lines: PdfL
                 color: table.rowColour,
               }}
             >
-              {lineItemCell(line, column.key)}
+              {lineItemCell(line, column.key, currency)}
             </Text>
           ))}
         </View>
@@ -374,7 +382,7 @@ export function DesignDocument({
             />
           ))}
         </View>
-        <LineItemsTable table={table} lines={data.lines} />
+        <LineItemsTable table={table} lines={data.lines} currency={data.document.currency} />
         {below.length > 0 ? (
           <View wrap={!keepBelowTogether} style={{ height: belowHeight }}>
             {below.map((element) => (

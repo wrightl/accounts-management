@@ -4,23 +4,27 @@ import { isDocumentCurrency, STERLING, type DocumentRate } from "@/lib/currency"
 
 export type DocumentRateDetails = DocumentRate & {
   fxRateDate: string | null;
-  fxRateSource: "boe" | null;
+  fxRateSource: "boe" | "manual" | null;
 };
 
 export type DocumentRateResult =
   | { ok: true; rate: DocumentRateDetails }
   | { ok: false; error: string };
 
+/** Largest rate accepted by hand: well above any real currency per £1. */
+export const MAX_MANUAL_RATE = 1_000_000;
+
 /**
  * The rate to put a document in `currency` dated `onDate` into the books: the
- * Bank of England spot rate published on or before that date. Sterling is
- * always 1. When the rate can't be fetched the error tells the user they can
- * enter one by hand.
+ * Bank of England spot rate published on or before that date, or `manualRate`
+ * when the user entered one. Sterling is always 1. When the rate can't be
+ * fetched the error tells the user they can enter one by hand.
  */
 export async function documentRate(
   currency: string,
   onDate: string,
   fetchImpl: typeof fetch = fetch,
+  manualRate: number | null = null,
 ): Promise<DocumentRateResult> {
   const code = currency.trim().toUpperCase();
   if (code === STERLING) {
@@ -32,7 +36,16 @@ export async function documentRate(
   if (!isDocumentCurrency(code)) {
     return { ok: false, error: `${code} isn't a currency documents can be issued in` };
   }
-  const observation = await resolveFxRate(code, onDate, fetchImpl);
+  if (manualRate != null) {
+    if (!(manualRate > 0) || manualRate > MAX_MANUAL_RATE) {
+      return { ok: false, error: "Enter an exchange rate above 0" };
+    }
+    return {
+      ok: true,
+      rate: { currency: code, fxRate: manualRate, fxRateDate: onDate, fxRateSource: "manual" },
+    };
+  }
+  const observation = await resolveFxRate(code, onDate, fetchImpl).catch(() => null);
   if (!observation) {
     return {
       ok: false,

@@ -59,6 +59,9 @@ export default async function EditInvoicePage({
           issueDate: detail.invoice.issueDate,
           dueDate: detail.invoice.dueDate,
           notes: detail.invoice.notes,
+          currency: detail.invoice.currency,
+          fxRate: detail.invoice.fxRate,
+          fxRateSource: detail.invoice.fxRateSource,
         }}
         initialLines={initialLines}
         vatRegistered={company.vatRegistered}

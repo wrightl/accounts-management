@@ -7,11 +7,12 @@ import { writeAudit } from "@/lib/audit";
 import { claimEvent, releaseEvent } from "@/lib/billing/webhook-events";
 import { getStripe } from "@/lib/billing/stripe";
 import { creditAdjustmentForInvoice } from "@/lib/credit-notes/adjustments";
-import { isForeignDocumentCurrency, STERLING } from "@/lib/currency";
+import { STERLING, toSterlingPence } from "@/lib/currency";
+import { documentRate } from "@/lib/document-rate";
 import { isInvoiceSettled, settlementMinor } from "@/lib/invoices/balance";
 import { syncFxDifference } from "@/lib/invoices/fx-difference";
 import { storedStatus, todayIsoDate } from "@/lib/invoices/status";
-import { formatGBP, formatMoney } from "@/lib/money";
+import { formatDocumentAmount, formatMoney } from "@/lib/money";
 import { INVOICE_PAYMENT_KIND } from "@/lib/payments/online-status";
 
 /** Store whether the connected account can take card payments yet. */
@@ -42,26 +43,73 @@ export async function refreshConnectAccount(accountId: string): Promise<void> {
 }
 
 /**
+ * The sterling Stripe settled a charge for, from the charge's balance
+ * transaction on the connected account, or null when Stripe hasn't recorded it
+ * yet or settles the account in another currency. Stripe's conversion fee is
+ * already taken off, so it ends up in the invoice's exchange difference.
+ */
+export async function settledSterlingPence(
+  paymentIntentId: string | null,
+  stripeAccount: string,
+): Promise<number | null> {
+  if (!paymentIntentId) return null;
+  try {
+    const intent = await getStripe().paymentIntents.retrieve(
+      paymentIntentId,
+      { expand: ["latest_charge.balance_transaction"] },
+      { stripeAccount },
+    );
+    const charge = intent.latest_charge;
+    const balance = typeof charge === "object" ? charge?.balance_transaction : null;
+    if (!balance || typeof balance !== "object") return null;
+    return balance.currency.toUpperCase() === STERLING ? balance.amount : null;
+  } catch (err) {
+    console.warn(
+      JSON.stringify({
+        level: "warn",
+        msg: "online_payment_balance_lookup_failed",
+        paymentIntentId,
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    );
+    return null;
+  }
+}
+
+/**
  * Record a completed Checkout payment against its invoice. Idempotent on the
  * Checkout session, so webhook retries never double-count. Money Stripe has
  * already taken is recorded even if the invoice changed meanwhile; an
  * overpayment then shows as a refund due on the invoice.
  *
- * Only sterling charges on sterling invoices are recorded here. Anything else
- * would need the amount in two currencies, so it is left for the company to
- * record by hand: logged, audited and notified, never stored wrongly.
+ * The charge settles the invoice in its own currency. For a foreign invoice
+ * the sterling is what Stripe settled (`settledPence`), or, when Stripe hasn't
+ * said yet, an estimate at the Bank of England rate for the day, flagged until
+ * a bank line confirms it. A charge in a different currency from the invoice
+ * isn't stored: it is logged, audited and notified for the company to record
+ * by hand.
  */
 export async function recordOnlineInvoicePayment(params: {
   companyId: string;
   invoiceId: string;
-  amountPence: number;
+  /** What Stripe charged, in `currency`'s minor units. */
+  amountMinor: number;
   /** The currency Stripe charged in (the session's `currency`). */
   currency: string;
+  /** Sterling Stripe settled the charge for, when known. */
+  settledPence?: number | null;
   checkoutSessionId: string;
   paymentIntentId: string | null;
   paidAt: Date;
 }): Promise<{ recorded: boolean; paymentId?: string; unsupportedCurrency?: boolean }> {
   const db = getDb();
+  const paidOn = todayIsoDate(params.paidAt);
+  // Fetched before the transaction so no network call holds the invoice lock.
+  let estimateRate: number | null = null;
+  if (params.currency !== STERLING && params.settledPence == null) {
+    const rate = await documentRate(params.currency, paidOn);
+    if (rate.ok) estimateRate = rate.rate.fxRate;
+  }
   const result = await db.transaction(async (tx) => {
     await tx.execute(sql`select id from invoices where id = ${params.invoiceId} for update`);
     const [inv] = await tx
@@ -85,19 +133,25 @@ export async function recordOnlineInvoicePayment(params: {
     if (existing) return { recorded: false, paymentId: existing.id, inv };
 
     // Checked here, at the money boundary, not only when Checkout was created:
-    // an invoice's currency can change, and events can be replayed.
-    // The charge must be in pounds, not merely "not foreign": a missing currency isn't sterling.
-    if (isForeignDocumentCurrency(inv.currency) || params.currency !== STERLING) {
+    // an invoice's currency can change, and events can be replayed. A missing
+    // currency matches nothing.
+    if (!params.currency || params.currency !== inv.currency) {
       return { recorded: false, unsupportedCurrency: true, inv };
     }
+    const sterling = params.currency === STERLING;
+    const amountPence = sterling
+      ? params.amountMinor
+      : (params.settledPence ??
+        // No settlement yet: estimate at the day's rate, or the invoice's own.
+        toSterlingPence(params.amountMinor, estimateRate ?? inv.fxRate));
 
     const [payment] = await tx
       .insert(payments)
       .values({
         invoiceId: inv.id,
-        amountPence: params.amountPence,
-        // A sterling charge on a sterling invoice (checked above), so these match.
-        amountMinor: params.amountPence,
+        amountPence,
+        amountMinor: params.amountMinor,
+        amountPenceEstimated: !sterling && params.settledPence == null,
         method: "card",
         reference: params.paymentIntentId ?? params.checkoutSessionId,
         receivedAt: params.paidAt,
@@ -123,12 +177,12 @@ export async function recordOnlineInvoicePayment(params: {
         .set({ status: "paid", paidAt: params.paidAt })
         .where(and(eq(invoices.id, inv.id), eq(invoices.companyId, params.companyId)));
     }
-    await syncFxDifference(tx, params.companyId, inv.id, todayIsoDate(params.paidAt));
-    return { recorded: true, paymentId: payment.id, inv };
+    await syncFxDifference(tx, params.companyId, inv.id, paidOn);
+    return { recorded: true, paymentId: payment.id, inv, amountPence };
   });
 
   if (result.unsupportedCurrency) {
-    const charged = formatMoney(params.amountPence, params.currency);
+    const charged = formatMoney(params.amountMinor, params.currency);
     console.error(
       JSON.stringify({
         level: "error",
@@ -150,7 +204,7 @@ export async function recordOnlineInvoicePayment(params: {
         reason: "currency",
         invoiceCurrency: result.inv.currency,
         chargedCurrency: params.currency,
-        amountMinor: params.amountPence,
+        amountMinor: params.amountMinor,
         checkoutSessionId: params.checkoutSessionId,
       },
     });
@@ -186,7 +240,9 @@ export async function recordOnlineInvoicePayment(params: {
       entityId: result.paymentId,
       meta: {
         invoiceId: params.invoiceId,
-        amountPence: params.amountPence,
+        amountMinor: params.amountMinor,
+        currency: params.currency,
+        amountPence: result.amountPence,
         checkoutSessionId: params.checkoutSessionId,
       },
     });
@@ -196,7 +252,7 @@ export async function recordOnlineInvoicePayment(params: {
         companyId: params.companyId,
         type: "invoice.paid",
         title: `Invoice ${result.inv.number} paid online`,
-        body: `${formatGBP(params.amountPence)} paid by card.`,
+        body: `${formatDocumentAmount(params.amountMinor, result.amountPence ?? params.amountMinor, params.currency)} paid by card.`,
         href: `/invoices/${params.invoiceId}`,
         entityType: "invoice",
         entityId: params.invoiceId,
@@ -247,16 +303,22 @@ async function handleCheckoutSession(
     return;
   }
 
+  const currency = (session.currency ?? "").toUpperCase();
+  const paymentIntentId =
+    typeof session.payment_intent === "string"
+      ? session.payment_intent
+      : (session.payment_intent?.id ?? null);
   await recordOnlineInvoicePayment({
     companyId,
     invoiceId,
-    amountPence: session.amount_total,
-    currency: (session.currency ?? "").toUpperCase(),
+    amountMinor: session.amount_total,
+    currency,
+    settledPence:
+      currency && currency !== STERLING
+        ? await settledSterlingPence(paymentIntentId, company.accountId)
+        : null,
     checkoutSessionId: session.id,
-    paymentIntentId:
-      typeof session.payment_intent === "string"
-        ? session.payment_intent
-        : (session.payment_intent?.id ?? null),
+    paymentIntentId,
     paidAt,
   });
 }

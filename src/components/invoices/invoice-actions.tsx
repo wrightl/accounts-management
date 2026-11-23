@@ -55,6 +55,7 @@ export function InvoiceActions({
   canWrite,
   balanceFormatted,
   balancePence,
+  currency = "GBP",
   clientName,
   companyName,
   isImported = false,
@@ -65,8 +66,10 @@ export function InvoiceActions({
   status: string;
   canWrite: boolean;
   balanceFormatted: string;
-  /** What the client still owes, to explain a bank payment that differs from it. */
+  /** What the client still owes in the invoice's currency, to explain a bank payment that differs from it. */
   balancePence?: number;
+  /** The invoice's currency; payments on a foreign invoice also record the sterling received. */
+  currency?: string;
   clientName: string;
   companyName: string | null;
   /** Sending an imported invoice emails a client about something issued elsewhere. */
@@ -171,10 +174,17 @@ export function InvoiceActions({
     router.refresh();
   }
 
-  const defaultAmount =
-    selectedMatch && !manualEntry
-      ? String(penceToPounds(selectedMatch.amountPence))
-      : "";
+  const foreign = currency !== "GBP";
+  const linked = Boolean(selectedMatch && !manualEntry);
+  // A bank line is sterling. On a foreign invoice it doesn't say what the
+  // client paid in their currency, so that starts at the balance due.
+  const defaultAmount = linked
+    ? foreign
+      ? balancePence !== undefined
+        ? String(penceToPounds(balancePence))
+        : ""
+      : String(penceToPounds(selectedMatch!.amountPence))
+    : "";
   const defaultReference =
     selectedMatch && !manualEntry ? (selectedMatch.reference ?? "") : "";
   const defaultReceivedAt =
@@ -277,7 +287,7 @@ export function InvoiceActions({
                 {selectedMatch.reference ? ` · ${selectedMatch.reference}` : ""}
               </p>
               <MatchBreakdown breakdown={selectedMatch.breakdown} />
-              {balancePence !== undefined ? (
+              {balancePence !== undefined && !foreign ? (
                 <AmountDifference
                   receivedPence={selectedMatch.amountPence}
                   balancePence={balancePence}
@@ -320,14 +330,14 @@ export function InvoiceActions({
 
           <div>
             <Label htmlFor="amountPounds" required>
-              Amount (£)
+              {foreign ? `Amount received (${currency})` : "Amount (£)"}
             </Label>
             <Input
               id="amountPounds"
               name="amountPounds"
               key={`amount-${selectedMatchId ?? "manual"}-${manualEntry}`}
               defaultValue={defaultAmount || (manualEntry ? "" : undefined)}
-              disabled={pending || (!manualEntry && Boolean(selectedMatch))}
+              disabled={pending || (!foreign && linked)}
               aria-invalid={Boolean(fieldErrors.amountPounds)}
               aria-describedby={
                 fieldErrors.amountPounds ? "amountPounds-error" : undefined
@@ -336,6 +346,36 @@ export function InvoiceActions({
             />
             <FieldError id="amountPounds-error">{fieldErrors.amountPounds}</FieldError>
           </div>
+          {foreign ? (
+            linked ? (
+              <p className="text-sm text-muted">
+                Reached your bank: {selectedMatch!.amountFormatted}. The difference from the
+                invoice&apos;s rate is booked as an exchange gain or loss.
+              </p>
+            ) : (
+              <div>
+                <Label htmlFor="sterlingPounds">Reached your bank (£)</Label>
+                <Input
+                  id="sterlingPounds"
+                  name="sterlingPounds"
+                  inputMode="decimal"
+                  disabled={pending}
+                  aria-invalid={Boolean(fieldErrors.sterlingPounds)}
+                  aria-describedby={
+                    fieldErrors.sterlingPounds
+                      ? "sterlingPounds-error sterlingPounds-hint"
+                      : "sterlingPounds-hint"
+                  }
+                  onChange={() => clearField("sterlingPounds")}
+                />
+                <FieldError id="sterlingPounds-error">{fieldErrors.sterlingPounds}</FieldError>
+                <p id="sterlingPounds-hint" className="mt-1 text-xs text-muted">
+                  Leave blank to estimate at the Bank of England rate. Linking the bank line
+                  later replaces the estimate.
+                </p>
+              </div>
+            )
+          ) : null}
           <div>
             <Label htmlFor="method">Method</Label>
             <Input

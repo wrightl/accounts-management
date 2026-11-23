@@ -1,6 +1,7 @@
 import { clientBillToLines } from "@/lib/clients/display";
 import { formatIsoDateUk } from "@/lib/dates";
-import { formatGBP } from "@/lib/money";
+import { STERLING } from "@/lib/currency";
+import { formatMoney } from "@/lib/money";
 import {
   SAMPLE_CLIENT,
   SAMPLE_COMPANY,
@@ -11,6 +12,7 @@ import {
   SAMPLE_QUOTE,
 } from "@/lib/pdf/templates/sample";
 import type {
+  LabelledValue,
   PdfClient,
   PdfCompany,
   PdfCreditNoteDetails,
@@ -18,7 +20,7 @@ import type {
   PdfLine,
   PdfQuote,
 } from "@/lib/pdf/templates/types";
-import type { DocumentKind } from "@/lib/pdf/templates/views";
+import { sterlingVatRow, type DocumentKind } from "@/lib/pdf/templates/views";
 import { formatQuoteVersion } from "@/lib/quotes/status";
 
 /** The document a design is filled from, whichever kind it is. */
@@ -37,9 +39,16 @@ export interface DesignDocument {
   creditedInvoiceNumber: string | null;
   /** Credit notes only. */
   reason: string | null;
-  netPence: number | null;
-  vatPence: number;
-  grossPence: number;
+  /** Totals in `currency`'s minor units. */
+  netMinor: number | null;
+  vatMinor: number;
+  grossMinor: number;
+  currency: string;
+  /**
+   * Foreign invoices with VAT: the sterling VAT row HMRC requires, labelled
+   * with the rate. Added to the totals of every design.
+   */
+  sterlingVat: LabelledValue | null;
 }
 
 /** What a design's placeholders are filled from. */
@@ -74,9 +83,11 @@ export function invoiceDesignData(invoice: PdfInvoice, parties: DesignParties): 
       issueDate: invoice.issueDate,
       dueDate: invoice.dueDate,
       notes: invoice.notes,
-      netPence: invoice.netPence,
-      vatPence: invoice.vatPence ?? 0,
-      grossPence: invoice.grossPence,
+      netMinor: invoice.netMinor,
+      vatMinor: invoice.vatMinor ?? 0,
+      grossMinor: invoice.grossMinor,
+      currency: invoice.currency,
+      sterlingVat: sterlingVatRow(invoice),
     },
   };
 }
@@ -92,9 +103,12 @@ export function quoteDesignData(quote: PdfQuote, parties: DesignParties): Design
       validUntil: quote.validUntil,
       version: quote.version,
       notes: quote.notes,
-      netPence: quote.netPence ?? null,
-      vatPence: quote.vatPence ?? 0,
-      grossPence: quote.grossPence,
+      netMinor: quote.netPence ?? null,
+      vatMinor: quote.vatPence ?? 0,
+      grossMinor: quote.grossPence,
+      // Quotes are issued in sterling until they carry a currency.
+      currency: STERLING,
+      sterlingVat: null,
     },
   };
 }
@@ -119,9 +133,12 @@ export function creditNoteDesignData(
       issueDate: creditNote.issueDate,
       creditedInvoiceNumber: details.invoiceNumber,
       reason: details.reason,
-      netPence: creditNote.netPence,
-      vatPence: creditNote.vatPence,
-      grossPence: creditNote.grossPence,
+      netMinor: creditNote.netPence,
+      vatMinor: creditNote.vatPence,
+      grossMinor: creditNote.grossPence,
+      // Credit notes are issued in sterling until they follow their invoice's currency.
+      currency: STERLING,
+      sterlingVat: null,
     },
   };
 }
@@ -261,9 +278,16 @@ const SHARED_FIELDS: DesignField[] = [
     token: "totals.subtotal",
     label: "Subtotal",
     group: "Totals",
-    resolve: (d) => (d.document.netPence == null ? "" : formatGBP(d.document.netPence)),
+    resolve: (d) =>
+      d.document.netMinor == null ? "" : formatMoney(d.document.netMinor, d.document.currency),
   },
-  { token: "totals.vat", label: "VAT", group: "Totals", resolve: (d) => formatGBP(d.document.vatPence) },
+  {
+    token: "totals.vat",
+    label: "VAT",
+    group: "Totals",
+    resolve: (d) => formatMoney(d.document.vatMinor, d.document.currency),
+  },
+
 ];
 
 function buildFields(kind: DocumentKind): DesignField[] {
@@ -274,7 +298,7 @@ function buildFields(kind: DocumentKind): DesignField[] {
       token: "totals.total",
       label: TOTAL_LABELS[kind],
       group: "Totals",
-      resolve: (d) => formatGBP(d.document.grossPence),
+      resolve: (d) => formatMoney(d.document.grossMinor, d.document.currency),
     },
   ];
 }
