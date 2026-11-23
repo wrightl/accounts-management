@@ -91,6 +91,7 @@ import {
     settlementMinor,
     settlementPence,
 } from '@/lib/invoices/balance';
+import { syncFxDifference } from '@/lib/invoices/fx-difference';
 import { isForeignDocumentCurrency } from '@/lib/currency';
 import {
     resolveBankDisplayName,
@@ -1476,6 +1477,7 @@ async function createPaymentFromBankMatch(
                 and(eq(invoices.id, inv.id), eq(invoices.companyId, companyId)),
             );
     }
+    await syncFxDifference(tx, companyId, inv.id, bankTx.bookedAt);
 
     return payment.id;
 }

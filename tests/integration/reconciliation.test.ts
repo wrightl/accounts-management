@@ -20,9 +20,15 @@ import {
 } from "@/lib/bank/queries";
 import { seedCompany } from "@/lib/test/seed-company";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
+import { syncFxDifference } from "@/lib/invoices/fx-difference";
 import { recordInvoicePayment } from "@/lib/payments/record";
 
 vi.mock("server-only", () => ({}));
+vi.mock("@/lib/invoices/fx-difference", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/invoices/fx-difference")>();
+  // Pass-through spy: every payment path must keep exchange differences in step.
+  return { ...actual, syncFxDifference: vi.fn(actual.syncFxDifference) };
+});
 
 let ctx: Awaited<ReturnType<typeof createTestDb>>;
 let db: TestDatabase;
@@ -109,6 +115,12 @@ describe("bank reconciliation integration", () => {
     expect(suggestions).toHaveLength(1);
 
     await confirmMatch(companyId, suggestions[0].matchId);
+    expect(syncFxDifference).toHaveBeenCalledWith(
+      expect.anything(),
+      companyId,
+      invoice.id,
+      tx.bookedAt,
+    );
 
     const paymentRows = await db
       .select()

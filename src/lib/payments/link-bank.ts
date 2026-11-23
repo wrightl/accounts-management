@@ -16,6 +16,7 @@ import { creditAdjustmentForInvoice } from "@/lib/credit-notes/adjustments";
 import type { Tx } from "@/lib/invoices/allocate";
 import { isForeignDocumentCurrency } from "@/lib/currency";
 import { invoiceBalance, isInvoiceSettled, settlementMinor } from "@/lib/invoices/balance";
+import { syncFxDifference } from "@/lib/invoices/fx-difference";
 import { storedStatus } from "@/lib/invoices/status";
 import { formatGBP } from "@/lib/money";
 import { checkPeriodOpen } from "@/lib/period-lock-queries";
@@ -245,6 +246,8 @@ export async function linkPaymentToBankTransaction(
           .set({ status: "sent", paidAt: null })
           .where(and(eq(invoices.id, inv.id), eq(invoices.companyId, companyId)));
       }
+      // The sterling received may have changed, and with it any exchange difference.
+      await syncFxDifference(tx, companyId, inv.id, bankTx.bookedAt);
     });
   } catch (e) {
     if (e instanceof LinkError || e instanceof ReconciliationError) {

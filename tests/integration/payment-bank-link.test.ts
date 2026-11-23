@@ -13,6 +13,7 @@ import {
 } from "@/db/schema";
 import { seedCompany } from "@/lib/test/seed-company";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
+import { syncFxDifference } from "@/lib/invoices/fx-difference";
 import {
   linkedPaymentIds,
   linkPaymentToBankTransaction,
@@ -21,6 +22,11 @@ import {
 import { recordInvoicePayment } from "@/lib/payments/record";
 
 vi.mock("server-only", () => ({}));
+vi.mock("@/lib/invoices/fx-difference", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/invoices/fx-difference")>();
+  // Pass-through spy: every payment path must keep exchange differences in step.
+  return { ...actual, syncFxDifference: vi.fn(actual.syncFxDifference) };
+});
 
 let ctx: Awaited<ReturnType<typeof createTestDb>>;
 let db: TestDatabase;
@@ -102,6 +108,12 @@ describe("linking an existing payment to a bank receipt", () => {
     expect(receipts.map((r) => r.bankTransactionId)).toEqual([exact.id, near.id]);
 
     expect((await link(exact.id)).ok).toBe(true);
+    expect(syncFxDifference).toHaveBeenCalledWith(
+      expect.anything(),
+      companyId,
+      invoiceId,
+      "2026-03-15",
+    );
     expect(await linkedPaymentIds(companyId, invoiceId)).toEqual(new Set([paymentId]));
     const detail = await getInvoiceDetail(companyId, invoiceId);
     expect(detail?.invoice.status).toBe("paid");

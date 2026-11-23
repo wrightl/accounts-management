@@ -3,6 +3,7 @@ import { and, eq, sum } from "drizzle-orm";
 import { invoices, invoiceWriteOffs, payments } from "@/db/schema";
 import { isForeignDocumentCurrency } from "@/lib/currency";
 import { creditAdjustmentForInvoice } from "@/lib/credit-notes/adjustments";
+import type { Database } from "@/db";
 import type { Tx } from "@/lib/invoices/allocate";
 import { invoiceBalance, settlementMinor, settlementPence } from "@/lib/invoices/balance";
 
@@ -21,7 +22,7 @@ export const FX_DIFFERENCE_NOTE = "Exchange difference on settlement";
  * `onDate` dates a new or changed difference (the day it was settled).
  */
 export async function syncFxDifference(
-  tx: Tx,
+  tx: Database | Tx,
   companyId: string,
   invoiceId: string,
   onDate: string,

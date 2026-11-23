@@ -16,6 +16,7 @@ import { creditAdjustmentForInvoice } from "@/lib/credit-notes/adjustments";
 import type { Tx } from "@/lib/invoices/allocate";
 import { isForeignDocumentCurrency } from "@/lib/currency";
 import { invoiceBalance, isInvoiceSettled, settlementMinor } from "@/lib/invoices/balance";
+import { syncFxDifference } from "@/lib/invoices/fx-difference";
 import {
   effectiveStatus,
   todayIsoDate,
@@ -238,6 +239,7 @@ export async function recordInvoicePayment(
           .set({ status: "paid", paidAt: receivedAt })
           .where(and(eq(invoices.id, invoiceId), eq(invoices.companyId, companyId)));
       }
+      await syncFxDifference(tx, companyId, invoiceId, todayIsoDate(receivedAt));
 
       return payment.id;
     });

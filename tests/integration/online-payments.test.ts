@@ -7,6 +7,7 @@ import { clients, companies, invoices, payments } from "@/db/schema";
 import { seedCompany } from "@/lib/test/seed-company";
 import { getPublicInvoiceByToken } from "@/lib/invoices/public-queries";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
+import { syncFxDifference } from "@/lib/invoices/fx-difference";
 import { processConnectEvent } from "@/lib/payments/online";
 import {
   markPublicInvoiceViewed,
@@ -16,6 +17,11 @@ import {
 const createSession = vi.fn();
 
 vi.mock("server-only", () => ({}));
+vi.mock("@/lib/invoices/fx-difference", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/invoices/fx-difference")>();
+  // Pass-through spy: every payment path must keep exchange differences in step.
+  return { ...actual, syncFxDifference: vi.fn(actual.syncFxDifference) };
+});
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
   unstable_cache: <T,>(fn: T) => fn,
@@ -195,6 +201,12 @@ describe("Connect webhook", () => {
     const detail = await getInvoiceDetail(companyId, invoiceId);
     expect(detail?.invoice.status).toBe("paid");
     expect(detail?.balanceMinor).toBe(0);
+    expect(syncFxDifference).toHaveBeenCalledWith(
+      expect.anything(),
+      companyId,
+      invoiceId,
+      "2026-03-20",
+    );
   });
 
   it("never records the same Checkout session twice", async () => {

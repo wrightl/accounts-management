@@ -8,7 +8,8 @@ import { claimEvent, releaseEvent } from "@/lib/billing/webhook-events";
 import { getStripe } from "@/lib/billing/stripe";
 import { creditAdjustmentForInvoice } from "@/lib/credit-notes/adjustments";
 import { isInvoiceSettled, settlementMinor } from "@/lib/invoices/balance";
-import { storedStatus } from "@/lib/invoices/status";
+import { syncFxDifference } from "@/lib/invoices/fx-difference";
+import { storedStatus, todayIsoDate } from "@/lib/invoices/status";
 import { formatGBP } from "@/lib/money";
 import { INVOICE_PAYMENT_KIND } from "@/lib/payments/online-status";
 
@@ -102,6 +103,7 @@ export async function recordOnlineInvoicePayment(params: {
         .set({ status: "paid", paidAt: params.paidAt })
         .where(and(eq(invoices.id, inv.id), eq(invoices.companyId, params.companyId)));
     }
+    await syncFxDifference(tx, params.companyId, inv.id, todayIsoDate(params.paidAt));
     return { recorded: true, paymentId: payment.id, inv };
   });
 

@@ -193,6 +193,36 @@ export async function drainSendJobs(limit = 20): Promise<{ processed: number; se
   return { processed: jobs.length, sent, failed };
 }
 
+/**
+ * Paid so far on invoices from many companies, in each invoice's currency. One
+ * query per company, each scoped to that company through the invoice.
+ */
+async function paidMinorByCompany(
+  db: ReturnType<typeof getDb>,
+  list: { id: string; companyId: string }[],
+) {
+  const byCompany = Map.groupBy(list, (i) => i.companyId);
+  const paid = new Map<string, number>();
+  for (const [companyId, rows] of byCompany) {
+    const totals = await db
+      .select({ invoiceId: payments.invoiceId, total: sum(payments.amountMinor).mapWith(Number) })
+      .from(payments)
+      .innerJoin(invoices, eq(invoices.id, payments.invoiceId))
+      .where(
+        and(
+          inArray(
+            payments.invoiceId,
+            rows.map((r) => r.id),
+          ),
+          eq(invoices.companyId, companyId),
+        ),
+      )
+      .groupBy(payments.invoiceId);
+    for (const r of totals) paid.set(r.invoiceId, r.total ?? 0);
+  }
+  return paid;
+}
+
 /** Credit and write-off totals for invoices from many companies, one query set per company. */
 async function creditAdjustmentsByCompany(
   db: ReturnType<typeof getDb>,
@@ -257,12 +287,8 @@ export async function enqueueOverdueReminders(): Promise<number> {
   if (due.length === 0) return 0;
 
   const ids = due.map((i) => i.id);
-  const [paidRows, credits, existing] = await Promise.all([
-    db
-      .select({ invoiceId: payments.invoiceId, total: sum(payments.amountMinor).mapWith(Number) })
-      .from(payments)
-      .where(inArray(payments.invoiceId, ids))
-      .groupBy(payments.invoiceId),
+  const [paid, credits, existing] = await Promise.all([
+    paidMinorByCompany(db, due),
     creditAdjustmentsByCompany(db, due),
     db
       .select({ invoiceId: sendJobs.invoiceId, step: sendJobs.reminderStep })
@@ -275,7 +301,6 @@ export async function enqueueOverdueReminders(): Promise<number> {
         ),
       ),
   ]);
-  const paid = new Map(paidRows.map((r) => [r.invoiceId, r.total ?? 0]));
   const done = new Set(existing.map((r) => `${r.invoiceId}:${r.step}`));
 
   let queued = 0;

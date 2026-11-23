@@ -20,6 +20,11 @@ import { getProfitAndLoss } from "@/lib/reports/queries";
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("@/lib/invoices/fx-difference", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/invoices/fx-difference")>();
+  // Pass-through spy: every payment path must keep exchange differences in step.
+  return { ...actual, syncFxDifference: vi.fn(actual.syncFxDifference) };
+});
 
 let ctx: Awaited<ReturnType<typeof createTestDb>>;
 let db: TestDatabase;
@@ -153,6 +158,34 @@ describe("sterling documents", () => {
       })
       .returning();
     expect(note.grossMinor).toBe(500);
+  });
+
+  it("keeps exchange differences in step when a payment is recorded", async () => {
+    const [inv] = await db
+      .insert(invoices)
+      .values({
+        companyId,
+        number: "DD-2026-0903",
+        clientId,
+        status: "sent",
+        issueDate: "2026-05-01",
+        dueDate: "2099-05-31",
+        netPence: 10_000,
+        grossPence: 10_000,
+      })
+      .returning();
+    const result = await recordInvoicePayment({ companyId, localUserId: actorId }, inv.id, {
+      amountPounds: "100.00",
+      method: "bank_transfer",
+      receivedAt: "2026-05-20",
+    });
+    expect(result.ok).toBe(true);
+    expect(syncFxDifference).toHaveBeenCalledWith(
+      expect.anything(),
+      companyId,
+      inv.id,
+      "2026-05-20",
+    );
   });
 
   it("books no exchange difference on a sterling invoice", async () => {
