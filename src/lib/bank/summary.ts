@@ -79,7 +79,7 @@ export async function getBankTransactionSummary(
         eq(reconciliationMatches.confirmed, true),
       ),
     )
-    .where(where ? and(where, isNull(reconciliationMatches.id)) : isNull(reconciliationMatches.id));
+    .where(and(where, isNull(reconciliationMatches.id)));
 
   const [latest] = await db
     .select({

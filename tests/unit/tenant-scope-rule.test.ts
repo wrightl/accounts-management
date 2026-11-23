@@ -128,6 +128,48 @@ describe("tenant-scope/require-company-scope", () => {
         }`,
         errors: [error("payments")],
       },
+      // Scopes that look right but don't restrict the rows.
+      {
+        code: `async function f(db, companyId, x) {
+          await db.select().from(payments).innerJoin(invoices, eq(invoices.id, payments.invoiceId))
+            .where(or(eq(invoices.companyId, companyId), eq(payments.id, x)));
+        }`,
+        errors: [error("payments")],
+      },
+      {
+        code: `async function f(db, companyId) {
+          await db.select().from(payments).where(eq(payments.id, getThing(companyId)));
+        }`,
+        errors: [error("payments")],
+      },
+      {
+        code: `async function f(db, companyId) {
+          await db.select().from(payments).where(not(paymentOfCompany(companyId)));
+        }`,
+        errors: [error("payments")],
+      },
+      {
+        code: `async function f(db, companyId) {
+          await db.select().from(payments)
+            .where(sql\`invoice_id in (select id from invoices where company_id = \${companyId}) or true\`);
+        }`,
+        errors: [error("payments")],
+      },
+      // An outer join's condition doesn't remove rows.
+      {
+        code: `async function f(db, companyId) {
+          await db.select().from(payments)
+            .leftJoin(invoices, and(eq(invoices.id, payments.invoiceId), eq(invoices.companyId, companyId)));
+        }`,
+        errors: [error("payments")],
+      },
+      // A scope that only applies on one branch.
+      {
+        code: `async function f(db, companyId, where) {
+          await db.select().from(payments).where(where ? and(where, eq(invoices.companyId, companyId)) : undefined);
+        }`,
+        errors: [error("payments")],
+      },
       // Relational queries can't be checked, so they're reported.
       {
         code: `async function f(db) { await db.query.payments.findMany(); }`,

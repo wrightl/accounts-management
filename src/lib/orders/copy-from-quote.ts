@@ -99,6 +99,12 @@ export async function replaceQuotePaymentMilestones(
   quoteId: string,
   milestones: PaymentMilestoneInput[],
 ) {
+  // The insert below has no WHERE, so check the quote is the company's first.
+  const [own] = await tx
+    .select({ id: quotes.id })
+    .from(quotes)
+    .where(and(eq(quotes.id, quoteId), eq(quotes.companyId, companyId)));
+  if (!own) throw new Error("Quote not found");
   await tx
     .delete(quotePaymentMilestones)
     .where(
@@ -119,6 +125,12 @@ export async function replaceOrderPaymentMilestones(
   orderId: string,
   milestones: PaymentMilestoneInput[],
 ) {
+  // The insert below has no WHERE, so check the order is the company's first.
+  const [own] = await tx
+    .select({ id: orders.id })
+    .from(orders)
+    .where(and(eq(orders.id, orderId), eq(orders.companyId, companyId)));
+  if (!own) throw new Error("Order not found");
   await tx
     .delete(orderPaymentMilestones)
     .where(

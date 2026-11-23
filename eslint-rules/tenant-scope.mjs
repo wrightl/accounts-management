@@ -9,21 +9,15 @@
  *
  * The check is syntactic. For each Drizzle chain that reads, updates or
  * deletes one of these tables (`.from(t)`, `.update(t)`, `.delete(t)`) or
- * joins it (`.innerJoin(t, …)`, `.leftJoin(t, …)`…), the statement's filters
- * (the `.where(…)` argument and join conditions) must contain one of:
- *
- *   - a scope helper call named `…OfCompany(…)`, such as `rowOfCompany`;
- *   - `eq(x.companyId, …)` (either side), at any depth, including inside a
- *     subquery such as `inArray(payments.invoiceId, tx.select(…).where(eq(invoices.companyId, companyId)))`;
- *   - a `sql` template that names `company_id` or interpolates `x.companyId`;
- *   - a call to a helper that is passed the company id, such as
- *     `bankListWhere(companyId, filters)`.
- *
- * A `companyId` anywhere else in the chain (in `.select({…})`, `.limit()` or a
- * `.then()` callback) does not count. A local used in a filter counts if its
- * initial value passes the same check (`const where = bankListWhere(companyId, f)`),
- * but data read earlier does not (`const ids = rows.map(…)`): an earlier read
- * being scoped is exactly what the rule doesn't accept.
+ * joins it (`.innerJoin(t, …)`, `.leftJoin(t, …)`…), one of the statement's
+ * filters (the `.where(…)` argument or an inner-join condition) must restrict
+ * the rows to the company. See `isScoped` for the forms accepted. Only
+ * conjunctive positions count, so a `companyId` inside `or(…)`, `not(…)`, a
+ * conditional, an outer join, `.select({…})`, `.limit()` or a callback
+ * doesn't. A local used in a filter counts if its initial value passes the
+ * same check (`const where = bankListWhere(companyId, f)`), but data read
+ * earlier does not (`const ids = rows.map(…)`): an earlier read being scoped
+ * is exactly what the rule doesn't accept.
  *
  * Inserts are not checked: they have no WHERE, and their scope comes from the
  * parent row they reference. Relational queries (`db.query.payments…`) on
@@ -70,12 +64,6 @@ export const NOT_COMPANY_OWNED = [
 
 const QUERY_METHODS = new Set(["from", "update", "delete"]);
 const JOIN_METHODS = new Set(["innerJoin", "leftJoin", "rightJoin", "fullJoin", "crossJoin"]);
-/** Drizzle operators: passing the company id to one of these isn't a scope by itself. */
-const OPERATORS = new Set([
-  "and", "or", "not", "eq", "ne", "gt", "gte", "lt", "lte", "inArray", "notInArray",
-  "isNull", "isNotNull", "like", "ilike", "notLike", "notIlike", "between", "notBetween",
-  "exists", "notExists", "arrayContains", "arrayContained", "arrayOverlaps",
-]);
 
 /** The table identifier a call's first argument names: `payments` or `schema.payments`. */
 function tableName(arg) {
@@ -115,7 +103,10 @@ function chainTop(node) {
   }
 }
 
-/** The filter expressions of a chain: `.where(…)` arguments and join conditions. */
+/**
+ * The filter expressions of a chain: `.where(…)` arguments and inner-join
+ * conditions. An outer join's condition doesn't remove rows, so it can't scope.
+ */
 function chainFilters(top) {
   const filters = [];
   let node = top;
@@ -123,7 +114,7 @@ function chainFilters(top) {
     if (node.type === "CallExpression") {
       const method = methodName(node);
       if (method === "where") filters.push(...node.arguments);
-      else if (JOIN_METHODS.has(method)) filters.push(...node.arguments.slice(1));
+      else if (method === "innerJoin") filters.push(...node.arguments.slice(1));
       node = node.callee;
     } else if (node.type === "MemberExpression") {
       node = node.object;
@@ -149,51 +140,76 @@ function isCompanyIdRef(node) {
   return (node?.type === "Identifier" && node.name === "companyId") || isCompanyIdMember(node);
 }
 
-/** Child nodes of an AST node. */
-function* children(node) {
-  for (const key of Object.keys(node)) {
-    if (key === "parent") continue;
-    const child = node[key];
-    if (Array.isArray(child)) {
-      for (const c of child) if (c && typeof c.type === "string") yield c;
-    } else if (child && typeof child.type === "string") {
-      yield child;
+/** Whether a call is a query chain (`tx.select(…).from(…)…`). */
+function isQueryChain(node) {
+  let current = node;
+  while (current) {
+    if (current.type === "CallExpression") {
+      if (QUERY_METHODS.has(methodName(current))) return true;
+      current = current.callee;
+    } else if (current.type === "MemberExpression") {
+      current = current.object;
+    } else {
+      return false;
     }
-  }
-}
-
-/** Whether a single node is a company filter on its own (see the header). */
-function isScopeNode(node) {
-  if (node.type === "CallExpression") {
-    const fn = functionName(node);
-    if (fn && /OfCompany$/.test(fn)) return true;
-    if (fn === "eq" && node.arguments.some(isCompanyIdMember)) return true;
-    // A helper given the company id builds the filter from it.
-    const named = fn ?? methodName(node);
-    if (named && !OPERATORS.has(named) && node.arguments.some(isCompanyIdRef)) return true;
-  }
-  if (node.type === "TaggedTemplateExpression" && node.tag.type === "Identifier" && node.tag.name === "sql") {
-    const { quasi } = node;
-    if (quasi.quasis.some((q) => /\bcompany_id\b/.test(q.value.raw))) return true;
-    if (quasi.expressions.some(isCompanyIdMember)) return true;
   }
   return false;
 }
 
+/** Helpers that build a company filter or id subquery from the company id. */
+const FILTER_HELPER = /(OfCompany|Where|Filter|Ids)$/;
+
 /**
- * Whether a filter expression scopes to the company: it, or anything inside
- * it, is a scope node, or it reads a local whose initial value is one.
+ * Whether a filter expression restricts the rows to the company. Only
+ * conjunctive positions are followed, so the scope can't be bypassed by an
+ * `or(…)` or `not(…)` or by passing the company id to something unrelated:
+ *
+ *   - `and(…)` (or an array spread into it): any argument is scoped;
+ *   - `…OfCompany(…)`: a scope helper;
+ *   - `eq(x.companyId, …)`, either way round;
+ *   - `inArray(col, sub)` / `exists(sub)`: `sub` is a scoped subquery, or a
+ *     helper named `…Where` / `…Filter` / `…Ids` given the company id;
+ *   - `…Where(…)` / `…Filter(…)` given the company id, such as `bankListWhere`;
+ *   - a `sql` template naming `company_id` (with no `or`);
+ *   - a local whose initial value is one of these.
  */
 function isScoped(node, sourceCode, seen) {
   if (!node || typeof node.type !== "string") return false;
-  // Callbacks run later, not as part of the filter.
-  if (node.type === "ArrowFunctionExpression" || node.type === "FunctionExpression") return false;
-  if (isScopeNode(node)) return true;
-  if (node.type === "Identifier" && scopedLocal(node, sourceCode, seen)) return true;
-  for (const child of children(node)) {
-    if (isScoped(child, sourceCode, seen)) return true;
+  switch (node.type) {
+    case "Identifier":
+      return scopedLocal(node, sourceCode, seen);
+    case "SpreadElement":
+      return isScoped(node.argument, sourceCode, seen);
+    case "ArrayExpression":
+      return node.elements.some((e) => isScoped(e, sourceCode, seen));
+    case "TSAsExpression":
+    case "TSNonNullExpression":
+      return isScoped(node.expression, sourceCode, seen);
+    case "TaggedTemplateExpression": {
+      if (node.tag.type !== "Identifier" || node.tag.name !== "sql") return false;
+      const text = node.quasi.quasis.map((q) => q.value.raw).join(" ");
+      if (/\bor\b/i.test(text)) return false;
+      return (
+        /\bcompany_id\b/.test(text) || node.quasi.expressions.some(isCompanyIdMember)
+      );
+    }
+    case "CallExpression": {
+      if (isQueryChain(node)) {
+        return chainFilters(chainTop(node)).some((f) => isScoped(f, sourceCode, seen));
+      }
+      const fn = functionName(node);
+      if (!fn) return false;
+      if (fn === "and") return node.arguments.some((a) => isScoped(a, sourceCode, seen));
+      if (fn === "eq") return node.arguments.some(isCompanyIdMember);
+      if (fn === "inArray") return isScoped(node.arguments[1], sourceCode, seen);
+      if (fn === "exists") return isScoped(node.arguments[0], sourceCode, seen);
+      if (/OfCompany$/.test(fn)) return true;
+      if (FILTER_HELPER.test(fn)) return node.arguments.some(isCompanyIdRef);
+      return false;
+    }
+    default:
+      return false;
   }
-  return false;
 }
 
 /**
