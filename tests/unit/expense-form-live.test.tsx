@@ -57,7 +57,10 @@ function renderExpensePage(expense: Parameters<typeof ExpenseForm>[0]["expense"]
         initialPence={expense!.amountPence}
         initialOriginal={null}
       >
-        <ExpenseTitle fallback={expense!.description} />
+        {/* The page renders the title inside PageHeader's h1. */}
+        <h1>
+          <ExpenseTitle fallback={expense!.description} />
+        </h1>
         <ExpenseAmountCard />
         <ExpenseForm
           mode="edit"

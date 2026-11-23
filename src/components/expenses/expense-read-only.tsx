@@ -2,7 +2,6 @@ import { BankSettlements } from "@/components/bank/bank-settlements";
 import { DisplayDate } from "@/components/date-format-provider";
 import { ReceiptPanel } from "@/components/expenses/receipt-panel";
 import { RecordQueries } from "@/components/queries/record-queries";
-import { BackLink } from "@/components/ui/back-link";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { listBankSettlements } from "@/lib/bank/settlements";
 import { clientDisplayName } from "@/lib/clients/display";
@@ -11,6 +10,7 @@ import type { getExpenseDetail } from "@/lib/expenses/queries";
 import { formatGBP } from "@/lib/money";
 import { formatExpenseRef } from "@/lib/references";
 import type { Role } from "@/lib/roles";
+import { PageHeader } from "@/components/ui/page-header";
 
 /** An expense for someone who can't edit it, limited to what the accountant pack exports. */
 export async function ExpenseReadOnly({
@@ -42,12 +42,9 @@ export async function ExpenseReadOnly({
 
   return (
     <div>
-      <div className="mb-6">
-        <BackLink href="/expenses">Expenses</BackLink>
-      </div>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <h1 className="font-display text-2xl font-semibold">{expense.description}</h1>
-        <Card className="min-w-[140px]">
+      <PageHeader backHref="/expenses" backLabel="Expenses" title={expense.description} />
+      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Card>
           <CardTitle>Amount</CardTitle>
           <CardValue>{expense.amountFormatted}</CardValue>
         </Card>

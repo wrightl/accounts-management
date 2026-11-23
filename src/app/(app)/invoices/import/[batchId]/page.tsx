@@ -1,10 +1,10 @@
 import { notFound } from "next/navigation";
 import { InvoiceImportReview } from "@/components/invoices/invoice-import-review";
-import { BackLink } from "@/components/ui/back-link";
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { SetupStepBanner } from "@/components/data-onboarding/setup-step-banner";
 import { getImportBatchReview } from "@/lib/invoices/import/queries";
 import { getCompanySettings } from "@/lib/settings/queries";
+import { PageHeader } from "@/components/ui/page-header";
 
 // Server Actions on this page commit and undo large imports.
 export const maxDuration = 60;
@@ -30,11 +30,12 @@ export default async function InvoiceImportBatchPage({
   return (
     <div>
       <SetupStepBanner stepId="invoices" entityType={entityType} from={sp.from} />
-      <div className="mb-6">
-        <BackLink href="/invoices/import">Back to imports</BackLink>
-      </div>
-      <h1 className="font-display text-2xl font-semibold">Review import</h1>
-      <p className="mt-1 text-muted">{review.batch.filename}</p>
+      <PageHeader
+        backHref="/invoices/import"
+        backLabel="Imports"
+        title="Review import"
+        description={<>{review.batch.filename}</>}
+      />
       <InvoiceImportReview
         review={review}
         canSetCutover={canSetCutover}

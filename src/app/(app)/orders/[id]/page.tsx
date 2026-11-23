@@ -6,7 +6,6 @@ import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { OrderActions } from "@/components/orders/order-actions";
 import { InvoiceDueDate } from "@/components/invoices/invoice-due-date";
 import { StatusBadge } from "@/components/ui/badge";
-import { BackLink } from "@/components/ui/back-link";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import {
@@ -22,6 +21,7 @@ import type { InvoiceStatus } from "@/lib/invoices/status";
 import { getOrderProfitability, listProjectExpenses } from "@/lib/profitability/queries";
 import { MarginCards, ProjectExpenses, marginLabel } from "@/components/profitability/project-costs";
 import { DisplayDate } from "@/components/date-format-provider";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function OrderDetailPage({
   params,
@@ -45,59 +45,65 @@ export default async function OrderDetailPage({
 
   return (
     <div>
-      <div className="mb-6">
-        <BackLink href="/orders">Orders</BackLink>
-      </div>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          <h1 className="font-display text-2xl font-semibold">{detail.order.number}</h1>
-          <p className="mt-1 text-muted capitalize">
-            {detail.order.status} ·{" "}
-            <Link
-              href={`/clients/${detail.client.id}`}
-              className="text-foreground hover:underline"
-            >
-              {clientDisplayName(detail.client)}
-            </Link>
-            {" · Created "}
-            <DisplayDate value={detail.order.createdAt} />
-          </p>
-          {detail.quote ? (
-            <p className="mt-1 text-sm">
-              From quote{" "}
+      <PageHeader
+        backHref="/orders"
+        backLabel="Orders"
+        title={detail.order.number}
+        description={
+          <>
+            <p>
+              <span className="capitalize">{detail.order.status}</span> ·{" "}
               <Link
-                href={`/quotes/${detail.quote.id}`}
-                className="text-foreground underline"
+                href={`/clients/${detail.client.id}`}
+                className="text-foreground hover:underline"
               >
-                {detail.quote.number}
+                {clientDisplayName(detail.client)}
               </Link>
+              {" · Created "}
+              <DisplayDate value={detail.order.createdAt} />
             </p>
-          ) : null}
-          {canWrite ? (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <OrderActions
-                orderId={detail.order.id}
-                canWrite={canWrite}
-                remainingPence={detail.remainingPence}
-                orderGrossPence={detail.order.grossPence}
-                availableMilestones={detail.availableMilestones}
-                defaultDueDate={defaultDue}
-              />
-              {detail.remainingPence <= 0 ? (
-                <span className="text-sm text-muted">Fully invoiced</span>
-              ) : null}
-            </div>
+            {detail.quote ? (
+              <p className="mt-1 text-sm">
+                From quote{" "}
+                <Link
+                  href={`/quotes/${detail.quote.id}`}
+                  className="text-foreground underline"
+                >
+                  {detail.quote.number}
+                </Link>
+              </p>
+            ) : null}
+          </>
+        }
+      />
+
+      {canWrite ? (
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <OrderActions
+            orderId={detail.order.id}
+            canWrite={canWrite}
+            remainingPence={detail.remainingPence}
+            orderGrossPence={detail.order.grossPence}
+            availableMilestones={detail.availableMilestones}
+            defaultDueDate={defaultDue}
+          />
+          {detail.remainingPence <= 0 ? (
+            <span className="text-sm text-muted">Fully invoiced</span>
           ) : null}
         </div>
-        <Card className="min-w-[140px]">
+      ) : null}
+
+      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Card>
           <CardTitle>Total</CardTitle>
           <CardValue>{detail.order.grossFormatted}</CardValue>
-          {detail.priorInvoicedPence > 0 ? (
-            <p className="mt-2 text-xs text-muted">
-              Remaining {detail.remainingFormatted}
-            </p>
-          ) : null}
         </Card>
+        {detail.priorInvoicedPence > 0 ? (
+          <Card>
+            <CardTitle>Still to invoice</CardTitle>
+            <CardValue>{detail.remainingFormatted}</CardValue>
+          </Card>
+        ) : null}
       </div>
 
       <div className="mt-8">

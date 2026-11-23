@@ -3,7 +3,7 @@ import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { getClient } from "@/lib/clients/queries";
 import { clientDisplayName } from "@/lib/clients/display";
 import { ClientForm } from "@/components/clients/client-form";
-import { BackLink } from "@/components/ui/back-link";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function EditClientPage({
   params,
@@ -19,10 +19,12 @@ export default async function EditClientPage({
 
   return (
     <div>
-      <div className="mb-6 flex items-center gap-3">
-        <BackLink href={`/clients/${id}`}>{clientDisplayName(client)}</BackLink>
-      </div>
-      <h1 className="mb-6 font-display text-2xl font-semibold">Edit client</h1>
+      <PageHeader
+        backHref={`/clients/${id}`}
+        backLabel={clientDisplayName(client)}
+        title="Edit client"
+        className="mb-6"
+      />
       <ClientForm mode="edit" client={client} canWrite={canWrite} />
     </div>
   );

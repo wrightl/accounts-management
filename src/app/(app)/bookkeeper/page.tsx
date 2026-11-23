@@ -13,6 +13,7 @@ import { countUncategorisedOutgoing, listCategorySuggestions } from "@/lib/bookk
 import { listAiReceiptMatches } from "@/lib/bookkeeper/receipts";
 import { getCompanySettings } from "@/lib/settings/queries";
 import { Callout } from "@/components/ui/callout";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const metadata: Metadata = { title: "AI bookkeeper" };
 
@@ -33,11 +34,10 @@ export default async function BookkeeperPage() {
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-semibold">AI bookkeeper</h1>
-      <p className="mt-1 max-w-2xl text-muted">
-        Suggestions to speed up the bookkeeping, and answers from your own figures. Nothing
-        changes until someone accepts it.
-      </p>
+      <PageHeader
+        title="AI bookkeeper"
+        description="Suggestions to speed up the bookkeeping, and answers from your own figures. Nothing changes until someone accepts it."
+      />
       {!aiReady ? (
         <Callout className="mt-4 max-w-2xl">
           AI isn&apos;t set up on this deployment, so questions and AI suggestions are off.

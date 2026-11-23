@@ -11,6 +11,7 @@ import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { DisplayDate } from "@/components/date-format-provider";
 import { Callout } from "@/components/ui/callout";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const metadata: Metadata = { title: "Deadlines" };
 
@@ -48,13 +49,17 @@ export default async function DeadlinesPage() {
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-semibold">Deadlines</h1>
-      <p className="mt-1 max-w-3xl text-muted">
-        {isLtd
-          ? `Companies House and HMRC deadlines for the next year, worked out from your year end, ${settings.vatRegistered ? "VAT quarters " : ""}and Companies House record.`
-          : `HMRC deadlines for the next year, worked out from the tax year${settings.vatRegistered ? " and your VAT quarters" : ""}.`}{" "}
-        Mark each one done once it&apos;s filed or paid.
-      </p>
+      <PageHeader
+        title="Deadlines"
+        description={
+          <>
+            {isLtd
+              ? `Companies House and HMRC deadlines for the next year, worked out from your year end, ${settings.vatRegistered ? "VAT quarters " : ""}and Companies House record.`
+              : `HMRC deadlines for the next year, worked out from the tax year${settings.vatRegistered ? " and your VAT quarters" : ""}.`}{" "}
+            Mark each one done once it&apos;s filed or paid.
+          </>
+        }
+      />
 
       {missingCompaniesHouse ? (
         <Callout className="mt-6">

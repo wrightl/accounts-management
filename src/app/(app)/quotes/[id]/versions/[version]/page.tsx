@@ -1,7 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { guardTenantPage } from "@/lib/auth";
 import { getQuoteVersionDetail } from "@/lib/quotes/queries";
-import { BackLink } from "@/components/ui/back-link";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import {
@@ -14,6 +13,7 @@ import {
 import { clientDisplayName } from "@/lib/clients/display";
 import { DisplayDate } from "@/components/date-format-provider";
 import { Callout } from "@/components/ui/callout";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function QuoteVersionPage({
   params,
@@ -33,29 +33,30 @@ export default async function QuoteVersionPage({
 
   return (
     <div>
-      <div className="mb-6">
-        <BackLink href={`/quotes/${id}`}>Current quote</BackLink>
-      </div>
+      <PageHeader
+        backHref={`/quotes/${id}`}
+        backLabel="Current quote"
+        title={detail.quote.reference}
+        description={
+          <>
+            <p className="capitalize">
+              {detail.quote.status} · {clientDisplayName(detail.client)}
+            </p>
+            <p className="mt-1 text-sm">
+              Issued <DisplayDate value={detail.quote.issueDate} />
+              {detail.quote.validUntil ? <> · Valid until <DisplayDate value={detail.quote.validUntil} /></> : null}
+            </p>
+          </>
+        }
+      />
 
-      <Callout tone="warning" className="mb-4">
+      <Callout tone="warning" className="mt-4">
         You&apos;re viewing {detail.quote.versionLabel}, not the current version
         {detail.currentVersion ? ` (v${detail.currentVersion})` : ""}.
       </Callout>
 
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-semibold">
-            {detail.quote.reference}
-          </h1>
-          <p className="mt-1 capitalize text-muted">
-            {detail.quote.status} · {clientDisplayName(detail.client)}
-          </p>
-          <p className="mt-1 text-sm text-muted">
-            Issued <DisplayDate value={detail.quote.issueDate} />
-            {detail.quote.validUntil ? <> · Valid until <DisplayDate value={detail.quote.validUntil} /></> : null}
-          </p>
-        </div>
-        <Card className="min-w-[140px]">
+      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Card>
           <CardTitle>Total</CardTitle>
           <CardValue>{detail.quote.grossFormatted}</CardValue>
         </Card>

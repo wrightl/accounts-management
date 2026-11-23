@@ -6,6 +6,7 @@ import { getBroughtForwardDebtsPence, getForecastInputs } from "@/lib/forecast/q
 import { formatGBP } from "@/lib/money";
 import { DisplayDate } from "@/components/date-format-provider";
 import { Callout } from "@/components/ui/callout";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const metadata: Metadata = { title: "Cash forecast" };
 
@@ -25,11 +26,15 @@ export default async function ForecastPage() {
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-semibold">Cash forecast</h1>
-      <p className="mt-1 max-w-2xl text-muted">
-        Cash at the end of each of the next 13 weeks, from the money you&apos;re owed and the
-        bills you know about.
-      </p>
+      <PageHeader
+        title="Cash forecast"
+        description={
+          <>
+            Cash at the end of each of the next 13 weeks, from the money you&apos;re owed and the
+            bills you know about.
+          </>
+        }
+      />
 
       {oldDebtsPence > 0 ? (
         <Callout className="mt-6 max-w-2xl">

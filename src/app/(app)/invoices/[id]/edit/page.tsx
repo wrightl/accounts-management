@@ -8,8 +8,8 @@ import { defaultLineVatRate } from "@/lib/vat";
 import { InvoiceForm } from "@/components/invoices/invoice-form";
 import { listRebillableExpenses } from "@/lib/profitability/queries";
 import { toRebillOptions } from "@/lib/profitability/rebill";
-import { BackLink } from "@/components/ui/back-link";
 import { penceToPounds } from "@/lib/money";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function EditInvoicePage({
   params,
@@ -44,12 +44,12 @@ export default async function EditInvoicePage({
 
   return (
     <div>
-      <div className="mb-6 flex items-center gap-3">
-        <BackLink href={`/invoices/${id}`}>{detail.invoice.number}</BackLink>
-      </div>
-      <h1 className="mb-6 font-display text-2xl font-semibold">
-        Edit {detail.invoice.number}
-      </h1>
+      <PageHeader
+        backHref={`/invoices/${id}`}
+        backLabel={detail.invoice.number}
+        title={<>Edit {detail.invoice.number}</>}
+        className="mb-6"
+      />
       <InvoiceForm
         mode="edit"
         clients={clients}

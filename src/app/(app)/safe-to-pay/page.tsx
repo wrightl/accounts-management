@@ -10,6 +10,7 @@ import { getSafeToPay } from "@/lib/safe-to-pay/queries";
 import { DisplayDate } from "@/components/date-format-provider";
 import { getDateFormat } from "@/lib/date-format.server";
 import { Callout } from "@/components/ui/callout";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const metadata: Metadata = { title: "Safe to pay yourself" };
 
@@ -62,11 +63,10 @@ export default async function SafeToPayPage() {
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-semibold">Safe to pay yourself</h1>
-      <p className="mt-1 max-w-2xl text-muted">
-        How much the company could pay out in dividends today without running short of cash or
-        paying more than its profits allow.
-      </p>
+      <PageHeader
+        title="Safe to pay yourself"
+        description="How much the company could pay out in dividends today without running short of cash or paying more than its profits allow."
+      />
 
       {!cash.known ? (
         <Callout className="mt-6 max-w-2xl">

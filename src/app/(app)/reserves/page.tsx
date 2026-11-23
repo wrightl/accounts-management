@@ -16,6 +16,7 @@ import {
 import { formatGBP } from "@/lib/money";
 import { DisplayDate } from "@/components/date-format-provider";
 import { Callout } from "@/components/ui/callout";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const metadata: Metadata = { title: "Tax & reserves" };
 
@@ -60,11 +61,10 @@ export default async function ReservesPage({
   return (
     <div>
       <SetupStepBanner stepId="opening_balances" entityType={entityType} from={sp.from} />
-      <h1 className="font-display text-2xl font-semibold">Tax &amp; reserves</h1>
-      <p className="mt-1 max-w-2xl text-muted">
-        A running estimate of corporation tax and of the profit the company can pay out as
-        dividends. Your accountant finalises the real figures.
-      </p>
+      <PageHeader
+        title={<>Tax &amp; reserves</>}
+        description="A running estimate of corporation tax and of the profit the company can pay out as dividends. Your accountant finalises the real figures."
+      />
 
       {!position.hasOpeningBalances ? (
         <Callout className="mt-6 max-w-2xl">

@@ -13,6 +13,7 @@ import { Table, THead, TBody, TR, TD } from "@/components/ui/table";
 import { sortHeaders } from "@/components/ui/sortable-th";
 import { defineTableSort, parseTableSort, setTableSortParams, sortRows } from "@/lib/table-sort";
 import { Callout } from "@/components/ui/callout";
+import { PageHeader } from "@/components/ui/page-header";
 
 /** "created" is the loaded order (newest first) and has no header. */
 const ORDER_SORT = defineTableSort({
@@ -102,11 +103,15 @@ export default async function ProfitabilityPage({
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-semibold">Profitability</h1>
-      <p className="mt-1 max-w-2xl text-muted">
-        What each order and client earns once the costs you spent on them are taken off.
-        {company.vatRegistered ? " All figures are net of VAT." : null}
-      </p>
+      <PageHeader
+        title="Profitability"
+        description={
+          <>
+            What each order and client earns once the costs you spent on them are taken off.
+            {company.vatRegistered ? " All figures are net of VAT." : null}
+          </>
+        }
+      />
 
       {!anyCosts ? (
         <Callout className="mt-6 max-w-2xl">

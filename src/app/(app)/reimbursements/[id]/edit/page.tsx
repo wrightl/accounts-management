@@ -3,7 +3,7 @@ import { guardTenantPage } from "@/lib/auth";
 import { getReimbursementEditData } from "@/lib/reimbursements/queries";
 import { canEditReimbursement } from "@/lib/reimbursements/status";
 import { EditReimbursementForm } from "@/components/reimbursements/edit-form";
-import { BackLink } from "@/components/ui/back-link";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function EditReimbursementPage({
   params,
@@ -19,12 +19,12 @@ export default async function EditReimbursementPage({
 
   return (
     <div>
-      <div className="mb-6 flex items-center gap-3">
-        <BackLink href={`/reimbursements/${id}`}>{data.payeeLabel}</BackLink>
-      </div>
-      <h1 className="mb-6 font-display text-2xl font-semibold">
-        Edit reimbursement run
-      </h1>
+      <PageHeader
+        backHref={`/reimbursements/${id}`}
+        backLabel={data.payeeLabel}
+        title="Edit reimbursement run"
+        className="mb-6"
+      />
       <EditReimbursementForm
         id={id}
         payeeLabel={data.payeeLabel}

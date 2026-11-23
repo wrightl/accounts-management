@@ -6,6 +6,7 @@ import { visibleSettingsPages, type SettingsPage } from "@/components/dashboard/
 import { NAV_ICONS } from "@/components/dashboard/nav-icons";
 import { ReopenDataOnboardingButton } from "@/components/data-onboarding/reopen-data-onboarding-button";
 import { getDataOnboardingRow } from "@/lib/data-onboarding/queries";
+import { PageHeader } from "@/components/ui/page-header";
 
 const SECTIONS: { id: SettingsPage["section"]; label: string }[] = [
   { id: "you", label: "You" },
@@ -24,10 +25,11 @@ export default async function SettingsHubPage() {
 
   return (
     <div>
-      <h1 className="mb-2 font-display text-2xl font-semibold">Settings</h1>
-      <p className="mb-8 text-muted">
-        Your own preferences, and the details and people behind the business.
-      </p>
+      <PageHeader
+        title="Settings"
+        description="Your own preferences, and the details and people behind the business."
+        className="mb-8"
+      />
       <div className="max-w-2xl space-y-8">
         {SECTIONS.map((section) => {
           const items = pages.filter((page) => page.section === section.id);

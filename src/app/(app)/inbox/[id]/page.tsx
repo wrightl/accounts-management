@@ -1,4 +1,4 @@
-import { BackLink } from "@/components/ui/back-link";
+import { Card } from "@/components/ui/card";
 import { notFound, redirect } from "next/navigation";
 import { guardTenantPage } from "@/lib/auth";
 import { ensureLocalUser } from "@/lib/users";
@@ -8,6 +8,7 @@ import {
 } from "@/lib/notifications";
 import { DisplayDate } from "@/components/date-format-provider";
 import { PAGE_WIDTH } from "@/components/ui/page-width";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function InboxDetailPage({
   params,
@@ -35,18 +36,15 @@ export default async function InboxDetailPage({
 
   return (
     <div className={PAGE_WIDTH.reading}>
-      <BackLink href="/inbox">Back to inbox</BackLink>
-      <article className="mt-4 rounded-2xl border border-border bg-surface p-6">
-        <h1 className="font-display text-2xl font-semibold">
-          {notification.title}
-        </h1>
-        <p className="mt-1 text-xs text-muted">
-          <DisplayDate value={notification.createdAt} withTime />
-        </p>
-        <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed">
-          {notification.body}
-        </p>
-      </article>
+      <PageHeader
+        backHref="/inbox"
+        backLabel="Inbox"
+        title={notification.title}
+        description={<DisplayDate value={notification.createdAt} withTime />}
+      />
+      <Card className="mt-6">
+        <p className="whitespace-pre-wrap text-sm leading-relaxed">{notification.body}</p>
+      </Card>
     </div>
   );
 }

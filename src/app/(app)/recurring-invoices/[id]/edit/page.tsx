@@ -3,10 +3,10 @@ import { guardTenantPage } from "@/lib/auth";
 import { listClients } from "@/lib/clients/queries";
 import { getRecurringInvoiceDetail } from "@/lib/invoices/recurring-queries";
 import { RecurringInvoiceForm } from "@/components/recurring-invoices/recurring-form";
-import { BackLink } from "@/components/ui/back-link";
 import { penceToPounds } from "@/lib/money";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { defaultLineVatRate } from "@/lib/vat";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function EditRecurringInvoicePage({
   params,
@@ -27,10 +27,12 @@ export default async function EditRecurringInvoicePage({
 
   return (
     <div>
-      <div className="mb-6">
-        <BackLink href={`/recurring-invoices/${id}`}>{template.name}</BackLink>
-      </div>
-      <h1 className="mb-6 font-display text-2xl font-semibold">Edit schedule</h1>
+      <PageHeader
+        backHref={`/recurring-invoices/${id}`}
+        backLabel={template.name}
+        title="Edit schedule"
+        className="mb-6"
+      />
       <RecurringInvoiceForm
         mode="edit"
         clients={clients}

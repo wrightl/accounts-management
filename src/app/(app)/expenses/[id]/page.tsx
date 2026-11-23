@@ -20,7 +20,6 @@ import { periodLockError } from "@/lib/period-lock";
 import { formatExpenseRef } from "@/lib/references";
 import { ExpenseForm } from "@/components/expenses/expense-form";
 import { ReceiptPanel } from "@/components/expenses/receipt-panel";
-import { BackLink } from "@/components/ui/back-link";
 import { EXPENSE_LIST_COOKIE, expenseListReturnHref } from "@/lib/expenses/list-params";
 import {
   ExpenseAmountCard,
@@ -39,6 +38,7 @@ import { PossibleDuplicateList } from "@/components/expenses/possible-duplicates
 import { DisplayDate } from "@/components/date-format-provider";
 import { getDateFormat } from "@/lib/date-format.server";
 import { Callout } from "@/components/ui/callout";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function ExpenseDetailPage({
   params,
@@ -95,16 +95,26 @@ export default async function ExpenseDetailPage({
   const listHref = expenseListReturnHref((await cookies()).get(EXPENSE_LIST_COOKIE)?.value);
 
   return (
-    <div>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <BackLink href={listHref}>Expenses</BackLink>
-        <p className="text-sm text-muted">
-          Reference{" "}
-          <span className="font-medium text-foreground">
+    <ExpenseSummaryProvider
+      initialDescription={detail.expense.description}
+      initialPence={detail.expense.amountPence}
+      initialOriginal={originalAmount}
+    >
+      <PageHeader
+        backHref={listHref}
+        backLabel="Expenses"
+        title={<ExpenseTitle fallback={detail.expense.description} />}
+        description={
+          <>
             {formatExpenseRef(detail.expense.refNumber)}
-          </span>
-        </p>
-      </div>
+            {" · "}
+            {expenseStatusLabel(detail.expense.status as ExpenseStatus)}
+            {detail.expense.spentAt ? <> · <DisplayDate value={detail.expense.spentAt} /></> : null}
+            {detail.paidBy ? ` · Paid by ${detail.paidBy.name || detail.paidBy.email}` : null}
+          </>
+        }
+        className="mb-6"
+      />
 
       {detail.expense.status === "pending" && (
         <Callout tone="warning" className="mb-6">
@@ -216,67 +226,53 @@ export default async function ExpenseDetailPage({
         </Callout>
       )}
 
-      <ExpenseSummaryProvider
-        initialDescription={detail.expense.description}
-        initialPence={detail.expense.amountPence}
-        initialOriginal={originalAmount}
-      >
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <ExpenseTitle fallback={detail.expense.description} />
-            <p className="mt-1 text-muted">
-              {expenseStatusLabel(detail.expense.status as ExpenseStatus)}
-              {detail.expense.spentAt ? <> · <DisplayDate value={detail.expense.spentAt} /></> : null}
-              {detail.paidBy ? ` · Paid by ${detail.paidBy.name || detail.paidBy.email}` : null}
-            </p>
-          </div>
-          <ExpenseAmountCard />
-        </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <ExpenseAmountCard />
+      </div>
 
-        <div className="mt-8 grid gap-10 lg:grid-cols-2">
-          <ExpenseForm
-            listHref={listHref}
-            // Remount when the status changes (e.g. a pending email expense is
-            // approved, or the sender answers how they paid) so the form's status
-            // state re-derives from the saved row.
-            key={`${detail.expense.id}:${detail.expense.status}:${paymentSource?.suggestedStatus ?? ""}`}
-            mode="edit"
-            expense={detail.expense}
-            founders={founders}
-            clients={clients}
-            orders={orders}
-            rebilledOn={rebill}
-            linkedToBank={settlements.length > 0}
-            receiptCount={detail.receipts.length}
-            suggestedApproveStatus={paymentSource?.suggestedStatus ?? null}
+      <div className="mt-8 grid gap-10 lg:grid-cols-2">
+        <ExpenseForm
+          listHref={listHref}
+          // Remount when the status changes (e.g. a pending email expense is
+          // approved, or the sender answers how they paid) so the form's status
+          // state re-derives from the saved row.
+          key={`${detail.expense.id}:${detail.expense.status}:${paymentSource?.suggestedStatus ?? ""}`}
+          mode="edit"
+          expense={detail.expense}
+          founders={founders}
+          clients={clients}
+          orders={orders}
+          rebilledOn={rebill}
+          linkedToBank={settlements.length > 0}
+          receiptCount={detail.receipts.length}
+          suggestedApproveStatus={paymentSource?.suggestedStatus ?? null}
+          canWrite={canWrite}
+          defaultMileageRatePence={settings.defaultMileageRatePence}
+          vatRegistered={settings.vatRegistered}
+          defaultVatRate={settings.vatRegistered ? settings.defaultVatRate : 0}
+        />
+        <div className="space-y-10">
+          <ReceiptPanel
+            expenseId={detail.expense.id}
+            receipts={detail.receipts}
             canWrite={canWrite}
-            defaultMileageRatePence={settings.defaultMileageRatePence}
-            vatRegistered={settings.vatRegistered}
-            defaultVatRate={settings.vatRegistered ? settings.defaultVatRate : 0}
           />
-          <div className="space-y-10">
-            <ReceiptPanel
+          {inboundJob ? (
+            <EmailBodyPanel
               expenseId={detail.expense.id}
-              receipts={detail.receipts}
-              canWrite={canWrite}
+              email={{
+                fromEmail: inboundJob.fromEmail,
+                subject: inboundJob.subject,
+                receivedAt: formatInstantDateTime(inboundJob.createdAt, await getDateFormat()),
+                hasHtml: inboundJob.hasHtml,
+                hasText: inboundJob.hasText,
+              }}
             />
-            {inboundJob ? (
-              <EmailBodyPanel
-                expenseId={detail.expense.id}
-                email={{
-                  fromEmail: inboundJob.fromEmail,
-                  subject: inboundJob.subject,
-                  receivedAt: formatInstantDateTime(inboundJob.createdAt, await getDateFormat()),
-                  hasHtml: inboundJob.hasHtml,
-                  hasText: inboundJob.hasText,
-                }}
-              />
-            ) : null}
-          </div>
+          ) : null}
         </div>
-      </ExpenseSummaryProvider>
+      </div>
 
       <RecordQueries companyId={companyId} role={role} kind="expense" recordId={detail.expense.id} />
-    </div>
+    </ExpenseSummaryProvider>
   );
 }

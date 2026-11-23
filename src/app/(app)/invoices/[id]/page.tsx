@@ -108,19 +108,17 @@ export default async function InvoiceDetailPage({
         actions={
           <InvoiceStatusSelect invoiceId={invoice.id} status={status} canWrite={canWrite} />
         }
-        title={
-          <span className="flex items-center gap-2">
-            {invoice.number}
-            {canWrite && canEditInvoice(status) ? (
-              <Link
-                href={`/invoices/${invoice.id}/edit`}
-                className={buttonClasses("ghost", "size-9 shrink-0 px-0")}
-                aria-label="Edit invoice"
-              >
-                <Pencil className="h-4 w-4" />
-              </Link>
-            ) : null}
-          </span>
+        title={invoice.number}
+        titleAddon={
+          canWrite && canEditInvoice(status) ? (
+            <Link
+              href={`/invoices/${invoice.id}/edit`}
+              className={buttonClasses("ghost", "size-9 shrink-0 px-0")}
+              aria-label="Edit invoice"
+            >
+              <Pencil className="h-4 w-4" />
+            </Link>
+          ) : null
         }
         description={
           <>

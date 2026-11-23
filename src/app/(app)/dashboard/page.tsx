@@ -34,6 +34,7 @@ import { todayIsoDate } from "@/lib/dates";
 import { DataOnboardingCard } from "@/components/data-onboarding/data-onboarding-card";
 import { getDataOnboarding, type DataOnboardingView } from "@/lib/data-onboarding/queries";
 import { stepsFor } from "@/lib/data-onboarding/steps";
+import { PageHeader } from "@/components/ui/page-header";
 
 type MenuPrompt =
   | { kind: "questions" }
@@ -80,14 +81,10 @@ export default async function DashboardOverview({
   if (user.role === "pending") {
     return (
       <div>
-        <h1 className="font-display text-2xl font-semibold">
-          Welcome{user.name ? `, ${user.name.split(" ")[0]}` : ""}
-        </h1>
-        <p className="mt-2 text-muted">
-          Your account is waiting for an administrator to assign a role in Clerk
-          (admin, co-founder, or accountant). You cannot view or change the books
-          until then.
-        </p>
+        <PageHeader
+          title={`Welcome${user.name ? `, ${user.name.split(" ")[0]}` : ""}`}
+          description="Your account is waiting for an administrator to give you a role (admin, co-founder or accountant). You can't view or change the books until then."
+        />
       </div>
     );
   }
@@ -163,12 +160,10 @@ export default async function DashboardOverview({
 
   return (
     <div>
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-semibold">
-            Welcome{user.name ? `, ${user.name.split(" ")[0]}` : ""}
-          </h1>
-          <p className="mt-1 text-muted">
+      <PageHeader
+        title={`Welcome${user.name ? `, ${user.name.split(" ")[0]}` : ""}`}
+        description={
+          <>
             {overview ? <DisplayDate value={todayIsoDate()} /> : "Business overview"}
             {" · "}
             <Link
@@ -177,10 +172,14 @@ export default async function DashboardOverview({
             >
               How to use this app
             </Link>
-          </p>
-        </div>
-        {overview ? <PeriodChips current={overview.periodKey} pastYears={overview.pastYears} /> : null}
-      </div>
+          </>
+        }
+        actions={
+          overview ? (
+            <PeriodChips current={overview.periodKey} pastYears={overview.pastYears} />
+          ) : null
+        }
+      />
 
       {showDataOnboarding && dataOnboarding ? (
         <DataOnboardingCard

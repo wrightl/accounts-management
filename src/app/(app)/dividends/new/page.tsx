@@ -1,8 +1,8 @@
 import { guardTenantPage, hasPermission } from "@/lib/auth";
 import { getActiveShareholdersForSplit } from "@/lib/shareholders/queries";
 import { DividendDeclareForm } from "@/components/dividends/dividends-form";
-import { BackLink } from "@/components/ui/back-link";
 import { getReservesPosition } from "@/lib/ledger/queries";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function NewDividendPage({
   searchParams,
@@ -22,16 +22,17 @@ export default async function NewDividendPage({
 
   return (
     <div>
-      <div className="mb-6">
-        <BackLink href="/dividends">Dividends</BackLink>
-      </div>
-      <h1 className="mb-2 font-display text-2xl font-semibold">Create dividend</h1>
-      {split.balanced && (
-        <p className="mb-6 text-sm text-muted">
-          Enter a total amount. It is split across all active shareholders by share
-          count.
-        </p>
-      )}
+      <PageHeader
+        backHref="/dividends"
+        backLabel="Dividends"
+        title="Create dividend"
+        description={
+          split.balanced
+            ? "Enter a total amount. It is split across all active shareholders by share count."
+            : undefined
+        }
+        className="mb-6"
+      />
       <DividendDeclareForm
         canWrite={canWrite}
         balanced={split.balanced}

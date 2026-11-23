@@ -9,7 +9,6 @@ import { RecurringInvoiceActions } from '@/components/recurring-invoices/recurri
 import { Card, CardTitle, CardValue } from '@/components/ui/card';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
 import { buttonClasses } from '@/components/ui/button';
-import { BackLink } from "@/components/ui/back-link";
 import { StatusBadge } from '@/components/ui/badge';
 import { clientDisplayName } from '@/lib/clients/display';
 import {
@@ -21,6 +20,7 @@ import {
 } from '@/lib/money';
 import type { InvoiceStatus } from '@/lib/invoices/status';
 import { DisplayDate } from "@/components/date-format-provider";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function RecurringInvoiceDetailPage({
     params,
@@ -45,65 +45,64 @@ export default async function RecurringInvoiceDetailPage({
 
     return (
         <div>
-            <div className="mb-6">
-                <BackLink href="/recurring-invoices">Recurring</BackLink>
+            <PageHeader
+                backHref="/recurring-invoices"
+                backLabel="Recurring"
+                title={template.name}
+                titleAddon={
+                    canWrite ? (
+                        <Link
+                            href={`/recurring-invoices/${template.id}/edit`}
+                            className={buttonClasses('ghost', 'size-9 shrink-0 px-0')}
+                            aria-label="Edit schedule"
+                        >
+                            <Pencil className="h-4 w-4" />
+                        </Link>
+                    ) : null
+                }
+                description={
+                    <>
+                        <p>
+                            {inPack ? (
+                                <span className="text-foreground">
+                                    {clientDisplayName(client)}
+                                </span>
+                            ) : (
+                                <Link
+                                    href={`/clients/${client.id}`}
+                                    className="text-foreground hover:underline"
+                                >
+                                    {clientDisplayName(client)}
+                                </Link>
+                            )}
+                            {' · '}
+                            Day {template.dayOfMonth} each month
+                            {' · '}
+                            {template.enabled ? 'Active' : 'Paused'}
+                            {' · '}
+                            On generate: {template.onGenerate}
+                        </p>
+                        <p className="mt-1 text-sm">
+                            Next run: <DisplayDate value={template.nextRunOn} />
+                            {template.endsOn ? <> · Ends <DisplayDate value={template.endsOn} /></> : ''}
+                            {template.maxOccurrences != null
+                                ? ` · ${template.occurrenceCount}/${template.maxOccurrences} invoices`
+                                : ` · ${template.occurrenceCount} generated`}
+                        </p>
+                    </>
+                }
+            />
+
+            <div className="mt-4 flex flex-wrap items-start gap-2">
+                <RecurringInvoiceActions
+                    id={template.id}
+                    enabled={template.enabled}
+                    canWrite={canWrite}
+                />
             </div>
 
-            <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                        <h1 className="font-display text-2xl font-semibold">
-                            {template.name}
-                        </h1>
-                        {canWrite ? (
-                            <Link
-                                href={`/recurring-invoices/${template.id}/edit`}
-                                className={buttonClasses(
-                                    'ghost',
-                                    'size-9 shrink-0 px-0',
-                                )}
-                                aria-label="Edit schedule"
-                            >
-                                <Pencil className="h-4 w-4" />
-                            </Link>
-                        ) : null}
-                    </div>
-                    <p className="mt-1 text-muted">
-                        {inPack ? (
-                            <span className="text-foreground">
-                                {clientDisplayName(client)}
-                            </span>
-                        ) : (
-                            <Link
-                                href={`/clients/${client.id}`}
-                                className="text-foreground hover:underline"
-                            >
-                                {clientDisplayName(client)}
-                            </Link>
-                        )}
-                        {' · '}
-                        Day {template.dayOfMonth} each month
-                        {' · '}
-                        {template.enabled ? 'Active' : 'Paused'}
-                        {' · '}
-                        On generate: {template.onGenerate}
-                    </p>
-                    <p className="mt-1 text-sm text-muted">
-                        Next run: <DisplayDate value={template.nextRunOn} />
-                        {template.endsOn ? <> · Ends <DisplayDate value={template.endsOn} /></> : ''}
-                        {template.maxOccurrences != null
-                            ? ` · ${template.occurrenceCount}/${template.maxOccurrences} invoices`
-                            : ` · ${template.occurrenceCount} generated`}
-                    </p>
-                    <div className="mt-3">
-                        <RecurringInvoiceActions
-                            id={template.id}
-                            enabled={template.enabled}
-                            canWrite={canWrite}
-                        />
-                    </div>
-                </div>
-                <Card className="min-w-[160px]">
+            <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <Card>
                     <CardTitle>Amount</CardTitle>
                     <CardValue>{template.grossFormatted}</CardValue>
                 </Card>

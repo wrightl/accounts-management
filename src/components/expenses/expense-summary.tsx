@@ -41,11 +41,10 @@ export function ExpenseSummaryProvider({
   );
 }
 
+/** The expense's description as typed, for the page title. */
 export function ExpenseTitle({ fallback }: { fallback: string }) {
   const description = useContext(ExpenseSummaryContext)?.summary.description.trim();
-  return (
-    <h1 className="font-display text-2xl font-semibold">{description || fallback}</h1>
-  );
+  return <>{description || fallback}</>;
 }
 
 export function ExpenseAmountCard() {

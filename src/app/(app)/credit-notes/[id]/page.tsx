@@ -11,7 +11,6 @@ import { CreditNoteActions } from "@/components/credit-notes/credit-note-actions
 import { CreditNoteStatusBadge } from "@/components/credit-notes/credit-note-status-badge";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
-import { BackLink } from "@/components/ui/back-link";
 import {
   formatDiscountPercent,
   formatGBP,
@@ -21,6 +20,7 @@ import {
 } from "@/lib/money";
 import { clientDisplayName } from "@/lib/clients/display";
 import { DisplayDate } from "@/components/date-format-provider";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function CreditNoteDetailPage({
   params,
@@ -44,17 +44,13 @@ export default async function CreditNoteDetailPage({
 
   return (
     <div>
-      <div className="mb-6">
-        <BackLink href="/credit-notes">Credit notes</BackLink>
-      </div>
-
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="font-display text-2xl font-semibold">{creditNote.number}</h1>
-            <CreditNoteStatusBadge status={creditNote.status} />
-          </div>
-          <p className="mt-1 text-muted">
+      <PageHeader
+        backHref="/credit-notes"
+        backLabel="Credit notes"
+        title={creditNote.number}
+        titleAddon={<CreditNoteStatusBadge status={creditNote.status} />}
+        description={
+          <>
             {scope === "all" ? (
               <Link href={`/clients/${client.id}`} className="text-foreground hover:underline">
                 {clientDisplayName(client)}
@@ -69,20 +65,24 @@ export default async function CreditNoteDetailPage({
             {creditNote.sentAt
               ? <> · Sent <DisplayDate value={creditNote.sentAt} /></>
               : null}
-          </p>
-          <div className="mt-3">
-            <CreditNoteActions
-              creditNoteId={creditNote.id}
-              canWrite={canWrite}
-              canSend={creditNote.status === "issued"}
-              sent={creditNote.sentAt != null}
-              canVoid={canVoidCreditNote(creditNote)}
-              refundablePence={refundablePence}
-              today={todayIsoDate()}
-            />
-          </div>
-        </div>
-        <Card className="min-w-[160px]">
+          </>
+        }
+      />
+
+      <div className="mt-4 flex flex-wrap items-start gap-2">
+        <CreditNoteActions
+          creditNoteId={creditNote.id}
+          canWrite={canWrite}
+          canSend={creditNote.status === "issued"}
+          sent={creditNote.sentAt != null}
+          canVoid={canVoidCreditNote(creditNote)}
+          refundablePence={refundablePence}
+          today={todayIsoDate()}
+        />
+      </div>
+
+      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Card>
           <CardTitle>Total credited</CardTitle>
           <CardValue>{creditNote.grossFormatted}</CardValue>
         </Card>
