@@ -8,11 +8,27 @@
  * parent in that statement.
  *
  * The check is syntactic. For each Drizzle chain that reads, updates or
- * deletes one of these tables (`.from(t)`, `.update(t)`, `.delete(t)`), the
- * whole statement must mention `companyId` / `company_id`, or call a scope
- * helper named `…OfCompany(…)` (such as `matchOfCompany`). Inserts are not
- * checked: they have no WHERE, and their scope comes from the parent row they
- * reference.
+ * deletes one of these tables (`.from(t)`, `.update(t)`, `.delete(t)`) or
+ * joins it (`.innerJoin(t, …)`, `.leftJoin(t, …)`…), the statement's filters
+ * (the `.where(…)` argument and join conditions) must contain one of:
+ *
+ *   - a scope helper call named `…OfCompany(…)`, such as `rowOfCompany`;
+ *   - `eq(x.companyId, …)` (either side), at any depth, including inside a
+ *     subquery such as `inArray(payments.invoiceId, tx.select(…).where(eq(invoices.companyId, companyId)))`;
+ *   - a `sql` template that names `company_id` or interpolates `x.companyId`;
+ *   - a call to a helper that is passed the company id, such as
+ *     `bankListWhere(companyId, filters)`.
+ *
+ * A `companyId` anywhere else in the chain (in `.select({…})`, `.limit()` or a
+ * `.then()` callback) does not count. A local used in a filter counts if its
+ * initial value passes the same check (`const where = bankListWhere(companyId, f)`),
+ * but data read earlier does not (`const ids = rows.map(…)`): an earlier read
+ * being scoped is exactly what the rule doesn't accept.
+ *
+ * Inserts are not checked: they have no WHERE, and their scope comes from the
+ * parent row they reference. Relational queries (`db.query.payments…`) on
+ * these tables are reported outright, since their filters live in callbacks
+ * the rule can't check; use the core query builder instead.
  *
  * `tests/unit/tenant-scope-rule.test.ts` keeps CHILD_TABLES in step with
  * the schema.
@@ -53,7 +69,13 @@ export const NOT_COMPANY_OWNED = [
 ];
 
 const QUERY_METHODS = new Set(["from", "update", "delete"]);
-const SCOPED = /\bcompanyId\b|\bcompany_id\b|\w*OfCompany\s*\(/;
+const JOIN_METHODS = new Set(["innerJoin", "leftJoin", "rightJoin", "fullJoin", "crossJoin"]);
+/** Drizzle operators: passing the company id to one of these isn't a scope by itself. */
+const OPERATORS = new Set([
+  "and", "or", "not", "eq", "ne", "gt", "gte", "lt", "lte", "inArray", "notInArray",
+  "isNull", "isNotNull", "like", "ilike", "notLike", "notIlike", "between", "notBetween",
+  "exists", "notExists", "arrayContains", "arrayContained", "arrayOverlaps",
+]);
 
 /** The table identifier a call's first argument names: `payments` or `schema.payments`. */
 function tableName(arg) {
@@ -63,6 +85,18 @@ function tableName(arg) {
     return arg.property.name;
   }
   return null;
+}
+
+/** The method name of `x.method(…)`, or null. */
+function methodName(call) {
+  const callee = call.callee;
+  if (callee.type !== "MemberExpression" || callee.computed) return null;
+  return callee.property.type === "Identifier" ? callee.property.name : null;
+}
+
+/** The name of a plain function call `f(…)`, or null. */
+function functionName(call) {
+  return call.callee.type === "Identifier" ? call.callee.name : null;
 }
 
 /** Climb to the outermost node of a method chain (`a.b().c().d()`). */
@@ -81,57 +115,107 @@ function chainTop(node) {
   }
 }
 
-/** Every identifier read inside `node`. */
-function identifiersIn(node, out = []) {
-  if (!node || typeof node.type !== "string") return out;
-  if (node.type === "Identifier") out.push(node);
+/** The filter expressions of a chain: `.where(…)` arguments and join conditions. */
+function chainFilters(top) {
+  const filters = [];
+  let node = top;
+  while (node) {
+    if (node.type === "CallExpression") {
+      const method = methodName(node);
+      if (method === "where") filters.push(...node.arguments);
+      else if (JOIN_METHODS.has(method)) filters.push(...node.arguments.slice(1));
+      node = node.callee;
+    } else if (node.type === "MemberExpression") {
+      node = node.object;
+    } else {
+      break;
+    }
+  }
+  return filters;
+}
+
+/** `x.companyId` */
+function isCompanyIdMember(node) {
+  return (
+    node?.type === "MemberExpression" &&
+    !node.computed &&
+    node.property.type === "Identifier" &&
+    node.property.name === "companyId"
+  );
+}
+
+/** `companyId` or `x.companyId` */
+function isCompanyIdRef(node) {
+  return (node?.type === "Identifier" && node.name === "companyId") || isCompanyIdMember(node);
+}
+
+/** Child nodes of an AST node. */
+function* children(node) {
   for (const key of Object.keys(node)) {
     if (key === "parent") continue;
     const child = node[key];
-    if (Array.isArray(child)) for (const c of child) identifiersIn(c, out);
-    else if (child && typeof child.type === "string") identifiersIn(child, out);
+    if (Array.isArray(child)) {
+      for (const c of child) if (c && typeof c.type === "string") yield c;
+    } else if (child && typeof child.type === "string") {
+      yield child;
+    }
   }
-  return out;
+}
+
+/** Whether a single node is a company filter on its own (see the header). */
+function isScopeNode(node) {
+  if (node.type === "CallExpression") {
+    const fn = functionName(node);
+    if (fn && /OfCompany$/.test(fn)) return true;
+    if (fn === "eq" && node.arguments.some(isCompanyIdMember)) return true;
+    // A helper given the company id builds the filter from it.
+    const named = fn ?? methodName(node);
+    if (named && !OPERATORS.has(named) && node.arguments.some(isCompanyIdRef)) return true;
+  }
+  if (node.type === "TaggedTemplateExpression" && node.tag.type === "Identifier" && node.tag.name === "sql") {
+    const { quasi } = node;
+    if (quasi.quasis.some((q) => /\bcompany_id\b/.test(q.value.raw))) return true;
+    if (quasi.expressions.some(isCompanyIdMember)) return true;
+  }
+  return false;
 }
 
 /**
- * Whether the statement uses a local variable whose initial value is scoped
- * to the company, such as `const where = bankListWhere(companyId, filters)`
- * passed to `.where(where)`. The scope is still part of the statement; it was
- * just built a line earlier.
+ * Whether a filter expression scopes to the company: it, or anything inside
+ * it, is a scope node, or it reads a local whose initial value is one.
  */
-function usesScopedLocal(node, sourceCode, depth = 0, seen = new Set()) {
-  if (depth > 3) return false;
-  for (const id of identifiersIn(node)) {
-    let scope = sourceCode.getScope(id);
-    while (scope) {
-      const variable = scope.set.get(id.name);
-      if (variable) {
-        const def = variable.defs[0];
-        const init = def?.type === "Variable" ? def.node.init : null;
-        // Only plain values: following into function bodies would walk whole modules.
-        const isValue =
-          init &&
-          init.type !== "ArrowFunctionExpression" &&
-          init.type !== "FunctionExpression" &&
-          init.type !== "ClassExpression";
-        // A condition built ahead of the statement counts; data read earlier does
-        // not, even if that read was scoped (`const ids = rows.map(...)`): that is
-        // the "an earlier read already checked it" case the rule is about.
-        const isCondition =
-          isValue && !/\bawait\b|\.(map|filter|flatMap|reduce|find)\(/.test(sourceCode.getText(init));
-        if (isCondition && !seen.has(init)) {
-          seen.add(init);
-          // Directly scoped, or built from another local that is
-          // (`const own = companyTransactionIds(tx, companyId, ids)`, then
-          // `const ownMatches = inArray(matches.bankTransactionId, own)`).
-          if (SCOPED.test(sourceCode.getText(init))) return true;
-          if (usesScopedLocal(init, sourceCode, depth + 1, seen)) return true;
-        }
-        break;
-      }
-      scope = scope.upper;
+function isScoped(node, sourceCode, seen) {
+  if (!node || typeof node.type !== "string") return false;
+  // Callbacks run later, not as part of the filter.
+  if (node.type === "ArrowFunctionExpression" || node.type === "FunctionExpression") return false;
+  if (isScopeNode(node)) return true;
+  if (node.type === "Identifier" && scopedLocal(node, sourceCode, seen)) return true;
+  for (const child of children(node)) {
+    if (isScoped(child, sourceCode, seen)) return true;
+  }
+  return false;
+}
+
+/**
+ * Whether `id` names a local whose initial value is a company filter, such as
+ * `const where = bankListWhere(companyId, filters)` used as `.where(where)`.
+ * The scope is still part of the statement; it was just built a line earlier.
+ */
+function scopedLocal(id, sourceCode, seen) {
+  let scope = sourceCode.getScope(id);
+  while (scope) {
+    const variable = scope.set.get(id.name);
+    if (variable) {
+      const def = variable.defs[0];
+      const init = def?.type === "Variable" ? def.node.init : null;
+      if (!init || seen.has(init)) return false;
+      // A condition built ahead of the statement counts; data read earlier
+      // does not, even if that read was scoped.
+      if (/\bawait\b|\.(map|filter|flatMap|reduce|find)\(/.test(sourceCode.getText(init))) return false;
+      seen.add(init);
+      return isScoped(init, sourceCode, seen);
     }
+    scope = scope.upper;
   }
   return false;
 }
@@ -153,6 +237,8 @@ const requireCompanyScope = {
     messages: {
       unscoped:
         "`{{table}}` has no company_id column, so scope this statement to the company through its parent (join or subquery filtering on companyId). See CLAUDE.md, #78.",
+      relational:
+        "`{{table}}` has no company_id column, and the lint rule can't check a relational query's scope. Use the core query builder with a company filter. See CLAUDE.md, #78.",
     },
   },
   create(context) {
@@ -160,21 +246,29 @@ const requireCompanyScope = {
     const sourceCode = context.sourceCode;
     return {
       CallExpression(node) {
-        const callee = node.callee;
+        const method = methodName(node);
+        if (!method || !(QUERY_METHODS.has(method) || JOIN_METHODS.has(method))) return;
+        const table = tableName(node.arguments[0]);
+        if (!table || !tables.has(table)) return;
+        const filters = chainFilters(chainTop(node));
+        const seen = new Set();
+        if (filters.some((f) => isScoped(f, sourceCode, seen))) return;
+        context.report({ node, messageId: "unscoped", data: { table } });
+      },
+      // db.query.payments.findMany(…)
+      MemberExpression(node) {
         if (
-          callee.type !== "MemberExpression" ||
-          callee.computed ||
-          callee.property.type !== "Identifier" ||
-          !QUERY_METHODS.has(callee.property.name)
+          node.computed ||
+          node.property.type !== "Identifier" ||
+          !tables.has(node.property.name) ||
+          node.object.type !== "MemberExpression" ||
+          node.object.computed ||
+          node.object.property.type !== "Identifier" ||
+          node.object.property.name !== "query"
         ) {
           return;
         }
-        const table = tableName(node.arguments[0]);
-        if (!table || !tables.has(table)) return;
-        const top = chainTop(node);
-        if (SCOPED.test(sourceCode.getText(top))) return;
-        if (usesScopedLocal(top, sourceCode)) return;
-        context.report({ node, messageId: "unscoped", data: { table } });
+        context.report({ node, messageId: "relational", data: { table: node.property.name } });
       },
     };
   },

@@ -40,6 +40,23 @@ describe("tenant-scope/require-company-scope", () => {
         const ownMatches = inArray(reconciliationMatches.bankTransactionId, own);
         await tx.delete(reconciliationMatches).where(ownMatches);
       }`,
+      // A subquery on the company-owned parent.
+      `async function f(tx, companyId, id) {
+        await tx.select().from(payments).where(and(
+          eq(payments.id, id),
+          inArray(payments.invoiceId, tx.select({ id: invoices.id }).from(invoices).where(eq(invoices.companyId, companyId))),
+        ));
+      }`,
+      // Raw SQL naming company_id.
+      `async function f(db, companyId) {
+        await db.select().from(payments).where(sql\`invoice_id in (select id from invoices where company_id = \${companyId})\`);
+      }`,
+      // A child table joined from a company-owned table filtered on the company.
+      `async function f(db, companyId) {
+        await db.select().from(invoices)
+          .leftJoin(payments, eq(payments.invoiceId, invoices.id))
+          .where(eq(invoices.companyId, companyId));
+      }`,
       // Inserts have no WHERE.
       `async function f(db, id) { await db.insert(payments).values({ invoiceId: id }); }`,
       // Tables that aren't child tables.
@@ -80,6 +97,41 @@ describe("tenant-scope/require-company-scope", () => {
           await tx.select().from(payments).where(eq(payments.invoiceId, inv.id));
         }`,
         errors: [error("payments")],
+      },
+      // companyId outside the filter doesn't count.
+      {
+        code: `async function f(db, companyId, id) {
+          await db.select().from(payments).where(eq(payments.invoiceId, id)).then(() => audit(companyId));
+        }`,
+        errors: [error("payments")],
+      },
+      {
+        code: `async function f(db, companyId, ids) {
+          await db.select({ companyId: invoices.companyId }).from(payments)
+            .where(inArray(payments.invoiceId, ids)).limit(companyId.length);
+        }`,
+        errors: [error("payments")],
+      },
+      // Nor does passing it to a Drizzle operator against an unrelated column.
+      {
+        code: `async function f(db, companyId) {
+          await db.select().from(payments).where(eq(payments.invoiceId, companyId));
+        }`,
+        errors: [error("payments")],
+      },
+      // A joined child table needs the statement scoped too.
+      {
+        code: `async function f(db, id) {
+          await db.select().from(invoices)
+            .innerJoin(payments, eq(payments.invoiceId, invoices.id))
+            .where(eq(invoices.id, id));
+        }`,
+        errors: [error("payments")],
+      },
+      // Relational queries can't be checked, so they're reported.
+      {
+        code: `async function f(db) { await db.query.payments.findMany(); }`,
+        errors: [{ messageId: "relational", data: { table: "payments" } }],
       },
     ],
   });
