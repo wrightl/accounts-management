@@ -23,7 +23,7 @@ import {
   BankListPositionRestorer,
   NewExpenseFromBankListLink,
 } from "@/components/bank/bank-list-position";
-import { TransactionsSummaryPanel } from "@/components/bank/transactions-summary";
+import { TransactionsSummaryStrip } from "@/components/bank/transactions-summary";
 import { listBankSpendingCategoriesWithUsage } from "@/lib/bank/spending-categories";
 import { listIncomeCategoryNames } from "@/lib/bank/income-category-catalog";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -128,25 +128,9 @@ export default async function TransactionsPage({
       <PageHeader
         title="Transactions"
         description={
-          <>
-            <p>
-              {inPack
-                ? "Bank transactions and how they were reconciled."
-                : "Import bank CSV and reconcile against payments and expenses."}
-            </p>
-            {canWrite ? (
-              <p className="mt-1 text-sm">
-                Paid for something from a personal account?{" "}
-                <NewExpenseFromBankListLink
-                  params={{ status: "reimbursable" }}
-                  className="font-medium text-navy underline underline-offset-2 hover:no-underline"
-                >
-                  Add it as a reimbursable expense
-                </NewExpenseFromBankListLink>
-                .
-              </p>
-            ) : null}
-          </>
+          inPack
+            ? "Bank transactions and how they were matched."
+            : "Import your bank statement, then match each line to an invoice or expense."
         }
         actions={
           <BankToolbar
@@ -159,7 +143,9 @@ export default async function TransactionsPage({
         }
       />
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_280px] xl:grid-cols-[1fr_320px]">
+      <TransactionsSummaryStrip summary={summary} />
+
+      <div className="mt-6">
         <div>
           <BankFilters params={params} customCategories={customCategoryNames} labels={inPack ? [] : labels} />
 
@@ -232,11 +218,20 @@ export default async function TransactionsPage({
             />
           ) : null}
         </div>
-
-        <aside className="lg:sticky lg:top-6 lg:self-start">
-          <TransactionsSummaryPanel summary={summary} />
-        </aside>
       </div>
+
+      {canWrite ? (
+        <p className="mt-6 text-sm text-muted">
+          Paid for something from a personal account?{" "}
+          <NewExpenseFromBankListLink
+            params={{ status: "reimbursable" }}
+            className="text-foreground underline underline-offset-2 hover:no-underline"
+          >
+            Add it as a reimbursable expense
+          </NewExpenseFromBankListLink>
+          .
+        </p>
+      ) : null}
       <BankListPositionRestorer />
     </div>
   );
