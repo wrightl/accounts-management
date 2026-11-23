@@ -79,17 +79,31 @@ export type HeroKpi = {
   value: string;
   valuePence: number;
   href: string;
-  subtitle?: string;
-  insight?: string;
-  delta: {
-    percent: number | null;
-    label: string;
-    direction: "up" | "down" | "flat";
-    caption: string;
-  };
-  sparkline: number[];
+  /** The one plain-English line under the figure, on the web and in the app. */
+  line: HeroLine;
   accent?: "default" | "destructive";
 };
+
+export type HeroLine = { label: string; direction: "up" | "down" | "flat" };
+
+/** "the previous financial year" for "Prior FY"; month names stay as they are. */
+function comparePhrase(compareLabel: string): string {
+  if (!compareLabel.startsWith("Prior ")) return compareLabel;
+  const rest = compareLabel.slice("Prior ".length).replace(/^FY$/, "financial year");
+  return `the previous ${rest}`;
+}
+
+/** "Up 29% on September 2026", "Same as the previous 3 months", "None in September 2026". */
+function compareLine(
+  delta: { percent: number | null; direction: "up" | "down" | "flat" },
+  compareLabel: string,
+): HeroLine {
+  const than = comparePhrase(compareLabel);
+  if (delta.percent == null) return { label: `None in ${than}`, direction: "flat" };
+  if (delta.percent === 0) return { label: `Same as ${than}`, direction: "flat" };
+  const word = delta.percent > 0 ? "Up" : "Down";
+  return { label: `${word} ${Math.abs(delta.percent)}% on ${than}`, direction: delta.direction };
+}
 
 export type MonthlyCashPoint = {
   month: string;
@@ -624,12 +638,6 @@ function mergeCashSeries(
   });
 }
 
-function buildSparkline(
-  series: MonthlyCashPoint[],
-  key: "collectedPence" | "invoicedPence" | "profitPence",
-): number[] {
-  return series.map((p) => p[key]);
-}
 
 function todayDisplayLabel(today: string): string {
   const [y, m, d] = today.split("-").map(Number);
@@ -805,7 +813,6 @@ export async function getDashboardOverview(
 
   // Orders count only what is still to invoice; the rest is in Invoiced already.
   const totalPipelinePence = quotePipelinePence + unbilledPence;
-  const snapshotCaption = pastYear ? `today, not ${pastYear.label}` : null;
   const winRate = winRatePercent(quotesSummary);
 
   const expenseTotal = expenseByCategory.reduce((a, r) => a + r.totalPence, 0);
@@ -821,6 +828,7 @@ export async function getDashboardOverview(
           : 0,
     }));
 
+  const today = pastYear ? " today" : "";
   const heroes: HeroKpi[] = [
     {
       key: "collected",
@@ -828,16 +836,7 @@ export async function getDashboardOverview(
       value: formatGBP(collectedPence),
       valuePence: collectedPence,
       href: "/invoices",
-      subtitle: period.label,
-      insight:
-        invoicedGrossPence > 0
-          ? `${formatGBP(invoicedGrossPence)} invoiced · ${Math.round((collectedPence / Math.max(invoicedGrossPence, 1)) * 100)}% of invoiced`
-          : "No invoices issued in this period",
-      delta: {
-        ...collectedDelta,
-        caption: `vs ${period.compareLabel}`,
-      },
-      sparkline: buildSparkline(cashSeries, "collectedPence"),
+      line: compareLine(collectedDelta, period.compareLabel),
     },
     {
       key: "outstanding",
@@ -845,24 +844,10 @@ export async function getDashboardOverview(
       value: invoiceKpis.outstandingFormatted,
       valuePence: invoiceKpis.outstandingPence,
       href: "/invoices",
-      subtitle:
+      line:
         overdueCount > 0
-          ? `${overdueCount} overdue · ${invoiceKpis.overdueFormatted}`
-          : "Nothing overdue",
-      insight:
-        overduePercentOfAr != null
-          ? `${overduePercentOfAr}% of AR is overdue${dsoDays != null ? ` · DSO ${dsoDays} days` : ""}`
-          : dsoDays != null
-            ? `Average DSO ${dsoDays} days`
-            : "No receivables due",
-      delta: {
-        percent: null,
-        label: "Open",
-        direction: "flat",
-        caption: snapshotCaption ?? "current balance",
-      },
-      // A balance has no monthly history here, so no trend line.
-      sparkline: [],
+          ? { label: `${invoiceKpis.overdueFormatted} overdue${today}`, direction: "down" }
+          : { label: `Nothing overdue${today}`, direction: "flat" },
       accent: overdueCount > 0 ? "destructive" : "default",
     },
     {
@@ -871,18 +856,9 @@ export async function getDashboardOverview(
       value: pnl.profitFormatted,
       valuePence: pnl.profitPence,
       href: "/reports",
-      subtitle:
-        pnl.otherIncomePence !== 0
-          ? `${pnl.incomeFormatted} invoiced · ${pnl.otherIncomeFormatted} other income · ${pnl.expenseFormatted} expenses`
-          : `${pnl.incomeFormatted} income · ${pnl.expenseFormatted} expenses`,
-      insight: periodBeforeCutover
-        ? "Accrual · invoiced net plus other income, less expenses · leaves out invoices before cutover"
-        : "Accrual · invoiced net plus other income, less expenses",
-      delta: {
-        ...profitDelta,
-        caption: `vs ${period.compareLabel}`,
-      },
-      sparkline: buildSparkline(cashSeries, "profitPence"),
+      line: periodBeforeCutover
+        ? { label: "Leaves out invoices from before you used Alfa", direction: "flat" }
+        : compareLine(profitDelta, period.compareLabel),
     },
     {
       key: "pipeline",
@@ -890,20 +866,13 @@ export async function getDashboardOverview(
       value: formatGBP(totalPipelinePence),
       valuePence: totalPipelinePence,
       href: "/quotes",
-      subtitle: `${formatGBP(quotePipelinePence)} in quotes · ${formatGBP(unbilledPence)} unbilled on orders`,
-      insight:
-        recurringMonthlyPence > 0
-          ? `Plus ${formatGBP(recurringMonthlyPence)}/month recurring (net)`
-          : totalPipelinePence > 0
-            ? `${quotesSummary.pipelineCount} quotes · ${ordersSummary.activeCount} orders`
-            : "No open pipeline yet",
-      delta: {
-        percent: null,
-        label: winRate != null ? `${winRate}% win` : "Open",
+      line: {
+        label:
+          totalPipelinePence > 0
+            ? `${formatGBP(quotePipelinePence)} quoted, ${formatGBP(unbilledPence)} still to invoice`
+            : "No open quotes or orders",
         direction: "flat",
-        caption: snapshotCaption ?? "quote → order",
       },
-      sparkline: [],
     },
   ];
 

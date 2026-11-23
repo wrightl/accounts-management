@@ -15,15 +15,7 @@ function overviewFixture(): DashboardOverviewData {
         value: "£400.00",
         valuePence: 40_000,
         href: "/invoices",
-        subtitle: "September 2026",
-        insight: "£1,000.00 invoiced",
-        delta: {
-          percent: 10,
-          label: "+10%",
-          direction: "up",
-          caption: "vs August 2026",
-        },
-        sparkline: [0, 10, 20],
+        line: { label: "Up 10% on August 2026", direction: "up" },
       },
     ],
     cashSeries: [
@@ -136,10 +128,15 @@ describe("toMobileDashboard", () => {
 
     expect(payload.role).toBe("admin");
     expect(payload.firstName).toBe("Lee");
+    // Released apps draw delta, subtitle, insight and sparkline; only the
+    // one line is filled so they show the same words as the web.
     expect(payload.heroes[0]).toMatchObject({
       key: "collected",
       value: "£400.00",
-      sparkline: [0, 10, 20],
+      subtitle: null,
+      insight: null,
+      delta: { percent: null, label: "Up 10% on August 2026", direction: "up", caption: "" },
+      sparkline: [],
     });
     expect(payload.heroes[0]).not.toHaveProperty("href");
     expect(payload.funnel[0]).not.toHaveProperty("href");

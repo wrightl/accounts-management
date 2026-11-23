@@ -25,11 +25,14 @@ export function toMobileDashboard(
       title: hero.title,
       value: hero.value,
       valuePence: hero.valuePence,
-      subtitle: hero.subtitle ?? null,
-      insight: hero.insight ?? null,
+      // Released app versions draw these fields in this order. The one line
+      // goes in delta.label, and the rest stay empty so the app shows the
+      // same words as the web card.
+      subtitle: null,
+      insight: null,
       accent: hero.accent ?? "default",
-      delta: hero.delta,
-      sparkline: hero.sparkline,
+      delta: { percent: null, label: hero.line.label, direction: hero.line.direction, caption: "" },
+      sparkline: [] as number[],
     })),
     cashSeries: overview.cashSeries,
     funnel: overview.funnel.map((stage) => ({

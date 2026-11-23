@@ -22,10 +22,10 @@ const BUCKET_COLORS = [
 ];
 
 const BUCKET_LABELS = [
-  { key: "current", label: "Current" },
-  { key: "d30", label: "1–30 days" },
-  { key: "d60", label: "31–60 days" },
-  { key: "d90", label: "Over 60 days" },
+  { key: "current", label: "Not due yet" },
+  { key: "d30", label: "1 to 30 days late" },
+  { key: "d60", label: "31 to 60 days late" },
+  { key: "d90", label: "Over 60 days late" },
 ] as const;
 
 export function AgedReceivablesChart({
@@ -52,12 +52,10 @@ export function AgedReceivablesChart({
     <Card className="h-full">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <CardTitle>Aged receivables</CardTitle>
+          <CardTitle>Money owed to you</CardTitle>
           <p className="mt-1 text-xs text-muted">
-            Outstanding balances by days past due
-            {overduePercent != null
-              ? ` · ${overduePercent}% past due`
-              : ""}
+            By how late it is
+            {overduePercent ? `. ${overduePercent}% is overdue.` : "."}
           </p>
         </div>
         {raw.d90 > 0 ? (
@@ -65,12 +63,12 @@ export function AgedReceivablesChart({
             href="/invoices"
             className="text-xs text-destructive hover:underline"
           >
-            Review 90+ →
+            Review late invoices
           </Link>
         ) : null}
       </div>
       {totalPence === 0 ? (
-        <p className="mt-6 text-sm text-muted">No outstanding receivables.</p>
+        <p className="mt-6 text-sm text-muted">Nobody owes you anything right now.</p>
       ) : (
         <>
           <div className="mt-4 h-48">
