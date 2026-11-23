@@ -40,30 +40,11 @@ describe("tenant-scope/require-company-scope", () => {
         const ownMatches = inArray(reconciliationMatches.bankTransactionId, own);
         await tx.delete(reconciliationMatches).where(ownMatches);
       }`,
-      // A subquery on the company-owned parent.
-      `async function f(tx, companyId, id) {
-        await tx.select().from(payments).where(and(
-          eq(payments.id, id),
-          inArray(payments.invoiceId, tx.select({ id: invoices.id }).from(invoices).where(eq(invoices.companyId, companyId))),
-        ));
-      }`,
-      // Raw SQL naming company_id.
-      `async function f(db, companyId) {
-        await db.select().from(payments).where(sql\`invoice_id in (select id from invoices where company_id = \${companyId})\`);
-      }`,
       // A child table joined from a company-owned table filtered on the company.
       `async function f(db, companyId) {
         await db.select().from(invoices)
           .leftJoin(payments, eq(payments.invoiceId, invoices.id))
           .where(eq(invoices.companyId, companyId));
-      }`,
-      // Inside a subquery the helper's column belongs to the subquery's table.
-      `async function f(tx, companyId) {
-        await tx.delete(reconciliationMatches).where(inArray(
-          reconciliationMatches.bankTransactionId,
-          tx.select({ id: bankTransactions.id }).from(bankTransactions)
-            .where(rowOfCompany(bankTransactions.bankAccountId, bankAccounts, companyId)),
-        ));
       }`,
       // Scoped through a join from another child table's scoped parent.
       `async function f(db, companyId) {
@@ -245,6 +226,53 @@ describe("tenant-scope/require-company-scope", () => {
         code: `async function f(tx, companyId, ids) {
           await tx.delete(reconciliationMatches)
             .where(inArray(payments.id, transactionIdsOfCompany(tx, companyId, ids)));
+        }`,
+        errors: [error("reconciliationMatches")],
+      },
+      // Raw SQL and inline subqueries aren't accepted: the rule can't tell what
+      // company_id is compared with, or whether the ids belong in the column.
+      {
+        code: `async function f(db, companyId) {
+          await db.select().from(payments).where(sql\`invoice_id in (select id from invoices where company_id = \${companyId})\`);
+        }`,
+        errors: [error("payments")],
+      },
+      {
+        code: `async function f(db, someOtherId) {
+          await db.select().from(payments).where(sql\`invoice_id in (select id from invoices where company_id = \${someOtherId})\`);
+        }`,
+        errors: [error("payments")],
+      },
+      {
+        code: `async function f(db) {
+          await db.select().from(payments).where(sql\`company_id is not null\`);
+        }`,
+        errors: [error("payments")],
+      },
+      {
+        code: `async function f(tx, companyId) {
+          await tx.select().from(payments).where(inArray(
+            payments.invoiceId,
+            tx.select({ id: expenses.id }).from(expenses).where(eq(expenses.companyId, companyId)),
+          ));
+        }`,
+        errors: [error("payments")],
+      },
+      {
+        code: `async function f(tx, companyId) {
+          await tx.delete(reconciliationMatches).where(inArray(
+            reconciliationMatches.bankTransactionId,
+            tx.select({ id: bankTransactions.id }).from(bankTransactions)
+              .where(rowOfCompany(bankTransactions.bankAccountId, bankAccounts, companyId)),
+          ));
+        }`,
+        errors: [error("reconciliationMatches")],
+      },
+      // A subquery helper's ids only belong in its own column.
+      {
+        code: `async function f(tx, companyId, ids) {
+          await tx.delete(reconciliationMatches)
+            .where(inArray(reconciliationMatches.invoiceId, transactionIdsOfCompany(tx, companyId, ids)));
         }`,
         errors: [error("reconciliationMatches")],
       },

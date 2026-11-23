@@ -4,8 +4,8 @@
  * `tenant-scope/require-company-scope` enforces the CLAUDE.md rule: every
  * query on a tenant-owned table filters on the company in the same statement.
  * Tables without a `company_id` column (`payments`, line items, bank
- * transactions…) must be scoped by a join or subquery to their company-owned
- * parent in that statement.
+ * transactions…) must be scoped by a join to their company-owned parent, or by
+ * a scope helper such as `rowOfCompany`, in that statement.
  *
  * The check is syntactic. For each Drizzle chain that reads, updates or
  * deletes one of these tables (`.from(t)`, `.update(t)`, `.delete(t)`) or
@@ -17,8 +17,8 @@
  * conditional, an outer join, `.select({…})`, `.limit()` or a callback
  * doesn't, and neither does a filter on a table the statement doesn't use.
  * Scope helpers are trusted only when listed in TABLE_HELPERS, COLUMN_HELPERS
- * or SUBQUERY_HELPERS, never by name. A local used in a filter counts if its initial value passes the
- * same check (`const where = bankListWhere(companyId, f)`), but data read
+ * or SUBQUERY_HELPERS, never by name. A local used in a filter counts if its
+ * initial value passes the same check (`const where = bankListWhere(companyId, f)`), but data read
  * earlier does not (`const ids = rows.map(…)`): an earlier read being scoped
  * is exactly what the rule doesn't accept.
  *
@@ -143,22 +143,6 @@ function isCompanyIdRef(node) {
   return (node?.type === "Identifier" && node.name === "companyId") || isCompanyIdMember(node);
 }
 
-/** Whether a call is a query chain (`tx.select(…).from(…)…`). */
-function isQueryChain(node) {
-  let current = node;
-  while (current) {
-    if (current.type === "CallExpression") {
-      if (QUERY_METHODS.has(methodName(current))) return true;
-      current = current.callee;
-    } else if (current.type === "MemberExpression") {
-      current = current.object;
-    } else {
-      return false;
-    }
-  }
-  return false;
-}
-
 /**
  * Helpers that limit one table to the company, and the table each scopes.
  * A helper counts only when given the company id and only for its own table,
@@ -170,8 +154,12 @@ const TABLE_HELPERS = new Map([
 ]);
 /** Helpers whose first argument is the column being scoped. */
 const COLUMN_HELPERS = new Set(["rowOfCompany", "bankTransactionOfCompany"]);
-/** Helpers returning a company-scoped subquery of ids, for `inArray(col, …)`. */
-const SUBQUERY_HELPERS = new Set(["transactionIdsOfCompany"]);
+/**
+ * Helpers returning a company-scoped subquery of ids, and the column name the
+ * ids belong in: `inArray(reconciliationMatches.bankTransactionId,
+ * transactionIdsOfCompany(tx, companyId, ids))`.
+ */
+const SUBQUERY_HELPERS = new Map([["transactionIdsOfCompany", "bankTransactionId"]]);
 
 /**
  * The tables a chain's rows come from: the table it reads, updates or deletes,
@@ -198,8 +186,14 @@ function chainTables(top) {
   return tables;
 }
 
-/** The `tables` passed for the subquery position of `inArray(col, sub)`. */
-const SUBQUERY = new Set();
+/**
+ * What `isScoped` is given for the subquery position of `inArray(column, sub)`:
+ * no tables, so only a SUBQUERY_HELPERS helper can match, and only one meant
+ * for `column`.
+ */
+function subqueryFor(column) {
+  return Object.assign(new Set(), { column });
+}
 
 /** `t.col` where `t` is one of `tables`. */
 function isColumnOf(node, tables) {
@@ -217,11 +211,13 @@ function isColumnOf(node, tables) {
  *   - `rowOfCompany(t.col, parent, companyId)` or
  *     `bankTransactionOfCompany(t.col, companyId)`, with `t` in `tables`;
  *   - a TABLE_HELPERS helper given the company id, if its table is in `tables`;
- *   - `inArray(t.col, sub)` with `t` in `tables`, where `sub` is a scoped
- *     query or a SUBQUERY_HELPERS helper given the company id;
- *   - a `sql` template with no `or` that names `company_id` or interpolates
- *     `t.companyId` with `t` in `tables`;
+ *   - `inArray(t.col, helper(…, companyId, …))` with `t` in `tables`, where
+ *     `helper` is the SUBQUERY_HELPERS entry for `col`;
  *   - a local whose initial value is one of these.
+ *
+ * Raw `sql` templates and inline subqueries are not accepted: the rule can't
+ * tell what a template compares `company_id` with, or whether a subquery's ids
+ * belong in the column. Use `rowOfCompany` for those.
  */
 function isScoped(node, sourceCode, seen, tables) {
   if (!node || typeof node.type !== "string") return false;
@@ -235,17 +231,7 @@ function isScoped(node, sourceCode, seen, tables) {
     case "TSAsExpression":
     case "TSNonNullExpression":
       return isScoped(node.expression, sourceCode, seen, tables);
-    case "TaggedTemplateExpression": {
-      if (node.tag.type !== "Identifier" || node.tag.name !== "sql") return false;
-      const text = node.quasi.quasis.map((q) => q.value.raw).join(" ");
-      if (/\bor\b/i.test(text)) return false;
-      return (
-        /\bcompany_id\b/.test(text) ||
-        node.quasi.expressions.some((e) => isCompanyIdMember(e) && isColumnOf(e, tables))
-      );
-    }
     case "CallExpression": {
-      if (isQueryChain(node)) return isScopedChain(chainTop(node), sourceCode, seen);
       const fn = functionName(node);
       const args = node.arguments;
       if (fn === "and") return args.some((a) => isScoped(a, sourceCode, seen, tables));
@@ -258,13 +244,12 @@ function isScoped(node, sourceCode, seen, tables) {
       }
       if (fn === "inArray") {
         const [column, sub] = args;
-        // A subquery is scoped through its own tables.
-        return isColumnOf(column, tables) && isScoped(sub, sourceCode, seen, SUBQUERY);
+        return isColumnOf(column, tables) && isScoped(sub, sourceCode, seen, subqueryFor(column));
       }
       if (!args.some(isCompanyIdRef)) return false;
       if (COLUMN_HELPERS.has(fn)) return isColumnOf(args[0], tables);
       if (TABLE_HELPERS.has(fn)) return tables.has(TABLE_HELPERS.get(fn));
-      if (SUBQUERY_HELPERS.has(fn)) return tables === SUBQUERY;
+      if (SUBQUERY_HELPERS.has(fn)) return SUBQUERY_HELPERS.get(fn) === tables.column?.property.name;
       return false;
     }
     default:

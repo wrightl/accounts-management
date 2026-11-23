@@ -1,7 +1,8 @@
 import "server-only";
-import { and, eq, inArray, sql, sum } from "drizzle-orm";
+import { and, eq, sql, sum } from "drizzle-orm";
 import { getDb } from "@/db";
 import { matchOfCompany } from "@/lib/bank/match-scope";
+import { rowOfCompany } from "@/lib/tenant-scope";
 import { invoices, payments, reconciliationMatches } from "@/db/schema";
 import type { ActionResult } from "@/actions/result";
 import { writeAudit } from "@/lib/audit";
@@ -223,10 +224,7 @@ export async function linkPaymentToBankTransaction(
           .where(
             and(
               eq(payments.id, paymentId),
-              inArray(
-                payments.invoiceId,
-                tx.select({ id: invoices.id }).from(invoices).where(eq(invoices.companyId, companyId)),
-              ),
+              rowOfCompany(payments.invoiceId, invoices, companyId),
             ),
           );
       }

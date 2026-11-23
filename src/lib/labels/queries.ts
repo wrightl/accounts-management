@@ -285,13 +285,7 @@ export async function setRowNote(
       .where(
         and(
           eq(bankTransactions.id, rowId),
-          inArray(
-            bankTransactions.bankAccountId,
-            db
-              .select({ id: bankAccounts.id })
-              .from(bankAccounts)
-              .where(eq(bankAccounts.companyId, companyId)),
-          ),
+          rowOfCompany(bankTransactions.bankAccountId, bankAccounts, companyId),
         ),
       );
   }
