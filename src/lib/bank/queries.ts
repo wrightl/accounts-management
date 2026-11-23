@@ -1722,7 +1722,7 @@ export async function explainBankCredit(
  * another statement. reconciliation_matches has no company_id, so each query on
  * it scopes itself through this rather than relying on an earlier read.
  */
-function companyTransactionIds(
+function transactionIdsOfCompany(
     db: Pick<ReturnType<typeof getDb>, 'select'>,
     companyId: string,
     ids: string[],
@@ -1792,7 +1792,7 @@ export async function explainBankCredits(
     if (!parsed.ok) throw new ReconciliationError(parsed.error);
 
     return db.transaction(async (dbTx) => {
-        const own = companyTransactionIds(dbTx, companyId, ids);
+        const own = transactionIdsOfCompany(dbTx, companyId, ids);
         const ownMatches = inArray(reconciliationMatches.bankTransactionId, own);
         const confirmed = await dbTx
             .select({ id: reconciliationMatches.bankTransactionId })
@@ -1914,7 +1914,7 @@ export async function explainOwnerTransactions(
     const note = input.note?.trim() ? input.note.trim().slice(0, 500) : null;
 
     return db.transaction(async (dbTx) => {
-        const ownTransactions = companyTransactionIds(dbTx, companyId, ids);
+        const ownTransactions = transactionIdsOfCompany(dbTx, companyId, ids);
         const ownMatches = inArray(reconciliationMatches.bankTransactionId, ownTransactions);
         const confirmed = await dbTx
             .select({ id: reconciliationMatches.bankTransactionId })

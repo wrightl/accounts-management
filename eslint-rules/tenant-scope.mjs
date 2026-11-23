@@ -156,8 +156,26 @@ function isQueryChain(node) {
   return false;
 }
 
-/** Helpers that build a company filter or id subquery from the company id. */
-const FILTER_HELPER = /(OfCompany|Where|Filter|Ids)$/;
+/** Helpers that build a company filter from the company id. */
+const FILTER_HELPER = /(OfCompany|Where|Filter)$/;
+/** Scope helpers whose first argument is the column being scoped. */
+const COLUMN_HELPERS = new Set(["rowOfCompany", "bankTransactionOfCompany"]);
+
+/** The table a query chain reads, updates or deletes, or null. */
+function queryTable(node) {
+  let current = node;
+  while (current) {
+    if (current.type === "CallExpression") {
+      if (QUERY_METHODS.has(methodName(current))) return tableName(current.arguments[0]);
+      current = current.callee;
+    } else if (current.type === "MemberExpression") {
+      current = current.object;
+    } else {
+      return null;
+    }
+  }
+  return null;
+}
 
 /**
  * Whether a filter expression restricts the rows to the company. Only
@@ -165,26 +183,28 @@ const FILTER_HELPER = /(OfCompany|Where|Filter|Ids)$/;
  * `or(…)` or `not(…)` or by passing the company id to something unrelated:
  *
  *   - `and(…)` (or an array spread into it): any argument is scoped;
- *   - `…OfCompany(…)`: a scope helper;
+ *   - `…OfCompany(…)` given the company id; for `rowOfCompany` and
+ *     `bankTransactionOfCompany` the column must also belong to the table
+ *     being checked;
  *   - `eq(x.companyId, …)`, either way round;
  *   - `inArray(col, sub)` / `exists(sub)`: `sub` is a scoped subquery, or a
- *     helper named `…Where` / `…Filter` / `…Ids` given the company id;
+ *     helper named `…OfCompany` / `…Where` / `…Filter` given the company id;
  *   - `…Where(…)` / `…Filter(…)` given the company id, such as `bankListWhere`;
  *   - a `sql` template naming `company_id` (with no `or`);
  *   - a local whose initial value is one of these.
  */
-function isScoped(node, sourceCode, seen) {
+function isScoped(node, sourceCode, seen, table) {
   if (!node || typeof node.type !== "string") return false;
   switch (node.type) {
     case "Identifier":
-      return scopedLocal(node, sourceCode, seen);
+      return scopedLocal(node, sourceCode, seen, table);
     case "SpreadElement":
-      return isScoped(node.argument, sourceCode, seen);
+      return isScoped(node.argument, sourceCode, seen, table);
     case "ArrayExpression":
-      return node.elements.some((e) => isScoped(e, sourceCode, seen));
+      return node.elements.some((e) => isScoped(e, sourceCode, seen, table));
     case "TSAsExpression":
     case "TSNonNullExpression":
-      return isScoped(node.expression, sourceCode, seen);
+      return isScoped(node.expression, sourceCode, seen, table);
     case "TaggedTemplateExpression": {
       if (node.tag.type !== "Identifier" || node.tag.name !== "sql") return false;
       const text = node.quasi.quasis.map((q) => q.value.raw).join(" ");
@@ -195,16 +215,24 @@ function isScoped(node, sourceCode, seen) {
     }
     case "CallExpression": {
       if (isQueryChain(node)) {
-        return chainFilters(chainTop(node)).some((f) => isScoped(f, sourceCode, seen));
+        const sub = queryTable(node);
+        return chainFilters(chainTop(node)).some((f) => isScoped(f, sourceCode, seen, sub));
       }
       const fn = functionName(node);
       if (!fn) return false;
-      if (fn === "and") return node.arguments.some((a) => isScoped(a, sourceCode, seen));
+      if (fn === "and") return node.arguments.some((a) => isScoped(a, sourceCode, seen, table));
       if (fn === "eq") return node.arguments.some(isCompanyIdMember);
-      if (fn === "inArray") return isScoped(node.arguments[1], sourceCode, seen);
-      if (fn === "exists") return isScoped(node.arguments[0], sourceCode, seen);
-      if (/OfCompany$/.test(fn)) return true;
-      if (FILTER_HELPER.test(fn)) return node.arguments.some(isCompanyIdRef);
+      // A subquery is scoped through its own table.
+      if (fn === "inArray") return isScoped(node.arguments[1], sourceCode, seen, null);
+      if (fn === "exists") return isScoped(node.arguments[0], sourceCode, seen, null);
+      if (!node.arguments.some(isCompanyIdRef)) return false;
+      if (COLUMN_HELPERS.has(fn)) {
+        // rowOfCompany(payments.invoiceId, invoices, companyId): the column
+        // must belong to the table this statement reads, updates or deletes.
+        const column = node.arguments[0];
+        return column?.type === "MemberExpression" && tableName(column.object) === table;
+      }
+      return FILTER_HELPER.test(fn);
       return false;
     }
     default:
@@ -217,7 +245,7 @@ function isScoped(node, sourceCode, seen) {
  * `const where = bankListWhere(companyId, filters)` used as `.where(where)`.
  * The scope is still part of the statement; it was just built a line earlier.
  */
-function scopedLocal(id, sourceCode, seen) {
+function scopedLocal(id, sourceCode, seen, table) {
   let scope = sourceCode.getScope(id);
   while (scope) {
     const variable = scope.set.get(id.name);
@@ -229,7 +257,7 @@ function scopedLocal(id, sourceCode, seen) {
       // does not, even if that read was scoped.
       if (/\bawait\b|\.(map|filter|flatMap|reduce|find)\(/.test(sourceCode.getText(init))) return false;
       seen.add(init);
-      return isScoped(init, sourceCode, seen);
+      return isScoped(init, sourceCode, seen, table);
     }
     scope = scope.upper;
   }
@@ -268,7 +296,7 @@ const requireCompanyScope = {
         if (!table || !tables.has(table)) return;
         const filters = chainFilters(chainTop(node));
         const seen = new Set();
-        if (filters.some((f) => isScoped(f, sourceCode, seen))) return;
+        if (filters.some((f) => isScoped(f, sourceCode, seen, table))) return;
         context.report({ node, messageId: "unscoped", data: { table } });
       },
       // db.query.payments.findMany(…)

@@ -36,7 +36,7 @@ describe("tenant-scope/require-company-scope", () => {
         await db.select().from(bankTransactions).where(where);
       }`,
       `async function f(tx, companyId, ids) {
-        const own = companyTransactionIds(tx, companyId, ids);
+        const own = transactionIdsOfCompany(tx, companyId, ids);
         const ownMatches = inArray(reconciliationMatches.bankTransactionId, own);
         await tx.delete(reconciliationMatches).where(ownMatches);
       }`,
@@ -56,6 +56,14 @@ describe("tenant-scope/require-company-scope", () => {
         await db.select().from(invoices)
           .leftJoin(payments, eq(payments.invoiceId, invoices.id))
           .where(eq(invoices.companyId, companyId));
+      }`,
+      // Inside a subquery the helper's column belongs to the subquery's table.
+      `async function f(tx, companyId) {
+        await tx.delete(reconciliationMatches).where(inArray(
+          reconciliationMatches.bankTransactionId,
+          tx.select({ id: bankTransactions.id }).from(bankTransactions)
+            .where(rowOfCompany(bankTransactions.bankAccountId, bankAccounts, companyId)),
+        ));
       }`,
       // Inserts have no WHERE.
       `async function f(db, id) { await db.insert(payments).values({ invoiceId: id }); }`,
@@ -152,6 +160,37 @@ describe("tenant-scope/require-company-scope", () => {
         code: `async function f(db, companyId) {
           await db.select().from(payments)
             .where(sql\`invoice_id in (select id from invoices where company_id = \${companyId}) or true\`);
+        }`,
+        errors: [error("payments")],
+      },
+      // A scope helper needs the company id, and its column must be from the checked table.
+      {
+        code: `async function f(db, someOtherId, id) {
+          await db.select().from(payments).where(and(
+            eq(payments.id, id),
+            rowOfCompany(payments.invoiceId, invoices, someOtherId),
+          ));
+        }`,
+        errors: [error("payments")],
+      },
+      {
+        code: `async function f(db, companyId, id) {
+          await db.select().from(payments).where(and(
+            eq(payments.id, id),
+            rowOfCompany(invoiceLineItems.invoiceId, invoices, companyId),
+          ));
+        }`,
+        errors: [error("payments")],
+      },
+      {
+        code: `async function f(db, id) {
+          await db.select().from(payments).where(paymentsOfCompany(id));
+        }`,
+        errors: [error("payments")],
+      },
+      {
+        code: `async function f(db, companyId) {
+          await db.select().from(payments).where(inArray(payments.invoiceId, invoiceIds(companyId)));
         }`,
         errors: [error("payments")],
       },
