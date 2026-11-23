@@ -17,7 +17,7 @@ async function renderFromSnapshot(
   number: string,
   version: number,
 ) {
-  const snapshot = await getQuoteVersionSnapshot(quoteId, version);
+  const snapshot = await getQuoteVersionSnapshot(companyId, quoteId, version);
   if (!snapshot) throw new Error("Quote version not found");
 
   const db = getDb();

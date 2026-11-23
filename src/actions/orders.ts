@@ -11,6 +11,7 @@ import {
   orderPaymentMilestones,
   orders,
 } from "@/db/schema";
+import { rowOfCompany } from "@/lib/tenant-scope";
 import type { ActionResult } from "@/actions/result";
 import { writeAudit } from "@/lib/audit";
 import { mutate } from "@/lib/mutate";
@@ -97,7 +98,7 @@ export async function createOrder(formData: FormData): Promise<ActionResult> {
           lineValues.map((l) => ({ ...l, orderId: row.id })),
         );
 
-        await replaceOrderPaymentMilestones(tx, row.id, milestones);
+        await replaceOrderPaymentMilestones(tx, companyId, row.id, milestones);
         return row.id;
       });
 
@@ -166,7 +167,11 @@ export async function createInvoiceFromOrder(
           .select()
           .from(orderPaymentMilestones)
           .where(
-            and(eq(orderPaymentMilestones.id, id), eq(orderPaymentMilestones.orderId, orderId)),
+            and(
+              eq(orderPaymentMilestones.id, id),
+              eq(orderPaymentMilestones.orderId, orderId),
+              rowOfCompany(orderPaymentMilestones.orderId, orders, companyId),
+            ),
           )
           .limit(1);
         if (!milestone) return { ok: false, error: "Milestone not found" };

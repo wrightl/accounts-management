@@ -28,6 +28,7 @@ import {
   orders,
   payments,
 } from "@/db/schema";
+import { rowOfCompany } from "@/lib/tenant-scope";
 import { clientDisplayNameSql } from "@/lib/clients/sql";
 import { formatGBP, formatMoney } from "@/lib/money";
 import { creditAdjustmentsByInvoice } from "@/lib/credit-notes/adjustments";
@@ -236,7 +237,12 @@ export async function invoiceAmountsDue(
       total: sum(payments.amountPence).mapWith(Number),
     })
     .from(payments)
-    .where(inArray(payments.invoiceId, ids))
+    .where(
+      and(
+        inArray(payments.invoiceId, ids),
+        rowOfCompany(payments.invoiceId, invoices, companyId),
+      ),
+    )
     .groupBy(payments.invoiceId);
   const paid = new Map(paidRows.map((r) => [r.invoiceId, r.total ?? 0]));
   const credits = await creditAdjustmentsByInvoice(db, companyId, ids);
@@ -284,13 +290,18 @@ export async function getInvoiceDetail(
   const lines = await db
     .select()
     .from(invoiceLineItems)
-    .where(eq(invoiceLineItems.invoiceId, id))
+    .where(
+      and(
+        eq(invoiceLineItems.invoiceId, id),
+        rowOfCompany(invoiceLineItems.invoiceId, invoices, companyId),
+      ),
+    )
     .orderBy(invoiceLineItems.position);
 
   const paymentRows = await db
     .select()
     .from(payments)
-    .where(eq(payments.invoiceId, id))
+    .where(and(eq(payments.invoiceId, id), rowOfCompany(payments.invoiceId, invoices, companyId)))
     .orderBy(desc(payments.receivedAt));
 
   const creditNoteRows = await db
@@ -408,7 +419,12 @@ export async function getDashboardKpis(companyId: string): Promise<DashboardKpis
         total: sum(payments.amountPence).mapWith(Number),
       })
       .from(payments)
-      .where(inArray(payments.invoiceId, ids))
+      .where(
+        and(
+          inArray(payments.invoiceId, ids),
+          rowOfCompany(payments.invoiceId, invoices, companyId),
+        ),
+      )
       .groupBy(payments.invoiceId);
 
     const paidMap = new Map(paidByInvoice.map((r) => [r.invoiceId, r.total ?? 0]));
@@ -479,7 +495,12 @@ export async function getUnchasedImports(companyId: string) {
       total: sum(payments.amountPence).mapWith(Number),
     })
     .from(payments)
-    .where(inArray(payments.invoiceId, ids))
+    .where(
+      and(
+        inArray(payments.invoiceId, ids),
+        rowOfCompany(payments.invoiceId, invoices, companyId),
+      ),
+    )
     .groupBy(payments.invoiceId);
   const paid = new Map(paidRows.map((r) => [r.invoiceId, r.total ?? 0]));
   const credits = await creditAdjustmentsByInvoice(db, companyId, ids);
@@ -532,7 +553,12 @@ export async function countOverdueInvoices(
       total: sum(payments.amountPence).mapWith(Number),
     })
     .from(payments)
-    .where(inArray(payments.invoiceId, ids))
+    .where(
+      and(
+        inArray(payments.invoiceId, ids),
+        rowOfCompany(payments.invoiceId, invoices, companyId),
+      ),
+    )
     .groupBy(payments.invoiceId);
 
   const paidMap = new Map(paidByInvoice.map((r) => [r.invoiceId, r.total ?? 0]));
@@ -597,7 +623,12 @@ export async function listOverdueInvoices(
       total: sum(payments.amountPence).mapWith(Number),
     })
     .from(payments)
-    .where(inArray(payments.invoiceId, ids))
+    .where(
+      and(
+        inArray(payments.invoiceId, ids),
+        rowOfCompany(payments.invoiceId, invoices, companyId),
+      ),
+    )
     .groupBy(payments.invoiceId);
 
   const paidMap = new Map(paidByInvoice.map((r) => [r.invoiceId, r.total ?? 0]));
@@ -628,14 +659,4 @@ export async function listOverdueInvoices(
       balancePence,
       balanceFormatted,
     }));
-}
-
-/** Sum of payments for an invoice (raw SQL helper for mutations). */
-export async function sumPaymentsForInvoice(invoiceId: string): Promise<number> {
-  const db = getDb();
-  const [row] = await db
-    .select({ total: sum(payments.amountPence).mapWith(Number) })
-    .from(payments)
-    .where(eq(payments.invoiceId, invoiceId));
-  return row?.total ?? 0;
 }

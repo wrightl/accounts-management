@@ -74,7 +74,7 @@ export async function createDraftQuoteRecord(
       lineValues.map((l) => ({ ...l, quoteId: row.id })),
     );
 
-    await replaceQuotePaymentMilestones(tx, row.id, milestones);
+    await replaceQuotePaymentMilestones(tx, companyId, row.id, milestones);
 
     await insertQuoteVersion(tx, {
       quoteId: row.id,

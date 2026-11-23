@@ -1,6 +1,6 @@
 import "server-only";
 import { documentTotals, STERLING_RATE } from "@/lib/currency";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import {
   invoiceLineItems,
   invoices,
@@ -8,6 +8,7 @@ import {
   orderPaymentMilestones,
   orders,
 } from "@/db/schema";
+import { rowOfCompany } from "@/lib/tenant-scope";
 import { allocateInvoiceNumber, type Tx } from "@/lib/invoices/allocate";
 import {
   buildInvoiceLineValues,
@@ -41,7 +42,12 @@ export async function raiseDepositInvoice(
   const [milestone] = await tx
     .select()
     .from(orderPaymentMilestones)
-    .where(eq(orderPaymentMilestones.orderId, order.id))
+    .where(
+      and(
+        eq(orderPaymentMilestones.orderId, order.id),
+        rowOfCompany(orderPaymentMilestones.orderId, orders, params.companyId),
+      ),
+    )
     .orderBy(asc(orderPaymentMilestones.position))
     .limit(1);
   if (!milestone) return null;
@@ -49,7 +55,12 @@ export async function raiseDepositInvoice(
   const orderLines = await tx
     .select()
     .from(orderLineItems)
-    .where(eq(orderLineItems.orderId, order.id))
+    .where(
+      and(
+        eq(orderLineItems.orderId, order.id),
+        rowOfCompany(orderLineItems.orderId, orders, params.companyId),
+      ),
+    )
     .orderBy(asc(orderLineItems.position));
 
   const amountPence = resolveMilestoneAmountPence(milestone, order.grossPence);

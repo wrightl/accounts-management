@@ -11,6 +11,7 @@ import {
   reconciliationMatches,
   users,
 } from "@/db/schema";
+import { rowOfCompany } from "@/lib/tenant-scope";
 import { clientDisplayNameSql } from "@/lib/clients/sql";
 import { formatExpenseAmount, formatGBP } from "@/lib/money";
 import type { ExpenseStatus } from "@/lib/expenses/categories";
@@ -187,7 +188,7 @@ export async function listExpenses(
     );
   const rows = page ? await query.limit(page.limit).offset(page.offset) : await query;
 
-  const labelsByExpense = await labelsForExpenses(rows.map((r) => r.id));
+  const labelsByExpense = await labelsForExpenses(companyId, rows.map((r) => r.id));
 
   return rows.map((r) => {
     const createdByDisplay =
@@ -275,7 +276,12 @@ export async function getExpenseDetail(
   const receipts = await db
     .select()
     .from(expenseReceipts)
-    .where(eq(expenseReceipts.expenseId, id))
+    .where(
+      and(
+        eq(expenseReceipts.expenseId, id),
+        rowOfCompany(expenseReceipts.expenseId, expenses, companyId),
+      ),
+    )
     .orderBy(desc(expenseReceipts.uploadedAt));
 
   const e = rows[0].expense;

@@ -47,6 +47,7 @@ import {
     reimbursements,
     users,
 } from '@/db/schema';
+import { rowOfCompany } from '@/lib/tenant-scope';
 import { formatGBP } from '@/lib/money';
 import { labelsForBankTransactions, type RowLabel } from '@/lib/labels/queries';
 import { payReimbursementRun } from '@/lib/reimbursements/pay';
@@ -212,6 +213,7 @@ export async function importBankRows(
                             eq(bankTransactions.bankAccountId, accountId),
                             eq(bankTransactions.externalId, row.externalId),
                             isNull(bankTransactions.spendingCategory),
+                            rowOfCompany(bankTransactions.bankAccountId, bankAccounts, companyId),
                         ),
                     );
                 continue;
@@ -399,6 +401,7 @@ async function paidTotalForInvoice(
 /** Link each match to the record it settles (invoice, expense or reimbursement run). */
 async function buildMatchHrefs(
     db: ReturnType<typeof getDb>,
+    companyId: string,
     matches: (typeof reconciliationMatches.$inferSelect)[],
 ): Promise<Map<string, string>> {
     const paymentIds = matches
@@ -409,7 +412,12 @@ async function buildMatchHrefs(
         const rows = await db
             .select({ id: payments.id, invoiceId: payments.invoiceId })
             .from(payments)
-            .where(inArray(payments.id, paymentIds));
+            .where(
+                and(
+                    inArray(payments.id, paymentIds),
+                    rowOfCompany(payments.invoiceId, invoices, companyId),
+                ),
+            );
         for (const row of rows) invoiceByPayment.set(row.id, row.invoiceId);
     }
 
@@ -431,6 +439,7 @@ async function buildMatchHrefs(
 
 async function buildMatchLabels(
     db: ReturnType<typeof getDb>,
+    companyId: string,
     matches: (typeof reconciliationMatches.$inferSelect)[],
 ): Promise<Map<string, string>> {
     const labels = new Map<string, string>();
@@ -458,7 +467,12 @@ async function buildMatchLabels(
             .from(payments)
             .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
             .innerJoin(clients, eq(invoices.clientId, clients.id))
-            .where(inArray(payments.id, paymentIds));
+            .where(
+                and(
+                    inArray(payments.id, paymentIds),
+                    rowOfCompany(payments.invoiceId, invoices, companyId),
+                ),
+            );
         for (const row of rows) {
             labels.set(
                 row.paymentId,
@@ -756,9 +770,9 @@ export async function listBankTransactions(
     }
 
     const [labelByMatchId, hrefByMatchId, labelsByTx, hiddenMatches] = await Promise.all([
-        buildMatchLabels(db, matches),
-        buildMatchHrefs(db, matches),
-        labelsForBankTransactions(pageTx.map((tx) => tx.id)),
+        buildMatchLabels(db, companyId, matches),
+        buildMatchHrefs(db, companyId, matches),
+        labelsForBankTransactions(companyId, pageTx.map((tx) => tx.id)),
         inPack ? matchesOutsidePack(db, companyId, matches) : new Set<string>(),
     ]);
 
@@ -903,7 +917,12 @@ async function loadOpenInvoiceBalances(
                 total: sum(payments.amountPence).mapWith(Number),
             })
             .from(payments)
-            .where(inArray(payments.invoiceId, ids))
+            .where(
+                and(
+                    inArray(payments.invoiceId, ids),
+                    rowOfCompany(payments.invoiceId, invoices, companyId),
+                ),
+            )
             .groupBy(payments.invoiceId),
         creditAdjustmentsByInvoice(db, companyId, ids),
     ]);
@@ -1518,7 +1537,12 @@ async function assertBankRowOpen(
     const [row] = await db
         .select({ bookedAt: bankTransactions.bookedAt })
         .from(bankTransactions)
-        .where(eq(bankTransactions.id, bankTransactionId))
+        .where(
+            and(
+                eq(bankTransactions.id, bankTransactionId),
+                rowOfCompany(bankTransactions.bankAccountId, bankAccounts, companyId),
+            ),
+        )
         .limit(1);
     const locked = periodLockError(
         await getBooksLockedThrough(companyId, db),
@@ -1543,7 +1567,12 @@ export async function confirmMatch(companyId: string, matchId: string) {
             const [bankTx] = await tx
                 .select()
                 .from(bankTransactions)
-                .where(eq(bankTransactions.id, match.bankTransactionId))
+                .where(
+                    and(
+                        eq(bankTransactions.id, match.bankTransactionId),
+                        rowOfCompany(bankTransactions.bankAccountId, bankAccounts, companyId),
+                    ),
+                )
                 .limit(1);
             if (!bankTx)
                 throw new ReconciliationError('Bank transaction not found');
@@ -1565,7 +1594,12 @@ export async function confirmMatch(companyId: string, matchId: string) {
             const [bankTx] = await tx
                 .select()
                 .from(bankTransactions)
-                .where(eq(bankTransactions.id, match.bankTransactionId))
+                .where(
+                    and(
+                        eq(bankTransactions.id, match.bankTransactionId),
+                        rowOfCompany(bankTransactions.bankAccountId, bankAccounts, companyId),
+                    ),
+                )
                 .limit(1);
             if (!bankTx)
                 throw new ReconciliationError('Bank transaction not found');
@@ -1595,7 +1629,12 @@ export async function confirmMatch(companyId: string, matchId: string) {
             const [bankTx] = await tx
                 .select({ amountPence: bankTransactions.amountPence })
                 .from(bankTransactions)
-                .where(eq(bankTransactions.id, match.bankTransactionId))
+                .where(
+                    and(
+                        eq(bankTransactions.id, match.bankTransactionId),
+                        rowOfCompany(bankTransactions.bankAccountId, bankAccounts, companyId),
+                    ),
+                )
                 .limit(1);
             if (!expense || !bankTx)
                 throw new ReconciliationError('Match not found');
@@ -2302,7 +2341,12 @@ export async function updateTransactionCategory(
             suggestedCategoryReason: null,
             suggestedCategorySource: null,
         })
-        .where(eq(bankTransactions.id, transactionId));
+        .where(
+            and(
+                eq(bankTransactions.id, transactionId),
+                rowOfCompany(bankTransactions.bankAccountId, bankAccounts, companyId),
+            ),
+        );
 }
 
 export { ReconciliationError };

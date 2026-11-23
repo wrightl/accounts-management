@@ -2,6 +2,7 @@ import "server-only";
 import { and, desc, eq, inArray, ne, sum } from "drizzle-orm";
 import { getDb } from "@/db";
 import { clients, invoices, orders, payments, quotes } from "@/db/schema";
+import { rowOfCompany } from "@/lib/tenant-scope";
 import { formatGBP } from "@/lib/money";
 import { creditAdjustmentsByInvoice } from "@/lib/credit-notes/adjustments";
 import { invoiceAmountDue, settlementPence } from "@/lib/invoices/balance";
@@ -140,7 +141,12 @@ export async function getClientOverview(
         total: sum(payments.amountPence).mapWith(Number),
       })
       .from(payments)
-      .where(inArray(payments.invoiceId, openIds))
+      .where(
+        and(
+          inArray(payments.invoiceId, openIds),
+          rowOfCompany(payments.invoiceId, invoices, companyId),
+        ),
+      )
       .groupBy(payments.invoiceId);
 
     const paidMap = new Map(paidByInvoice.map((r) => [r.invoiceId, r.total ?? 0]));
@@ -159,7 +165,13 @@ export async function getClientOverview(
     .select({ total: sum(payments.amountPence).mapWith(Number) })
     .from(payments)
     .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
-    .where(and(eq(invoices.clientId, clientId), ne(invoices.status, "void")));
+    .where(
+      and(
+        eq(invoices.clientId, clientId),
+        ne(invoices.status, "void"),
+        rowOfCompany(payments.invoiceId, invoices, companyId),
+      ),
+    );
 
   const paidToDatePence = paidRow?.total ?? 0;
 

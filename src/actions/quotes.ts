@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { documentTotals, STERLING_RATE, sterlingTotals } from "@/lib/currency";
 import { getDb } from "@/db";
 import { quoteLineItems, quotes } from "@/db/schema";
+import { rowOfCompany } from "@/lib/tenant-scope";
 import { writeAudit } from "@/lib/audit";
 import { mutate } from "@/lib/mutate";
 import { poundsToPence } from "@/lib/money";
@@ -136,10 +137,15 @@ export async function updateQuote(id: string, formData: FormData): Promise<Actio
           })
           .where(and(eq(quotes.id, id), eq(quotes.companyId, companyId)));
 
-        await tx.delete(quoteLineItems).where(eq(quoteLineItems.quoteId, id));
+        await tx.delete(quoteLineItems).where(
+          and(
+            eq(quoteLineItems.quoteId, id),
+            rowOfCompany(quoteLineItems.quoteId, quotes, companyId),
+          ),
+        );
         await tx.insert(quoteLineItems).values(lineValues.map((l) => ({ ...l, quoteId: id })));
 
-        await replaceQuotePaymentMilestones(tx, id, milestoneResult.milestones);
+        await replaceQuotePaymentMilestones(tx, companyId, id, milestoneResult.milestones);
 
         await insertQuoteVersion(tx, {
           quoteId: id,
@@ -197,7 +203,7 @@ export async function rollbackQuote(
         return { ok: false, error: "Already on this version" };
       }
 
-      const snapshot = await getQuoteVersionSnapshot(quoteId, targetVersion);
+      const snapshot = await getQuoteVersionSnapshot(companyId, quoteId, targetVersion);
       if (!snapshot) return { ok: false, error: "Version not found" };
 
       const nextVersion = existing.version + 1;
@@ -224,7 +230,12 @@ export async function rollbackQuote(
           })
           .where(and(eq(quotes.id, quoteId), eq(quotes.companyId, companyId)));
 
-        await tx.delete(quoteLineItems).where(eq(quoteLineItems.quoteId, quoteId));
+        await tx.delete(quoteLineItems).where(
+          and(
+            eq(quoteLineItems.quoteId, quoteId),
+            rowOfCompany(quoteLineItems.quoteId, quotes, companyId),
+          ),
+        );
         await tx.insert(quoteLineItems).values(lineValues.map((l) => ({ ...l, quoteId })));
 
         await insertQuoteVersion(tx, {

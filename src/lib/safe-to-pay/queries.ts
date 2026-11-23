@@ -10,6 +10,7 @@ import {
   payments,
   recurringInvoices,
 } from "@/db/schema";
+import { rowOfCompany } from "@/lib/tenant-scope";
 import { parseStatementBalancePence } from "@/lib/bank/summary";
 import { listMilestonesReadyToBill } from "@/lib/close/checklist";
 import { creditAdjustmentsByInvoice } from "@/lib/credit-notes/adjustments";
@@ -49,7 +50,12 @@ export async function getCashAtBank(companyId: string): Promise<CashAtBank> {
       const [row] = await db
         .select({ raw: bankTransactions.raw, bookedAt: bankTransactions.bookedAt })
         .from(bankTransactions)
-        .where(eq(bankTransactions.bankAccountId, a.id))
+        .where(
+          and(
+            eq(bankTransactions.bankAccountId, a.id),
+            rowOfCompany(bankTransactions.bankAccountId, bankAccounts, companyId),
+          ),
+        )
         .orderBy(desc(bankTransactions.bookedAt), desc(bankTransactions.createdAt))
         .limit(1);
       return row ? { balance: parseStatementBalancePence(row.raw), bookedAt: row.bookedAt } : null;
@@ -82,6 +88,7 @@ export async function getCashAtBank(companyId: string): Promise<CashAtBank> {
               accounts.map((a) => a.id),
             ),
             gt(bankTransactions.bookedAt, company.asAt),
+            rowOfCompany(bankTransactions.bankAccountId, bankAccounts, companyId),
           ),
         )
     : [{ total: 0 }];
@@ -154,7 +161,12 @@ async function invoicesDueSoonPence(companyId: string, today: string, until: str
     db
       .select({ invoiceId: payments.invoiceId, total: sum(payments.amountPence).mapWith(Number) })
       .from(payments)
-      .where(inArray(payments.invoiceId, ids))
+      .where(
+        and(
+          inArray(payments.invoiceId, ids),
+          rowOfCompany(payments.invoiceId, invoices, companyId),
+        ),
+      )
       .groupBy(payments.invoiceId),
     creditAdjustmentsByInvoice(db, companyId, ids),
   ]);

@@ -8,6 +8,7 @@ import {
   invoiceLineItems,
   invoices,
 } from "@/db/schema";
+import { rowOfCompany } from "@/lib/tenant-scope";
 import { writeAudit } from "@/lib/audit";
 import { mutate } from "@/lib/mutate";
 import {
@@ -119,7 +120,12 @@ export async function updateInvoice(
           })
           .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)));
 
-        await tx.delete(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, id));
+        await tx.delete(invoiceLineItems).where(
+          and(
+            eq(invoiceLineItems.invoiceId, id),
+            rowOfCompany(invoiceLineItems.invoiceId, invoices, companyId),
+          ),
+        );
         await tx.insert(invoiceLineItems).values(
           lineValues.map((l) => ({ ...l, invoiceId: id })),
         );

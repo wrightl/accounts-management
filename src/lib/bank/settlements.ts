@@ -1,7 +1,8 @@
 import "server-only";
 import { and, desc, eq, inArray, or } from "drizzle-orm";
 import { getDb } from "@/db";
-import { bankAccounts, bankTransactions, payments, reconciliationMatches } from "@/db/schema";
+import { bankAccounts, bankTransactions, invoices, payments, reconciliationMatches } from "@/db/schema";
+import { rowOfCompany } from "@/lib/tenant-scope";
 import { formatGBP } from "@/lib/money";
 
 export type BankSettlement = {
@@ -38,7 +39,12 @@ export async function listBankSettlements(
     const invoicePayments = db
       .select({ id: payments.id })
       .from(payments)
-      .where(eq(payments.invoiceId, target.invoiceId));
+      .where(
+        and(
+          eq(payments.invoiceId, target.invoiceId),
+          rowOfCompany(payments.invoiceId, invoices, companyId),
+        ),
+      );
     matchCondition = or(
       eq(reconciliationMatches.invoiceId, target.invoiceId),
       inArray(reconciliationMatches.paymentId, invoicePayments),

@@ -12,6 +12,7 @@ import {
   payments,
   recurringInvoices,
 } from "@/db/schema";
+import { rowOfCompany } from "@/lib/tenant-scope";
 import { listMilestonesReadyToBill } from "@/lib/close/checklist";
 import { clientDisplayNameSql } from "@/lib/clients/sql";
 import { creditAdjustmentsByInvoice } from "@/lib/credit-notes/adjustments";
@@ -52,7 +53,12 @@ async function invoiceEvents(companyId: string, today: string): Promise<Forecast
     db
       .select({ invoiceId: payments.invoiceId, total: sum(payments.amountPence).mapWith(Number) })
       .from(payments)
-      .where(inArray(payments.invoiceId, ids))
+      .where(
+        and(
+          inArray(payments.invoiceId, ids),
+          rowOfCompany(payments.invoiceId, invoices, companyId),
+        ),
+      )
       .groupBy(payments.invoiceId),
     creditAdjustmentsByInvoice(db, companyId, ids),
   ]);
@@ -313,7 +319,12 @@ export async function getBroughtForwardDebtsPence(companyId: string): Promise<nu
     db
       .select({ invoiceId: payments.invoiceId, total: sum(payments.amountPence).mapWith(Number) })
       .from(payments)
-      .where(inArray(payments.invoiceId, ids))
+      .where(
+        and(
+          inArray(payments.invoiceId, ids),
+          rowOfCompany(payments.invoiceId, invoices, companyId),
+        ),
+      )
       .groupBy(payments.invoiceId),
     creditAdjustmentsByInvoice(db, companyId, ids),
   ]);

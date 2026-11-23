@@ -8,9 +8,9 @@ import {
   orderLineItems,
   orderPaymentMilestones,
   orders,
-  quotePaymentMilestones,
   quotes,
 } from "@/db/schema";
+import { rowOfCompany } from "@/lib/tenant-scope";
 import { type ListPaging, fetchPage } from "@/lib/list-paging";
 import { formatGBP } from "@/lib/money";
 import { sortExpr, sortNumbered, sortRank, sortText } from "@/lib/sql-paging";
@@ -99,13 +99,23 @@ export async function getOrderDetail(companyId: string, id: string) {
   const lines = await db
     .select()
     .from(orderLineItems)
-    .where(eq(orderLineItems.orderId, id))
+    .where(
+      and(
+        eq(orderLineItems.orderId, id),
+        rowOfCompany(orderLineItems.orderId, orders, companyId),
+      ),
+    )
     .orderBy(orderLineItems.position);
 
   const milestones = await db
     .select()
     .from(orderPaymentMilestones)
-    .where(eq(orderPaymentMilestones.orderId, id))
+    .where(
+      and(
+        eq(orderPaymentMilestones.orderId, id),
+        rowOfCompany(orderPaymentMilestones.orderId, orders, companyId),
+      ),
+    )
     .orderBy(orderPaymentMilestones.position);
 
   const invoiceRows = await db
@@ -168,15 +178,6 @@ export async function getOrderDetail(companyId: string, id: string) {
     remainingFormatted: formatGBP(remainingPence),
     availableMilestones,
   };
-}
-
-export async function getQuotePaymentMilestones(quoteId: string) {
-  const db = getDb();
-  return db
-    .select()
-    .from(quotePaymentMilestones)
-    .where(eq(quotePaymentMilestones.quoteId, quoteId))
-    .orderBy(quotePaymentMilestones.position);
 }
 
 export type OrderLineValue = {

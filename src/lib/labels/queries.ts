@@ -9,6 +9,7 @@ import {
   expenses,
   labels,
 } from "@/db/schema";
+import { bankTransactionOfCompany, rowOfCompany } from "@/lib/tenant-scope";
 import { isUniqueViolation } from "@/lib/db-errors";
 import type { LabelColor } from "@/lib/labels/colors";
 import { MAX_NOTE_LENGTH } from "@/lib/labels/params";
@@ -176,14 +177,24 @@ export async function setRowLabels(
   }
   await db.transaction(async (tx) => {
     if (kind === "expense") {
-      await tx.delete(expenseLabels).where(eq(expenseLabels.expenseId, rowId));
+      await tx.delete(expenseLabels).where(
+        and(
+          eq(expenseLabels.expenseId, rowId),
+          rowOfCompany(expenseLabels.expenseId, expenses, companyId),
+        ),
+      );
       if (uniqueIds.length > 0) {
         await tx
           .insert(expenseLabels)
           .values(uniqueIds.map((labelId) => ({ expenseId: rowId, labelId })));
       }
     } else {
-      await tx.delete(bankTransactionLabels).where(eq(bankTransactionLabels.bankTransactionId, rowId));
+      await tx.delete(bankTransactionLabels).where(
+        and(
+          eq(bankTransactionLabels.bankTransactionId, rowId),
+          bankTransactionOfCompany(bankTransactionLabels.bankTransactionId, companyId),
+        ),
+      );
       if (uniqueIds.length > 0) {
         await tx
           .insert(bankTransactionLabels)
@@ -299,8 +310,11 @@ function groupLabels<T extends { rowId: string; id: string; name: string; color:
   return byRow;
 }
 
-/** Callers pass ids they have already scoped to the company. */
-export async function labelsForBankTransactions(ids: string[]): Promise<Map<string, RowLabel[]>> {
+/** Labels on these rows, limited to the company's own rows. */
+export async function labelsForBankTransactions(
+  companyId: string,
+  ids: string[],
+): Promise<Map<string, RowLabel[]>> {
   if (ids.length === 0) return new Map();
   const rows = await getDb()
     .select({
@@ -311,13 +325,21 @@ export async function labelsForBankTransactions(ids: string[]): Promise<Map<stri
     })
     .from(bankTransactionLabels)
     .innerJoin(labels, eq(bankTransactionLabels.labelId, labels.id))
-    .where(inArray(bankTransactionLabels.bankTransactionId, ids))
+    .where(
+      and(
+        inArray(bankTransactionLabels.bankTransactionId, ids),
+        bankTransactionOfCompany(bankTransactionLabels.bankTransactionId, companyId),
+      ),
+    )
     .orderBy(asc(sql`lower(${labels.name})`));
   return groupLabels(rows);
 }
 
-/** Callers pass ids they have already scoped to the company. */
-export async function labelsForExpenses(ids: string[]): Promise<Map<string, RowLabel[]>> {
+/** Labels on these rows, limited to the company's own rows. */
+export async function labelsForExpenses(
+  companyId: string,
+  ids: string[],
+): Promise<Map<string, RowLabel[]>> {
   if (ids.length === 0) return new Map();
   const rows = await getDb()
     .select({
@@ -328,7 +350,12 @@ export async function labelsForExpenses(ids: string[]): Promise<Map<string, RowL
     })
     .from(expenseLabels)
     .innerJoin(labels, eq(expenseLabels.labelId, labels.id))
-    .where(inArray(expenseLabels.expenseId, ids))
+    .where(
+      and(
+        inArray(expenseLabels.expenseId, ids),
+        rowOfCompany(expenseLabels.expenseId, expenses, companyId),
+      ),
+    )
     .orderBy(asc(sql`lower(${labels.name})`));
   return groupLabels(rows);
 }

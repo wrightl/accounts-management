@@ -3,6 +3,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { getDb } from "@/db";
 import { clients, expenseReceipts, expenses, users } from "@/db/schema";
+import { rowOfCompany } from "@/lib/tenant-scope";
 import { clientDisplayName } from "@/lib/clients/display";
 import { labelsForExpenses } from "@/lib/labels/queries";
 import { toMobileExpense } from "@/lib/mobile/expense-payload";
@@ -13,6 +14,7 @@ type ReceiptRow = typeof expenseReceipts.$inferSelect;
 
 /** Receipts for several expenses, grouped by expense id, in one query. */
 export async function receiptsByExpense(
+  companyId: string,
   expenseIds: string[],
 ): Promise<Map<string, ReceiptRow[]>> {
   const grouped = new Map<string, ReceiptRow[]>();
@@ -20,7 +22,12 @@ export async function receiptsByExpense(
   const rows = await getDb()
     .select()
     .from(expenseReceipts)
-    .where(inArray(expenseReceipts.expenseId, expenseIds));
+    .where(
+      and(
+        inArray(expenseReceipts.expenseId, expenseIds),
+        rowOfCompany(expenseReceipts.expenseId, expenses, companyId),
+      ),
+    );
   for (const row of rows) {
     const list = grouped.get(row.expenseId) ?? [];
     list.push(row);
@@ -60,9 +67,9 @@ export async function loadMobileExpense(companyId: string, id: string) {
   if (!row) return null;
 
   const [receipts, paymentSources, labels] = await Promise.all([
-    receiptsByExpense([id]).then((byId) => byId.get(id) ?? []),
+    receiptsByExpense(companyId, [id]).then((byId) => byId.get(id) ?? []),
     pendingPaymentSources(companyId, [row.expense]),
-    labelsForExpenses([id]).then((byId) => byId.get(id) ?? []),
+    labelsForExpenses(companyId, [id]).then((byId) => byId.get(id) ?? []),
   ]);
   return toMobileExpense({
     paymentSource: paymentSources.get(id) ?? null,

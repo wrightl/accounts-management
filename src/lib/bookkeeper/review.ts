@@ -2,6 +2,7 @@ import "server-only";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { getDb } from "@/db";
 import { bankAccounts, bankTransactions, expenses, reconciliationMatches } from "@/db/schema";
+import { rowOfCompany } from "@/lib/tenant-scope";
 import { writeAudit } from "@/lib/audit";
 import { ReconciliationError, confirmMatch, updateTransactionCategory } from "@/lib/bank/queries";
 import { suggestBankCategories } from "@/lib/bookkeeper/categories";
@@ -92,7 +93,12 @@ export async function dismissCategorySuggestionsFor(
       suggestedCategorySource: null,
       categorySuggestionDismissed: true,
     })
-    .where(inArray(bankTransactions.id, rows.map((r) => r.id)));
+    .where(
+      and(
+        inArray(bankTransactions.id, rows.map((r) => r.id)),
+        rowOfCompany(bankTransactions.bankAccountId, bankAccounts, companyId),
+      ),
+    );
   return { ok: true };
 }
 

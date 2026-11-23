@@ -1,5 +1,6 @@
 import { eq, inArray, sql, and } from "drizzle-orm";
 import { expenses, reimbursementItems, reimbursements } from "@/db/schema";
+import { rowOfCompany } from "@/lib/tenant-scope";
 import type { getDb } from "@/db";
 import { todayIsoDate } from "@/lib/dates";
 
@@ -39,7 +40,12 @@ export async function payReimbursementRun(
   const items = await tx
     .select()
     .from(reimbursementItems)
-    .where(eq(reimbursementItems.reimbursementId, reimbursementId));
+    .where(
+      and(
+        eq(reimbursementItems.reimbursementId, reimbursementId),
+        rowOfCompany(reimbursementItems.reimbursementId, reimbursements, companyId),
+      ),
+    );
 
   await tx
     .update(reimbursements)

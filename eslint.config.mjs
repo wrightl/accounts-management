@@ -1,6 +1,7 @@
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
+import tenantScope from "./eslint-rules/tenant-scope.mjs";
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -25,6 +26,15 @@ const eslintConfig = defineConfig([
         { ignoreRestSiblings: true, varsIgnorePattern: "^_", argsIgnorePattern: "^_" },
       ],
     },
+  },
+  {
+    // CLAUDE.md: every query on a tenant-owned table is scoped to the company in
+    // the same statement. See eslint-rules/tenant-scope.mjs.
+    files: ["src/**/*.{ts,tsx}"],
+    // Seed scripts run locally and clear their fixtures across companies on purpose.
+    ignores: ["src/db/seed-*.ts"],
+    plugins: { "tenant-scope": tenantScope },
+    rules: { "tenant-scope/require-company-scope": "error" },
   },
 ]);
 
