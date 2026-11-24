@@ -171,9 +171,15 @@ export function en16931Category(code: TaxCode): En16931Category | null {
   return TAX_CODE_INFO[code].en16931;
 }
 
+/** Keeps a rate between 0 and 100 without rounding it; not a number gives 0. */
 function clampRate(rate: number): number {
   if (!Number.isFinite(rate)) return 0;
-  return Math.min(100, Math.max(0, Math.round(rate)));
+  return Math.min(100, Math.max(0, rate));
+}
+
+/** Whether `rate` is `target` exactly, allowing only for floating-point noise. */
+function isRate(rate: number, target: number): boolean {
+  return Math.abs(rate - target) < 0.005;
 }
 
 /**
@@ -204,7 +210,8 @@ export interface InferredTaxCode {
  *
  *  - Not VAT registered: outside the scope of VAT, whatever the rate.
  *  - 20% is standard and 5% is reduced.
- *  - Any other rate above 0 is treated as standard and flagged.
+ *  - Any other rate above 0, including near misses like 19.6%, is treated as
+ *    standard and flagged. Rates are matched exactly, never rounded.
  *  - 0% is zero rated.
  */
 export function inferTaxCodeFromRate(
@@ -213,9 +220,9 @@ export function inferTaxCodeFromRate(
 ): InferredTaxCode {
   if (!company.vatRegistered) return { code: "outside_scope", needsReview: false };
   const r = clampRate(rate ?? 0);
-  if (r === STANDARD_RATE) return { code: "standard", needsReview: false };
-  if (r === REDUCED_RATE) return { code: "reduced", needsReview: false };
-  if (r > 0) return { code: "standard", needsReview: true };
+  if (isRate(r, STANDARD_RATE)) return { code: "standard", needsReview: false };
+  if (isRate(r, REDUCED_RATE)) return { code: "reduced", needsReview: false };
+  if (!isRate(r, 0)) return { code: "standard", needsReview: true };
   return { code: "zero_rated", needsReview: false };
 }
 
@@ -317,6 +324,6 @@ export function resolveLineTax(
     return { taxCode: code, vatRate: rateForTaxCode(code) };
   }
   const inferred = inferTaxCodeFromRate(posted.vatRate, company);
-  if (inferred.needsReview) throw new TaxRateNotRecognisedError(clampRate(posted.vatRate ?? 0));
+  if (inferred.needsReview) throw new TaxRateNotRecognisedError(posted.vatRate ?? 0);
   return { taxCode: inferred.code, vatRate: rateForTaxCode(inferred.code) };
 }

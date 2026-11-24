@@ -116,6 +116,19 @@ describe("inferTaxCodeFromRate", () => {
   it("flags other rates as standard to check", () => {
     expect(inferTaxCodeFromRate(17, registered)).toEqual({ code: "standard", needsReview: true });
   });
+
+  it("matches rates exactly rather than rounding", () => {
+    for (const rate of [19.6, 5.4, 0.4]) {
+      expect(inferTaxCodeFromRate(rate, registered)).toEqual({
+        code: "standard",
+        needsReview: true,
+      });
+    }
+    expect(inferTaxCodeFromRate(0.1 + 0.2 + 19.7, registered)).toEqual({
+      code: "standard",
+      needsReview: false,
+    });
+  });
 });
 
 describe("inferExpenseTaxCode", () => {
@@ -240,8 +253,16 @@ describe("resolveLineTax", () => {
       TaxRateNotRecognisedError,
     );
     expect(() => resolveLineTax(registered, { vatRate: 17.6 }, "purchases")).toThrow(
-      "18% is not a UK VAT rate",
+      "17.6% is not a UK VAT rate",
     );
+  });
+
+  it("refuses near misses rather than rounding them to a UK rate", () => {
+    for (const rate of [19.6, 5.4, 0.4]) {
+      expect(() => resolveLineTax(registered, { vatRate: rate }, "sales")).toThrow(
+        `${rate}% is not a UK VAT rate`,
+      );
+    }
   });
 
   it("refuses a code that does not apply", () => {
