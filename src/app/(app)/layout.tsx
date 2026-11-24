@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { hmrcConnectEnabled } from "@/lib/hmrc/config";
 import { redirect } from "next/navigation";
 import { hasDatabaseClient } from "@/db";
 import { requireUser, safeCurrentUser } from "@/lib/auth";
@@ -93,7 +94,7 @@ export default async function AppLayout({
   };
   const groups = filterNavGroups(NAV_GROUPS, navFilter);
   const hiddenGroups = hiddenNavGroups(NAV_GROUPS, navFilter);
-  const settingsPages = visibleSettingsPages(navFilter.permissionCheck);
+  const settingsPages = visibleSettingsPages(navFilter.permissionCheck, { hmrc: hmrcConnectEnabled() });
   const navCollapsed =
     (await cookies()).get(NAV_COLLAPSED_COOKIE)?.value === "1";
 

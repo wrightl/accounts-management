@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { hmrcConnectEnabled } from "@/lib/hmrc/config";
 import { ChevronRight } from "lucide-react";
 import { guardTenantPage } from "@/lib/auth";
 import { can } from "@/lib/roles";
@@ -17,7 +18,9 @@ const SECTIONS: { id: SettingsPage["section"]; label: string }[] = [
 
 export default async function SettingsHubPage() {
   const session = await guardTenantPage("workspace:read");
-  const pages = visibleSettingsPages((permission) => can(session.role, permission));
+  const pages = visibleSettingsPages((permission) => can(session.role, permission), {
+    hmrc: hmrcConnectEnabled(),
+  });
   // Once hidden, the history checklist comes back from here.
   const onboarding = can(session.role, "accounts:write")
     ? await getDataOnboardingRow(session.companyId)

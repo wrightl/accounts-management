@@ -44,7 +44,8 @@ export type NavIcon =
     | 'payments'
     | 'reminders'
     | 'templates'
-    | 'assistant';
+    | 'assistant'
+    | 'hmrc';
 
 export interface NavItem {
     href: string;
@@ -95,6 +96,8 @@ export interface SettingsPage extends NavItem {
     section: 'you' | 'business' | 'team';
     /** Hide from people with this permission (they edit it elsewhere). */
     hideWithPermission?: Permission;
+    /** Only shown once the server is set up to connect to HMRC. */
+    requiresHmrc?: true;
 }
 
 /** Destinations on the Settings hub, filtered by permission like the sidebar. */
@@ -166,6 +169,15 @@ export const SETTINGS_PAGES: SettingsPage[] = [
         section: 'business',
     },
     {
+        href: '/settings/hmrc',
+        label: 'HMRC',
+        description: 'Connect to HMRC so Alfa can file returns for you.',
+        icon: 'hmrc',
+        permission: 'tax:connect',
+        section: 'business',
+        requiresHmrc: true,
+    },
+    {
         href: '/settings/reminders',
         label: 'Payment reminders',
         description: 'Automatic reminders for unpaid invoices.',
@@ -210,11 +222,13 @@ export const SETTINGS_PAGES: SettingsPage[] = [
 /** Settings hub destinations this person should see. */
 export function visibleSettingsPages(
     permissionCheck: (permission: Permission) => boolean,
+    available: { hmrc?: boolean } = {},
 ): SettingsPage[] {
     return SETTINGS_PAGES.filter(
         (page) =>
             permissionCheck(page.permission) &&
-            !(page.hideWithPermission && permissionCheck(page.hideWithPermission)),
+            !(page.hideWithPermission && permissionCheck(page.hideWithPermission)) &&
+            !(page.requiresHmrc && !available.hmrc),
     );
 }
 

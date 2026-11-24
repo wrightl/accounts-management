@@ -77,4 +77,5 @@ export const NAV_ICONS: Record<NavIcon, LucideIcon> = {
   reminders: BellRing,
   templates: LayoutTemplate,
   assistant: MessagesSquare,
+  hmrc: Landmark,
 };

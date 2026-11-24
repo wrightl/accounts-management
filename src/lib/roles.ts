@@ -53,7 +53,9 @@ export type Permission =
   /** See accountant query threads and reply to them. */
   | "queries:read"
   /** Raise, close and reopen accountant queries. */
-  | "queries:raise";
+  | "queries:raise"
+  /** Connect the company to HMRC, or disconnect it. Admins only: it grants Alfa authority to file. */
+  | "tax:connect";
 
 const PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
   admin: new Set<Permission>([
@@ -68,6 +70,7 @@ const PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     "users:manage",
     "books:lock",
     "queries:read",
+    "tax:connect",
   ]),
   user: new Set<Permission>([
     "accounts:read",
