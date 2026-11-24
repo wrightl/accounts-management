@@ -3,6 +3,7 @@ import {
   TAX_CODES,
   TAX_CODE_INFO,
   TaxCodeNotAllowedError,
+  TaxRateNotRecognisedError,
   defaultLineTax,
   en16931Category,
   inferExpenseTaxCode,
@@ -73,35 +74,20 @@ describe("tax codes", () => {
 });
 
 describe("rateForTaxCode", () => {
-  it("forces unrated codes to 0", () => {
-    expect(rateForTaxCode("zero_rated", 20)).toBe(0);
-    expect(rateForTaxCode("exempt", 5)).toBe(0);
-    expect(rateForTaxCode("reverse_charge", 20)).toBe(0);
-  });
-
-  it("keeps a posted rate above 0 on rated codes", () => {
-    expect(rateForTaxCode("standard", 20)).toBe(20);
-    expect(rateForTaxCode("standard", 17.6)).toBe(18);
-    expect(rateForTaxCode("reduced", 5)).toBe(5);
-  });
-
-  it("falls back to the default rate rather than 0 on rated codes", () => {
+  it("gives each code its own rate", () => {
     expect(rateForTaxCode("standard")).toBe(20);
-    expect(rateForTaxCode("standard", 0)).toBe(20);
-    expect(rateForTaxCode("reduced", null)).toBe(5);
-    expect(rateForTaxCode("standard", Number.NaN)).toBe(20);
-  });
-
-  it("clamps rates to 100", () => {
-    expect(rateForTaxCode("standard", 150)).toBe(100);
+    expect(rateForTaxCode("reduced")).toBe(5);
+    expect(rateForTaxCode("zero_rated")).toBe(0);
+    expect(rateForTaxCode("exempt")).toBe(0);
+    expect(rateForTaxCode("reverse_charge")).toBe(0);
   });
 });
 
 describe("taxCodeDisplay", () => {
   it("shows the rate for rated codes only", () => {
-    expect(taxCodeDisplay("standard", 20)).toBe("Standard rate 20%");
+    expect(taxCodeDisplay("standard")).toBe("Standard rate 20%");
     expect(taxCodeDisplay("reduced")).toBe("Reduced rate 5%");
-    expect(taxCodeDisplay("exempt", 20)).toBe("Exempt");
+    expect(taxCodeDisplay("exempt")).toBe("Exempt");
   });
 });
 
@@ -173,10 +159,13 @@ describe("defaultLineTax", () => {
     });
   });
 
-  it("uses the company default code", () => {
+  it("uses the company default code with the code's own rate", () => {
     expect(
       defaultLineTax({ vatRegistered: true, defaultTaxCode: "reduced", defaultVatRate: 20 }),
-    ).toEqual({ taxCode: "reduced", vatRate: 20 });
+    ).toEqual({ taxCode: "reduced", vatRate: 5 });
+    expect(
+      defaultLineTax({ vatRegistered: true, defaultTaxCode: "standard", defaultVatRate: 5 }),
+    ).toEqual({ taxCode: "standard", vatRate: 20 });
     expect(defaultLineTax({ vatRegistered: true, defaultTaxCode: "zero_rated" })).toEqual({
       taxCode: "zero_rated",
       vatRate: 0,
@@ -193,6 +182,10 @@ describe("defaultLineTax", () => {
       vatRate: 5,
     });
     expect(defaultLineTax({ vatRegistered: true })).toEqual({ taxCode: "standard", vatRate: 20 });
+    expect(defaultLineTax({ vatRegistered: true, defaultVatRate: 17 })).toEqual({
+      taxCode: "standard",
+      vatRate: 20,
+    });
   });
 });
 
@@ -204,10 +197,18 @@ describe("resolveLineTax", () => {
     });
   });
 
-  it("keeps a posted code with its rate", () => {
+  it("keeps a posted code with the code's own rate", () => {
     expect(resolveLineTax(registered, { taxCode: "standard", vatRate: 20 }, "sales")).toEqual({
       taxCode: "standard",
       vatRate: 20,
+    });
+    expect(resolveLineTax(registered, { taxCode: "standard", vatRate: 5 }, "sales")).toEqual({
+      taxCode: "standard",
+      vatRate: 20,
+    });
+    expect(resolveLineTax(registered, { taxCode: "reduced", vatRate: 20 }, "sales")).toEqual({
+      taxCode: "reduced",
+      vatRate: 5,
     });
     expect(resolveLineTax(registered, { taxCode: "exempt", vatRate: 20 }, "sales")).toEqual({
       taxCode: "exempt",
@@ -232,6 +233,15 @@ describe("resolveLineTax", () => {
       taxCode: "reduced",
       vatRate: 5,
     });
+  });
+
+  it("refuses a bare rate that is not a UK rate", () => {
+    expect(() => resolveLineTax(registered, { vatRate: 17 }, "sales")).toThrow(
+      TaxRateNotRecognisedError,
+    );
+    expect(() => resolveLineTax(registered, { vatRate: 17.6 }, "purchases")).toThrow(
+      "18% is not a UK VAT rate",
+    );
   });
 
   it("refuses a code that does not apply", () => {

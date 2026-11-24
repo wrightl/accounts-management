@@ -177,22 +177,19 @@ function clampRate(rate: number): number {
 }
 
 /**
- * The rate to store for a line with `code`. Unrated codes are always 0. Rated
- * codes keep a posted rate above 0 and otherwise take the code's default, so a
- * standard or reduced line never ends up at 0%.
+ * The rate to store for a new line with `code`: the code's own rate, so the
+ * code, its EN 16931 category and the rate always agree. Lines already stored
+ * keep the rate they were saved with if the law changes it later.
  */
-export function rateForTaxCode(code: TaxCode, postedRate?: number | null): number {
-  const info = TAX_CODE_INFO[code];
-  if (!info.rated) return 0;
-  const rate = clampRate(postedRate ?? 0);
-  return rate > 0 ? rate : info.defaultRate;
+export function rateForTaxCode(code: TaxCode): number {
+  return TAX_CODE_INFO[code].defaultRate;
 }
 
 /** A label with the rate for rated codes, e.g. "Standard rate 20%". */
-export function taxCodeDisplay(code: TaxCode, rate?: number | null): string {
+export function taxCodeDisplay(code: TaxCode): string {
   const info = TAX_CODE_INFO[code];
   if (!info.rated) return info.label;
-  return `${info.label} ${rateForTaxCode(code, rate)}%`;
+  return `${info.label} ${info.defaultRate}%`;
 }
 
 /** A tax code worked out from older data, and whether a person should check it. */
@@ -263,7 +260,8 @@ export interface LineTax {
 
 /**
  * Default tax for a new line: the company's default code when registered,
- * else outside the scope of VAT at 0%.
+ * else outside the scope of VAT at 0%. The rate always comes from the code;
+ * an old default rate that is not a UK rate gives the standard rate.
  */
 export function defaultLineTax(company: {
   vatRegistered?: boolean | null;
@@ -274,7 +272,7 @@ export function defaultLineTax(company: {
   const code =
     parseTaxCode(company.defaultTaxCode) ??
     inferTaxCodeFromRate(company.defaultVatRate ?? STANDARD_RATE, company).code;
-  return { taxCode: code, vatRate: rateForTaxCode(code, company.defaultVatRate) };
+  return { taxCode: code, vatRate: rateForTaxCode(code) };
 }
 
 export class TaxCodeNotAllowedError extends Error {
@@ -287,15 +285,25 @@ export class TaxCodeNotAllowedError extends Error {
   }
 }
 
+export class TaxRateNotRecognisedError extends Error {
+  constructor(readonly rate: number) {
+    super(
+      `${rate}% is not a UK VAT rate. Choose a tax code: standard (${STANDARD_RATE}%), reduced (${REDUCED_RATE}%) or a 0% code.`,
+    );
+    this.name = "TaxRateNotRecognisedError";
+  }
+}
+
 /**
  * The tax code and rate to store for a posted line.
  *
  *  - Not VAT registered: outside the scope of VAT at 0%, whatever was posted.
- *  - A valid code: kept, with its rate from {@link rateForTaxCode}.
+ *  - A valid code: kept, with the code's own rate. Any posted rate is ignored.
  *  - No code (callers that still post only a rate): inferred from the rate.
  *
  * Throws {@link TaxCodeNotAllowedError} when a registered company posts a
- * code that doesn't apply, such as postponed import VAT on a sale.
+ * code that doesn't apply, such as postponed import VAT on a sale, and
+ * {@link TaxRateNotRecognisedError} when a bare rate is not 0%, 5% or 20%.
  */
 export function resolveLineTax(
   company: { vatRegistered?: boolean | null },
@@ -306,8 +314,9 @@ export function resolveLineTax(
   const code = parseTaxCode(posted.taxCode);
   if (code) {
     if (!isTaxCodeAllowed(code, use)) throw new TaxCodeNotAllowedError(code, use);
-    return { taxCode: code, vatRate: rateForTaxCode(code, posted.vatRate) };
+    return { taxCode: code, vatRate: rateForTaxCode(code) };
   }
-  const inferred = inferTaxCodeFromRate(posted.vatRate, company).code;
-  return { taxCode: inferred, vatRate: rateForTaxCode(inferred, posted.vatRate) };
+  const inferred = inferTaxCodeFromRate(posted.vatRate, company);
+  if (inferred.needsReview) throw new TaxRateNotRecognisedError(clampRate(posted.vatRate ?? 0));
+  return { taxCode: inferred.code, vatRate: rateForTaxCode(inferred.code) };
 }
