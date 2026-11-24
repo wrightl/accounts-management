@@ -48,7 +48,7 @@ import {
   yearEndRuns,
 } from "@/db/schema";
 import type { DemoBooks } from "@/lib/demo/generate";
-import { inferExpenseTaxCode, inferStoredTaxCode } from "@/lib/tax-codes";
+import { inferExpenseTaxCode, inferStoredTaxCode, type TaxCode } from "@/lib/tax-codes";
 
 type Registration = { vatRegistered?: boolean | null };
 
@@ -56,7 +56,10 @@ type Registration = { vatRegistered?: boolean | null };
  * The demo's lines with tax codes, from their rates. The demo books are made
  * up to be right, so nothing is flagged for review.
  */
-function coded<T extends { vatRate?: number | null }>(rows: T[], company: Registration): T[] {
+function coded<T extends { vatRate?: number | null }>(
+  rows: T[],
+  company: Registration,
+): (T & { taxCode: TaxCode; taxCodeNeedsReview: boolean })[] {
   return rows.map((r) => ({
     ...r,
     taxCode: inferStoredTaxCode(r.vatRate ?? 0, company).code,

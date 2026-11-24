@@ -25,7 +25,7 @@ import {
   users,
 } from "@/db/schema";
 import { PLATFORM_ADMIN_ROLE } from "@/lib/roles";
-import { applyTaxCodeBackfill } from "@/lib/tax-code-backfill";
+import { inferStoredTaxCode } from "@/lib/tax-codes";
 
 /** Fixed promo document numbers — safe to upsert by. */
 export const PROMO_NUMBERS = {
@@ -264,6 +264,15 @@ export async function seedPromoDemo(
     );
   }
 
+  // Lines and expenses get the tax code their rate implies for this company.
+  const [promoCompany] = await db
+    .select({ vatRegistered: companies.vatRegistered })
+    .from(companies)
+    .where(eq(companies.id, companyId));
+  const promoTax = (rate: number) => ({
+    taxCode: inferStoredTaxCode(rate, promoCompany ?? { vatRegistered: false }).code,
+  });
+
   // Deadlines need an incorporation date for the confirmation statement.
   await db
     .update(companies)
@@ -306,6 +315,7 @@ export async function seedPromoDemo(
       quantity: 2,
       unitPricePence: 75_000,
       vatRate: 0,
+    ...promoTax(0),
       position: 0,
     },
     {
@@ -313,6 +323,7 @@ export async function seedPromoDemo(
       quantity: 1,
       unitPricePence: 120_000,
       vatRate: 0,
+    ...promoTax(0),
       position: 1,
     },
   ];
@@ -340,6 +351,7 @@ export async function seedPromoDemo(
       quantity: l.quantity,
       unitPricePence: l.unitPricePence,
       vatRate: l.vatRate,
+      ...promoTax(l.vatRate),
       position: l.position,
     })),
   );
@@ -369,6 +381,7 @@ export async function seedPromoDemo(
       quantity: l.quantity,
       unitPricePence: l.unitPricePence,
       vatRate: l.vatRate,
+      ...promoTax(l.vatRate),
       position: l.position,
     })),
   );
@@ -386,6 +399,7 @@ export async function seedPromoDemo(
       quantity: l.quantity,
       unitPricePence: l.unitPricePence,
       vatRate: l.vatRate,
+      ...promoTax(l.vatRate),
       position: l.position,
     })),
     source: "create",
@@ -415,6 +429,7 @@ export async function seedPromoDemo(
     quantity: 1,
     unitPricePence: 108_000,
     vatRate: 0,
+    ...promoTax(0),
     position: 0,
   });
 
@@ -440,6 +455,7 @@ export async function seedPromoDemo(
     quantity: 1,
     unitPricePence: 45_000,
     vatRate: 0,
+    ...promoTax(0),
     position: 0,
   });
 
@@ -473,6 +489,7 @@ export async function seedPromoDemo(
     quantity: 1,
     unitPricePence: 32_000,
     vatRate: 0,
+    ...promoTax(0),
     position: 0,
   });
 
@@ -484,6 +501,7 @@ export async function seedPromoDemo(
       category: "Meals",
       spentAt: day(-11),
       amountPence: 4_850,
+      ...promoTax(0),
       vatPence: 0,
       status: "pending",
       source: "email",
@@ -513,6 +531,7 @@ export async function seedPromoDemo(
       category: "Travel",
       spentAt: day(-6),
       amountPence: 8_420,
+      ...promoTax(0),
       vatPence: 0,
       status: "reimbursable",
       source: "manual",
@@ -573,9 +592,6 @@ export async function seedPromoDemo(
       raw: { Balance: "17160.00" },
     },
   ]);
-
-  // Give the seeded lines and expenses tax codes, as the app would have.
-  await applyTaxCodeBackfill(db, { companyId });
 
   return {
     routes: {

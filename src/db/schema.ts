@@ -697,8 +697,11 @@ export const invoiceLineItems = pgTable(
     /** In the invoice's currency (minor units); pence only for GBP invoices. */
     unitPricePence: integer("unit_price_pence").notNull().default(0),
     vatRate: integer("vat_rate").notNull().default(0),
-    /** What kind of supply this is (item 17). Null until the backfill or a write sets it. */
-    taxCode: taxCodeEnum("tax_code"),
+    /**
+     * What kind of supply this is (item 17). Every writer sets it; a database
+     * trigger codes and flags any row inserted without one (migration 0099).
+     */
+    taxCode: taxCodeEnum("tax_code").notNull(),
     /** The backfill could only guess the tax code; a person should check it. */
     taxCodeNeedsReview: boolean("tax_code_needs_review").notNull().default(false),
     /** Line discount percentage (0–100), applied before VAT. */
@@ -858,8 +861,11 @@ export const creditNoteLineItems = pgTable(
       .default(1),
     unitPricePence: integer("unit_price_pence").notNull().default(0),
     vatRate: integer("vat_rate").notNull().default(0),
-    /** What kind of supply this is (item 17). Null until the backfill or a write sets it. */
-    taxCode: taxCodeEnum("tax_code"),
+    /**
+     * What kind of supply this is (item 17). Every writer sets it; a database
+     * trigger codes and flags any row inserted without one (migration 0099).
+     */
+    taxCode: taxCodeEnum("tax_code").notNull(),
     /** The backfill could only guess the tax code; a person should check it. */
     taxCodeNeedsReview: boolean("tax_code_needs_review").notNull().default(false),
     discountPercent: numeric("discount_percent", { precision: 5, scale: 2, mode: "number" })
@@ -892,8 +898,11 @@ export const expenses = pgTable(
     amountPence: integer("amount_pence").notNull().default(0),
     /** VAT rate percentage used to derive vatPence from inclusive amountPence. */
     vatRate: integer("vat_rate").notNull().default(0),
-    /** What kind of supply this is (item 17). Null until the backfill or a write sets it. */
-    taxCode: taxCodeEnum("tax_code"),
+    /**
+     * What kind of supply this is (item 17). Every writer sets it; a database
+     * trigger codes and flags any row inserted without one (migration 0099).
+     */
+    taxCode: taxCodeEnum("tax_code").notNull(),
     /** The backfill could only guess the tax code; a person should check it. */
     taxCodeNeedsReview: boolean("tax_code_needs_review").notNull().default(false),
     vatPence: integer("vat_pence").notNull().default(0),
@@ -1515,8 +1524,11 @@ export const orderLineItems = pgTable(
       .default(1),
     unitPricePence: integer("unit_price_pence").notNull().default(0),
     vatRate: integer("vat_rate").notNull().default(0),
-    /** What kind of supply this is (item 17). Null until the backfill or a write sets it. */
-    taxCode: taxCodeEnum("tax_code"),
+    /**
+     * What kind of supply this is (item 17). Every writer sets it; a database
+     * trigger codes and flags any row inserted without one (migration 0099).
+     */
+    taxCode: taxCodeEnum("tax_code").notNull(),
     /** The backfill could only guess the tax code; a person should check it. */
     taxCodeNeedsReview: boolean("tax_code_needs_review").notNull().default(false),
     /** Line discount percentage (0–100), applied before VAT. */
@@ -1651,8 +1663,11 @@ export const quoteLineItems = pgTable(
       .default(1),
     unitPricePence: integer("unit_price_pence").notNull().default(0),
     vatRate: integer("vat_rate").notNull().default(0),
-    /** What kind of supply this is (item 17). Null until the backfill or a write sets it. */
-    taxCode: taxCodeEnum("tax_code"),
+    /**
+     * What kind of supply this is (item 17). Every writer sets it; a database
+     * trigger codes and flags any row inserted without one (migration 0099).
+     */
+    taxCode: taxCodeEnum("tax_code").notNull(),
     /** The backfill could only guess the tax code; a person should check it. */
     taxCodeNeedsReview: boolean("tax_code_needs_review").notNull().default(false),
     /** Line discount percentage (0–100), applied before VAT. */
