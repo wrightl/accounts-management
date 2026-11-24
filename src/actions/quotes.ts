@@ -3,7 +3,7 @@
 import { and, eq } from "drizzle-orm";
 import { carriedLineTax } from "@/lib/tax-codes";
 import { storedLineTax } from "@/lib/documents/schema";
-import { documentTotals, STERLING_RATE, sterlingTotals } from "@/lib/currency";
+import { priceDocument } from "@/lib/document-rate";
 import { getDb } from "@/db";
 import { quoteLineItems, quotes } from "@/db/schema";
 import { rowOfCompany } from "@/lib/tenant-scope";
@@ -23,7 +23,11 @@ import {
   isQuoteStatus,
   type QuoteStatus,
 } from "@/lib/quotes/status";
-import { insertQuoteVersion, linesToSnapshot } from "@/lib/quotes/versions";
+import {
+  insertQuoteVersion,
+  linesToSnapshot,
+  snapshotCurrencyColumns,
+} from "@/lib/quotes/versions";
 import { upsertDeclineReasonCategory } from "@/lib/quotes/decline-reasons";
 import { createOrderFromQuote, replaceQuotePaymentMilestones } from "@/lib/orders/copy-from-quote";
 import {
@@ -105,8 +109,11 @@ export async function updateQuote(id: string, formData: FormData): Promise<Actio
       } catch {
         return { ok: false, error: "Enter a valid unit price on each line item" };
       }
-      const totals = documentTotals(lineValues, STERLING_RATE);
-      const milestoneResult = parseAndValidateMilestones(formData, totals.grossPence);
+      const priced = await priceDocument(parsed.data, parsed.data.issueDate, lineValues);
+      if (!priced.ok) return priced;
+      const totals = priced.fields;
+      // Milestones are in the quote's currency.
+      const milestoneResult = parseAndValidateMilestones(formData, totals.grossMinor);
       if (!milestoneResult.ok) return { ok: false, error: milestoneResult.error };
 
       const db = getDb();
@@ -226,7 +233,7 @@ export async function rollbackQuote(
             issueDate: snapshot.issueDate,
             validUntil: snapshot.validUntil,
             notes: snapshot.notes,
-            ...sterlingTotals(snapshot),
+            ...snapshotCurrencyColumns(snapshot),
             version: nextVersion,
             pdfBlobPath: null,
           })

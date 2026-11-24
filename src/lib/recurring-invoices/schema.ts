@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  documentCurrencySchema,
   lineDiscountPercentSchema,
   lineQuantitySchema,
   lineTaxCodeSchema,
@@ -43,6 +44,8 @@ export const recurringInvoiceSchema = z.object({
     .min(1, "Day must be between 1 and 28")
     .max(28, "Day must be between 1 and 28"),
   onGenerate: z.enum(["draft", "send"]),
+  /** Each invoice is generated in this currency at the rate for its issue date. */
+  currency: documentCurrencySchema,
   endsOn: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid end date")
@@ -74,6 +77,7 @@ export function recurringInvoiceRawFromFormData(
     notes: formData.get("notes") ?? "",
     dayOfMonth: formData.get("dayOfMonth") ?? "1",
     onGenerate: formData.get("onGenerate") ?? "draft",
+    currency: formData.get("currency") ?? "",
     endsOn: formData.get("endsOn") ?? "",
     maxOccurrences: formData.get("maxOccurrences") ?? "",
     enabled: formData.get("enabled") ?? "true",

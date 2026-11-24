@@ -56,6 +56,9 @@ export default async function EditQuotePage({
             validUntil: detail.quote.validUntil,
             notes: detail.quote.notes,
             depositOnAccept: detail.quote.depositOnAccept,
+            currency: detail.quote.currency,
+            fxRate: detail.quote.fxRate,
+            fxRateSource: detail.quote.fxRateSource,
           }}
           initialLines={initialLines}
           initialMilestones={detail.milestones}

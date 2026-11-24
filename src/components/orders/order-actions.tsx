@@ -9,7 +9,7 @@ import { Dialog, DialogActions } from "@/components/ui/dialog";
 import { FieldError, Input, Label } from "@/components/ui/form";
 import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
 import { useFieldErrors } from "@/components/ui/use-field-errors";
-import { formatGBP } from "@/lib/money";
+import { expenseCurrencySymbol, formatMoney } from "@/lib/money";
 import {
   createInvoiceFromOrderRawFromFormData,
   parseCreateInvoiceFromOrderInput,
@@ -32,13 +32,16 @@ export function OrderActions({
   canWrite,
   remainingPence,
   orderGrossPence,
+  currency = "GBP",
   availableMilestones,
   defaultDueDate,
 }: {
   orderId: string;
   canWrite: boolean;
+  /** Amounts are in the order's currency. */
   remainingPence: number;
   orderGrossPence: number;
+  currency?: string;
   availableMilestones: MilestoneOption[];
   defaultDueDate: string;
 }) {
@@ -68,7 +71,7 @@ export function OrderActions({
   const partPreviewPence = useMemo(() => {
     if (mode !== "part") return null;
     if (partMode === "amount") {
-      const pounds = Number(amountPounds.replace(/[£,\s]/g, ""));
+      const pounds = Number(amountPounds.replace(/[^\d.\-]/g, ""));
       if (!Number.isFinite(pounds) || pounds <= 0) return null;
       return Math.round(pounds * 100);
     }
@@ -136,7 +139,7 @@ export function OrderActions({
       <Dialog open={open} onClose={() => setOpen(false)} title="Create invoice">
         <div ref={containerRef} className="space-y-4">
           <p className="text-sm text-muted">
-            Remaining on this order: <strong>{formatGBP(remainingPence)}</strong>
+            Remaining on this order: <strong>{formatMoney(remainingPence, currency)}</strong>
           </p>
 
           <fieldset className="space-y-2">
@@ -182,7 +185,7 @@ export function OrderActions({
               />
               <span className="text-sm">
                 <span className="font-medium">Full remaining</span>
-                <span className="ml-2 text-muted">{formatGBP(remainingPence)}</span>
+                <span className="ml-2 text-muted">{formatMoney(remainingPence, currency)}</span>
               </span>
             </label>
 
@@ -208,7 +211,7 @@ export function OrderActions({
                           disabled={pending}
                           onChange={() => setPartMode("amount")}
                         />
-                        £ amount
+                        {expenseCurrencySymbol(currency)} amount
                       </label>
                       <label className="flex items-center gap-1.5">
                         <input
@@ -268,7 +271,7 @@ export function OrderActions({
                     )}
                     {partPreviewPence != null ? (
                       <p className="text-xs text-muted">
-                        Invoice amount: {formatGBP(partPreviewPence)}
+                        Invoice amount: {formatMoney(partPreviewPence, currency)}
                       </p>
                     ) : null}
                   </div>

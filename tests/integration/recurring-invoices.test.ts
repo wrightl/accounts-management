@@ -5,10 +5,14 @@ import { setTestDb, type Database } from "@/db";
 import {
   clients,
   companies,
+  fxRates,
   invoices,
   invoiceLineItems,
+  notifications,
   recurringInvoices,
+  users,
 } from "@/db/schema";
+import { resetFxFetchBackoff } from "@/lib/bank/fx";
 import { seedCompany } from "@/lib/test/seed-company";
 import {
   generateRecurringInvoiceForTemplate,
@@ -63,6 +67,7 @@ async function insertTemplate(
     maxOccurrences: number | null;
     occurrenceCount: number;
     clientEmail: string | null;
+    currency: string;
   }> = {},
 ) {
   const [client] = await db
@@ -89,6 +94,7 @@ async function insertTemplate(
       endsOn: overrides.endsOn ?? null,
       maxOccurrences: overrides.maxOccurrences ?? null,
       occurrenceCount: overrides.occurrenceCount ?? 0,
+      currency: overrides.currency ?? "GBP",
       nextRunOn: "2026-03-15",
     })
     .returning();
@@ -208,5 +214,50 @@ describe("generateRecurringInvoices (PGlite)", () => {
     if (!second.ok) {
       expect(second.error).toMatch(/this month/i);
     }
+  });
+});
+
+describe("recurring invoices in a foreign currency", () => {
+  beforeEach(() => {
+    resetFxFetchBackoff();
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("no network in tests")));
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("generates each invoice in the template's currency at that day's rate", async () => {
+    await db.insert(fxRates).values({ currency: "USD", observationDate: "2026-03-15", foreignPerGbp: 1.25 });
+    const { tmpl } = await insertTemplate({ currency: "USD" });
+    const result = await generateRecurringInvoices({ today: "2026-03-15" });
+    if (result.skipped) throw new Error("unexpected skip");
+    expect(result.generated).toBe(1);
+    const [inv] = await db.select().from(invoices).where(eq(invoices.recurringInvoiceId, tmpl.id));
+    expect(inv).toMatchObject({
+      currency: "USD",
+      fxRate: 1.25,
+      fxRateDate: "2026-03-15",
+      fxRateSource: "boe",
+      grossMinor: 150000,
+      grossPence: 120000,
+    });
+  });
+
+  it("doesn't generate without a rate, and says so", async () => {
+    await db.insert(users).values({
+      companyId,
+      clerkUserId: "user_fx",
+      email: "o@test.dev",
+      name: "O",
+      role: "admin",
+    });
+    const { tmpl } = await insertTemplate({ currency: "EUR" });
+    const result = await generateRecurringInvoices({ today: "2026-03-15" });
+    if (result.skipped) throw new Error("unexpected skip");
+    expect(result.generated).toBe(0);
+    expect(await db.select().from(invoices).where(eq(invoices.recurringInvoiceId, tmpl.id))).toHaveLength(0);
+    const [note] = await db.select().from(notifications).where(eq(notifications.companyId, companyId));
+    expect(note?.title).toBe("Monthly retainer invoice not generated");
+
+    const now = await generateRecurringInvoiceForTemplate(tmpl.id, { today: "2026-03-15" });
+    expect(now).toMatchObject({ ok: false, error: expect.stringMatching(/EUR rate/) });
   });
 });

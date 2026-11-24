@@ -18,7 +18,8 @@ import {
   writeQuoteStatus,
 } from "@/lib/quotes/status-write";
 import { todayIsoDate } from "@/lib/invoices/status";
-import { formatGBP } from "@/lib/money";
+import { formatMoney } from "@/lib/money";
+import { documentRate, type DocumentRateDetails } from "@/lib/document-rate";
 import type { QuoteStatus } from "@/lib/quotes/status";
 import type { ActionResult } from "@/actions/result";
 import {
@@ -111,6 +112,21 @@ export async function acceptPublicQuote(
   }));
 
   const takeDeposit = detail.quote.depositOnAccept && milestones.length > 0;
+  // The deposit invoice takes today's rate, fetched before the transaction.
+  // The client is waiting, so if the Bank of England can't be reached it
+  // falls back to the quote's own rate.
+  let depositRate: DocumentRateDetails | null = null;
+  if (takeDeposit) {
+    const fetched = await documentRate(detail.quote.currency, todayIsoDate());
+    depositRate = fetched.ok
+      ? fetched.rate
+      : {
+          currency: detail.quote.currency,
+          fxRate: detail.quote.fxRate,
+          fxRateDate: detail.quote.fxRateDate,
+          fxRateSource: detail.quote.fxRateSource as DocumentRateDetails["fxRateSource"],
+        };
+  }
 
   const db = getDb();
   let accepted: { orderId: string; deposit: DepositInvoice | null };
@@ -136,11 +152,12 @@ export async function acceptPublicQuote(
         milestones,
         loaded.createdByUserId,
       );
-      const raised = takeDeposit
+      const raised = depositRate
         ? await raiseDepositInvoice(tx, {
             companyId: loaded.companyId,
             orderId: newOrderId,
             createdByUserId: loaded.createdByUserId,
+            rate: depositRate,
           })
         : null;
       return { orderId: newOrderId, deposit: raised };
@@ -162,7 +179,7 @@ export async function acceptPublicQuote(
       type: "quote.accepted",
       title: `Quote ${detail.quote.number} accepted`,
       body: deposit
-        ? `A client accepted this quote via the public link. The first payment, ${formatGBP(deposit.amountPence)}, has been invoiced.`
+        ? `A client accepted this quote via the public link. The first payment, ${formatMoney(deposit.amountMinor, deposit.currency)}, has been invoiced.`
         : "A client accepted this quote via the public link.",
       href: `/quotes/${loaded.quoteId}`,
       entityType: "quote",

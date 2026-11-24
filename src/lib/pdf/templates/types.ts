@@ -53,15 +53,17 @@ export interface PdfLine {
   discountPercent?: number;
 }
 
+/** A quote, in its own currency. Not a tax document, so no sterling rows. */
 export interface PdfQuote {
   number: string;
   version: number;
   issueDate: string | null;
   validUntil: string | null;
   notes: string | null;
-  netPence?: number;
-  vatPence?: number;
-  grossPence: number;
+  currency: string;
+  netMinor?: number;
+  vatMinor?: number;
+  grossMinor: number;
 }
 
 /** A credit note, in its invoice's currency and converted at its rate. */

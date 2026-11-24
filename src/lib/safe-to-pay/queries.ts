@@ -1,4 +1,6 @@
 import "server-only";
+import { latestStoredRates } from "@/lib/document-rate";
+import { toSterlingPence } from "@/lib/currency";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, lte, ne, sum } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
@@ -182,7 +184,12 @@ async function invoicesDueSoonPence(companyId: string, today: string, until: str
 /** Recurring invoices that will be raised in the window (one run each). */
 async function recurringDueSoonPence(companyId: string, today: string, until: string) {
   const rows = await getDb()
-    .select({ lines: recurringInvoices.lineTemplate, endsOn: recurringInvoices.endsOn, nextRunOn: recurringInvoices.nextRunOn })
+    .select({
+      lines: recurringInvoices.lineTemplate,
+      currency: recurringInvoices.currency,
+      endsOn: recurringInvoices.endsOn,
+      nextRunOn: recurringInvoices.nextRunOn,
+    })
     .from(recurringInvoices)
     .where(
       and(
@@ -193,9 +200,15 @@ async function recurringDueSoonPence(companyId: string, today: string, until: st
       ),
     )
     .orderBy(asc(recurringInvoices.nextRunOn));
+  // Template prices are in its currency; this figure is sterling.
+  const rates = await latestStoredRates(rows.map((r) => r.currency));
   return rows
     .filter((r) => !r.endsOn || (r.nextRunOn && r.nextRunOn <= r.endsOn))
-    .reduce((t, r) => t + invoiceTotals((r.lines as LineItem[]) ?? []).grossPence, 0);
+    .reduce((t, r) => {
+      const rate = rates.get(r.currency);
+      if (rate == null) return t;
+      return t + toSterlingPence(invoiceTotals((r.lines as LineItem[]) ?? []).grossPence, rate);
+    }, 0);
 }
 
 /** Everything behind the "safe to pay yourself" figure. */

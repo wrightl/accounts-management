@@ -1,5 +1,5 @@
 import { and, desc, eq, isNull } from "drizzle-orm";
-import { documentTotals, STERLING_RATE } from "@/lib/currency";
+import { documentColumns, documentRate } from "@/lib/document-rate";
 import { getDb, hasDatabaseClient } from "@/db";
 import {
   clients,
@@ -59,6 +59,7 @@ export async function generateRecurringInvoices(
       name: recurringInvoices.name,
       lineTemplate: recurringInvoices.lineTemplate,
       notes: recurringInvoices.notes,
+      currency: recurringInvoices.currency,
       dayOfMonth: recurringInvoices.dayOfMonth,
       onGenerate: recurringInvoices.onGenerate,
       endsOn: recurringInvoices.endsOn,
@@ -107,6 +108,8 @@ type TemplateRow = {
   name: string;
   lineTemplate: unknown;
   notes: string | null;
+  /** Generated invoices are in this currency, at the rate for their issue date. */
+  currency: string;
   dayOfMonth: number;
   onGenerate: string;
   endsOn: string | null;
@@ -143,6 +146,7 @@ export async function generateRecurringInvoiceForTemplate(
       name: recurringInvoices.name,
       lineTemplate: recurringInvoices.lineTemplate,
       notes: recurringInvoices.notes,
+      currency: recurringInvoices.currency,
       dayOfMonth: recurringInvoices.dayOfMonth,
       onGenerate: recurringInvoices.onGenerate,
       endsOn: recurringInvoices.endsOn,
@@ -182,6 +186,12 @@ export async function generateRecurringInvoiceForTemplate(
   if (outcome === "skipped_empty") {
     return { ok: false, error: "Template has no line items" };
   }
+  if (outcome === "skipped_rate") {
+    return {
+      ok: false,
+      error: `Couldn't get the Bank of England ${tmpl.currency} rate for today. Try again later.`,
+    };
+  }
   if (outcome === "skipped") {
     return { ok: false, error: "Could not generate invoice" };
   }
@@ -216,6 +226,7 @@ type GenerateOutcome =
   | "skipped_month"
   | "skipped_exhausted"
   | "skipped_empty"
+  | "skipped_rate"
   | "skipped";
 
 async function generateFromTemplateRow(
@@ -241,14 +252,43 @@ async function generateFromTemplateRow(
   const lines = tmpl.lineTemplate as RecurringLineTemplate[];
   if (!Array.isArray(lines) || lines.length === 0) return "skipped_empty";
 
-  const totals = documentTotals(
+  // The rate for the invoice's issue date, fetched before the transaction.
+  // Without one the invoice isn't generated rather than booked at a guess;
+  // the user is told and can generate it once the rate is available.
+  const rate = await documentRate(tmpl.currency, today);
+  if (!rate.ok) {
+    console.warn(
+      JSON.stringify({
+        level: "warn",
+        msg: "recurring.generate.no_rate",
+        templateId: tmpl.id,
+        currency: tmpl.currency,
+      }),
+    );
+    try {
+      const { notify } = await import("@/lib/notifications");
+      await notify({
+        companyId: tmpl.companyId,
+        type: "recurring.failed",
+        title: `${tmpl.name} invoice not generated`,
+        body: `Alfa couldn't get the Bank of England ${tmpl.currency} rate for ${today}, so this month's invoice wasn't created. Use Generate now once the rate is available.`,
+        href: `/recurring-invoices/${tmpl.id}`,
+        entityType: "recurring_invoice",
+        entityId: tmpl.id,
+      });
+    } catch {
+      // The log above still records it.
+    }
+    return "skipped_rate";
+  }
+  const totals = documentColumns(
     lines.map((l) => ({
       quantity: l.quantity,
       unitPricePence: l.unitPricePence,
       vatRate: l.vatRate ?? 0,
       discountPercent: l.discountPercent ?? 0,
     })),
-    STERLING_RATE,
+    rate.rate,
   );
 
   const dueDate = defaultDueDate(today, tmpl.paymentTermsDays ?? 14);

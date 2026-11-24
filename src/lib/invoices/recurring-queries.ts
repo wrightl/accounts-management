@@ -3,7 +3,7 @@ import { and, count, desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { clients, invoices, recurringInvoices } from "@/db/schema";
 import { clientDisplayNameSql } from "@/lib/clients/sql";
-import { formatGBP, lineNetPence } from "@/lib/money";
+import { formatDocumentAmount, formatMoney, lineNetPence } from "@/lib/money";
 import {
   effectiveStatus,
   todayIsoDate,
@@ -28,6 +28,7 @@ function recurringListQuery(companyId: string) {
       enabled: recurringInvoices.enabled,
       lastGeneratedAt: recurringInvoices.lastGeneratedAt,
       lineTemplate: recurringInvoices.lineTemplate,
+      currency: recurringInvoices.currency,
       createdAt: recurringInvoices.createdAt,
     })
     .from(recurringInvoices)
@@ -58,8 +59,10 @@ function toRecurringListItem(r: RecurringListRow) {
     enabled: r.enabled,
     lastGeneratedAt: r.lastGeneratedAt,
     createdAt: r.createdAt,
+    /** In the template's currency. */
     grossPence,
-    grossFormatted: formatGBP(grossPence),
+    currency: r.currency,
+    grossFormatted: formatMoney(grossPence, r.currency),
   };
 }
 
@@ -113,6 +116,8 @@ export async function getRecurringInvoiceDetail(
       issueDate: invoices.issueDate,
       dueDate: invoices.dueDate,
       grossPence: invoices.grossPence,
+      grossMinor: invoices.grossMinor,
+      currency: invoices.currency,
       createdAt: invoices.createdAt,
     })
     .from(invoices)
@@ -138,13 +143,13 @@ export async function getRecurringInvoiceDetail(
       onGenerate: rows[0].template.onGenerate as "draft" | "send",
       lineTemplate: lines,
       grossPence,
-      grossFormatted: formatGBP(grossPence),
+      grossFormatted: formatMoney(grossPence, rows[0].template.currency),
     },
     client: rows[0].client,
     generatedInvoices: generated.map((inv) => ({
       ...inv,
       status: effectiveStatus(inv.status as InvoiceStatus, inv.dueDate, today),
-      grossFormatted: formatGBP(inv.grossPence),
+      grossFormatted: formatDocumentAmount(inv.grossMinor, inv.grossPence, inv.currency),
     })),
   };
 }

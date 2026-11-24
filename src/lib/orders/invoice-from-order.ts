@@ -41,23 +41,37 @@ export function resolveMilestoneDueDate(
 }
 
 /**
- * Gross invoiced against an order, net of issued credit notes on those
- * invoices. A credited amount counts as not yet invoiced, so it can be billed
- * again (or cleared by completing the order).
+ * Gross invoiced against an order, in the order's currency (its invoices are
+ * raised in it), net of issued credit notes on those invoices. A credited
+ * amount counts as not yet invoiced, so it can be billed again (or cleared by
+ * completing the order).
  */
-export async function sumInvoicedPenceForOrder(
+export async function sumInvoicedForOrder(
   db: Database,
+  companyId: string,
   orderId: string,
 ): Promise<number> {
   const [row] = await db
-    .select({ total: sum(invoices.grossPence).mapWith(Number) })
+    .select({ total: sum(invoices.grossMinor).mapWith(Number) })
     .from(invoices)
-    .where(and(eq(invoices.orderId, orderId), ne(invoices.status, "void")));
+    .where(
+      and(
+        eq(invoices.orderId, orderId),
+        eq(invoices.companyId, companyId),
+        ne(invoices.status, "void"),
+      ),
+    );
   const [credited] = await db
-    .select({ total: sum(creditNotes.grossPence).mapWith(Number) })
+    .select({ total: sum(creditNotes.grossMinor).mapWith(Number) })
     .from(creditNotes)
     .innerJoin(invoices, eq(creditNotes.invoiceId, invoices.id))
-    .where(and(eq(invoices.orderId, orderId), eq(creditNotes.status, "issued")));
+    .where(
+      and(
+        eq(invoices.orderId, orderId),
+        eq(invoices.companyId, companyId),
+        eq(creditNotes.status, "issued"),
+      ),
+    );
   return (row?.total ?? 0) - (credited?.total ?? 0);
 }
 

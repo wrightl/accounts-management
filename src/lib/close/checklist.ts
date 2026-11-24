@@ -1,4 +1,5 @@
 import "server-only";
+import { toSterlingPence } from "@/lib/currency";
 import { and, asc, count, desc, eq, isNull, ne, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
@@ -96,7 +97,8 @@ export async function listMilestonesReadyToBill(
       orderNumber: orders.number,
       clientId: orders.clientId,
       orderIssueDate: orders.issueDate,
-      orderGrossPence: orders.grossPence,
+      orderGrossMinor: orders.grossMinor,
+      orderFxRate: orders.fxRate,
       milestone: orderPaymentMilestones,
     })
     .from(orderPaymentMilestones)
@@ -119,7 +121,8 @@ export async function listMilestonesReadyToBill(
     if (dueDate > horizon) return [];
     let amountPence = 0;
     try {
-      amountPence = resolveMilestoneAmountPence(m, r.orderGrossPence);
+      // Milestones are in the order's currency; the checklist totals sterling.
+      amountPence = toSterlingPence(resolveMilestoneAmountPence(m, r.orderGrossMinor), r.orderFxRate);
     } catch {
       return [];
     }

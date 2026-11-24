@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { storedLineTax } from "@/lib/documents/schema";
-import { documentTotals, STERLING_RATE } from "@/lib/currency";
+import { documentColumns, documentRate, priceDocument } from "@/lib/document-rate";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
@@ -31,7 +31,7 @@ import {
   getUsedMilestoneIds,
   resolveInvoiceDueDate,
   resolveMilestoneAmountPence,
-  sumInvoicedPenceForOrder,
+  sumInvoicedForOrder,
   todayIsoDate,
   validateInvoiceAmount,
   type InvoiceFromOrderMode,
@@ -72,9 +72,12 @@ export async function createOrder(formData: FormData): Promise<ActionResult> {
         return { ok: false, error: e instanceof Error ? e.message : "Invalid amount" };
       }
 
-      const totals = documentTotals(lineValues, STERLING_RATE);
+      const priced = await priceDocument(parsed.data, parsed.data.issueDate, lineValues);
+      if (!priced.ok) return priced;
+      const totals = priced.fields;
       const milestones = parseMilestonesJson(String(formData.get("milestonesJson") ?? "[]"));
-      const milestoneError = validateMilestones(milestones, totals.grossPence);
+      // Milestones are in the order's currency.
+      const milestoneError = validateMilestones(milestones, totals.grossMinor);
       if (milestoneError) return { ok: false, error: milestoneError };
 
       const db = getDb();
@@ -135,8 +138,9 @@ export async function createInvoiceFromOrder(
       const db = getDb();
       const company = await getOrCreateCompanySettings(companyId);
       const paymentTermsDays = company.invoicePaymentTermsDays;
-      const priorInvoicedPence = await sumInvoicedPenceForOrder(db, orderId);
-      const remainingPence = detail.order.grossPence - priorInvoicedPence;
+      // Amounts here are in the order's currency, which its invoices are raised in.
+      const priorInvoicedPence = await sumInvoicedForOrder(db, companyId, orderId);
+      const remainingPence = detail.order.grossMinor - priorInvoicedPence;
 
       if (remainingPence <= 0) {
         return { ok: false, error: "Nothing left to invoice on this order" };
@@ -177,7 +181,7 @@ export async function createInvoiceFromOrder(
         if (!milestone) return { ok: false, error: "Milestone not found" };
 
         try {
-          amountPence = resolveMilestoneAmountPence(milestone, detail.order.grossPence);
+          amountPence = resolveMilestoneAmountPence(milestone, detail.order.grossMinor);
         } catch (e) {
           return {
             ok: false,
@@ -195,7 +199,7 @@ export async function createInvoiceFromOrder(
           partMode,
           amountPounds: parsed.data.amountPounds,
           percent: parsed.data.percent,
-          orderGrossPence: detail.order.grossPence,
+          orderGrossPence: detail.order.grossMinor,
         });
         if (typeof resolved === "object" && "error" in resolved) {
           const field = partMode === "percent" ? "percent" : "amountPounds";
@@ -232,7 +236,15 @@ export async function createInvoiceFromOrder(
         orderLines: detail.lines,
         priorInvoicedPence,
       });
-      const totals = documentTotals(lineValues, STERLING_RATE);
+      // A fresh rate for the invoice's own issue date, as for any invoice.
+      const rate = await documentRate(detail.order.currency, issueDate);
+      if (!rate.ok) {
+        return {
+          ok: false,
+          error: `Couldn't get today's Bank of England ${detail.order.currency} rate for the invoice. Try again later.`,
+        };
+      }
+      const totals = documentColumns(lineValues, rate.rate);
 
       const invoiceId = await db.transaction(async (tx) => {
         const number = await allocateInvoiceNumber(tx, companyId, issueDate);

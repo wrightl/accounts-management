@@ -1,5 +1,5 @@
 import "server-only";
-import { sterlingTotals } from "@/lib/currency";
+import type { DocumentCurrencyColumns } from "@/lib/document-rate";
 import { and, eq } from "drizzle-orm";
 import {
   companies,
@@ -22,14 +22,12 @@ import {
 import type { PaymentMilestoneInput } from "@/lib/quotes/payment-schedule";
 
 type QuoteOrderSource = {
-  quote: {
+  quote: Omit<DocumentCurrencyColumns, "fxRateSource"> & {
     id: string;
     clientId: string;
     notes: string | null;
-    netPence: number;
-    vatPence: number;
-    grossPence: number;
     orderId: string | null;
+    fxRateSource: string | null;
   };
   lines: Array<{
     description: string;
@@ -65,7 +63,18 @@ export async function createOrderFromQuote(
       status: "active",
       issueDate,
       notes: source.quote.notes,
-      ...sterlingTotals(source.quote),
+      // The quote's prices, currency and rate carry over; invoices raised from
+      // the order each take the rate for their own issue date.
+      currency: source.quote.currency,
+      fxRate: source.quote.fxRate,
+      fxRateDate: source.quote.fxRateDate,
+      fxRateSource: source.quote.fxRateSource as DocumentCurrencyColumns["fxRateSource"],
+      netMinor: source.quote.netMinor,
+      vatMinor: source.quote.vatMinor,
+      grossMinor: source.quote.grossMinor,
+      netPence: source.quote.netPence,
+      vatPence: source.quote.vatPence,
+      grossPence: source.quote.grossPence,
       createdByUserId,
     })
     .returning({ id: orders.id });

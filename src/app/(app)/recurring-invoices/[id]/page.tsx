@@ -13,7 +13,7 @@ import { StatusBadge } from '@/components/ui/badge';
 import { clientDisplayName } from '@/lib/clients/display';
 import {
     formatDiscountPercent,
-    formatGBP,
+    formatMoney,
     formatQuantity,
     hasLineDiscount,
     lineNetPence,
@@ -133,7 +133,7 @@ export default async function RecurringInvoiceDetailPage({
                                     {formatQuantity(line.quantity)}
                                 </TD>
                                 <TD className="text-right">
-                                    {formatGBP(line.unitPricePence)}
+                                    {formatMoney(line.unitPricePence, template.currency)}
                                 </TD>
                                 {hasLineDiscount(template.lineTemplate) ? (
                                     <TD className="text-right">
@@ -143,7 +143,7 @@ export default async function RecurringInvoiceDetailPage({
                                     </TD>
                                 ) : null}
                                 <TD className="text-right">
-                                    {formatGBP(lineNetPence(line))}
+                                    {formatMoney(lineNetPence(line), template.currency)}
                                 </TD>
                             </TR>
                         ))}

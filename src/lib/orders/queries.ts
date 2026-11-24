@@ -13,7 +13,7 @@ import {
 } from "@/db/schema";
 import { rowOfCompany } from "@/lib/tenant-scope";
 import { type ListPaging, fetchPage } from "@/lib/list-paging";
-import { formatGBP } from "@/lib/money";
+import { formatDocumentAmount, formatMoney } from "@/lib/money";
 import { sortExpr, sortNumbered, sortRank, sortText } from "@/lib/sql-paging";
 import type { TableSort } from "@/lib/table-sort";
 import {
@@ -24,7 +24,7 @@ import {
 import {
   getUsedMilestoneIds,
   resolveMilestoneAmountPence,
-  sumInvoicedPenceForOrder,
+  sumInvoicedForOrder,
 } from "@/lib/orders/invoice-from-order";
 import type { PaymentMilestoneInput } from "@/lib/quotes/payment-schedule";
 
@@ -72,6 +72,8 @@ export async function listOrderPage(
           status: orders.status,
           issueDate: orders.issueDate,
           grossPence: orders.grossPence,
+          grossMinor: orders.grossMinor,
+          currency: orders.currency,
           clientName: clientDisplayNameSql.as("client_name"),
           quoteNumber: quotes.number,
         })
@@ -83,7 +85,13 @@ export async function listOrderPage(
         .limit(limit)
         .offset(offset),
   );
-  return { ...page, rows: page.rows.map((r) => ({ ...r, grossFormatted: formatGBP(r.grossPence) })) };
+  return {
+    ...page,
+    rows: page.rows.map((r) => ({
+      ...r,
+      grossFormatted: formatDocumentAmount(r.grossMinor, r.grossPence, r.currency),
+    })),
+  };
 }
 
 export async function getOrderDetail(companyId: string, id: string) {
@@ -127,6 +135,8 @@ export async function getOrderDetail(companyId: string, id: string) {
       issueDate: invoices.issueDate,
       dueDate: invoices.dueDate,
       grossPence: invoices.grossPence,
+      grossMinor: invoices.grossMinor,
+      currency: invoices.currency,
       paymentMilestoneId: invoices.paymentMilestoneId,
     })
     .from(invoices)
@@ -134,18 +144,20 @@ export async function getOrderDetail(companyId: string, id: string) {
     .orderBy(desc(invoices.createdAt));
 
   const today = todayIsoDate();
-  const priorInvoicedPence = await sumInvoicedPenceForOrder(db, id);
+  // In the order's currency.
+  const priorInvoicedPence = await sumInvoicedForOrder(db, companyId, id);
   const usedMilestoneIds = await getUsedMilestoneIds(db, id);
 
   const order = rows[0].order;
-  const remainingPence = Math.max(0, order.grossPence - priorInvoicedPence);
+  const remainingPence = Math.max(0, order.grossMinor - priorInvoicedPence);
+  const money = (minor: number) => formatMoney(minor, order.currency);
 
   const availableMilestones = milestones
     .filter((m) => !usedMilestoneIds.has(m.id))
     .map((m) => {
       let amountPence: number;
       try {
-        amountPence = resolveMilestoneAmountPence(m, order.grossPence);
+        amountPence = resolveMilestoneAmountPence(m, order.grossMinor);
       } catch {
         amountPence = 0;
       }
@@ -153,7 +165,7 @@ export async function getOrderDetail(companyId: string, id: string) {
         id: m.id,
         label: m.label,
         amountPence,
-        amountFormatted: formatGBP(amountPence),
+        amountFormatted: money(amountPence),
         dueDate: m.dueDate,
         dueInDays: m.dueInDays,
         disabled: amountPence > remainingPence,
@@ -163,7 +175,7 @@ export async function getOrderDetail(companyId: string, id: string) {
   return {
     order: {
       ...order,
-      grossFormatted: formatGBP(order.grossPence),
+      grossFormatted: money(order.grossMinor),
     },
     client: rows[0].client,
     quote: rows[0].quote,
@@ -172,11 +184,11 @@ export async function getOrderDetail(companyId: string, id: string) {
     invoices: invoiceRows.map((inv) => ({
       ...inv,
       status: effectiveStatus(inv.status as InvoiceStatus, inv.dueDate, today),
-      grossFormatted: formatGBP(inv.grossPence),
+      grossFormatted: formatMoney(inv.grossMinor, inv.currency),
     })),
     priorInvoicedPence,
     remainingPence,
-    remainingFormatted: formatGBP(remainingPence),
+    remainingFormatted: money(remainingPence),
     availableMilestones,
   };
 }

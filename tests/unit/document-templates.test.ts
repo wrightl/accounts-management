@@ -262,6 +262,13 @@ describe("document views", () => {
     );
   });
 
+  it("shows a foreign quote in its currency, with no sterling rows", () => {
+    const view = quoteView({ ...base, quote: { ...SAMPLE_QUOTE, currency: "USD" } });
+    expect(view.lines[0]?.unitPrice).toBe("US$800.00");
+    expect(view.subtotals.map((row) => row.value)).toEqual(["US$2,370.00", "US$474.00"]);
+    expect(view.total.value).toBe("US$2,844.00");
+  });
+
   it("adds no sterling rows to a sterling invoice", () => {
     const view = invoiceView({ ...base, invoice: SAMPLE_INVOICE });
     expect(view.subtotals.map((row) => row.label)).toEqual(["Subtotal", "VAT"]);

@@ -41,6 +41,7 @@ export default async function EditRecurringInvoicePage({
           name: template.name,
           clientId: template.clientId,
           notes: template.notes,
+          currency: template.currency,
           dayOfMonth: template.dayOfMonth,
           onGenerate: template.onGenerate,
           endsOn: template.endsOn,

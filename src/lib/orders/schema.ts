@@ -1,6 +1,9 @@
 import { z } from "zod";
 import {
+  documentCurrencyRawFromFormData,
+  documentCurrencySchema,
   documentLinesSchema,
+  manualFxRateSchema,
   parseDocumentLinesJson,
 } from "@/lib/documents/schema";
 import { todayIsoDate } from "@/lib/dates";
@@ -24,6 +27,8 @@ export const orderSchema = z.object({
     .min(1, "Issue date is required")
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid issue date"),
   notes: optionalNotes,
+  currency: documentCurrencySchema,
+  fxRate: manualFxRateSchema,
   lines: documentLinesSchema,
 });
 
@@ -34,6 +39,7 @@ export function orderRawFromFormData(formData: FormData): Record<string, unknown
     clientId: formData.get("clientId"),
     issueDate: formData.get("issueDate") || todayIsoDate(),
     notes: formData.get("notes") ?? "",
+    ...documentCurrencyRawFromFormData(formData),
     lines: parseDocumentLinesJson(formData.get("linesJson")),
   };
 }

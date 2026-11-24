@@ -1,5 +1,5 @@
 import "server-only";
-import { documentTotals, STERLING_RATE } from "@/lib/currency";
+import { documentColumns, type DocumentRateDetails } from "@/lib/document-rate";
 import { and, asc, eq } from "drizzle-orm";
 import {
   companies,
@@ -21,24 +21,35 @@ import { todayIsoDate } from "@/lib/invoices/status";
 export type DepositInvoice = {
   invoiceId: string;
   publicToken: string;
-  amountPence: number;
+  /** In the order's currency. */
+  amountMinor: number;
+  currency: string;
 };
 
 /**
  * Raise the order's first payment milestone as a sent invoice, so the client
  * can pay it straight after accepting the quote. Returns null when the order
- * has no payment schedule.
+ * has no payment schedule. `rate` is the rate for today in the order's
+ * currency, fetched by the caller before its transaction.
  */
 export async function raiseDepositInvoice(
   tx: Tx,
-  params: { companyId: string; orderId: string; createdByUserId: string | null },
+  params: {
+    companyId: string;
+    orderId: string;
+    createdByUserId: string | null;
+    rate: DocumentRateDetails;
+  },
 ): Promise<DepositInvoice | null> {
   const [order] = await tx
     .select()
     .from(orders)
-    .where(eq(orders.id, params.orderId))
+    .where(and(eq(orders.id, params.orderId), eq(orders.companyId, params.companyId)))
     .limit(1);
   if (!order) throw new Error("Order not found");
+  if (params.rate.currency !== order.currency) {
+    throw new Error(`Deposit rate is for ${params.rate.currency}, not the order's ${order.currency}`);
+  }
 
   const [milestone] = await tx
     .select()
@@ -68,7 +79,8 @@ export async function raiseDepositInvoice(
     .select({ vatRegistered: companies.vatRegistered })
     .from(companies)
     .where(eq(companies.id, params.companyId));
-  const amountPence = resolveMilestoneAmountPence(milestone, order.grossPence);
+  // In the order's currency.
+  const amountPence = resolveMilestoneAmountPence(milestone, order.grossMinor);
   const issueDate = todayIsoDate();
   const lineValues = buildInvoiceLineValues({
     company: company ?? { vatRegistered: false },
@@ -79,7 +91,7 @@ export async function raiseDepositInvoice(
     orderLines,
     priorInvoicedPence: 0,
   });
-  const totals = documentTotals(lineValues, STERLING_RATE);
+  const totals = documentColumns(lineValues, params.rate);
 
   const number = await allocateInvoiceNumber(tx, params.companyId, issueDate);
   const [inv] = await tx
@@ -104,5 +116,10 @@ export async function raiseDepositInvoice(
     lineValues.map((l) => ({ ...l, invoiceId: inv.id })),
   );
 
-  return { invoiceId: inv.id, publicToken: inv.publicToken, amountPence: totals.grossPence };
+  return {
+    invoiceId: inv.id,
+    publicToken: inv.publicToken,
+    amountMinor: totals.grossMinor,
+    currency: totals.currency,
+  };
 }
