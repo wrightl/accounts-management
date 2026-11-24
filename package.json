@@ -17,6 +17,7 @@
         "auth:agent": "tsx scripts/agent-auth.ts",
         "promo:seed": "tsx scripts/seed-promo-demo.ts",
         "demo:create": "tsx --require ./scripts/stub-server-only.cjs scripts/demo.ts create",
+        "tax-codes:dry-run": "tsx --require ./scripts/stub-server-only.cjs scripts/tax-code-dry-run.ts",
         "demo:reset": "tsx --require ./scripts/stub-server-only.cjs scripts/demo.ts reset",
         "promo:record": "PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers tsx scripts/record-promo.ts",
         "promo:assemble": "node scripts/assemble-promo-video.mjs",

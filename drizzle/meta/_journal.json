@@ -680,6 +680,20 @@
       "when": 1795464389177,
       "tag": "0096_document_currency",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1795530087831,
+      "tag": "0097_tax_codes",
+      "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1795530136580,
+      "tag": "0098_tax_code_rate_checks",
+      "breakpoints": true
     }
   ]
 }

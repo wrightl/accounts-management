@@ -19,6 +19,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type { GenericCsvMapping } from "@/lib/bank/types";
 import type { ParsedInvoice } from "@/lib/invoices/import/parse";
+import { TAX_CODES } from "@/lib/tax-codes";
 
 /**
  * Currency columns shared by client documents (invoices, quotes, orders).
@@ -53,6 +54,11 @@ function sterlingTotalsMatch(t: {
   return sql`${t.currency} <> 'GBP' OR (${t.netMinor} = ${t.netPence} AND ${t.vatMinor} = ${t.vatPence} AND ${t.grossMinor} = ${t.grossPence})`;
 }
 
+/** Only standard and reduced carry a rate; every other tax code stores 0%. */
+function taxCodeMatchesRate(t: { taxCode: AnyPgColumn; vatRate: AnyPgColumn }) {
+  return sql`${t.taxCode} IS NULL OR ${t.taxCode} IN ('standard', 'reduced') OR ${t.vatRate} = 0`;
+}
+
 export const roleEnum = pgEnum("role", [
   "admin",
   "user",
@@ -67,6 +73,8 @@ export const entityTypeEnum = pgEnum("entity_type", [
 /** How a sole trader's profit is worked out: when money moves, or when it is earned and owed. */
 export const accountingBasisEnum = pgEnum("accounting_basis", ["cash", "accruals"]);
 export const invoiceSourceEnum = pgEnum("invoice_source", ["alfa", "import"]);
+/** VAT tax codes; see src/lib/tax-codes.ts. */
+export const taxCodeEnum = pgEnum("tax_code", TAX_CODES);
 export const invoiceStatusEnum = pgEnum("invoice_status", [
   "draft",
   "sent",
@@ -129,6 +137,8 @@ export const companies = pgTable("companies", {
   vatRegistered: boolean("vat_registered").notNull().default(false),
   /** Default VAT rate percentage for new lines when registered (e.g. 20). */
   defaultVatRate: integer("default_vat_rate").notNull().default(20),
+  /** Default tax code for new lines when registered. Null until set; then it wins over the rate. */
+  defaultTaxCode: taxCodeEnum("default_tax_code"),
   addressLines: text("address_lines"),
   email: text("email"),
   /**
@@ -687,6 +697,10 @@ export const invoiceLineItems = pgTable(
     /** In the invoice's currency (minor units); pence only for GBP invoices. */
     unitPricePence: integer("unit_price_pence").notNull().default(0),
     vatRate: integer("vat_rate").notNull().default(0),
+    /** What kind of supply this is (item 17). Null until the backfill or a write sets it. */
+    taxCode: taxCodeEnum("tax_code"),
+    /** The backfill could only guess the tax code; a person should check it. */
+    taxCodeNeedsReview: boolean("tax_code_needs_review").notNull().default(false),
     /** Line discount percentage (0–100), applied before VAT. */
     discountPercent: numeric("discount_percent", { precision: 5, scale: 2, mode: "number" })
       .notNull()
@@ -699,6 +713,7 @@ export const invoiceLineItems = pgTable(
   },
   (t) => [
     index("idx_line_items_invoice").on(t.invoiceId),
+    check("invoice_line_items_tax_code_rate", taxCodeMatchesRate(t)),
     index("idx_line_items_expense").on(t.expenseId),
   ],
 );
@@ -843,12 +858,19 @@ export const creditNoteLineItems = pgTable(
       .default(1),
     unitPricePence: integer("unit_price_pence").notNull().default(0),
     vatRate: integer("vat_rate").notNull().default(0),
+    /** What kind of supply this is (item 17). Null until the backfill or a write sets it. */
+    taxCode: taxCodeEnum("tax_code"),
+    /** The backfill could only guess the tax code; a person should check it. */
+    taxCodeNeedsReview: boolean("tax_code_needs_review").notNull().default(false),
     discountPercent: numeric("discount_percent", { precision: 5, scale: 2, mode: "number" })
       .notNull()
       .default(0),
     position: integer("position").notNull().default(0),
   },
-  (t) => [index("idx_credit_note_lines_credit_note").on(t.creditNoteId)],
+  (t) => [
+    index("idx_credit_note_lines_credit_note").on(t.creditNoteId),
+    check("credit_note_line_items_tax_code_rate", taxCodeMatchesRate(t)),
+  ],
 );
 
 export const expenses = pgTable(
@@ -870,6 +892,10 @@ export const expenses = pgTable(
     amountPence: integer("amount_pence").notNull().default(0),
     /** VAT rate percentage used to derive vatPence from inclusive amountPence. */
     vatRate: integer("vat_rate").notNull().default(0),
+    /** What kind of supply this is (item 17). Null until the backfill or a write sets it. */
+    taxCode: taxCodeEnum("tax_code"),
+    /** The backfill could only guess the tax code; a person should check it. */
+    taxCodeNeedsReview: boolean("tax_code_needs_review").notNull().default(false),
     vatPence: integer("vat_pence").notNull().default(0),
     status: expenseStatusEnum("status").notNull().default("recorded"),
     source: expenseSourceEnum("source").notNull().default("manual"),
@@ -945,6 +971,7 @@ export const expenses = pgTable(
     index("idx_expenses_paid_by").on(t.paidByUserId),
     index("idx_expenses_client").on(t.clientId),
     index("idx_expenses_order").on(t.orderId),
+    check("expenses_tax_code_rate", taxCodeMatchesRate(t)),
     check(
       "expenses_category_known",
       sql`${t.category} is null or ${t.category} in (
@@ -1488,13 +1515,20 @@ export const orderLineItems = pgTable(
       .default(1),
     unitPricePence: integer("unit_price_pence").notNull().default(0),
     vatRate: integer("vat_rate").notNull().default(0),
+    /** What kind of supply this is (item 17). Null until the backfill or a write sets it. */
+    taxCode: taxCodeEnum("tax_code"),
+    /** The backfill could only guess the tax code; a person should check it. */
+    taxCodeNeedsReview: boolean("tax_code_needs_review").notNull().default(false),
     /** Line discount percentage (0–100), applied before VAT. */
     discountPercent: numeric("discount_percent", { precision: 5, scale: 2, mode: "number" })
       .notNull()
       .default(0),
     position: integer("position").notNull().default(0),
   },
-  (t) => [index("idx_order_lines_order").on(t.orderId)],
+  (t) => [
+    index("idx_order_lines_order").on(t.orderId),
+    check("order_line_items_tax_code_rate", taxCodeMatchesRate(t)),
+  ],
 );
 
 export const orderPaymentMilestones = pgTable(
@@ -1617,13 +1651,20 @@ export const quoteLineItems = pgTable(
       .default(1),
     unitPricePence: integer("unit_price_pence").notNull().default(0),
     vatRate: integer("vat_rate").notNull().default(0),
+    /** What kind of supply this is (item 17). Null until the backfill or a write sets it. */
+    taxCode: taxCodeEnum("tax_code"),
+    /** The backfill could only guess the tax code; a person should check it. */
+    taxCodeNeedsReview: boolean("tax_code_needs_review").notNull().default(false),
     /** Line discount percentage (0–100), applied before VAT. */
     discountPercent: numeric("discount_percent", { precision: 5, scale: 2, mode: "number" })
       .notNull()
       .default(0),
     position: integer("position").notNull().default(0),
   },
-  (t) => [index("idx_quote_lines_quote").on(t.quoteId)],
+  (t) => [
+    index("idx_quote_lines_quote").on(t.quoteId),
+    check("quote_line_items_tax_code_rate", taxCodeMatchesRate(t)),
+  ],
 );
 
 export const quotePaymentMilestones = pgTable(
