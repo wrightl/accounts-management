@@ -44,10 +44,12 @@ export function vatDiffersFromDerived(vatPence: number, derivedPence: number): b
  *    that currency isn't converted yet.
  *  - A typed figure ("manual") or one read from the receipt: kept as given,
  *    once checked to be below the amount paid.
- *  - With no source posted, a typed figure already stored is kept while it
- *    is below the amount paid.
- *  - Otherwise a receipt figure stored earlier (an emailed receipt) if there
- *    is one, else worked out from the rate.
+ *  - With no source posted and an expense already stored, its choice stands:
+ *    a typed or receipt figure is kept while it is below the amount paid,
+ *    and a worked-out figure is worked out again.
+ *  - With nothing stored yet (a new expense, or approving an emailed one whose
+ *    VAT nobody has chosen), a receipt figure read earlier if there is one,
+ *    else worked out from the rate.
  *
  * Throws {@link ExpenseVatError} for a typed or receipt figure that isn't a
  * sensible amount.
@@ -60,7 +62,11 @@ export function resolveExpenseVat(args: {
   posted?: { vatPounds?: string | null; vatSource?: string | null };
   /** VAT a receipt showed, stored when it was read. */
   receiptVatPence?: number | null;
-  /** The expense as stored, when updating: a typed figure survives a post that doesn't mention VAT. */
+  /**
+   * The expense as stored, when updating, so a post that doesn't mention VAT
+   * keeps its choice. Leave it out when nobody has chosen yet (approving an
+   * emailed expense), so the receipt's figure is offered.
+   */
   existing?: { vatPence: number; vatPenceSource: string } | null;
 }): ExpenseVat {
   const derived: ExpenseVat = {
@@ -80,10 +86,15 @@ export function resolveExpenseVat(args: {
     return { vatPence: pence, vatPenceSource: source };
   }
   if (source === "derived") return derived;
-  // No source posted (an older client, or the mobile app): keep a typed figure
-  // while it still fits the amount, rather than replacing it without a word.
-  if (args.existing?.vatPenceSource === "manual" && usable(args.existing.vatPence)) {
-    return { vatPence: args.existing.vatPence, vatPenceSource: "manual" };
+  // No source posted (an older client, the mobile app, or the bank amount
+  // being taken): keep the choice already made. A typed or receipt figure
+  // stays while it still fits the amount; a worked-out one stays worked out.
+  if (args.existing) {
+    const kept = args.existing.vatPenceSource;
+    if ((kept === "manual" || kept === "receipt") && usable(args.existing.vatPence)) {
+      return { vatPence: args.existing.vatPence, vatPenceSource: kept };
+    }
+    return derived;
   }
   if (args.receiptVatPence != null && usable(args.receiptVatPence)) {
     return { vatPence: args.receiptVatPence, vatPenceSource: "receipt" };

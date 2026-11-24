@@ -276,6 +276,37 @@ describe("receipt matching", () => {
     const [updated] = await db.select().from(expenses).where(eq(expenses.id, expense!.id));
     expect(updated).toMatchObject({ amountPence: 150, vatPence: 25, vatPenceSource: "derived", receiptVatPence: 198 });
   });
+
+  it.each([
+    { source: "derived" as const, vatPence: 208, expected: { vatPence: 233, vatPenceSource: "derived" } },
+    { source: "manual" as const, vatPence: 150, expected: { vatPence: 150, vatPenceSource: "manual" } },
+    { source: "receipt" as const, vatPence: 198, expected: { vatPence: 198, vatPenceSource: "receipt" } },
+  ])("keeps a $source VAT figure's choice when taking a bank amount it still fits", async ({ source, vatPence, expected }) => {
+    const [expense] = await db
+      .insert(expenses)
+      .values({
+        companyId,
+        description: `Lunch (${source})`,
+        spentAt: addDays(today, -3),
+        amountPence: 1_250,
+        vatRate: 20,
+        vatPence,
+        vatPenceSource: source,
+        // A receipt figure on record that a derived expense chose not to use.
+        receiptVatPence: 198,
+        status: "recorded",
+      })
+      .returning();
+    const bank = await seedTx("PRET A MANGER 123", -1_400, { date: addDays(today, -2) });
+    const [match] = await db
+      .insert(reconciliationMatches)
+      .values({ bankTransactionId: bank, matchType: "expense", expenseId: expense!.id })
+      .returning();
+
+    expect((await acceptReceiptMatch(match!.id, true)).ok).toBe(true);
+    const [updated] = await db.select().from(expenses).where(eq(expenses.id, expense!.id));
+    expect(updated).toMatchObject({ amountPence: 1_400, ...expected });
+  });
 });
 
 describe("asking questions", () => {

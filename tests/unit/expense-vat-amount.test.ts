@@ -71,6 +71,15 @@ describe("resolveExpenseVat", () => {
     });
   });
 
+  it("keeps a stored choice to work VAT out, even with a receipt figure on record", () => {
+    expect(
+      resolveExpenseVat({ ...base, receiptVatPence: 190, existing: { vatPence: 200, vatPenceSource: "derived" } }),
+    ).toEqual({ vatPence: 200, vatPenceSource: "derived" });
+    expect(
+      resolveExpenseVat({ ...base, receiptVatPence: 190, existing: { vatPence: 190, vatPenceSource: "receipt" } }),
+    ).toEqual({ vatPence: 190, vatPenceSource: "receipt" });
+  });
+
   it("refuses a figure that isn't an amount below the total", () => {
     expect(() => resolveExpenseVat({ ...base, posted: { vatSource: "manual", vatPounds: "12.00" } })).toThrow(
       ExpenseVatError,

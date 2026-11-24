@@ -150,8 +150,8 @@ export async function approvePendingExpense(
       vatRate: tax.vatRate,
       currency: input.fields ? input.fields.foreignCurrency : existing.detectedCurrency,
       posted: input.fields,
+      // A pending expense's VAT hasn't been chosen yet, so its receipt figure is offered.
       receiptVatPence: existing.receiptVatPence,
-      existing,
     });
   } catch (e) {
     if (e instanceof ExpenseVatError) return { ok: false, error: e.message, fieldErrors: { vatPounds: e.message } };

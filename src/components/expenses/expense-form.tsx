@@ -209,11 +209,16 @@ export function ExpenseForm({
   const [vatRate, setVatRate] = useState(vatRegistered ? initialTax.vatRate : 0);
   const [taxCode, setTaxCode] = useState<TaxCode>(initialTax.taxCode);
   // A VAT figure read from the receipt or typed; null works it out from the rate.
-  const [vatEntry, setVatEntry] = useState<{ source: "receipt" | "manual"; pounds: string } | null>(() =>
-    (expense?.vatPenceSource === "receipt" || expense?.vatPenceSource === "manual") && expense.vatPence != null
-      ? { source: expense.vatPenceSource, pounds: penceToPounds(expense.vatPence).toFixed(2) }
-      : null,
-  );
+  const [vatEntry, setVatEntry] = useState<{ source: "receipt" | "manual"; pounds: string } | null>(() => {
+    if ((expense?.vatPenceSource === "receipt" || expense?.vatPenceSource === "manual") && expense.vatPence != null) {
+      return { source: expense.vatPenceSource, pounds: penceToPounds(expense.vatPence).toFixed(2) };
+    }
+    // An emailed expense awaiting review starts on its receipt's figure, as nobody has chosen yet.
+    if (expense?.status === "pending" && expense.receiptVatPence != null) {
+      return { source: "receipt", pounds: penceToPounds(expense.receiptVatPence).toFixed(2) };
+    }
+    return null;
+  });
   const [receiptVatPence, setReceiptVatPence] = useState<number | null>(expense?.receiptVatPence ?? null);
   // Only guess who paid when there's a single founder to choose from;
   // otherwise the reviewer must pick, so a wrong payee isn't reimbursed.
