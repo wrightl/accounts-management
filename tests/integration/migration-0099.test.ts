@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
+import { TEST_TAX_CODE_TRIGGER_SQL } from "@/db/test-tax-code-trigger";
+import { inferStoredTaxCode } from "@/lib/tax-codes";
 
 const BREAKPOINT = "--> statement-breakpoint";
 const journal = JSON.parse(readFileSync(join(process.cwd(), "drizzle/meta/_journal.json"), "utf8")) as {
@@ -108,8 +110,50 @@ describe("migration 0099", () => {
     expect(nullable.every((c) => c.is_nullable === "NO")).toBe(true);
   });
 
-  it("codes and flags a row inserted without a code afterwards, and leaves a coded row alone", async () => {
+  it("refuses an insert without a code afterwards, and a code set back to null", async () => {
     await runMigration();
+    const registered = await company("Registered Ltd", true);
+    const regInvoice = await invoice(registered, "R-1");
+
+    await expect(line(regInvoice, 20)).rejects.toThrow();
+    await expect(
+      client.query(
+        `insert into expenses (company_id, description, amount_pence, vat_rate) values ($1, 'Laptop', 1200, 20)`,
+        [registered],
+      ),
+    ).rejects.toThrow();
+    expect(await codeOf("invoice_line_items", await line(regInvoice, 20, "standard"))).toEqual({
+      tax_code: "standard",
+      tax_code_needs_review: false,
+      vat_rate: 20,
+    });
+    await expect(
+      client.query(`update invoice_line_items set tax_code = null where invoice_id = $1`, [regInvoice]),
+    ).rejects.toThrow();
+  });
+
+  it("codes rates the same way as inferStoredTaxCode", async () => {
+    await runMigration();
+    for (const registered of [true, false]) {
+      for (const rate of [-5, 0, 5, 17, 20, 150]) {
+        const { rows } = await client.query<{ code: string }>(
+          `select tax_code_for_rate($1, $2)::text as code`,
+          [rate, registered],
+        );
+        expect([rate, registered, rows[0]!.code]).toEqual([
+          rate,
+          registered,
+          inferStoredTaxCode(rate, { vatRegistered: registered }).code,
+        ]);
+      }
+    }
+  });
+});
+
+describe("the test databases' tax code trigger", () => {
+  it("codes and flags a row inserted without a code, and leaves a coded row alone", async () => {
+    await runMigration();
+    await client.exec(TEST_TAX_CODE_TRIGGER_SQL);
     const registered = await company("Registered Ltd", true);
     const small = await company("Small Ltd", false);
     const regInvoice = await invoice(registered, "R-1");
@@ -128,15 +172,10 @@ describe("migration 0099", () => {
       tax_code_needs_review: false,
       vat_rate: 20,
     });
-
     const { rows: expense } = await client.query<{ id: string }>(
       `insert into expenses (company_id, description, amount_pence, vat_rate) values ($1, 'Laptop', 1200, 20) returning id`,
       [small],
     );
     expect(await codeOf("expenses", expense[0]!.id)).toMatchObject({ tax_code: "standard", tax_code_needs_review: true });
-
-    await expect(
-      client.query(`update invoice_line_items set tax_code = null where invoice_id = $1`, [regInvoice]),
-    ).rejects.toThrow();
   });
 });
