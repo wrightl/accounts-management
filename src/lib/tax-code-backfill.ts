@@ -79,6 +79,29 @@ interface JsonLine {
   [key: string]: unknown;
 }
 
+/**
+ * The code for a stored line. Like inferTaxCodeFromRate, except that a row
+ * with a rate above 0 always gets a rated code. A company that is not VAT
+ * registered now may have been when the row was saved, and the database only
+ * allows standard and reduced to carry a rate, so such a row is coded from its
+ * rate and flagged rather than marked outside scope.
+ */
+function inferStoredLine(rate: number, company: Company): InferredTaxCode {
+  if (rate > 0 && !company.vatRegistered) {
+    return { code: inferTaxCodeFromRate(rate, { vatRegistered: true }).code, needsReview: true };
+  }
+  return inferTaxCodeFromRate(rate, company);
+}
+
+/** The same rule for a stored expense, then the category guesses for 0%. */
+function inferStoredExpense(
+  expense: { vatRate: number; category: string | null; currency: string | null },
+  company: Company,
+): InferredTaxCode {
+  if (expense.vatRate > 0 && !company.vatRegistered) return inferStoredLine(expense.vatRate, company);
+  return inferExpenseTaxCode(expense, company);
+}
+
 function lineRate(line: JsonLine): number {
   return typeof line.vatRate === "number" ? line.vatRate : Number(line.vatRate ?? 0);
 }
@@ -92,7 +115,7 @@ function withTaxCodes(lines: unknown, company: Company): JsonLine[] | null {
     const line = raw as JsonLine;
     if (isTaxCode(line.taxCode)) return line;
     changed = true;
-    const inferred = inferTaxCodeFromRate(lineRate(line), company);
+    const inferred = inferStoredLine(lineRate(line), company);
     return { ...line, taxCode: inferred.code, taxCodeNeedsReview: inferred.needsReview };
   });
   return changed ? next : null;
@@ -105,7 +128,7 @@ function countJsonLines(lists: unknown[], company: Company, table: BackfillTable
     for (const raw of lines) {
       if (!raw || typeof raw !== "object" || isTaxCode((raw as JsonLine).taxCode)) continue;
       const rate = lineRate(raw as JsonLine);
-      const inferred = inferTaxCodeFromRate(rate, company);
+      const inferred = inferStoredLine(rate, company);
       const key = `${rate}`;
       const group = groups.get(key) ?? { table, vatRate: rate, rows: 0, ...toGroup(inferred) };
       group.rows += 1;
@@ -177,7 +200,7 @@ async function lineGroups(db: Database, company: Company): Promise<BackfillGroup
       table,
       vatRate: r.vatRate,
       rows: r.rows,
-      ...toGroup(inferTaxCodeFromRate(r.vatRate, company)),
+      ...toGroup(inferStoredLine(r.vatRate, company)),
     })),
   );
 }
@@ -199,7 +222,7 @@ async function expenseGroups(db: Database, company: Company): Promise<BackfillGr
     category: r.category,
     currency: r.currency,
     rows: r.rows,
-    ...toGroup(inferExpenseTaxCode(r, company)),
+    ...toGroup(inferStoredExpense(r, company)),
   }));
 }
 

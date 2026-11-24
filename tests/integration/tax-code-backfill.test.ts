@@ -31,6 +31,8 @@ let db: TestDatabase;
 let registeredId: string;
 let unregisteredId: string;
 let oddDefaultId: string;
+let deregisteredId: string;
+let deregisteredInvoiceId: string;
 let registeredInvoiceId: string;
 let unregisteredInvoiceId: string;
 let before: Awaited<ReturnType<typeof amounts>>;
@@ -137,9 +139,13 @@ beforeAll(async () => {
   registeredId = registered!.id;
   unregisteredId = unregistered!.id;
   oddDefaultId = oddDefault!.id;
+  // Charged VAT while registered, then deregistered: the rows keep their 20%.
+  const deregistered = await seedCompany(db, { name: "Deregistered Ltd", vatRegistered: false, defaultVatRate: 20 });
+  deregisteredId = deregistered!.id;
 
   registeredInvoiceId = await seedBooks(registeredId, "REG", [20, 5, 0, 17]);
   unregisteredInvoiceId = await seedBooks(unregisteredId, "SML", [0]);
+  deregisteredInvoiceId = await seedBooks(deregisteredId, "DRG", [20, 0]);
 
   await db.insert(expenses).values([
     { companyId: registeredId, description: "Laptop", category: "Equipment", amountPence: 12_000, vatRate: 20, vatPence: 2_000 },
@@ -156,6 +162,7 @@ beforeAll(async () => {
     },
     { companyId: registeredId, description: "Misc", category: null, amountPence: 1_000, vatRate: 0 },
     { companyId: unregisteredId, description: "Laptop", category: "Equipment", amountPence: 12_000, vatRate: 0 },
+    { companyId: deregisteredId, description: "Old laptop", category: "Equipment", amountPence: 12_000, vatRate: 20, vatPence: 2_000 },
   ]);
   before = await amounts();
 }, 60_000);
@@ -261,6 +268,37 @@ describe("tax code backfill", () => {
       [unregisteredId]: null,
       [oddDefaultId]: null,
     });
+  });
+
+  it("codes a deregistered company's 20% rows from their rate instead of breaking the rate check", async () => {
+    expect(await lineCodes(deregisteredInvoiceId)).toEqual([
+      { vatRate: 20, taxCode: "standard", needsReview: true },
+      { vatRate: 0, taxCode: "outside_scope", needsReview: false },
+    ]);
+    for (const [table, parent, column] of [
+      [creditNoteLineItems, creditNotes, creditNoteLineItems.creditNoteId],
+      [quoteLineItems, quotes, quoteLineItems.quoteId],
+      [orderLineItems, orders, orderLineItems.orderId],
+    ] as const) {
+      const rows = await db
+        .select({ vatRate: table.vatRate, taxCode: table.taxCode, needsReview: table.taxCodeNeedsReview })
+        .from(table)
+        .innerJoin(parent, eq(column, parent.id))
+        .where(eq(parent.companyId, deregisteredId));
+      expect(rows).toEqual([{ vatRate: 20, taxCode: "standard", needsReview: true }]);
+    }
+    const [expense] = await db
+      .select({ taxCode: expenses.taxCode, needsReview: expenses.taxCodeNeedsReview })
+      .from(expenses)
+      .where(eq(expenses.companyId, deregisteredId));
+    expect(expense).toEqual({ taxCode: "standard", needsReview: true });
+    const [template] = await db
+      .select({ lines: recurringInvoices.lineTemplate })
+      .from(recurringInvoices)
+      .where(eq(recurringInvoices.companyId, deregisteredId));
+    expect(template!.lines).toEqual([
+      expect.objectContaining({ vatRate: 20, taxCode: "standard", taxCodeNeedsReview: true }),
+    ]);
   });
 
   it("leaves rates and amounts alone", async () => {
