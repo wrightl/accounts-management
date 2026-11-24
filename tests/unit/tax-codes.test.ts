@@ -293,6 +293,27 @@ describe("resolveLineTax", () => {
     );
   });
 
+  it("refuses a missing or invalid rate rather than reading it as 0%", () => {
+    expect(() => resolveLineTax(registered, {}, "sales")).toThrow(
+      "No tax code or VAT rate was given",
+    );
+    expect(() => resolveLineTax(registered, { taxCode: "", vatRate: null }, "sales")).toThrow(
+      TaxRateNotRecognisedError,
+    );
+    for (const vatRate of [Number.NaN, -20, 150, Number.POSITIVE_INFINITY]) {
+      expect(() => resolveLineTax(registered, { vatRate }, "sales")).toThrow(
+        TaxRateNotRecognisedError,
+      );
+    }
+  });
+
+  it("still lets the backfill read a missing rate as 0%", () => {
+    expect(inferTaxCodeFromRate(undefined, registered)).toEqual({
+      code: "zero_rated",
+      needsReview: false,
+    });
+  });
+
   it("refuses near misses rather than rounding them to a UK rate", () => {
     for (const rate of [19.6, 5.4, 0.4]) {
       expect(() => resolveLineTax(registered, { vatRate: rate }, "sales")).toThrow(

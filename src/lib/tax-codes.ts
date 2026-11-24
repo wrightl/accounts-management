@@ -314,9 +314,12 @@ export class TaxCodeNotRecognisedError extends Error {
 }
 
 export class TaxRateNotRecognisedError extends Error {
-  constructor(readonly rate: number) {
+  constructor(readonly rate: unknown) {
+    const choose = `Choose a tax code: standard (${STANDARD_RATE}%), reduced (${REDUCED_RATE}%) or a 0% code.`;
     super(
-      `${rate}% is not a UK VAT rate. Choose a tax code: standard (${STANDARD_RATE}%), reduced (${REDUCED_RATE}%) or a 0% code.`,
+      rate == null || rate === ""
+        ? `No tax code or VAT rate was given. ${choose}`
+        : `${String(rate)}% is not a UK VAT rate. ${choose}`,
     );
     this.name = "TaxRateNotRecognisedError";
   }
@@ -333,7 +336,8 @@ export class TaxRateNotRecognisedError extends Error {
  * For a registered company, throws {@link TaxCodeNotRecognisedError} for an
  * unknown code, {@link TaxCodeNotAllowedError} for a code that doesn't apply,
  * such as postponed import VAT on a sale, and
- * {@link TaxRateNotRecognisedError} when a bare rate is not 0%, 5% or 20%.
+ * {@link TaxRateNotRecognisedError} when there is no code and the rate is
+ * missing, not a number, or not exactly 0%, 5% or 20%.
  */
 export function resolveLineTax(
   company: { vatRegistered?: boolean | null },
@@ -350,7 +354,14 @@ export function resolveLineTax(
     if (!isTaxCodeAllowed(code, use)) throw new TaxCodeNotAllowedError(code, use);
     return { taxCode: code, vatRate: rateForTaxCode(code) };
   }
-  const inferred = inferTaxCodeFromRate(posted.vatRate, company);
-  if (inferred.needsReview) throw new TaxRateNotRecognisedError(posted.vatRate ?? 0);
+  // Unlike inferTaxCodeFromRate, which the backfill uses on stored rows, a
+  // posted line must carry a real rate: missing, NaN or out of range is refused
+  // rather than read as 0%.
+  const rate = posted.vatRate;
+  if (typeof rate !== "number" || !Number.isFinite(rate) || rate < 0 || rate > 100) {
+    throw new TaxRateNotRecognisedError(rate);
+  }
+  const inferred = inferTaxCodeFromRate(rate, company);
+  if (inferred.needsReview) throw new TaxRateNotRecognisedError(rate);
   return { taxCode: inferred.code, vatRate: rateForTaxCode(inferred.code) };
 }
