@@ -1,6 +1,16 @@
 import "server-only";
+import { desc, inArray } from "drizzle-orm";
+import { getDb } from "@/db";
+import { fxRates } from "@/db/schema";
 import { resolveFxRate } from "@/lib/bank/fx";
-import { isDocumentCurrency, STERLING, type DocumentRate } from "@/lib/currency";
+import {
+  documentTotals,
+  isDocumentCurrency,
+  STERLING,
+  type DocumentRate,
+  type DocumentTotals,
+} from "@/lib/currency";
+import type { LineItem } from "@/lib/money";
 
 export type DocumentRateDetails = DocumentRate & {
   fxRateDate: string | null;
@@ -75,4 +85,67 @@ export async function rateOrFallback(
 ): Promise<number> {
   const result = await documentRate(currency, onDate);
   return result.ok ? result.rate.fxRate : fallback;
+}
+
+/** The columns a document stores for its currency, rate and both sets of totals. */
+export type DocumentCurrencyColumns = DocumentTotals & {
+  currency: string;
+  fxRate: number;
+  fxRateDate: string | null;
+  fxRateSource: DocumentRateDetails["fxRateSource"];
+};
+
+/**
+ * Price a document's lines (in its own currency) and convert them to sterling.
+ * A foreign document uses the rate typed on its form, or else the Bank of
+ * England rate for `onDate`, fetched again on every save so it follows the
+ * date until the document can no longer be edited.
+ */
+export async function priceDocument(
+  data: { currency: string; fxRate: number | null },
+  onDate: string,
+  lines: LineItem[],
+  fetchImpl: typeof fetch = fetch,
+): Promise<
+  | { ok: true; fields: DocumentCurrencyColumns }
+  | { ok: false; error: string; fieldErrors: Record<string, string> }
+> {
+  const foreign = data.currency.trim().toUpperCase() !== STERLING;
+  const rate = await documentRate(data.currency, onDate, fetchImpl, foreign ? data.fxRate : null);
+  if (!rate.ok) return { ok: false, error: rate.error, fieldErrors: { fxRate: rate.error } };
+  return { ok: true, fields: documentColumns(lines, rate.rate) };
+}
+
+/** The currency columns for lines priced at an already-known rate. */
+export function documentColumns(lines: LineItem[], rate: DocumentRateDetails): DocumentCurrencyColumns {
+  return {
+    currency: rate.currency,
+    fxRate: rate.fxRate,
+    fxRateDate: rate.fxRateDate,
+    fxRateSource: rate.fxRateSource,
+    ...documentTotals(lines, rate),
+  };
+}
+
+/**
+ * The latest stored Bank of England rate for each currency (sterling is 1),
+ * from the cache only, for projections such as the forecast: they shouldn't
+ * wait on the network. Currencies with no stored rate are left out.
+ */
+export async function latestStoredRates(currencies: string[]): Promise<Map<string, number>> {
+  const rates = new Map<string, number>([[STERLING, 1]]);
+  const foreign = [...new Set(currencies.map((c) => c.trim().toUpperCase()))].filter(
+    (c) => c !== STERLING,
+  );
+  if (foreign.length === 0) return rates;
+  const rows = await getDb()
+    .selectDistinctOn([fxRates.currency], {
+      currency: fxRates.currency,
+      foreignPerGbp: fxRates.foreignPerGbp,
+    })
+    .from(fxRates)
+    .where(inArray(fxRates.currency, foreign))
+    .orderBy(fxRates.currency, desc(fxRates.observationDate));
+  for (const r of rows) rates.set(r.currency, r.foreignPerGbp);
+  return rates;
 }

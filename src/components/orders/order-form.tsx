@@ -20,7 +20,18 @@ import {
   type TaxCodeFieldValue,
 } from "@/components/documents/tax-code-field";
 import type { TaxCode } from "@/lib/tax-codes";
-import { formatGBP, invoiceTotals, poundsToPence } from "@/lib/money";
+import {
+  expenseCurrencySymbol,
+  formatGBP,
+  formatMoney,
+  invoiceTotals,
+  poundsToPence,
+} from "@/lib/money";
+import { toSterlingPence } from "@/lib/currency";
+import {
+  DocumentCurrencyFields,
+  useDocumentCurrency,
+} from "@/components/documents/document-currency-fields";
 import { orderRawFromFormData, parseOrderInput } from "@/lib/orders/schema";
 
 type LineDraft = {
@@ -55,7 +66,12 @@ export function OrderForm({
   vatRegistered = false,
   defaultVatRate = 0,
 }: {
-  clients: { id: string; name: string; companyName?: string | null }[];
+  clients: {
+    id: string;
+    name: string;
+    companyName?: string | null;
+    defaultCurrency?: string | null;
+  }[];
   vatRegistered?: boolean;
   defaultVatRate?: number;
 }) {
@@ -71,6 +87,8 @@ export function OrderForm({
   const formRef = useRef<HTMLFormElement>(null);
   const [pending, startTransition] = useTransition();
   const lineDefault = vatRegistered ? defaultVatRate : 0;
+  const [issueDate, setIssueDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const money = useDocumentCurrency({ clients, clientId: "", issueDate });
   const [lines, setLines] = useState<LineDraft[]>(() => [
     // A fixed key: keys feed DOM ids, and a random one fails hydration.
     { ...newLine(lineDefault), key: "initial-0" },
@@ -151,7 +169,10 @@ export function OrderForm({
           disabled={pending}
           aria-invalid={Boolean(fieldErrors.clientId)}
           aria-describedby={fieldErrors.clientId ? "clientId-error" : undefined}
-          onChange={() => clearField("clientId")}
+          onChange={(id, created) => {
+            clearField("clientId");
+            money.clientChanged(id, created);
+          }}
         />
         <FieldError id="clientId-error">{fieldErrors.clientId}</FieldError>
       </div>
@@ -163,13 +184,28 @@ export function OrderForm({
           id="issueDate"
           name="issueDate"
           type="date"
-          defaultValue={new Date().toISOString().slice(0, 10)}
+          defaultValue={issueDate}
           disabled={pending}
           aria-invalid={Boolean(fieldErrors.issueDate)}
           aria-describedby={fieldErrors.issueDate ? "issueDate-error" : undefined}
-          onChange={() => clearField("issueDate")}
+          onChange={(e) => {
+            clearField("issueDate");
+            if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) setIssueDate(e.target.value);
+          }}
         />
         <FieldError id="issueDate-error">{fieldErrors.issueDate}</FieldError>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <DocumentCurrencyFields
+          currency={money.currency}
+          onCurrencyChange={money.pickCurrency}
+          manualRate={money.manualRate}
+          onManualRateChange={money.setManualRate}
+          bankRate={money.bankRate}
+          disabled={pending}
+          fieldErrors={fieldErrors}
+          clearField={clearField}
+        />
       </div>
       <div className="space-y-2">
         <Label required>Line items</Label>
@@ -184,7 +220,10 @@ export function OrderForm({
           <span aria-hidden="true" />
           <span>Description</span>
           <span>Qty</span>
-          <span>Unit Cost £{vatRegistered ? " (ex VAT)" : ""}</span>
+          <span>
+            Unit Cost {expenseCurrencySymbol(money.currency)}
+            {vatRegistered ? " (ex VAT)" : ""}
+          </span>
           <span>Disc %</span>
           {vatRegistered ? <span>VAT</span> : null}
           <span className="sr-only">Remove</span>
@@ -337,17 +376,31 @@ export function OrderForm({
           {vatRegistered && totals.vatPence > 0 ? (
             <>
               <p className="text-sm text-muted">
-                Net {formatGBP(totals.netPence)}
+                Net {formatMoney(totals.netPence, money.currency)}
               </p>
               <p className="text-sm text-muted">
-                VAT {formatGBP(totals.vatPence)}
+                VAT {formatMoney(totals.vatPence, money.currency)}
               </p>
             </>
           ) : null}
-          <p className="font-medium">Total {formatGBP(totals.grossPence)}</p>
+          <p className="font-medium">Total {formatMoney(totals.grossPence, money.currency)}</p>
+          {money.foreign && money.effectiveRate ? (
+            <p className="text-sm text-muted">
+              About{" "}
+              {formatGBP(
+                toSterlingPence(totals.netPence, money.effectiveRate) +
+                  toSterlingPence(totals.vatPence, money.effectiveRate),
+              )}{" "}
+              in your books
+            </p>
+          ) : null}
         </div>
       </div>
-      <PaymentScheduleEditor grossPence={totals.grossPence} disabled={pending} />
+      <PaymentScheduleEditor
+        grossPence={totals.grossPence}
+        currency={money.currency}
+        disabled={pending}
+      />
       <div>
         <Label htmlFor="notes">Notes</Label>
         <Textarea id="notes" name="notes" rows={2} disabled={pending} />

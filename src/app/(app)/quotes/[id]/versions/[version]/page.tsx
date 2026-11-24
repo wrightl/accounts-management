@@ -5,7 +5,7 @@ import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import {
   formatDiscountPercent,
-  formatGBP,
+  formatMoney,
   formatQuantity,
   hasLineDiscount,
   lineNetPence,
@@ -87,13 +87,13 @@ export default async function QuoteVersionPage({
               <TR key={l.id}>
                 <TD>{l.description}</TD>
                 <TD className="text-right">{formatQuantity(l.quantity)}</TD>
-                <TD className="text-right">{formatGBP(l.unitPricePence)}</TD>
+                <TD className="text-right">{formatMoney(l.unitPricePence, detail.quote.currency)}</TD>
                 {hasLineDiscount(detail.lines) ? (
                   <TD className="text-right">
                     {formatDiscountPercent(l.discountPercent)}
                   </TD>
                 ) : null}
-                <TD className="text-right">{formatGBP(lineNetPence(l))}</TD>
+                <TD className="text-right">{formatMoney(lineNetPence(l), detail.quote.currency)}</TD>
               </TR>
             ))}
           </TBody>

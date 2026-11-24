@@ -1,6 +1,9 @@
 import { z } from "zod";
 import {
+  documentCurrencyRawFromFormData,
+  documentCurrencySchema,
   documentLinesSchema,
+  manualFxRateSchema,
   parseDocumentLinesJson,
 } from "@/lib/documents/schema";
 import { todayIsoDate } from "@/lib/dates";
@@ -29,6 +32,8 @@ export const quoteSchema = z.object({
     .or(z.literal(""))
     .transform((v) => (v === "" || !v ? null : v)),
   notes: optionalNotes,
+  currency: documentCurrencySchema,
+  fxRate: manualFxRateSchema,
   lines: documentLinesSchema,
   /** Only takes effect when the quote has a payment schedule. */
   depositOnAccept: z.boolean().default(false),
@@ -42,6 +47,7 @@ export function quoteRawFromFormData(formData: FormData): Record<string, unknown
     issueDate: formData.get("issueDate") || todayIsoDate(),
     validUntil: formData.get("validUntil") ?? "",
     notes: formData.get("notes") ?? "",
+    ...documentCurrencyRawFromFormData(formData),
     lines: parseDocumentLinesJson(formData.get("linesJson")),
     depositOnAccept: formData.get("depositOnAccept") === "on",
   };

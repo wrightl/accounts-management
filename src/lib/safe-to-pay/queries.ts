@@ -1,4 +1,6 @@
 import "server-only";
+import { latestStoredRates } from "@/lib/document-rate";
+import { toSterlingPence } from "@/lib/currency";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, lte, ne, sum } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
@@ -179,10 +181,22 @@ async function invoicesDueSoonPence(companyId: string, today: string, until: str
   );
 }
 
-/** Recurring invoices that will be raised in the window (one run each). */
-async function recurringDueSoonPence(companyId: string, today: string, until: string) {
+/**
+ * Recurring invoices that will be raised in the window (one run each), in
+ * sterling, and how many foreign templates were left out for want of a rate.
+ */
+export async function recurringDueSoon(
+  companyId: string,
+  today: string,
+  until: string,
+): Promise<{ pence: number; unpriced: number }> {
   const rows = await getDb()
-    .select({ lines: recurringInvoices.lineTemplate, endsOn: recurringInvoices.endsOn, nextRunOn: recurringInvoices.nextRunOn })
+    .select({
+      lines: recurringInvoices.lineTemplate,
+      currency: recurringInvoices.currency,
+      endsOn: recurringInvoices.endsOn,
+      nextRunOn: recurringInvoices.nextRunOn,
+    })
     .from(recurringInvoices)
     .where(
       and(
@@ -193,9 +207,19 @@ async function recurringDueSoonPence(companyId: string, today: string, until: st
       ),
     )
     .orderBy(asc(recurringInvoices.nextRunOn));
-  return rows
-    .filter((r) => !r.endsOn || (r.nextRunOn && r.nextRunOn <= r.endsOn))
-    .reduce((t, r) => t + invoiceTotals((r.lines as LineItem[]) ?? []).grossPence, 0);
+  // Template prices are in its currency; this figure is sterling.
+  const rates = await latestStoredRates(rows.map((r) => r.currency));
+  let pence = 0;
+  let unpriced = 0;
+  for (const r of rows.filter((r) => !r.endsOn || (r.nextRunOn && r.nextRunOn <= r.endsOn))) {
+    const rate = rates.get(r.currency);
+    if (rate == null) {
+      unpriced += 1;
+      continue;
+    }
+    pence += toSterlingPence(invoiceTotals((r.lines as LineItem[]) ?? []).grossPence, rate);
+  }
+  return { pence, unpriced };
 }
 
 /** Everything behind the "safe to pay yourself" figure. */
@@ -228,7 +252,7 @@ export async function getSafeToPay(
       averageMonthlySpendPence(companyId, today),
       invoicesDueSoonPence(companyId, today, until),
       listMilestonesReadyToBill(companyId, today, LOOKAHEAD_DAYS),
-      recurringDueSoonPence(companyId, today, until),
+      recurringDueSoon(companyId, today, until),
       getActiveShareholdersForSplit(companyId),
     ]);
 
@@ -245,7 +269,15 @@ export async function getSafeToPay(
   const expectedParts = [
     { label: "Invoices falling due", pence: invoicesDue },
     { label: "Milestones to bill", pence: milestonesPence },
-    { label: "Recurring invoices", pence: recurring },
+    {
+      // A foreign template with no stored rate can't be valued; say so rather
+      // than quietly understate what's coming in.
+      label:
+        recurring.unpriced > 0
+          ? `Recurring invoices (leaves out ${recurring.unpriced} with no exchange rate yet)`
+          : "Recurring invoices",
+      pence: recurring.pence,
+    },
   ];
 
   const result = computeSafeToPay({

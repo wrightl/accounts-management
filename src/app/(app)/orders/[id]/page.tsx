@@ -11,6 +11,7 @@ import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import {
   formatDiscountPercent,
   formatGBP,
+  formatMoney,
   formatQuantity,
   hasLineDiscount,
   lineNetPence,
@@ -84,7 +85,8 @@ export default async function OrderDetailPage({
             orderId={detail.order.id}
             canWrite={canWrite}
             remainingPence={detail.remainingPence}
-            orderGrossPence={detail.order.grossPence}
+            orderGrossPence={detail.order.grossMinor}
+            currency={detail.order.currency}
             availableMilestones={detail.availableMilestones}
             defaultDueDate={defaultDue}
           />
@@ -125,13 +127,13 @@ export default async function OrderDetailPage({
               <TR key={l.id}>
                 <TD>{l.description}</TD>
                 <TD className="text-right">{formatQuantity(l.quantity)}</TD>
-                <TD className="text-right">{formatGBP(l.unitPricePence)}</TD>
+                <TD className="text-right">{formatMoney(l.unitPricePence, detail.order.currency)}</TD>
                 {hasLineDiscount(detail.lines) ? (
                   <TD className="text-right">
                     {formatDiscountPercent(l.discountPercent)}
                   </TD>
                 ) : null}
-                <TD className="text-right">{formatGBP(lineNetPence(l))}</TD>
+                <TD className="text-right">{formatMoney(lineNetPence(l), detail.order.currency)}</TD>
               </TR>
             ))}
           </TBody>
@@ -198,7 +200,7 @@ export default async function OrderDetailPage({
                   <TD>{m.label}</TD>
                   <TD className="text-right">
                     {m.amountPence != null
-                      ? formatGBP(m.amountPence)
+                      ? formatMoney(m.amountPence, detail.order.currency)
                       : m.percentBasisPoints != null
                         ? `${m.percentBasisPoints / 100}%`
                         : "—"}

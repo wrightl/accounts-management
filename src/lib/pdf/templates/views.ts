@@ -237,10 +237,10 @@ export function quoteView(params: ViewBase & { quote: PdfQuote }): DocumentView 
     banner: null,
     recipient: recipient("Quoted to", client),
     sender: sender(company, contactEmail, true),
-    lines: viewLines(lines),
+    lines: viewLines(lines, quote.currency),
     showDiscount: hasLineDiscount(lines),
-    subtotals: subtotals(quote.netPence, quote.vatPence, company),
-    total: { label: "Quote total", value: formatGBP(quote.grossPence) },
+    subtotals: subtotals(quote.netMinor, quote.vatMinor, company, quote.currency),
+    total: { label: "Quote total", value: formatMoney(quote.grossMinor, quote.currency) },
     notes: quote.notes ? { title: "Terms and conditions", body: quote.notes } : null,
     detail: validUntil
       ? {

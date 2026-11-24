@@ -1,4 +1,6 @@
 import "server-only";
+import { latestStoredRates } from "@/lib/document-rate";
+import { toSterlingPence } from "@/lib/currency";
 import { and, eq, gt, gte, inArray, isNotNull, lte, ne, sum } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
@@ -91,6 +93,7 @@ async function recurringEvents(
       name: recurringInvoices.name,
       clientId: recurringInvoices.clientId,
       lines: recurringInvoices.lineTemplate,
+      currency: recurringInvoices.currency,
       nextRunOn: recurringInvoices.nextRunOn,
       endsOn: recurringInvoices.endsOn,
       maxOccurrences: recurringInvoices.maxOccurrences,
@@ -104,8 +107,23 @@ async function recurringEvents(
         isNotNull(recurringInvoices.nextRunOn),
       ),
     );
+  // Template prices are in its currency; the forecast is in sterling.
+  const rates = await latestStoredRates(rows.map((r) => r.currency));
   return rows.flatMap((r) => {
-    const gross = invoiceTotals((r.lines as LineItem[]) ?? []).grossPence;
+    const rate = rates.get(r.currency);
+    if (rate == null) {
+      console.warn(
+        JSON.stringify({
+          level: "warn",
+          msg: "forecast.recurring_unpriced",
+          companyId,
+          template: r.name,
+          currency: r.currency,
+        }),
+      );
+      return [];
+    }
+    const gross = toSterlingPence(invoiceTotals((r.lines as LineItem[]) ?? []).grossPence, rate);
     if (gross <= 0) return [];
     const remaining =
       r.maxOccurrences != null ? Math.max(0, r.maxOccurrences - r.occurrenceCount) : Infinity;

@@ -67,7 +67,8 @@ export const SAMPLE_QUOTE: PdfQuote = {
   issueDate: "2026-01-06",
   validUntil: "2026-02-05",
   notes: "Half is payable on acceptance and the balance on completion.",
-  netPence: 237000,
-  vatPence: 47400,
-  grossPence: 284400,
+  currency: "GBP",
+  netMinor: 237000,
+  vatMinor: 47400,
+  grossMinor: 284400,
 };

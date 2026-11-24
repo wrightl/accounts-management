@@ -4,12 +4,13 @@ import { ClientSelect } from "@/components/clients/client-select";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { FieldError, Input, Label, Textarea } from "@/components/ui/form";
+import { FieldError, Input, Label, Select, Textarea } from "@/components/ui/form";
 import { FormStickyActions } from "@/components/ui/form-sticky-actions";
 import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
 import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
 import { useFieldErrors } from "@/components/ui/use-field-errors";
-import { formatGBP, invoiceTotals, poundsToPence } from "@/lib/money";
+import { expenseCurrencySymbol, formatMoney, invoiceTotals, poundsToPence } from "@/lib/money";
+import { DOCUMENT_CURRENCIES, STERLING } from "@/lib/currency";
 import {
   createRecurringInvoice,
   updateRecurringInvoice,
@@ -61,12 +62,18 @@ export function RecurringInvoiceForm({
   defaultVatRate = 0,
 }: {
   mode: "create" | "edit";
-  clients: { id: string; name: string; companyName?: string | null }[];
+  clients: {
+    id: string;
+    name: string;
+    companyName?: string | null;
+    defaultCurrency?: string | null;
+  }[];
   template?: {
     id: string;
     name: string;
     clientId: string;
     notes: string | null;
+    currency: string;
     dayOfMonth: number;
     onGenerate: "draft" | "send";
     endsOn: string | null;
@@ -102,6 +109,9 @@ export function RecurringInvoiceForm({
     template?.onGenerate ?? "draft",
   );
   const [enabled, setEnabled] = useState(template?.enabled ?? true);
+  // Follows the client's default until picked by hand.
+  const [currency, setCurrency] = useState(template?.currency ?? STERLING);
+  const [currencyTouched, setCurrencyTouched] = useState(Boolean(template));
 
   const totals = useMemo(() => {
     try {
@@ -204,9 +214,48 @@ export function RecurringInvoiceForm({
             disabled={pending}
             aria-invalid={Boolean(fieldErrors.clientId)}
             aria-describedby={fieldErrors.clientId ? "clientId-error" : undefined}
-            onChange={() => clearField("clientId")}
+            onChange={(id, created) => {
+              clearField("clientId");
+              if (!currencyTouched) {
+                setCurrency(
+                  (created ?? clients.find((c) => c.id === id))?.defaultCurrency ?? STERLING,
+                );
+              }
+            }}
           />
           <FieldError id="clientId-error">{fieldErrors.clientId}</FieldError>
+        </div>
+        <div>
+          <Label htmlFor="currency">Currency</Label>
+          <Select
+            id="currency"
+            name="currency"
+            value={currency}
+            disabled={pending}
+            aria-invalid={Boolean(fieldErrors.currency)}
+            aria-describedby={
+              [fieldErrors.currency ? "currency-error" : null, currency !== STERLING ? "currency-hint" : null]
+                .filter(Boolean)
+                .join(" ") || undefined
+            }
+            onChange={(e) => {
+              clearField("currency");
+              setCurrencyTouched(true);
+              setCurrency(e.target.value);
+            }}
+          >
+            {DOCUMENT_CURRENCIES.map((code) => (
+              <option key={code} value={code}>
+                {code}
+              </option>
+            ))}
+          </Select>
+          <FieldError id="currency-error">{fieldErrors.currency}</FieldError>
+          {currency !== STERLING ? (
+            <p id="currency-hint" className="mt-1 text-xs text-muted">
+              Each invoice is converted at the Bank of England rate on the day it&apos;s generated.
+            </p>
+          ) : null}
         </div>
         <div>
           <Label htmlFor="dayOfMonth" required>
@@ -327,7 +376,10 @@ export function RecurringInvoiceForm({
           <span aria-hidden="true" />
           <span>Description</span>
           <span>Qty</span>
-          <span>Unit Cost £{vatRegistered ? " (ex VAT)" : ""}</span>
+          <span>
+            Unit Cost {expenseCurrencySymbol(currency)}
+            {vatRegistered ? " (ex VAT)" : ""}
+          </span>
           <span>Disc %</span>
           {vatRegistered ? <span>VAT</span> : null}
           <span className="sr-only">Remove</span>
@@ -485,15 +537,15 @@ export function RecurringInvoiceForm({
           {vatRegistered && totals.vatPence > 0 ? (
             <>
               <p className="text-sm text-muted">
-                Net {formatGBP(totals.netPence)}
+                Net {formatMoney(totals.netPence, currency)}
               </p>
               <p className="text-sm text-muted">
-                VAT {formatGBP(totals.vatPence)}
+                VAT {formatMoney(totals.vatPence, currency)}
               </p>
             </>
           ) : null}
           <p className="font-display text-lg font-semibold">
-            Total {formatGBP(totals.grossPence)}
+            Total {formatMoney(totals.grossPence, currency)}
           </p>
         </div>
       </div>

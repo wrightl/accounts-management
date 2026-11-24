@@ -18,6 +18,7 @@ export const NOTIFICATION_EVENT_TYPES = [
   "deadline.upcoming",
   "recurring.due.3d",
   "recurring.sent",
+  "recurring.failed",
   "expense.inbound.processed",
   "expense.inbound.failed",
   "user.invite.accepted",
@@ -116,6 +117,13 @@ export const NOTIFICATION_CATALOG: readonly NotificationEventDefinition[] = [
     description: "A recurring invoice was generated and sent",
     defaultRoles: ["admin", "user"],
     defaultChannels: { inApp: true, email: false, push: false },
+  },
+  {
+    type: "recurring.failed",
+    label: "Recurring invoice not generated",
+    description: "A recurring invoice couldn't be generated, such as when no exchange rate was available",
+    defaultRoles: ["admin", "user"],
+    defaultChannels: { inApp: true, email: true, push: false },
   },
   {
     type: "expense.inbound.processed",

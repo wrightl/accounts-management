@@ -1,7 +1,7 @@
 import "server-only";
 import { storedLineTax } from "@/lib/documents/schema";
-import { documentTotals, isForeignDocumentCurrency, type DocumentTotals } from "@/lib/currency";
-import { documentRate, type DocumentRateDetails } from "@/lib/document-rate";
+import { isForeignDocumentCurrency } from "@/lib/currency";
+import { priceDocument, type DocumentCurrencyColumns } from "@/lib/document-rate";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { clients, invoiceLineItems, invoices } from "@/db/schema";
@@ -32,19 +32,11 @@ export function buildLineValues(
   });
 }
 
-/** The columns an invoice stores for its currency, rate and totals. */
-export type InvoiceCurrencyFields = DocumentTotals & {
-  currency: string;
-  fxRate: number;
-  fxRateDate: string | null;
-  fxRateSource: DocumentRateDetails["fxRateSource"];
-};
+export type InvoiceCurrencyFields = DocumentCurrencyColumns;
 
 /**
- * The currency, rate and both sets of totals for an invoice's lines. A foreign
- * invoice uses the rate typed on the form, or else the Bank of England rate for
- * the issue date, fetched again on every save so it follows the date until the
- * invoice is sent and can no longer be edited.
+ * The currency, rate and both sets of totals for an invoice's lines (see
+ * priceDocument). Recharged expenses stay on sterling invoices.
  */
 export async function invoiceCurrencyFields(
   data: Pick<InvoiceParsed, "currency" | "fxRate">,
@@ -55,25 +47,13 @@ export async function invoiceCurrencyFields(
   | { ok: true; fields: InvoiceCurrencyFields }
   | { ok: false; error: string; fieldErrors?: Record<string, string> }
 > {
-  const foreign = isForeignDocumentCurrency(data.currency);
-  if (foreign && lineValues.some((l) => l.expenseId)) {
+  if (isForeignDocumentCurrency(data.currency) && lineValues.some((l) => l.expenseId)) {
     // Expenses are recharged at their sterling cost; converting them would
     // bury an exchange difference in the recharge.
     const error = "Recharged expenses can only go on a GBP invoice";
     return { ok: false, error, fieldErrors: { lines: error } };
   }
-  const rate = await documentRate(data.currency, issueDate, fetchImpl, foreign ? data.fxRate : null);
-  if (!rate.ok) return { ok: false, error: rate.error, fieldErrors: { fxRate: rate.error } };
-  return {
-    ok: true,
-    fields: {
-      currency: rate.rate.currency,
-      fxRate: rate.rate.fxRate,
-      fxRateDate: rate.rate.fxRateDate,
-      fxRateSource: rate.rate.fxRateSource,
-      ...documentTotals(lineValues, rate.rate),
-    },
-  };
+  return priceDocument(data, issueDate, lineValues, fetchImpl);
 }
 
 export function rebilledExpenseIds(lines: Array<{ expenseId: string | null }>): string[] {

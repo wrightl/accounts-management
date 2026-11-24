@@ -81,7 +81,7 @@ export function DocumentCurrencyFields({
     const dated = bankRate.fxRateDate ? `, ${formatIsoDateLong(bankRate.fxRateDate)}` : "";
     hint = manualRate.trim()
       ? `The Bank of England rate is ${bankRate.fxRate}${dated}. Clear your rate to use it.`
-      : `Leave blank to use the Bank of England rate, ${bankRate.fxRate}${dated}. It follows the issue date until the invoice is sent.`;
+      : `Leave blank to use the Bank of England rate, ${bankRate.fxRate}${dated}. It follows the issue date while you can still edit this.`;
   }
 
   return (
@@ -134,4 +134,52 @@ export function DocumentCurrencyFields({
       ) : null}
     </>
   );
+}
+
+/**
+ * Currency state for a document form: starts in the document's currency or
+ * else the client's default, follows the client until the user picks a
+ * currency by hand, and keeps the typed rate and the Bank of England one.
+ */
+export function useDocumentCurrency(opts: {
+  clients: ReadonlyArray<{ id: string; defaultCurrency?: string | null }>;
+  clientId: string;
+  document?: { currency: string; fxRate: number; fxRateSource: "boe" | "manual" | null } | null;
+  issueDate: string;
+}) {
+  const [created, setCreated] = useState<Record<string, string | null>>({});
+  const clientCurrency = (id: string, made?: { defaultCurrency: string | null }) =>
+    (made ?? opts.clients.find((c) => c.id === id))?.defaultCurrency ?? created[id] ?? STERLING;
+  const [currency, setCurrency] = useState(
+    opts.document?.currency ?? clientCurrency(opts.clientId),
+  );
+  const [touched, setTouched] = useState(Boolean(opts.document));
+  const [manualRate, setManualRate] = useState(
+    opts.document?.fxRateSource === "manual" ? String(opts.document.fxRate) : "",
+  );
+  const foreign = currency !== STERLING;
+  const bankRate = useDocumentRate(currency, opts.issueDate);
+  const effectiveRate = foreign ? (parseManualRate(manualRate) ?? bankRate?.fxRate ?? null) : 1;
+
+  function changeCurrency(code: string, byHand: boolean) {
+    if (byHand) setTouched(true);
+    setCurrency(code);
+    setManualRate("");
+  }
+
+  return {
+    currency,
+    foreign,
+    manualRate,
+    setManualRate,
+    bankRate,
+    effectiveRate,
+    /** The user picked a currency. */
+    pickCurrency: (code: string) => changeCurrency(code, true),
+    /** The client changed: follow its default unless a currency was picked. */
+    clientChanged(id: string, made?: { defaultCurrency: string | null }) {
+      if (made) setCreated((prev) => ({ ...prev, [id]: made.defaultCurrency }));
+      if (!touched) changeCurrency(clientCurrency(id, made), false);
+    },
+  };
 }

@@ -7,7 +7,11 @@ import { getDb } from "@/db";
 import { companies, quotes } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
 import { createOrderFromQuote } from "@/lib/orders/copy-from-quote";
-import { raiseDepositInvoice, type DepositInvoice } from "@/lib/orders/deposit";
+import {
+  depositRateFor,
+  raiseDepositInvoice,
+  type DepositInvoice,
+} from "@/lib/orders/deposit";
 import { enqueueSendJob, processSendJob } from "@/lib/outbox";
 import { createInvoiceCheckout } from "@/lib/payments/checkout";
 import type { PaymentMilestoneInput } from "@/lib/quotes/payment-schedule";
@@ -18,7 +22,7 @@ import {
   writeQuoteStatus,
 } from "@/lib/quotes/status-write";
 import { todayIsoDate } from "@/lib/invoices/status";
-import { formatGBP } from "@/lib/money";
+import { formatMoney } from "@/lib/money";
 import type { QuoteStatus } from "@/lib/quotes/status";
 import type { ActionResult } from "@/actions/result";
 import {
@@ -111,6 +115,9 @@ export async function acceptPublicQuote(
   }));
 
   const takeDeposit = detail.quote.depositOnAccept && milestones.length > 0;
+  // Fetched before the transaction, for the same date the deposit is issued.
+  const depositIssueDate = todayIsoDate();
+  const depositRate = takeDeposit ? await depositRateFor(detail.quote, depositIssueDate) : null;
 
   const db = getDb();
   let accepted: { orderId: string; deposit: DepositInvoice | null };
@@ -136,11 +143,13 @@ export async function acceptPublicQuote(
         milestones,
         loaded.createdByUserId,
       );
-      const raised = takeDeposit
+      const raised = depositRate
         ? await raiseDepositInvoice(tx, {
             companyId: loaded.companyId,
             orderId: newOrderId,
             createdByUserId: loaded.createdByUserId,
+            issueDate: depositIssueDate,
+            rate: depositRate,
           })
         : null;
       return { orderId: newOrderId, deposit: raised };
@@ -162,7 +171,7 @@ export async function acceptPublicQuote(
       type: "quote.accepted",
       title: `Quote ${detail.quote.number} accepted`,
       body: deposit
-        ? `A client accepted this quote via the public link. The first payment, ${formatGBP(deposit.amountPence)}, has been invoiced.`
+        ? `A client accepted this quote via the public link. The first payment, ${formatMoney(deposit.amountMinor, deposit.currency)}, has been invoiced.`
         : "A client accepted this quote via the public link.",
       href: `/quotes/${loaded.quoteId}`,
       entityType: "quote",

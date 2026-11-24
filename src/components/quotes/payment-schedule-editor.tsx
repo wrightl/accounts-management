@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select } from "@/components/ui/form";
+import { expenseCurrencySymbol } from "@/lib/money";
 import {
   draftToMilestoneInput,
   newMilestoneDraft,
@@ -35,11 +36,15 @@ function milestoneFromDb(row: {
 
 export function PaymentScheduleEditor({
   grossPence,
+  currency = "GBP",
   initialMilestones,
   disabled,
   depositOption,
 }: {
+  /** The document's gross, in its currency. */
   grossPence: number;
+  /** Milestone amounts are in the document's currency. */
+  currency?: string;
   initialMilestones?: Array<{
     label: string;
     amountPence: number | null;
@@ -138,7 +143,11 @@ export function PaymentScheduleEditor({
             </Select>
           </div>
           <div>
-            <Label>{milestone.amountMode === "percent" ? "Percent" : "Amount £"}</Label>
+            <Label>
+              {milestone.amountMode === "percent"
+                ? "Percent"
+                : `Amount ${expenseCurrencySymbol(currency)}`}
+            </Label>
             <Input
               value={
                 milestone.amountMode === "percent"

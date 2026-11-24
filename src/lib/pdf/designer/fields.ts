@@ -1,6 +1,5 @@
 import { clientBillToLines } from "@/lib/clients/display";
 import { formatIsoDateUk } from "@/lib/dates";
-import { STERLING } from "@/lib/currency";
 import { formatMoney } from "@/lib/money";
 import {
   SAMPLE_CLIENT,
@@ -104,11 +103,10 @@ export function quoteDesignData(quote: PdfQuote, parties: DesignParties): Design
       validUntil: quote.validUntil,
       version: quote.version,
       notes: quote.notes,
-      netMinor: quote.netPence ?? null,
-      vatMinor: quote.vatPence ?? 0,
-      grossMinor: quote.grossPence,
-      // Quotes are issued in sterling until they carry a currency.
-      currency: STERLING,
+      netMinor: quote.netMinor ?? null,
+      vatMinor: quote.vatMinor ?? 0,
+      grossMinor: quote.grossMinor,
+      currency: quote.currency,
       sterlingVat: null,
     },
   };

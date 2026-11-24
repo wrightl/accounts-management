@@ -9,7 +9,19 @@ import { FormStickyActions } from "@/components/ui/form-sticky-actions";
 import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-error";
 import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
 import { useFieldErrors } from "@/components/ui/use-field-errors";
-import { formatGBP, invoiceTotals, lineNetPence, poundsToPence } from "@/lib/money";
+import {
+  expenseCurrencySymbol,
+  formatGBP,
+  formatMoney,
+  invoiceTotals,
+  lineNetPence,
+  poundsToPence,
+} from "@/lib/money";
+import { toSterlingPence } from "@/lib/currency";
+import {
+  DocumentCurrencyFields,
+  useDocumentCurrency,
+} from "@/components/documents/document-currency-fields";
 import { PaymentScheduleEditor } from "@/components/quotes/payment-schedule-editor";
 import { createQuote, updateQuote } from "@/actions/quotes";
 import { parseQuoteInput, quoteRawFromFormData } from "@/lib/quotes/schema";
@@ -74,7 +86,12 @@ export function QuoteForm({
   cardPayments = false,
 }: {
   mode: "create" | "edit";
-  clients: { id: string; name: string; companyName?: string | null }[];
+  clients: {
+    id: string;
+    name: string;
+    companyName?: string | null;
+    defaultCurrency?: string | null;
+  }[];
   quote?: {
     id: string;
     clientId: string;
@@ -82,6 +99,9 @@ export function QuoteForm({
     validUntil: string | null;
     notes: string | null;
     depositOnAccept?: boolean;
+    currency: string;
+    fxRate: number;
+    fxRateSource: "boe" | "manual" | null;
   };
   initialLines?: QuoteLineDraft[];
   initialMilestones?: Array<{
@@ -108,6 +128,15 @@ export function QuoteForm({
   const formRef = useRef<HTMLFormElement>(null);
   const [pending, startTransition] = useTransition();
   const lineDefault = vatRegistered ? defaultVatRate : 0;
+  const [issueDate, setIssueDate] = useState(
+    quote?.issueDate ?? new Date().toISOString().slice(0, 10),
+  );
+  const money = useDocumentCurrency({
+    clients,
+    clientId: quote?.clientId ?? "",
+    document: quote,
+    issueDate,
+  });
   const [lines, setLines] = useState<QuoteLineDraft[]>(
     initialLines && initialLines.length > 0
       ? initialLines.map((l) => ({
@@ -201,7 +230,10 @@ export function QuoteForm({
           disabled={pending}
           aria-invalid={Boolean(fieldErrors.clientId)}
           aria-describedby={fieldErrors.clientId ? "clientId-error" : undefined}
-          onChange={() => clearField("clientId")}
+          onChange={(id, created) => {
+            clearField("clientId");
+            money.clientChanged(id, created);
+          }}
         />
         <FieldError id="clientId-error">{fieldErrors.clientId}</FieldError>
       </div>
@@ -214,13 +246,14 @@ export function QuoteForm({
             id="issueDate"
             name="issueDate"
             type="date"
-            defaultValue={
-              quote?.issueDate ?? new Date().toISOString().slice(0, 10)
-            }
+            defaultValue={issueDate}
             disabled={pending}
             aria-invalid={Boolean(fieldErrors.issueDate)}
             aria-describedby={fieldErrors.issueDate ? "issueDate-error" : undefined}
-            onChange={() => clearField("issueDate")}
+            onChange={(e) => {
+              clearField("issueDate");
+              if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) setIssueDate(e.target.value);
+            }}
           />
           <FieldError id="issueDate-error">{fieldErrors.issueDate}</FieldError>
         </div>
@@ -234,6 +267,16 @@ export function QuoteForm({
             disabled={pending}
           />
         </div>
+        <DocumentCurrencyFields
+          currency={money.currency}
+          onCurrencyChange={money.pickCurrency}
+          manualRate={money.manualRate}
+          onManualRateChange={money.setManualRate}
+          bankRate={money.bankRate}
+          disabled={pending}
+          fieldErrors={fieldErrors}
+          clearField={clearField}
+        />
       </div>
       <div className="space-y-2">
         <Label required>Line items</Label>
@@ -244,7 +287,10 @@ export function QuoteForm({
           <span aria-hidden="true" />
           <span>Description</span>
           <span>Qty</span>
-          <span>Unit Cost £{vatRegistered ? " (ex VAT)" : ""}</span>
+          <span>
+            Unit Cost {expenseCurrencySymbol(money.currency)}
+            {vatRegistered ? " (ex VAT)" : ""}
+          </span>
           <span>Disc %</span>
           {vatRegistered ? <span>VAT</span> : null}
           <span className="text-right">Total</span>
@@ -369,7 +415,7 @@ export function QuoteForm({
                 />
               ) : null}
               <p className="flex items-center justify-end text-sm font-medium tabular-nums">
-                {totalPence === null ? "—" : formatGBP(totalPence)}
+                {totalPence === null ? "—" : formatMoney(totalPence, money.currency)}
               </p>
               <Button
                 type="button"
@@ -395,18 +441,29 @@ export function QuoteForm({
           {vatRegistered && totals.vatPence > 0 ? (
             <>
               <p className="text-sm text-muted">
-                Net {formatGBP(totals.netPence)}
+                Net {formatMoney(totals.netPence, money.currency)}
               </p>
               <p className="text-sm text-muted">
-                VAT {formatGBP(totals.vatPence)}
+                VAT {formatMoney(totals.vatPence, money.currency)}
               </p>
             </>
           ) : null}
-          <p className="font-medium">Total {formatGBP(totals.grossPence)}</p>
+          <p className="font-medium">Total {formatMoney(totals.grossPence, money.currency)}</p>
+          {money.foreign && money.effectiveRate ? (
+            <p className="text-sm text-muted">
+              About{" "}
+              {formatGBP(
+                toSterlingPence(totals.netPence, money.effectiveRate) +
+                  toSterlingPence(totals.vatPence, money.effectiveRate),
+              )}{" "}
+              in your books
+            </p>
+          ) : null}
         </div>
       </div>
       <PaymentScheduleEditor
         grossPence={totals.grossPence}
+        currency={money.currency}
         initialMilestones={initialMilestones}
         disabled={pending}
         depositOption={{

@@ -8,7 +8,7 @@ import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { clientDisplayName } from "@/lib/clients/display";
 import {
   formatDiscountPercent,
-  formatGBP,
+  formatMoney,
   formatQuantity,
   hasLineDiscount,
   lineNetPence,
@@ -51,8 +51,9 @@ export default async function PublicQuotePage({
     detail.quote.depositOnAccept && firstMilestone
       ? {
           label: firstMilestone.label,
-          amountFormatted: formatGBP(
-            resolveMilestoneAmountPence(firstMilestone, detail.quote.grossPence),
+          amountFormatted: formatMoney(
+            resolveMilestoneAmountPence(firstMilestone, detail.quote.grossMinor),
+            detail.quote.currency,
           ),
           byCard: company.onlinePayments === "enabled",
         }
@@ -103,7 +104,7 @@ export default async function PublicQuotePage({
             <TR key={l.id}>
               <TD>{l.description}</TD>
               <TD className="text-right">{formatQuantity(l.quantity)}</TD>
-              <TD className="text-right">{formatGBP(l.unitPricePence)}</TD>
+              <TD className="text-right">{formatMoney(l.unitPricePence, detail.quote.currency)}</TD>
               {hasLineDiscount(detail.lines) ? (
                 <TD className="text-right">
                   {formatDiscountPercent(l.discountPercent)}
@@ -113,7 +114,7 @@ export default async function PublicQuotePage({
                 <TD className="text-right">{l.vatRate}%</TD>
               ) : null}
               <TD className="text-right">
-                {formatGBP(lineNetPence(l))}
+                {formatMoney(lineNetPence(l), detail.quote.currency)}
               </TD>
             </TR>
           ))}
@@ -121,9 +122,9 @@ export default async function PublicQuotePage({
       </Table>
 
       <div className="mt-4 space-y-1 text-right text-sm">
-        <p className="text-muted">Net {formatGBP(detail.quote.netPence)}</p>
-        {detail.quote.vatPence > 0 ? (
-          <p className="text-muted">VAT {formatGBP(detail.quote.vatPence)}</p>
+        <p className="text-muted">Net {formatMoney(detail.quote.netMinor, detail.quote.currency)}</p>
+        {detail.quote.vatMinor > 0 ? (
+          <p className="text-muted">VAT {formatMoney(detail.quote.vatMinor, detail.quote.currency)}</p>
         ) : null}
         <p className="font-display text-lg font-semibold">
           Total {detail.quote.grossFormatted}

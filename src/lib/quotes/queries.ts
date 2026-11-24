@@ -5,7 +5,7 @@ import { clients, quoteLineItems, quotePaymentMilestones, quoteVersions, quotes,
 import { rowOfCompany } from "@/lib/tenant-scope";
 import { clientDisplayNameSql } from "@/lib/clients/sql";
 import { type ListPaging, fetchPage } from "@/lib/list-paging";
-import { formatGBP } from "@/lib/money";
+import { formatDocumentAmount, formatMoney } from "@/lib/money";
 import {
   formatQuoteReference,
   formatQuoteVersion,
@@ -15,7 +15,12 @@ import {
 } from "@/lib/quotes/status";
 import { sortExpr, sortNumbered, sortRank, sortText } from "@/lib/sql-paging";
 import type { TableSort } from "@/lib/table-sort";
-import { insertQuoteVersion, linesToSnapshot, type QuoteSnapshot } from "@/lib/quotes/versions";
+import {
+  insertQuoteVersion,
+  linesToSnapshot,
+  snapshotCurrencyColumns,
+  type QuoteSnapshot,
+} from "@/lib/quotes/versions";
 
 export type QuoteListFilters = {
   status?: string;
@@ -49,6 +54,8 @@ export async function listQuotes(companyId: string, filters: QuoteListFilters = 
       status: quotes.status,
       issueDate: quotes.issueDate,
       grossPence: quotes.grossPence,
+      grossMinor: quotes.grossMinor,
+      currency: quotes.currency,
       clientName: clientDisplayNameSql.as("client_name"),
     })
     .from(quotes)
@@ -58,7 +65,7 @@ export async function listQuotes(companyId: string, filters: QuoteListFilters = 
 
   return rows.map((r) => ({
     ...r,
-    grossFormatted: formatGBP(r.grossPence),
+    grossFormatted: formatDocumentAmount(r.grossMinor, r.grossPence, r.currency),
     versionLabel: formatQuoteVersion(r.version),
   }));
 }
@@ -106,6 +113,8 @@ export async function listQuotePage(
           status: quotes.status,
           issueDate: quotes.issueDate,
           grossPence: quotes.grossPence,
+          grossMinor: quotes.grossMinor,
+          currency: quotes.currency,
           clientName: clientDisplayNameSql.as("client_name"),
         })
         .from(quotes)
@@ -119,7 +128,7 @@ export async function listQuotePage(
     ...page,
     rows: page.rows.map((r) => ({
       ...r,
-      grossFormatted: formatGBP(r.grossPence),
+      grossFormatted: formatDocumentAmount(r.grossMinor, r.grossPence, r.currency),
       versionLabel: formatQuoteVersion(r.version),
     })),
   };
@@ -161,7 +170,7 @@ export async function getQuoteDetail(companyId: string, id: string) {
   return {
     quote: {
       ...quote,
-      grossFormatted: formatGBP(quote.grossPence),
+      grossFormatted: formatMoney(quote.grossMinor, quote.currency),
       versionLabel: formatQuoteVersion(quote.version),
       reference: formatQuoteReference(quote.number, quote.version),
     },
@@ -181,6 +190,8 @@ export async function listQuoteVersionHistory(companyId: string, quoteId: string
       version: quoteVersions.version,
       source: quoteVersions.source,
       grossPence: quoteVersions.grossPence,
+      grossMinor: quoteVersions.grossMinor,
+      currency: quoteVersions.currency,
       createdAt: quoteVersions.createdAt,
       rolledBackFromVersion: quoteVersions.rolledBackFromVersion,
       actorName: users.name,
@@ -205,9 +216,10 @@ export async function listQuoteVersionHistory(companyId: string, quoteId: string
           issueDate: detail.quote.issueDate,
           validUntil: detail.quote.validUntil,
           notes: detail.quote.notes,
-          netPence: detail.quote.netPence,
-          vatPence: detail.quote.vatPence,
-          grossPence: detail.quote.grossPence,
+          ...snapshotCurrencyColumns({
+            ...detail.quote,
+            fxRateSource: detail.quote.fxRateSource as QuoteSnapshot["fxRateSource"],
+          }),
           lines: linesToSnapshot(detail.lines),
         },
         source: "create",
@@ -219,6 +231,8 @@ export async function listQuoteVersionHistory(companyId: string, quoteId: string
         version: quoteVersions.version,
         source: quoteVersions.source,
         grossPence: quoteVersions.grossPence,
+        grossMinor: quoteVersions.grossMinor,
+        currency: quoteVersions.currency,
         createdAt: quoteVersions.createdAt,
         rolledBackFromVersion: quoteVersions.rolledBackFromVersion,
         actorName: users.name,
@@ -236,7 +250,7 @@ export async function listQuoteVersionHistory(companyId: string, quoteId: string
 
   return rows.map((r) => ({
     ...r,
-    grossFormatted: formatGBP(r.grossPence),
+    grossFormatted: formatDocumentAmount(r.grossMinor, r.grossPence, r.currency),
     versionLabel: formatQuoteVersion(r.version),
     isCurrent: r.version === detail.quote.version,
   }));
@@ -266,6 +280,13 @@ export async function getQuoteVersionSnapshot(
     issueDate: row.issueDate,
     validUntil: row.validUntil,
     notes: row.notes,
+    currency: row.currency,
+    fxRate: row.fxRate,
+    fxRateDate: row.fxRateDate,
+    fxRateSource: row.fxRateSource as QuoteSnapshot["fxRateSource"],
+    netMinor: row.netMinor,
+    vatMinor: row.vatMinor,
+    grossMinor: row.grossMinor,
     netPence: row.netPence,
     vatPence: row.vatPence,
     grossPence: row.grossPence,
@@ -310,10 +331,8 @@ export async function getQuoteVersionDetail(
       issueDate: snapshot.issueDate,
       validUntil: snapshot.validUntil,
       notes: snapshot.notes,
-      netPence: snapshot.netPence,
-      vatPence: snapshot.vatPence,
-      grossPence: snapshot.grossPence,
-      grossFormatted: formatGBP(snapshot.grossPence),
+      ...snapshotCurrencyColumns(snapshot),
+      grossFormatted: formatMoney(snapshot.grossMinor, snapshot.currency),
       versionLabel: formatQuoteVersion(version),
       reference: formatQuoteReference(detail.quote.number, version),
       orderId: detail.quote.orderId,

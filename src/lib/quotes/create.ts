@@ -1,6 +1,6 @@
 import "server-only";
 import { storedLineTax } from "@/lib/documents/schema";
-import { documentTotals, STERLING_RATE } from "@/lib/currency";
+import { priceDocument } from "@/lib/document-rate";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { clients, quoteLineItems, quotes } from "@/db/schema";
@@ -47,8 +47,11 @@ export async function createDraftQuoteRecord(
   } catch {
     return { ok: false, error: "Enter a valid unit price on each line item" };
   }
-  const totals = documentTotals(lineValues, STERLING_RATE);
-  const milestoneError = validateMilestones(milestones, totals.grossPence);
+  const priced = await priceDocument(data, data.issueDate, lineValues);
+  if (!priced.ok) return priced;
+  const totals = priced.fields;
+  // Milestones are in the quote's currency.
+  const milestoneError = validateMilestones(milestones, totals.grossMinor);
   if (milestoneError) return { ok: false, error: milestoneError };
 
   const quoteId = await db.transaction(async (tx) => {

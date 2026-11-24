@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DOCUMENT_CURRENCIES, STERLING } from "@/lib/currency";
 import {
   REDUCED_RATE,
   STANDARD_RATE,
@@ -92,4 +93,31 @@ export function parseDocumentLinesJson(raw: FormDataEntryValue | null): unknown[
   } catch {
     return [];
   }
+}
+
+/** A document's currency: one of DOCUMENT_CURRENCIES, sterling when blank. */
+export const documentCurrencySchema = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .optional()
+  .transform((v) => v || STERLING)
+  .refine((v) => DOCUMENT_CURRENCIES.includes(v), "Choose one of the listed currencies");
+
+/**
+ * A rate typed by hand, in units of the document currency per £1. Blank means
+ * use the Bank of England rate for the issue date.
+ */
+export const manualFxRateSchema = z
+  .union([z.string(), z.number()])
+  .optional()
+  .transform((v) => (v == null || String(v).trim() === "" ? null : Number(String(v).trim())))
+  .refine((v) => v == null || (Number.isFinite(v) && v > 0), "Enter an exchange rate above 0");
+
+/** The raw currency fields every document form submits. */
+export function documentCurrencyRawFromFormData(formData: FormData) {
+  return {
+    currency: formData.get("currency") ?? "",
+    fxRate: formData.get("fxRate") ?? "",
+  };
 }
