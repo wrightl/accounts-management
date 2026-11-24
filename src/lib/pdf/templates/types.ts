@@ -19,24 +19,28 @@ export interface PdfClient {
   addressLines: string | null;
 }
 
-export interface PdfInvoice {
+/**
+ * A document's currency and how it was converted. Totals are in `currency`'s
+ * minor units; for a foreign document the rate and its VAT in sterling are
+ * there too, which a VAT invoice or credit note in another currency must show.
+ */
+export interface PdfCurrencyFields {
+  currency: string;
+  vatMinor?: number;
+  fxRate?: number;
+  fxRateDate?: string | null;
+  fxRateSource?: "boe" | "manual" | null;
+  vatPence?: number;
+}
+
+export interface PdfInvoice extends PdfCurrencyFields {
   number: string;
   issueDate: string | null;
   dueDate: string | null;
   notes: string | null;
   /** Totals in `currency`'s minor units: what the client owes. */
   netMinor: number;
-  vatMinor?: number;
   grossMinor: number;
-  currency: string;
-  /**
-   * Foreign invoices only: the rate the invoice was converted at and its VAT
-   * in sterling, which a VAT invoice in another currency has to show.
-   */
-  fxRate?: number;
-  fxRateDate?: string | null;
-  fxRateSource?: "boe" | "manual" | null;
-  vatPence?: number;
   /** "import" marks the PDF as a record of an invoice issued elsewhere. */
   source?: "alfa" | "import";
 }
@@ -58,6 +62,15 @@ export interface PdfQuote {
   netPence?: number;
   vatPence?: number;
   grossPence: number;
+}
+
+/** A credit note, in its invoice's currency and converted at its rate. */
+export interface PdfCreditNote extends PdfCurrencyFields {
+  number: string;
+  issueDate: string | null;
+  netMinor: number;
+  vatMinor: number;
+  grossMinor: number;
 }
 
 /** Set when rendering a credit note. */

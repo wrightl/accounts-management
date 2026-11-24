@@ -17,6 +17,7 @@ import type {
   DocumentView,
   PdfClient,
   PdfCompany,
+  PdfCreditNote,
   PdfCreditNoteDetails,
   PdfInvoice,
   PdfLine,
@@ -72,13 +73,7 @@ export async function renderInvoiceTemplatePdf(
 
 export async function renderCreditNoteTemplatePdf(
   params: DocumentParams & {
-    creditNote: {
-      number: string;
-      issueDate: string | null;
-      netPence: number;
-      vatPence: number;
-      grossPence: number;
-    };
+    creditNote: PdfCreditNote;
     details: PdfCreditNoteDetails;
   },
 ): Promise<Uint8Array> {

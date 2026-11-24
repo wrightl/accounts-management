@@ -7,6 +7,7 @@ import type { TemplateKey } from "@/lib/pdf/templates/registry";
 import type {
   PdfClient,
   PdfCompany,
+  PdfCreditNote,
   PdfInvoice,
   PdfLine,
 } from "@/lib/pdf/templates/types";
@@ -26,14 +27,7 @@ export async function renderInvoicePdfV2(params: {
 
 /** Credit note PDF: the same template as the invoice, with credit wording and the reason. */
 export async function renderCreditNotePdf(params: {
-  creditNote: {
-    number: string;
-    issueDate: string;
-    netPence: number;
-    vatPence: number;
-    grossPence: number;
-    reason: string;
-  };
+  creditNote: PdfCreditNote & { reason: string };
   invoiceNumber: string;
   client: PdfClient;
   lines: PdfLine[];

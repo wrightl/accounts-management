@@ -6,7 +6,8 @@ import { rowOfCompany } from "@/lib/tenant-scope";
 import { clientDisplayNameSql } from "@/lib/clients/sql";
 import { creditNoteInPack, type RecordScope } from "@/lib/accountant/record-scope";
 import { type ListPaging, fetchPage } from "@/lib/list-paging";
-import { formatGBP } from "@/lib/money";
+import { formatDocumentAmount, formatGBP, formatMoney } from "@/lib/money";
+import { isForeignDocumentCurrency } from "@/lib/currency";
 import type { CreditNoteStatus } from "@/lib/credit-notes/status";
 import { sortExpr, sortNumbered, sortRank, sortText } from "@/lib/sql-paging";
 import type { TableSort } from "@/lib/table-sort";
@@ -72,6 +73,9 @@ export async function listCreditNotePage(
           status: creditNotes.status,
           issueDate: creditNotes.issueDate,
           grossPence: creditNotes.grossPence,
+          grossMinor: creditNotes.grossMinor,
+          // Credit notes are in their invoice's currency.
+          currency: invoices.currency,
           invoiceId: creditNotes.invoiceId,
           invoiceNumber: invoices.number,
           clientName: clientDisplayNameSql.as("client_name"),
@@ -89,7 +93,7 @@ export async function listCreditNotePage(
     rows: page.rows.map((r) => ({
       ...r,
       status: r.status as CreditNoteStatus,
-      grossFormatted: formatGBP(r.grossPence),
+      grossFormatted: formatDocumentAmount(r.grossMinor, r.grossPence, r.currency),
     })),
   };
 }
@@ -127,16 +131,31 @@ export async function getCreditNoteDetail(
     .orderBy(creditNoteLineItems.position);
 
   const { creditNote, invoice, client } = rows[0];
+  // In the invoice's currency, converted to sterling at the invoice's rate.
+  const money = (minor: number) => formatMoney(minor, invoice.currency);
+  const foreign = isForeignDocumentCurrency(invoice.currency);
   return {
     creditNote: {
       ...creditNote,
       status: creditNote.status as CreditNoteStatus,
-      netFormatted: formatGBP(creditNote.netPence),
-      vatFormatted: formatGBP(creditNote.vatPence),
-      grossFormatted: formatGBP(creditNote.grossPence),
-      refundedFormatted: formatGBP(creditNote.refundedPence),
+      currency: invoice.currency,
+      fxRate: invoice.fxRate,
+      fxRateDate: invoice.fxRateDate,
+      fxRateSource: invoice.fxRateSource,
+      netFormatted: money(creditNote.netMinor),
+      vatFormatted: money(creditNote.vatMinor),
+      grossFormatted: money(creditNote.grossMinor),
+      grossSterlingFormatted: formatGBP(creditNote.grossPence),
+      refundedFormatted: foreign
+        ? formatDocumentAmount(creditNote.refundedMinor, creditNote.refundedPence, invoice.currency)
+        : money(creditNote.refundedMinor),
     },
-    invoice: { id: invoice.id, number: invoice.number, grossPence: invoice.grossPence },
+    invoice: {
+      id: invoice.id,
+      number: invoice.number,
+      grossPence: invoice.grossPence,
+      currency: invoice.currency,
+    },
     client,
     lines,
   };

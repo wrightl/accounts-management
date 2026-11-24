@@ -15,7 +15,7 @@ export default async function ReminderSettingsPage() {
   const company = await getOrCreateCompanySettings(companyId);
   const today = todayIsoDate();
   const example = latePaymentCharge({
-    amountDuePence: 500_000,
+    amountDue: 500_000,
     dueDate: addDays(today, -30),
     asOf: today,
   })!;
@@ -30,7 +30,7 @@ export default async function ReminderSettingsPage() {
         remindersEnabled={company.remindersEnabled}
         schedule={company.reminderScheduleDays}
         latePaymentCharges={company.latePaymentCharges}
-        exampleCharge={`For example, £5,000 paid 30 days late adds ${formatGBP(example.interestPence)} interest at ${example.ratePercent}% plus ${formatGBP(example.compensationPence)} compensation.`}
+        exampleCharge={`For example, £5,000 paid 30 days late adds ${formatGBP(example.interest)} interest at ${example.ratePercent}% plus ${formatGBP(example.compensationPence)} compensation.`}
       />
     </div>
   );

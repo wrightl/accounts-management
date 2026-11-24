@@ -10,7 +10,13 @@ import {
 import { renderDesignPdf } from "@/lib/pdf/designer/render";
 import { renderInvoiceTemplatePdf } from "@/lib/pdf/templates/render";
 import { getCompanyTemplate } from "@/lib/pdf/templates/resolve";
-import type { PdfClient, PdfInvoice, PdfLine, PdfQuote } from "@/lib/pdf/templates/types";
+import type {
+  PdfClient,
+  PdfCreditNote,
+  PdfInvoice,
+  PdfLine,
+  PdfQuote,
+} from "@/lib/pdf/templates/types";
 import { renderQuotePdf } from "@/lib/quotes/pdf";
 
 /*
@@ -41,14 +47,7 @@ export async function renderCompanyInvoicePdf(
 export async function renderCompanyCreditNotePdf(
   company: Company,
   params: {
-    creditNote: {
-      number: string;
-      issueDate: string;
-      netPence: number;
-      vatPence: number;
-      grossPence: number;
-      reason: string;
-    };
+    creditNote: PdfCreditNote & { reason: string };
     invoiceNumber: string;
     client: PdfClient;
     lines: PdfLine[];

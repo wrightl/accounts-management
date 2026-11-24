@@ -62,3 +62,17 @@ export async function documentRate(
     },
   };
 }
+
+/**
+ * Units of `currency` per £1 on `onDate` from the Bank of England, or
+ * `fallback` (usually the document's own rate) when that can't be had.
+ * For estimates and charges, never for a document's booked rate.
+ */
+export async function rateOrFallback(
+  currency: string,
+  onDate: string,
+  fallback: number,
+): Promise<number> {
+  const result = await documentRate(currency, onDate);
+  return result.ok ? result.rate.fxRate : fallback;
+}

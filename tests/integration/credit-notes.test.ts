@@ -8,6 +8,7 @@ import {
   creditNotes,
   invoiceLineItems,
   invoices,
+  payments,
   users,
 } from "@/db/schema";
 import { seedCompany } from "@/lib/test/seed-company";
@@ -371,5 +372,108 @@ describe("credit notes", () => {
     const detail = await getCreditNoteDetail(companyId, credit.id!);
     expect(detail?.creditNote.sentAt).not.toBeNull();
     expect((await voidCreditNote(credit.id!)).ok).toBe(false);
+  });
+});
+
+/** A sent $1,500 invoice (4 days at $312.50 + 20% VAT) booked at 1.25, so £1,200. */
+async function seedUsdInvoice() {
+  const [inv] = await db
+    .insert(invoices)
+    .values({
+      companyId,
+      number: "DD-2026-0101",
+      clientId,
+      status: "sent",
+      issueDate: "2026-03-01",
+      dueDate: "2026-03-15",
+      currency: "USD",
+      fxRate: 1.25,
+      fxRateDate: "2026-03-01",
+      fxRateSource: "boe",
+      netMinor: 125000,
+      vatMinor: 25000,
+      grossMinor: 150000,
+      netPence: 100000,
+      vatPence: 20000,
+      grossPence: 120000,
+    })
+    .returning();
+  await db.insert(invoiceLineItems).values({
+    invoiceId: inv.id,
+    description: "Workshop days",
+    quantity: 4,
+    unitPricePence: 31250,
+    vatRate: 20,
+    position: 0,
+  });
+  return inv.id;
+}
+
+describe("credit notes on a foreign invoice", () => {
+  beforeEach(() => {
+    // No Bank of England rates in tests: estimates fall back to the invoice's rate.
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("no network in tests")));
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("credits in the invoice's currency at the invoice's rate", async () => {
+    const invoiceId = await seedUsdInvoice();
+    const result = await createCreditNote(
+      invoiceId,
+      creditForm([{ description: "Day cancelled", quantity: 1, unitPricePounds: "312.50" }]),
+    );
+    expect(result.ok).toBe(true);
+    const [note] = await db.select().from(creditNotes).where(eq(creditNotes.id, result.id!));
+    // VAT reverses at the rate it was charged at.
+    expect(note).toMatchObject({
+      netMinor: 31250,
+      vatMinor: 6250,
+      grossMinor: 37500,
+      netPence: 25000,
+      vatPence: 5000,
+      grossPence: 30000,
+    });
+    const detail = await getCreditNoteDetail(companyId, result.id!);
+    expect(detail?.creditNote.grossFormatted).toBe("US$375.00");
+    expect(detail?.creditNote.grossSterlingFormatted).toBe("£300.00");
+  });
+
+  it("refunds in dollars, with the pounds that left the bank", async () => {
+    const invoiceId = await seedUsdInvoice();
+    await db.insert(payments).values({
+      invoiceId,
+      amountMinor: 150000,
+      amountPence: 118000,
+      receivedAt: new Date("2026-03-05T12:00:00Z"),
+    });
+    const credit = await createCreditNote(
+      invoiceId,
+      creditForm([{ description: "Day cancelled", quantity: 1, unitPricePounds: "312.50" }]),
+    );
+    const form = refundForm("375");
+    form.set("sterlingPounds", "290");
+    const refunded = await recordCreditNoteRefund(credit.id!, form);
+    expect(refunded.ok).toBe(true);
+    const [note] = await db.select().from(creditNotes).where(eq(creditNotes.id, credit.id!));
+    expect(note).toMatchObject({ refundedMinor: 37500, refundedPence: 29000 });
+    expect((await getInvoiceDetail(companyId, invoiceId))?.refundDueMinor).toBe(0);
+  });
+
+  it("estimates the pounds of a refund when they aren't given", async () => {
+    const invoiceId = await seedUsdInvoice();
+    await db.insert(payments).values({
+      invoiceId,
+      amountMinor: 150000,
+      amountPence: 118000,
+      receivedAt: new Date("2026-03-05T12:00:00Z"),
+    });
+    const credit = await createCreditNote(
+      invoiceId,
+      creditForm([{ description: "Day cancelled", quantity: 1, unitPricePounds: "312.50" }]),
+    );
+    expect((await recordCreditNoteRefund(credit.id!, refundForm("400"))).ok).toBe(false);
+    expect((await recordCreditNoteRefund(credit.id!, refundForm("375"))).ok).toBe(true);
+    const [note] = await db.select().from(creditNotes).where(eq(creditNotes.id, credit.id!));
+    expect(note).toMatchObject({ refundedMinor: 37500, refundedPence: 30000 });
   });
 });

@@ -16,7 +16,9 @@ import type {
   LabelledValue,
   PdfClient,
   PdfCompany,
+  PdfCreditNote,
   PdfCreditNoteDetails,
+  PdfCurrencyFields,
   PdfInvoice,
   PdfLine,
   PdfQuote,
@@ -49,30 +51,41 @@ function viewLines(lines: PdfLine[], currency: string = STERLING): DocumentViewL
  * The sterling VAT on a foreign invoice that charges VAT, which HMRC requires
  * a VAT invoice in another currency to show, or null.
  */
-export function sterlingVatRow(invoice: PdfInvoice): LabelledValue | null {
+export function sterlingVatRow(doc: PdfCurrencyFields): LabelledValue | null {
   if (
-    !isForeignDocumentCurrency(invoice.currency) ||
-    invoice.fxRate == null ||
-    invoice.vatPence == null ||
-    !invoice.vatMinor
+    !isForeignDocumentCurrency(doc.currency) ||
+    doc.fxRate == null ||
+    doc.vatPence == null ||
+    !doc.vatMinor
   ) {
     return null;
   }
   return {
-    label: `VAT in GBP at ${invoice.fxRate} ${invoice.currency} = £1`,
-    value: formatGBP(invoice.vatPence),
+    label: `VAT in GBP at ${doc.fxRate} ${doc.currency} = £1`,
+    value: formatGBP(doc.vatPence),
   };
 }
 
-/** How a foreign invoice was converted, for the small print; null for sterling. */
-export function invoiceRateNote(invoice: PdfInvoice): string | null {
-  if (!isForeignDocumentCurrency(invoice.currency) || invoice.fxRate == null) return null;
-  return `Amounts are in ${invoice.currency}. Converted to sterling at ${describeDocumentRate({
-    currency: invoice.currency,
-    fxRate: invoice.fxRate,
-    fxRateDate: invoice.fxRateDate ?? null,
-    fxRateSource: invoice.fxRateSource ?? null,
+/** How a foreign document was converted, for the small print; null for sterling. */
+export function invoiceRateNote(doc: PdfCurrencyFields): string | null {
+  if (!isForeignDocumentCurrency(doc.currency) || doc.fxRate == null) return null;
+  return `Amounts are in ${doc.currency}. Converted to sterling at ${describeDocumentRate({
+    currency: doc.currency,
+    fxRate: doc.fxRate,
+    fxRateDate: doc.fxRateDate ?? null,
+    fxRateSource: doc.fxRateSource ?? null,
   })}.`;
+}
+
+/** The subtotal rows of a document, with the sterling VAT row when it needs one. */
+function documentSubtotals(
+  doc: PdfCurrencyFields & { netMinor: number | null },
+  company: PdfCompany,
+): LabelledValue[] {
+  return [
+    ...subtotals(doc.netMinor, doc.vatMinor, company, doc.currency),
+    ...[sterlingVatRow(doc)].filter((row): row is LabelledValue => row != null),
+  ];
 }
 
 function recipient(label: string, client: PdfClient): DocumentView["recipient"] {
@@ -162,10 +175,7 @@ export function invoiceView(params: ViewBase & { invoice: PdfInvoice }): Documen
     sender: sender(company, contactEmail, showVatNumber),
     lines: viewLines(lines, invoice.currency),
     showDiscount: hasLineDiscount(lines),
-    subtotals: [
-      ...subtotals(invoice.netMinor, invoice.vatMinor, company, invoice.currency),
-      ...[sterlingVatRow(invoice)].filter((row): row is LabelledValue => row != null),
-    ],
+    subtotals: documentSubtotals(invoice, company),
     total: { label: "Total due", value: formatMoney(invoice.grossMinor, invoice.currency) },
     notes: invoice.notes ? { title: "Notes", body: invoice.notes } : null,
     detail: {
@@ -181,13 +191,7 @@ export function invoiceView(params: ViewBase & { invoice: PdfInvoice }): Documen
 
 export function creditNoteView(
   params: ViewBase & {
-    creditNote: {
-      number: string;
-      issueDate: string | null;
-      netPence: number;
-      vatPence: number;
-      grossPence: number;
-    };
+    creditNote: PdfCreditNote;
     details: PdfCreditNoteDetails;
   },
 ): DocumentView {
@@ -202,12 +206,19 @@ export function creditNoteView(
     banner: null,
     recipient: recipient("Bill to", client),
     sender: sender(company, contactEmail, true),
-    lines: viewLines(lines),
+    lines: viewLines(lines, creditNote.currency),
     showDiscount: hasLineDiscount(lines),
-    subtotals: subtotals(creditNote.netPence, creditNote.vatPence, company),
-    total: { label: "Total credited", value: formatGBP(creditNote.grossPence) },
+    subtotals: documentSubtotals(creditNote, company),
+    total: {
+      label: "Total credited",
+      value: formatMoney(creditNote.grossMinor, creditNote.currency),
+    },
     notes: null,
-    detail: { title: "Reason for credit", lines: [details.reason], footnote: null },
+    detail: {
+      title: "Reason for credit",
+      lines: [details.reason],
+      footnote: invoiceRateNote(creditNote),
+    },
     footerParts: footerParts(company, contactEmail, true),
   };
 }

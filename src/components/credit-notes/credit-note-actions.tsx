@@ -19,6 +19,7 @@ import {
   parseCreditNoteRefundInput,
 } from "@/lib/credit-notes/schema";
 import { penceToPounds } from "@/lib/money";
+import { SterlingAmountField } from "@/components/documents/sterling-amount-field";
 
 export function CreditNoteActions({
   creditNoteId,
@@ -26,8 +27,9 @@ export function CreditNoteActions({
   canSend,
   sent,
   canVoid,
-  /** Refund the client is owed for this note; 0 hides "Record refund". */
-  refundablePence,
+  /** Refund the client is owed for this note, in its currency; 0 hides "Record refund". */
+  refundableMinor,
+  currency = "GBP",
   today,
 }: {
   creditNoteId: string;
@@ -35,7 +37,9 @@ export function CreditNoteActions({
   canSend: boolean;
   sent: boolean;
   canVoid: boolean;
-  refundablePence: number;
+  refundableMinor: number;
+  /** The credited invoice's currency; a foreign refund also records the pounds paid out. */
+  currency?: string;
   today: string;
 }) {
   const router = useRouter();
@@ -51,6 +55,9 @@ export function CreditNoteActions({
   } = useFieldErrors();
   const [pending, startTransition] = useTransition();
   const [showRefund, setShowRefund] = useState(false);
+  const foreign = currency !== "GBP";
+  const [refundAmount, setRefundAmount] = useState(String(penceToPounds(refundableMinor)));
+  const [refundDate, setRefundDate] = useState(today);
   const formRef = useRef<HTMLFormElement>(null);
 
   function run(action: () => Promise<{ ok: boolean; error?: string }>) {
@@ -113,7 +120,7 @@ export function CreditNoteActions({
             {pending ? "Sending…" : sent ? "Resend to client" : "Send to client"}
           </Button>
         ) : null}
-        {canWrite && refundablePence > 0 ? (
+        {canWrite && refundableMinor > 0 ? (
           <Button
             type="button"
             variant={sent || !canSend ? "primary" : "ghost"}
@@ -147,17 +154,20 @@ export function CreditNoteActions({
           <div className="grid gap-3 sm:grid-cols-3">
             <div>
               <Label htmlFor="refund-amount" required>
-                Amount £
+                {foreign ? `Amount (${currency})` : "Amount £"}
               </Label>
               <Input
                 id="refund-amount"
                 name="amountPounds"
                 inputMode="decimal"
-                defaultValue={String(penceToPounds(refundablePence))}
+                value={refundAmount}
                 disabled={pending}
                 aria-invalid={Boolean(fieldErrors.amountPounds)}
                 aria-describedby={fieldErrors.amountPounds ? "refund-amount-error" : undefined}
-                onChange={() => clearField("amountPounds")}
+                onChange={(e) => {
+                  clearField("amountPounds");
+                  setRefundAmount(e.target.value);
+                }}
               />
               <FieldError id="refund-amount-error">{fieldErrors.amountPounds}</FieldError>
             </div>
@@ -173,7 +183,10 @@ export function CreditNoteActions({
                 disabled={pending}
                 aria-invalid={Boolean(fieldErrors.refundedAt)}
                 aria-describedby={fieldErrors.refundedAt ? "refund-date-error" : undefined}
-                onChange={() => clearField("refundedAt")}
+                onChange={(e) => {
+                  clearField("refundedAt");
+                  setRefundDate(e.target.value);
+                }}
               />
               <FieldError id="refund-date-error">{fieldErrors.refundedAt}</FieldError>
             </div>
@@ -187,6 +200,18 @@ export function CreditNoteActions({
               />
             </div>
           </div>
+          {foreign ? (
+            <SterlingAmountField
+              id="refund-sterling"
+              label="Left your bank (£)"
+              currency={currency}
+              foreignAmount={refundAmount}
+              date={refundDate}
+              disabled={pending}
+              error={fieldErrors.sterlingPounds}
+              onChange={() => clearField("sterlingPounds")}
+            />
+          ) : null}
           <FieldError>{error}</FieldError>
           <div className="flex gap-2">
             <Button type="submit" disabled={pending}>

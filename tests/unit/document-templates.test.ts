@@ -242,6 +242,26 @@ describe("document views", () => {
     );
   });
 
+  it("shows a foreign credit note in its invoice's currency, with sterling VAT", () => {
+    const view = creditNoteView({
+      ...base,
+      creditNote: {
+        ...SAMPLE_CREDIT_NOTE,
+        currency: "EUR",
+        fxRate: 1.2,
+        fxRateDate: "2026-01-13",
+        fxRateSource: "manual",
+        vatPence: 39500,
+      },
+      details: SAMPLE_CREDIT_NOTE_DETAILS,
+    });
+    expect(view.total.value).toBe("€2,844.00");
+    expect(view.subtotals.at(-1)).toEqual({ label: "VAT in GBP at 1.2 EUR = £1", value: "£395.00" });
+    expect(view.detail?.footnote).toBe(
+      "Amounts are in EUR. Converted to sterling at 1 GBP = 1.2 EUR (agreed rate, 13 January 2026).",
+    );
+  });
+
   it("adds no sterling rows to a sterling invoice", () => {
     const view = invoiceView({ ...base, invoice: SAMPLE_INVOICE });
     expect(view.subtotals.map((row) => row.label)).toEqual(["Subtotal", "VAT"]);

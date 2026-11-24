@@ -7,7 +7,7 @@ import type { ActionResult } from "@/actions/result";
 import { writeAudit } from "@/lib/audit";
 import { creditAdjustmentForInvoice } from "@/lib/credit-notes/adjustments";
 import type { Tx } from "@/lib/invoices/allocate";
-import { isForeignDocumentCurrency } from "@/lib/currency";
+import { toSterlingPence } from "@/lib/currency";
 import { invoiceBalance, isInvoiceSettled, settlementMinor } from "@/lib/invoices/balance";
 import { syncFxDifference } from "@/lib/invoices/fx-difference";
 import { storedStatus, todayIsoDate } from "@/lib/invoices/status";
@@ -91,9 +91,9 @@ export async function writeOffInvoiceBalance(
   }
   const { kind, writtenOffOn, note } = parsed.data;
 
-  let amountPence: number;
+  let amountMinor: number;
   try {
-    amountPence = poundsToPence(parsed.data.amountPounds);
+    amountMinor = poundsToPence(parsed.data.amountPounds);
   } catch (e) {
     return {
       ok: false,
@@ -101,7 +101,7 @@ export async function writeOffInvoiceBalance(
       fieldErrors: { amountPounds: e instanceof Error ? e.message : "Invalid amount" },
     };
   }
-  if (amountPence <= 0) {
+  if (amountMinor <= 0) {
     return {
       ok: false,
       error: FORM_FIELD_ERROR_SUMMARY,
@@ -122,14 +122,10 @@ export async function writeOffInvoiceBalance(
       if (inv.issueDate && writtenOffOn < inv.issueDate) {
         throw new WriteOffError("A write-off can't be dated before its invoice");
       }
-      if (isForeignDocumentCurrency(inv.currency)) {
-        // Needs the amount in both currencies; comes with foreign-currency write-offs.
-        throw new WriteOffError(`Write-offs on ${inv.currency} invoices can't be recorded yet`);
-      }
       const { balanceMinor } = await balanceOf(tx, inv);
-      if (amountPence > balanceMinor) {
+      if (amountMinor > balanceMinor) {
         throw new WriteOffError(
-          `Write-off is more than the ${formatGBP(Math.max(0, balanceMinor))} still owed`,
+          `Write-off is more than the ${formatMoney(Math.max(0, balanceMinor), inv.currency)} still owed`,
         );
       }
 
@@ -139,21 +135,24 @@ export async function writeOffInvoiceBalance(
           companyId,
           invoiceId,
           kind,
-          amountPence,
-          // Sterling invoice (checked above), so the two amounts are equal.
-          amountMinor: amountPence,
+          // In the invoice's currency, and in sterling at the invoice's rate:
+          // the part of the debt booked at that rate that won't be collected.
+          amountPence: toSterlingPence(amountMinor, inv.fxRate),
+          amountMinor,
           writtenOffOn,
           note,
           createdByUserId: localUserId,
         })
         .returning({ id: invoiceWriteOffs.id });
 
-      if (amountPence === balanceMinor) {
+      if (amountMinor === balanceMinor) {
         await tx
           .update(invoices)
           .set({ status: "paid", paidAt: new Date(`${writtenOffOn}T12:00:00Z`) })
           .where(and(eq(invoices.id, invoiceId), eq(invoices.companyId, companyId)));
       }
+      // Settling a foreign invoice this way realises its exchange difference.
+      await syncFxDifference(tx, companyId, invoiceId, writtenOffOn);
       return row.id;
     });
   } catch (e) {
@@ -167,7 +166,7 @@ export async function writeOffInvoiceBalance(
     action: "invoice.write_off",
     entityType: "invoice",
     entityId: invoiceId,
-    meta: { writeOffId: id, kind, amountPence, writtenOffOn },
+    meta: { writeOffId: id, kind, amountMinor, writtenOffOn },
   });
   return { ok: true, id };
 }

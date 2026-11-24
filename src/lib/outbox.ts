@@ -6,7 +6,8 @@ import { clients, companies, invoices, payments, sendJobs } from "@/db/schema";
 import { sendClientEmail } from "@/lib/email/client-email";
 import { resolveClientEmailSender } from "@/lib/email/resolve-client-sender";
 import { escapeHtml } from "@/lib/html";
-import { formatGBP, formatMoney } from "@/lib/money";
+import { formatDocumentAmount, formatMoney } from "@/lib/money";
+import { rateOrFallback } from "@/lib/document-rate";
 import { getInvoiceDetail } from "@/lib/invoices/queries";
 import { getCompanySettings } from "@/lib/settings/queries";
 import { loadOrRenderInvoicePdf } from "@/lib/invoices/pdf-cache";
@@ -438,15 +439,18 @@ async function deliverReminder(
 
   const charge =
     // Payment history on imports can be incomplete, so interest could be wrong.
-    // Statutory charges are worked out in sterling; foreign invoices get them in a later change.
-    !beforeDue &&
-    company.latePaymentCharges &&
-    row.invoice.source !== "import" &&
-    !isForeignDocumentCurrency(currency)
-      ? latePaymentCharge({ amountDuePence: amountDue, dueDate, asOf: todayIsoDate() })
+    !beforeDue && company.latePaymentCharges && row.invoice.source !== "import"
+      ? latePaymentCharge({
+          amountDue,
+          dueDate,
+          asOf: todayIsoDate(),
+          fxRate: isForeignDocumentCurrency(currency)
+            ? await rateOrFallback(currency, todayIsoDate(), row.invoice.fxRate)
+            : 1,
+        })
       : null;
   const chargeText = charge
-    ? `Under the Late Payment of Commercial Debts (Interest) Act 1998 we're entitled to statutory interest at ${charge.ratePercent}% a year (Bank of England base rate of ${charge.basePercent}% plus 8%) and fixed compensation of ${formatGBP(charge.compensationPence)}. Interest to date is ${formatGBP(charge.interestPence)} and is adding up at ${formatGBP(charge.dailyInterestPence)} a day until the invoice is paid.`
+    ? `Under the Late Payment of Commercial Debts (Interest) Act 1998 we're entitled to statutory interest at ${charge.ratePercent}% a year (Bank of England base rate of ${charge.basePercent}% plus 8%) and fixed compensation of ${formatDocumentAmount(charge.compensation, charge.compensationPence, currency)}. Interest to date is ${formatMoney(charge.interest, currency)} and is adding up at ${formatMoney(charge.dailyInterest, currency)} a day until the invoice is paid.`
     : null;
 
   await sendClientEmail(row.invoice.companyId, {

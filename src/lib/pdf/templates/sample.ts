@@ -1,6 +1,7 @@
 import type {
   PdfClient,
   PdfCompany,
+  PdfCreditNote,
   PdfCreditNoteDetails,
   PdfInvoice,
   PdfLine,
@@ -46,12 +47,13 @@ export const SAMPLE_INVOICE: PdfInvoice = {
   currency: "GBP",
 };
 
-export const SAMPLE_CREDIT_NOTE = {
+export const SAMPLE_CREDIT_NOTE: PdfCreditNote = {
   number: "CN-2026-0003",
   issueDate: "2026-01-20",
-  netPence: 237000,
-  vatPence: 47400,
-  grossPence: 284400,
+  netMinor: 237000,
+  vatMinor: 47400,
+  grossMinor: 284400,
+  currency: "GBP",
 };
 
 export const SAMPLE_CREDIT_NOTE_DETAILS: PdfCreditNoteDetails = {

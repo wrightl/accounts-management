@@ -8,6 +8,7 @@ import {
   clients,
   companies,
   expenses,
+  fxRates,
   invoiceLineItems,
   invoices,
   notifications,
@@ -207,6 +208,30 @@ describe("reminder emails", () => {
 });
 
 describe("late payment invoice", () => {
+  it("claims on a foreign invoice in its currency, at today's rate", async () => {
+    await db.insert(fxRates).values({ currency: "USD", observationDate: today, foreignPerGbp: 1.25 });
+    const late = await seedInvoice({ issueDate: addDays(today, -60), dueDate: addDays(today, -30) });
+    // $5,000, booked at 1.25.
+    await db
+      .update(invoices)
+      .set({ currency: "USD", fxRate: 1.25, netMinor: 500_000, grossMinor: 500_000, netPence: 400_000, grossPence: 400_000 })
+      .where(eq(invoices.id, late));
+    const result = await raiseLatePaymentInvoice(late);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const [claim] = await db.select().from(invoices).where(eq(invoices.id, result.id!));
+    expect(claim).toMatchObject({ currency: "USD", fxRate: 1.25, fxRateSource: "boe" });
+    const lines = await db
+      .select()
+      .from(invoiceLineItems)
+      .where(eq(invoiceLineItems.invoiceId, claim!.id));
+    // £4,000 of debt is in the £70 band: $87.50.
+    expect(lines[1]!.unitPricePence).toBe(8_750);
+    expect(lines[1]!.description).toMatch(/£70\.00/);
+    expect(claim!.grossMinor).toBe(lines[0]!.unitPricePence + 8_750);
+    expect(claim!.grossPence).toBe(Math.round(claim!.grossMinor / 1.25));
+  });
+
   it("raises a draft claiming interest and compensation, once", async () => {
     const late = await seedInvoice({ issueDate: addDays(today, -60), dueDate: addDays(today, -30) });
     const result = await raiseLatePaymentInvoice(late);

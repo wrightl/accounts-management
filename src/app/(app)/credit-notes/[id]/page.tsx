@@ -13,12 +13,13 @@ import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import {
   formatDiscountPercent,
-  formatGBP,
+  formatMoney,
   formatQuantity,
   hasLineDiscount,
   lineNetPence,
 } from "@/lib/money";
 import { clientDisplayName } from "@/lib/clients/display";
+import { describeDocumentRate, isForeignDocumentCurrency } from "@/lib/currency";
 import { DisplayDate } from "@/components/date-format-provider";
 import { PageHeader } from "@/components/ui/page-header";
 
@@ -37,8 +38,9 @@ export default async function CreditNoteDetailPage({
   const { creditNote, invoice, client, lines } = detail;
 
   const invoiceDetail = await getInvoiceDetail(companyId, invoice.id);
-  const refundablePence =
-    creditNote.status === "issued" && creditNote.refundedPence === 0
+  // In the invoice's currency.
+  const refundableMinor =
+    creditNote.status === "issued" && creditNote.refundedMinor === 0
       ? Math.min(invoiceDetail?.refundDueMinor ?? 0, creditNote.grossMinor)
       : 0;
 
@@ -76,7 +78,8 @@ export default async function CreditNoteDetailPage({
           canSend={creditNote.status === "issued"}
           sent={creditNote.sentAt != null}
           canVoid={canVoidCreditNote(creditNote)}
-          refundablePence={refundablePence}
+          refundableMinor={refundableMinor}
+          currency={creditNote.currency}
           today={todayIsoDate()}
         />
       </div>
@@ -87,6 +90,12 @@ export default async function CreditNoteDetailPage({
           <CardValue>{creditNote.grossFormatted}</CardValue>
         </Card>
       </div>
+      {isForeignDocumentCurrency(creditNote.currency) ? (
+        <p className="mt-2 text-sm text-muted">
+          {creditNote.grossSterlingFormatted} in your books, at the invoice&apos;s rate of{" "}
+          {describeDocumentRate(creditNote)}.
+        </p>
+      ) : null}
 
       <div className="mt-6">
         <h2 className="mb-2 font-display text-lg font-semibold">Reason</h2>
@@ -112,19 +121,19 @@ export default async function CreditNoteDetailPage({
               <TR key={line.id}>
                 <TD>{line.description}</TD>
                 <TD className="text-right">{formatQuantity(line.quantity)}</TD>
-                <TD className="text-right">{formatGBP(line.unitPricePence)}</TD>
+                <TD className="text-right">{formatMoney(line.unitPricePence, creditNote.currency)}</TD>
                 {hasLineDiscount(lines) ? (
                   <TD className="text-right">
                     {formatDiscountPercent(line.discountPercent)}
                   </TD>
                 ) : null}
-                <TD className="text-right">{formatGBP(lineNetPence(line))}</TD>
+                <TD className="text-right">{formatMoney(lineNetPence(line), creditNote.currency)}</TD>
               </TR>
             ))}
           </TBody>
         </Table>
         <div className="mt-3 space-y-1 text-right text-sm text-muted">
-          {creditNote.vatPence > 0 ? (
+          {creditNote.vatMinor > 0 ? (
             <>
               <p>Net {creditNote.netFormatted}</p>
               <p>VAT {creditNote.vatFormatted}</p>
@@ -133,7 +142,7 @@ export default async function CreditNoteDetailPage({
         </div>
       </div>
 
-      {creditNote.refundedPence > 0 ? (
+      {creditNote.refundedMinor > 0 ? (
         <div className="mt-8">
           <h2 className="mb-2 font-display text-lg font-semibold">Refund</h2>
           <p className="text-sm text-muted">
@@ -141,9 +150,9 @@ export default async function CreditNoteDetailPage({
             {creditNote.refundReference ? ` · Ref ${creditNote.refundReference}` : null}
           </p>
         </div>
-      ) : refundablePence > 0 ? (
+      ) : refundableMinor > 0 ? (
         <p className="mt-8 text-sm text-muted">
-          {formatGBP(refundablePence)} is owed back to the client because{" "}
+          {formatMoney(refundableMinor, creditNote.currency)} is owed back to the client because{" "}
           {invoice.number} had already been paid. Record the refund once you&apos;ve
           paid it.
         </p>

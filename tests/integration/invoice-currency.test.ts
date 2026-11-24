@@ -20,6 +20,7 @@ import { createDraftInvoiceRecord, invoiceCurrencyFields } from "@/lib/invoices/
 import { getInvoiceDetail } from "@/lib/invoices/queries";
 import { linkPaymentToBankTransaction, listReceiptsForPayment } from "@/lib/payments/link-bank";
 import { recordInvoicePayment } from "@/lib/payments/record";
+import { writeOffInvoiceBalance } from "@/lib/invoices/write-offs";
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -331,5 +332,41 @@ describe("bank lines for a foreign invoice", () => {
       tx.id,
     );
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("writing off a foreign invoice's balance", () => {
+  it("writes off in its currency at the invoice's rate and settles the exchange difference", async () => {
+    const inv = await sentUsdInvoice();
+    // $60 of the $70 arrived as £47.00; the client's bank kept $10.
+    await recordInvoicePayment({ companyId, localUserId: actorId }, inv.id, {
+      amountPounds: "60.00",
+      sterlingPounds: "47.00",
+      receivedAt: "2026-05-20",
+    });
+    const result = await writeOffInvoiceBalance({ companyId, localUserId: actorId }, inv.id, {
+      kind: "bank_charges",
+      amountPounds: "10.00",
+      writtenOffOn: "2026-05-21",
+    });
+    expect(result.ok).toBe(true);
+    const [row] = await db
+      .select()
+      .from(invoiceWriteOffs)
+      .where(and(eq(invoiceWriteOffs.invoiceId, inv.id), eq(invoiceWriteOffs.kind, "bank_charges")));
+    expect(row).toMatchObject({ amountMinor: 1_000, amountPence: 800 });
+    expect((await getInvoiceDetail(companyId, inv.id))?.invoice.status).toBe("paid");
+    // Booked £56.00, less £8.00 written off, less £47.00 received: £1.00 lost on exchange.
+    expect(await fxDifference(inv.id)).toBe(100);
+  });
+
+  it("won't write off more than is owed in its currency", async () => {
+    const inv = await sentUsdInvoice();
+    const result = await writeOffInvoiceBalance({ companyId, localUserId: actorId }, inv.id, {
+      kind: "bad_debt",
+      amountPounds: "70.01",
+      writtenOffOn: "2026-05-21",
+    });
+    expect(result).toMatchObject({ ok: false, error: expect.stringMatching(/US\$70\.00/) });
   });
 });
