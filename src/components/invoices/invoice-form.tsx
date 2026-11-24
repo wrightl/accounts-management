@@ -28,11 +28,13 @@ import {
   parseInvoiceInput,
 } from "@/lib/invoices/schema";
 import {
-  VatRateField,
-  choiceFromVatRate,
-  vatRateFromChoice,
-  type VatRateFieldValue,
-} from "@/components/documents/vat-rate-field";
+  TaxCodeField,
+  choiceFromLineTax,
+  lineTaxFromChoice,
+  postedLineTax,
+  type TaxCodeFieldValue,
+} from "@/components/documents/tax-code-field";
+import type { TaxCode } from "@/lib/tax-codes";
 import { Plus, Trash2 } from "lucide-react";
 import { PAGE_WIDTH } from "@/components/ui/page-width";
 
@@ -44,6 +46,8 @@ export interface LineDraft {
   /** Percent off the line; blank for no discount. */
   discountPercent: string;
   vatRate: number;
+  /** Unset on lines saved before tax codes; the rate then implies it. */
+  taxCode?: TaxCode;
   /** Set when the line recharges a rebillable expense. */
   expenseId?: string;
 }
@@ -151,7 +155,7 @@ export function InvoiceForm({
     if (initialLines && initialLines.length > 0) {
       return initialLines.map((l) => ({
         ...l,
-        vatRate: vatRegistered ? l.vatRate : 0,
+        ...postedLineTax(l, vatRegistered),
       }));
     }
     // Recharged expenses only go on GBP invoices.
@@ -212,7 +216,7 @@ export function InvoiceForm({
             quantity: Number(l.quantity) || 0,
             unitPricePence: poundsToPence(l.unitPricePounds || "0"),
             discountPercent: Number(l.discountPercent) || 0,
-            vatRate: vatRegistered ? l.vatRate : 0,
+            ...postedLineTax(l, vatRegistered),
           })),
       );
     } catch {
@@ -231,7 +235,7 @@ export function InvoiceForm({
           unitPricePounds: l.unitPricePounds,
           discountPercent:
             l.discountPercent.trim() === "" ? 0 : Number(l.discountPercent),
-          vatRate: vatRegistered ? l.vatRate : 0,
+          ...postedLineTax(l, vatRegistered),
           ...(l.expenseId ? { expenseId: l.expenseId } : {}),
         })),
       ),
@@ -256,10 +260,10 @@ export function InvoiceForm({
     });
   }
 
-  function setLineVat(index: number, value: VatRateFieldValue) {
+  function setLineVat(index: number, value: TaxCodeFieldValue) {
     setLines((prev) =>
       prev.map((l, i) =>
-        i === index ? { ...l, vatRate: vatRateFromChoice(value) } : l,
+        i === index ? { ...l, ...lineTaxFromChoice(value) } : l,
       ),
     );
   }
@@ -480,11 +484,11 @@ export function InvoiceForm({
                 </FieldError>
               </div>
               {vatRegistered ? (
-                <VatRateField
+                <TaxCodeField
                   id={`vat-${line.key}`}
                   label=""
                   compact
-                  value={choiceFromVatRate(line.vatRate)}
+                  value={choiceFromLineTax(line)}
                   onChange={(v) => setLineVat(index, v)}
                   disabled={pending}
                 />

@@ -1,4 +1,5 @@
 import "server-only";
+import { isTaxCode } from "@/lib/tax-codes";
 import { sterlingTotals } from "@/lib/currency";
 import type { Database } from "@/db";
 import { quoteVersions } from "@/db/schema";
@@ -49,6 +50,8 @@ export function linesToSnapshot(
     quantity: number;
     unitPricePence: number;
     vatRate?: number;
+    taxCode?: string | null;
+    taxCodeNeedsReview?: boolean;
     discountPercent?: number;
     position: number;
   }[],
@@ -58,6 +61,9 @@ export function linesToSnapshot(
     quantity: l.quantity,
     unitPricePence: l.unitPricePence,
     vatRate: l.vatRate ?? 0,
+    ...(isTaxCode(l.taxCode)
+      ? { taxCode: l.taxCode, taxCodeNeedsReview: l.taxCodeNeedsReview === true }
+      : {}),
     discountPercent: l.discountPercent ?? 0,
     position: l.position,
   }));

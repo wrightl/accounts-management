@@ -1,6 +1,8 @@
 "use server";
 
 import { sterlingTotals } from "@/lib/currency";
+import { getOrCreateCompanySettings } from "@/lib/settings/queries";
+import { carriedLineTax } from "@/lib/tax-codes";
 import { and, asc, eq, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 import { getDb } from "@/db";
 import { matchOfCompany } from "@/lib/bank/match-scope";
@@ -386,6 +388,8 @@ export async function commitInvoiceImportChunk(
     "accounts:write",
     async ({ companyId, localUserId }) => {
       const db = getDb();
+      // Codes the imported lines; history can carry any rate.
+      const importCompany = await getOrCreateCompanySettings(companyId);
       const result = await db.transaction(async (tx): Promise<CommitChunkResult> => {
         // Under the lock saveInvoiceCutover takes, so a cutover saved while this
         // runs can't leave rows flagged against the old date.
@@ -647,7 +651,7 @@ export async function commitInvoiceImportChunk(
               description: line.description,
               quantity: line.quantity,
               unitPricePence: line.unitPricePence,
-              vatRate: line.vatRate,
+              ...carriedLineTax(line, importCompany),
               discountPercent: line.discountPercent,
               position,
             })),

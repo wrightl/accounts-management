@@ -25,6 +25,7 @@ import {
   users,
 } from "@/db/schema";
 import { PLATFORM_ADMIN_ROLE } from "@/lib/roles";
+import { applyTaxCodeBackfill } from "@/lib/tax-code-backfill";
 
 /** Fixed promo document numbers — safe to upsert by. */
 export const PROMO_NUMBERS = {
@@ -572,6 +573,9 @@ export async function seedPromoDemo(
       raw: { Balance: "17160.00" },
     },
   ]);
+
+  // Give the seeded lines and expenses tax codes, as the app would have.
+  await applyTaxCodeBackfill(db, { companyId });
 
   return {
     routes: {

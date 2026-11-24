@@ -9,6 +9,7 @@ import {
   recurringInvoices,
 } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
+import { carriedLineTax } from "@/lib/tax-codes";
 
 import { allocateInvoiceNumber } from "@/lib/invoices/allocate";
 import {
@@ -294,13 +295,17 @@ async function generateFromTemplateRow(
         })
         .returning({ id: invoices.id });
 
+      const [company] = await tx
+        .select({ vatRegistered: companies.vatRegistered })
+        .from(companies)
+        .where(eq(companies.id, tmpl.companyId));
       await tx.insert(invoiceLineItems).values(
         lines.map((l, i) => ({
           invoiceId: inv.id,
           description: l.description,
           quantity: l.quantity,
           unitPricePence: l.unitPricePence,
-          vatRate: l.vatRate ?? 0,
+          ...carriedLineTax(l, company ?? { vatRegistered: false }),
           discountPercent: l.discountPercent ?? 0,
           position: i,
         })),

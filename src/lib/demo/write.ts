@@ -48,6 +48,29 @@ import {
   yearEndRuns,
 } from "@/db/schema";
 import type { DemoBooks } from "@/lib/demo/generate";
+import { inferExpenseTaxCode, inferStoredTaxCode } from "@/lib/tax-codes";
+
+type Registration = { vatRegistered?: boolean | null };
+
+/**
+ * The demo's lines with tax codes, from their rates. The demo books are made
+ * up to be right, so nothing is flagged for review.
+ */
+function coded<T extends { vatRate?: number | null }>(rows: T[], company: Registration): T[] {
+  return rows.map((r) => ({
+    ...r,
+    taxCode: inferStoredTaxCode(r.vatRate ?? 0, company).code,
+    taxCodeNeedsReview: false,
+  }));
+}
+
+/** The same for line lists saved as JSON (quote versions, recurring templates). */
+function codedJson(lines: unknown, company: Registration): unknown {
+  if (!Array.isArray(lines)) return lines;
+  return lines.map((l: unknown) =>
+    l && typeof l === "object" ? coded([l as { vatRate?: number }], company)[0] : l,
+  );
+}
 
 /** Rows per insert: well under Postgres's 65,535 bind parameters for any table here. */
 const CHUNK = 400;
@@ -80,6 +103,7 @@ export async function writeDemoBooks(
     .update(companies)
     .set({ ...books.company, logoUrl: extra.logoPath, updatedAt: new Date() })
     .where(eq(companies.id, companyId));
+  const company: Registration = { vatRegistered: books.company.vatRegistered };
 
   await insertAll(tx, labels, books.labels);
   await insertAll(tx, bankSpendingCategories, books.spendingCategories);
@@ -87,15 +111,23 @@ export async function writeDemoBooks(
   await insertAll(tx, bankAccounts, books.bankAccounts);
   await insertAll(tx, shareholders, books.shareholders);
   await insertAll(tx, clients, books.clients);
-  await insertAll(tx, recurringInvoices, books.recurringInvoices);
+  await insertAll(
+    tx,
+    recurringInvoices,
+    books.recurringInvoices.map((r) => ({ ...r, lineTemplate: codedJson(r.lineTemplate, company) })),
+  );
 
   // Quotes point at their orders, so orders go in first.
   await insertAll(tx, orders, books.orders);
-  await insertAll(tx, orderLineItems, books.orderLineItems);
+  await insertAll(tx, orderLineItems, coded(books.orderLineItems, company));
   await insertAll(tx, orderPaymentMilestones, books.orderMilestones);
   await insertAll(tx, quotes, books.quotes);
-  await insertAll(tx, quoteVersions, books.quoteVersions);
-  await insertAll(tx, quoteLineItems, books.quoteLineItems);
+  await insertAll(
+    tx,
+    quoteVersions,
+    books.quoteVersions.map((v) => ({ ...v, lines: codedJson(v.lines, company) })),
+  );
+  await insertAll(tx, quoteLineItems, coded(books.quoteLineItems, company));
   await insertAll(tx, quotePaymentMilestones, books.quoteMilestones);
 
   // Inbound emails and expenses point at each other: link them after both exist.
@@ -104,7 +136,21 @@ export async function writeDemoBooks(
     inboundEmailJobs,
     books.inboundEmailJobs.map((j) => ({ ...j, expenseId: null })),
   );
-  await insertAll(tx, expenses, books.expenses);
+  await insertAll(
+    tx,
+    expenses,
+    books.expenses.map((e) => ({
+      ...e,
+      taxCode:
+        (e.vatRate ?? 0) === 0
+          ? inferExpenseTaxCode(
+              { vatRate: 0, category: e.category, currency: e.detectedCurrency },
+              company,
+            ).code
+          : inferStoredTaxCode(e.vatRate ?? 0, company).code,
+      taxCodeNeedsReview: false,
+    })),
+  );
   for (const job of books.inboundEmailJobs) {
     if (!job.expenseId) continue;
     await tx
@@ -126,10 +172,10 @@ export async function writeDemoBooks(
   );
 
   await insertAll(tx, invoices, books.invoices);
-  await insertAll(tx, invoiceLineItems, books.invoiceLineItems);
+  await insertAll(tx, invoiceLineItems, coded(books.invoiceLineItems, company));
   await insertAll(tx, payments, books.payments);
   await insertAll(tx, creditNotes, books.creditNotes);
-  await insertAll(tx, creditNoteLineItems, books.creditNoteLineItems);
+  await insertAll(tx, creditNoteLineItems, coded(books.creditNoteLineItems, company));
   await insertAll(tx, invoiceWriteOffs, books.writeOffs);
   await insertAll(tx, sendJobs, books.sendJobs);
 

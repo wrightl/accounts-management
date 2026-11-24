@@ -14,11 +14,13 @@ import { PaymentScheduleEditor } from "@/components/quotes/payment-schedule-edit
 import { createQuote, updateQuote } from "@/actions/quotes";
 import { parseQuoteInput, quoteRawFromFormData } from "@/lib/quotes/schema";
 import {
-  VatRateField,
-  choiceFromVatRate,
-  vatRateFromChoice,
-  type VatRateFieldValue,
-} from "@/components/documents/vat-rate-field";
+  TaxCodeField,
+  choiceFromLineTax,
+  lineTaxFromChoice,
+  postedLineTax,
+  type TaxCodeFieldValue,
+} from "@/components/documents/tax-code-field";
+import type { TaxCode } from "@/lib/tax-codes";
 import { Plus, Trash2 } from "lucide-react";
 
 export type QuoteLineDraft = {
@@ -29,6 +31,8 @@ export type QuoteLineDraft = {
   /** Percent off the line; blank for no discount. */
   discountPercent: string;
   vatRate: number;
+  /** Unset on lines saved before tax codes; the rate then implies it. */
+  taxCode?: TaxCode;
 };
 
 function newLine(defaultVatRate: number): QuoteLineDraft {
@@ -108,7 +112,7 @@ export function QuoteForm({
     initialLines && initialLines.length > 0
       ? initialLines.map((l) => ({
           ...l,
-          vatRate: vatRegistered ? l.vatRate : 0,
+          ...postedLineTax(l, vatRegistered),
         }))
       : // A fixed key: keys feed DOM ids, and a random one fails hydration.
         [{ ...newLine(lineDefault), key: "initial-0" }],
@@ -123,7 +127,7 @@ export function QuoteForm({
             quantity: Number(l.quantity) || 0,
             unitPricePence: poundsToPence(l.unitPricePounds),
             discountPercent: Number(l.discountPercent) || 0,
-            vatRate: vatRegistered ? l.vatRate : 0,
+            ...postedLineTax(l, vatRegistered),
           })),
       );
     } catch {
@@ -131,10 +135,10 @@ export function QuoteForm({
     }
   }, [lines, vatRegistered]);
 
-  function setLineVat(index: number, value: VatRateFieldValue) {
+  function setLineVat(index: number, value: TaxCodeFieldValue) {
     setLines((prev) =>
       prev.map((l, i) =>
-        i === index ? { ...l, vatRate: vatRateFromChoice(value) } : l,
+        i === index ? { ...l, ...lineTaxFromChoice(value) } : l,
       ),
     );
   }
@@ -154,7 +158,7 @@ export function QuoteForm({
           unitPricePounds: l.unitPricePounds,
           discountPercent:
             l.discountPercent.trim() === "" ? 0 : Number(l.discountPercent),
-          vatRate: vatRegistered ? l.vatRate : 0,
+          ...postedLineTax(l, vatRegistered),
         })),
       ),
     );
@@ -355,11 +359,11 @@ export function QuoteForm({
                 </FieldError>
               </div>
               {vatRegistered ? (
-                <VatRateField
+                <TaxCodeField
                   id={`vat-${line.key}`}
                   label=""
                   compact
-                  value={choiceFromVatRate(line.vatRate)}
+                  value={choiceFromLineTax(line)}
                   onChange={(v) => setLineVat(index, v)}
                   disabled={pending}
                 />

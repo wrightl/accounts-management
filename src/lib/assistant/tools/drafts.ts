@@ -1,4 +1,5 @@
 import "server-only";
+import { TAX_CODES, defaultLineTax } from "@/lib/tax-codes";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { and, eq, ilike } from "drizzle-orm";
@@ -67,24 +68,36 @@ const invoiceLine = z.object({
   description: z.string().trim().min(1).max(500),
   quantity: z.number().positive().max(1_000_000).default(1),
   unitPrice: pounds(10_000_000).describe("Price per unit in pounds, before VAT"),
+  taxCode: z
+    .enum(TAX_CODES)
+    .optional()
+    .describe(
+      "VAT tax code for this line, e.g. standard (20%), reduced (5%), zero_rated, exempt or outside_scope. Leave out to use vatRate or the company's usual code",
+    ),
   vatRate: z
     .number()
     .int()
     .min(0)
     .max(100)
     .optional()
-    .describe("VAT % for this line; leave out to use the company's usual rate"),
+    .describe("VAT % for this line (0, 5 or 20) when no taxCode is given; leave both out to use the company's usual code"),
 });
 
 type LineInput = z.infer<typeof invoiceLine>;
 
-/** Lines as the shared invoice and quote schemas expect them. */
-function documentLines(lines: LineInput[], defaultVatRate: number) {
+/**
+ * Lines as the shared invoice and quote schemas expect them. A line with
+ * neither a code nor a rate takes the company's default code.
+ */
+function documentLines(lines: LineInput[], company: Parameters<typeof defaultLineTax>[0]) {
+  const fallback = defaultLineTax(company);
   return lines.map((l) => ({
     description: l.description,
     quantity: l.quantity,
     unitPricePounds: l.unitPrice.toFixed(2),
-    vatRate: l.vatRate ?? defaultVatRate,
+    ...(l.taxCode || l.vatRate !== undefined
+      ? { taxCode: l.taxCode, vatRate: l.vatRate }
+      : { taxCode: fallback.taxCode, vatRate: fallback.vatRate }),
   }));
 }
 
@@ -117,7 +130,7 @@ export const DRAFT_TOOLS: readonly AssistantDraftTool[] = [
         issueDate,
         dueDate: input.dueDate ?? defaultDueDate(issueDate, company.invoicePaymentTermsDays),
         notes: input.notes ?? "",
-        lines: documentLines(input.lines, company.defaultVatRate),
+        lines: documentLines(input.lines, company),
       });
       if (!parsed.ok) return failed(parsed);
 
@@ -181,7 +194,7 @@ export const DRAFT_TOOLS: readonly AssistantDraftTool[] = [
         issueDate,
         validUntil: input.validUntil ?? "",
         notes: input.notes ?? "",
-        lines: documentLines(input.lines, company.defaultVatRate),
+        lines: documentLines(input.lines, company),
       });
       if (!parsed.ok) return failed(parsed);
 
@@ -232,7 +245,17 @@ export const DRAFT_TOOLS: readonly AssistantDraftTool[] = [
         .describe("Total paid in pounds, including any VAT"),
       spentOn: isoDate.optional().describe("Defaults to today"),
       category: z.enum(EXPENSE_CATEGORIES).optional(),
-      vatRate: z.number().int().min(0).max(100).optional().describe("VAT % on the receipt, if known"),
+      taxCode: z
+        .enum(TAX_CODES)
+        .optional()
+        .describe("VAT tax code on the receipt, if known, e.g. standard, reduced, zero_rated, exempt or reverse_charge"),
+      vatRate: z
+        .number()
+        .int()
+        .min(0)
+        .max(100)
+        .optional()
+        .describe("VAT % on the receipt (0, 5 or 20), if known and no taxCode is given"),
     }),
     execute: async ({ companyId, localUserId }, input) => {
       const parsed = parseExpenseInput({
@@ -243,6 +266,7 @@ export const DRAFT_TOOLS: readonly AssistantDraftTool[] = [
         currency: "GBP",
         // Placeholder: a pending expense's status is chosen when it's approved.
         status: "recorded",
+        taxCode: input.taxCode,
         vatRate: input.vatRate ?? 0,
       });
       if (!parsed.ok) return failed(parsed);

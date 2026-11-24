@@ -85,6 +85,8 @@ export async function raiseLatePaymentInvoice(invoiceId: string): Promise<Action
           description: `Statutory interest on invoice ${invoice.number}: ${formatMoney(detail.balanceMinor, invoice.currency)} at ${charge.ratePercent}% a year for ${charge.daysLate} days from ${formatIsoDateUk(invoice.dueDate)}`,
           quantity: 1,
           unitPricePence: charge.interest,
+          // Interest and compensation aren't payment for a supply, so no VAT.
+          taxCode: "outside_scope" as const,
           vatRate: 0,
           discountPercent: 0,
           position: 0,
@@ -96,6 +98,8 @@ export async function raiseLatePaymentInvoice(invoiceId: string): Promise<Action
               : `Fixed compensation of ${formatGBP(charge.compensationPence)} for late payment of invoice ${invoice.number}`,
           quantity: 1,
           unitPricePence: charge.compensation,
+          // Interest and compensation aren't payment for a supply, so no VAT.
+          taxCode: "outside_scope" as const,
           vatRate: 0,
           discountPercent: 0,
           position: 1,

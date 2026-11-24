@@ -1,4 +1,5 @@
 import "server-only";
+import { storedLineTax } from "@/lib/documents/schema";
 import { documentTotals, isForeignDocumentCurrency, type DocumentTotals } from "@/lib/currency";
 import { documentRate, type DocumentRateDetails } from "@/lib/document-rate";
 import { and, eq } from "drizzle-orm";
@@ -11,7 +12,6 @@ import { poundsToPence } from "@/lib/money";
 import { periodLockError } from "@/lib/period-lock";
 import { checkRebillExpenses } from "@/lib/profitability/queries";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
-import { parseVatRate, resolveLineVatRate } from "@/lib/vat";
 import type { ActionResult } from "@/actions/result";
 
 export function buildLineValues(
@@ -24,7 +24,7 @@ export function buildLineValues(
       description: l.description,
       quantity: l.quantity,
       unitPricePence,
-      vatRate: resolveLineVatRate(company, parseVatRate(l.vatRate)),
+      ...storedLineTax(company, l),
       discountPercent: l.discountPercent ?? 0,
       position: i,
       expenseId: l.expenseId ?? null,

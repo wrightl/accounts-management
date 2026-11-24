@@ -1,4 +1,6 @@
 import "server-only";
+import { storedLineTax } from "@/lib/documents/schema";
+import { carriedLineTax, type StoredLineTax } from "@/lib/tax-codes";
 import { and, eq, ne, sum } from "drizzle-orm";
 import type { Database } from "@/db";
 import {
@@ -79,16 +81,20 @@ export function buildInvoiceLineValues(params: {
   milestoneLabel?: string;
   orderLines: OrderLineRow[];
   priorInvoicedPence: number;
-}): Array<{
-  description: string;
-  quantity: number;
-  unitPricePence: number;
-  vatRate: number;
-  discountPercent: number;
-  position: number;
-}> {
-  const { mode, amountPence, orderNumber, milestoneLabel, orderLines, priorInvoicedPence } =
+  /** Used only to code order lines saved before they had a tax code. */
+  company: { vatRegistered?: boolean | null };
+}): Array<
+  {
+    description: string;
+    quantity: number;
+    unitPricePence: number;
+    discountPercent: number;
+    position: number;
+  } & StoredLineTax
+> {
+  const { mode, amountPence, orderNumber, milestoneLabel, orderLines, priorInvoicedPence, company } =
     params;
+  const taxOf = (l: OrderLineRow) => carriedLineTax(l, company);
 
   if (
     mode === "remaining" &&
@@ -99,18 +105,22 @@ export function buildInvoiceLineValues(params: {
       description: l.description,
       quantity: l.quantity,
       unitPricePence: l.unitPricePence,
-      vatRate: l.vatRate,
+      ...taxOf(l),
       discountPercent: l.discountPercent,
       position: l.position,
     }));
   }
 
-  // amountPence is gross. Back out net so VAT is not double-counted.
-  const rates = [...new Set(orderLines.map((l) => l.vatRate))];
-  const singleRate = rates.length === 1 ? rates[0]! : null;
+  // amountPence is gross. Back out net so VAT is not double-counted. Lines
+  // only share one invoice line when they share both code and rate: zero
+  // rated and exempt are both 0% but must stay apart.
+  const taxes = orderLines.map(taxOf);
+  const kinds = [...new Map(taxes.map((t) => [`${t.taxCode}:${t.vatRate}`, t])).values()];
+  const single = kinds.length === 1 ? kinds[0]! : null;
 
-  if (singleRate != null || orderLines.length === 0) {
-    const rate = singleRate ?? 0;
+  if (single != null || orderLines.length === 0) {
+    const tax: StoredLineTax = single ?? storedLineTax(company, { vatRate: 0 });
+    const rate = tax.vatRate;
     const net = Math.round((amountPence * 100) / (100 + rate));
     let description: string;
     if (mode === "milestone" && milestoneLabel) {
@@ -125,7 +135,7 @@ export function buildInvoiceLineValues(params: {
         description,
         quantity: 1,
         unitPricePence: net,
-        vatRate: rate,
+        ...tax,
         discountPercent: 0,
         position: 0,
       },
@@ -145,7 +155,7 @@ export function buildInvoiceLineValues(params: {
       description: `${line.description} (${mode === "part" ? "part" : "balance"}) — ${orderNumber}`,
       quantity: 1,
       unitPricePence: net,
-      vatRate: line.vatRate,
+      ...taxOf(line),
       discountPercent: 0,
       position: i,
     };

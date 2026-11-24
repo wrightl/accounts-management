@@ -1,8 +1,12 @@
+import type { TaxCode } from "@/lib/tax-codes";
 export type QuoteVersionLine = {
   description: string;
   quantity: number;
   unitPricePence: number;
   vatRate: number;
+  /** Missing on versions saved before tax codes and not yet backfilled. */
+  taxCode?: TaxCode;
+  taxCodeNeedsReview?: boolean;
   /** Missing on versions saved before line discounts existed → 0. */
   discountPercent?: number;
   position: number;

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { storedLineTax } from "@/lib/documents/schema";
 import { documentTotals, STERLING_RATE } from "@/lib/currency";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
@@ -24,7 +25,6 @@ import {
   validateMilestones,
 } from "@/lib/quotes/payment-schedule";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
-import { parseVatRate, resolveLineVatRate } from "@/lib/vat";
 import {
   buildInvoiceLineValues,
   computePartAmountPence,
@@ -64,7 +64,7 @@ export async function createOrder(formData: FormData): Promise<ActionResult> {
           description: l.description,
           quantity: l.quantity,
           unitPricePence: poundsToPence(l.unitPricePounds),
-          vatRate: resolveLineVatRate(company, parseVatRate(l.vatRate)),
+          ...storedLineTax(company, l),
           discountPercent: l.discountPercent ?? 0,
           position: i,
         }));
@@ -224,6 +224,7 @@ export async function createInvoiceFromOrder(
       });
 
       const lineValues = buildInvoiceLineValues({
+        company,
         mode,
         amountPence,
         orderNumber: detail.order.number,
@@ -258,7 +259,9 @@ export async function createInvoiceFromOrder(
             description: l.description,
             quantity: l.quantity,
             unitPricePence: l.unitPricePence,
+            taxCode: l.taxCode,
             vatRate: l.vatRate,
+            taxCodeNeedsReview: l.taxCodeNeedsReview,
             discountPercent: l.discountPercent,
             position: l.position,
           })),

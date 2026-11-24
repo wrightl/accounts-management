@@ -28,6 +28,7 @@ import {
 import { rowOfCompany } from "@/lib/tenant-scope";
 import {
   inferExpenseTaxCode,
+  inferStoredTaxCode,
   inferTaxCodeFromRate,
   isTaxCode,
   type InferredTaxCode,
@@ -79,32 +80,12 @@ interface JsonLine {
   [key: string]: unknown;
 }
 
-/**
- * The code for a stored line. Like inferTaxCodeFromRate, with two
- * differences, because the database only lets standard and reduced carry a
- * rate other than 0:
- *
- *  - A rate that isn't a number from 0 to 100 (say -5, which no screen allows
- *    but the column could hold) is coded standard and flagged, rather than
- *    being read as 0% and given a 0% code it doesn't have.
- *  - A rate above 0 always gets a rated code. A company that is not VAT
- *    registered now may have been when the row was saved, so the row is coded
- *    from its rate and flagged rather than marked outside scope.
- */
-function inferStoredLine(rate: number, company: Company): InferredTaxCode {
-  if (!Number.isFinite(rate) || rate < 0 || rate > 100) return { code: "standard", needsReview: true };
-  if (rate > 0 && !company.vatRegistered) {
-    return { code: inferTaxCodeFromRate(rate, { vatRegistered: true }).code, needsReview: true };
-  }
-  return inferTaxCodeFromRate(rate, company);
-}
-
 /** The same rules for a stored expense, then the category guesses for 0%. */
 function inferStoredExpense(
   expense: { vatRate: number; category: string | null; currency: string | null },
   company: Company,
 ): InferredTaxCode {
-  if (expense.vatRate !== 0) return inferStoredLine(expense.vatRate, company);
+  if (expense.vatRate !== 0) return inferStoredTaxCode(expense.vatRate, company);
   return inferExpenseTaxCode(expense, company);
 }
 
@@ -121,7 +102,7 @@ function withTaxCodes(lines: unknown, company: Company): JsonLine[] | null {
     const line = raw as JsonLine;
     if (isTaxCode(line.taxCode)) return line;
     changed = true;
-    const inferred = inferStoredLine(lineRate(line), company);
+    const inferred = inferStoredTaxCode(lineRate(line), company);
     return { ...line, taxCode: inferred.code, taxCodeNeedsReview: inferred.needsReview };
   });
   return changed ? next : null;
@@ -134,7 +115,7 @@ function countJsonLines(lists: unknown[], company: Company, table: BackfillTable
     for (const raw of lines) {
       if (!raw || typeof raw !== "object" || isTaxCode((raw as JsonLine).taxCode)) continue;
       const rate = lineRate(raw as JsonLine);
-      const inferred = inferStoredLine(rate, company);
+      const inferred = inferStoredTaxCode(rate, company);
       const key = `${rate}`;
       const group = groups.get(key) ?? { table, vatRate: rate, rows: 0, ...toGroup(inferred) };
       group.rows += 1;
@@ -206,7 +187,7 @@ async function lineGroups(db: Database, company: Company): Promise<BackfillGroup
       table,
       vatRate: r.vatRate,
       rows: r.rows,
-      ...toGroup(inferStoredLine(r.vatRate, company)),
+      ...toGroup(inferStoredTaxCode(r.vatRate, company)),
     })),
   );
 }

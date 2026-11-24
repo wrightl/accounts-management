@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { lineTaxCodeSchema } from "@/lib/documents/schema";
 import { EXPENSE_CATEGORIES } from "@/lib/expenses/categories";
 import {
   DEFAULT_MILEAGE_RATE_PENCE,
@@ -94,11 +95,13 @@ export const expenseFieldsSchema = z.object({
   /** The period the cost pays for, when longer than the day it was spent. Left out by callers that don't set it. */
   coversFrom: optionalIsoDate,
   coversTo: optionalIsoDate,
+  taxCode: lineTaxCodeSchema("purchases"),
   vatRate: z.coerce
     .number({ error: "Enter a VAT rate between 0 and 100" })
     .int("Enter a whole-number VAT rate")
     .min(0, "VAT rate must be between 0 and 100")
     .max(100, "VAT rate must be between 0 and 100")
+    .refine((r) => r === 0 || r === 5 || r === 20, "Choose a tax code")
     .optional(),
 });
 
@@ -151,6 +154,7 @@ export function expenseRawFromFormData(formData: FormData): Record<string, unkno
     mileageRatePence: formData.get("mileageRatePence") ?? "",
     coversFrom: formData.get("coversFrom") ?? undefined,
     coversTo: formData.get("coversTo") ?? undefined,
+    taxCode: formData.get("taxCode") ?? "",
     vatRate: formData.get("vatRate") ?? "0",
   };
 }

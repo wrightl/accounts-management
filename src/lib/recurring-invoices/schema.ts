@@ -2,6 +2,8 @@ import { z } from "zod";
 import {
   lineDiscountPercentSchema,
   lineQuantitySchema,
+  lineTaxCodeSchema,
+  lineVatRateSchema,
   parseDocumentLinesJson,
 } from "@/lib/documents/schema";
 import { parseWithFieldErrors } from "@/lib/validation/field-errors";
@@ -14,7 +16,8 @@ const recurringLineSchema = z.object({
     .max(500, "Description must be 500 characters or fewer"),
   quantity: lineQuantitySchema,
   unitPricePounds: z.string().trim().min(1, "Enter a unit price"),
-  vatRate: z.coerce.number().int().min(0).max(100).optional(),
+  taxCode: lineTaxCodeSchema("sales"),
+  vatRate: lineVatRateSchema,
   discountPercent: lineDiscountPercentSchema,
 });
 

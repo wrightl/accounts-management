@@ -1,6 +1,8 @@
 "use server";
 
 import { and, eq } from "drizzle-orm";
+import { carriedLineTax } from "@/lib/tax-codes";
+import { storedLineTax } from "@/lib/documents/schema";
 import { documentTotals, STERLING_RATE, sterlingTotals } from "@/lib/currency";
 import { getDb } from "@/db";
 import { quoteLineItems, quotes } from "@/db/schema";
@@ -12,7 +14,6 @@ import { getQuoteDetail, getQuoteVersionSnapshot } from "@/lib/quotes/queries";
 import { createDraftQuoteRecord } from "@/lib/quotes/create";
 import { loadOrRenderQuotePdf } from "@/lib/quotes/pdf-cache";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
-import { parseVatRate, resolveLineVatRate } from "@/lib/vat";
 import { sendClientEmail } from "@/lib/email/client-email";
 import { resolveClientEmailSender } from "@/lib/email/resolve-client-sender";
 import {
@@ -97,7 +98,7 @@ export async function updateQuote(id: string, formData: FormData): Promise<Actio
           description: l.description,
           quantity: l.quantity,
           unitPricePence: poundsToPence(l.unitPricePounds),
-          vatRate: resolveLineVatRate(company, parseVatRate(l.vatRate)),
+          ...storedLineTax(company, l),
           discountPercent: l.discountPercent ?? 0,
           position: i,
         }));
@@ -207,11 +208,12 @@ export async function rollbackQuote(
       if (!snapshot) return { ok: false, error: "Version not found" };
 
       const nextVersion = existing.version + 1;
+      const company = await getOrCreateCompanySettings(companyId);
       const lineValues = snapshot.lines.map((l, i) => ({
         description: l.description,
         quantity: l.quantity,
         unitPricePence: l.unitPricePence,
-        vatRate: l.vatRate,
+        ...carriedLineTax(l, company),
         discountPercent: l.discountPercent ?? 0,
         position: i,
       }));

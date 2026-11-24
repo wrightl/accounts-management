@@ -40,9 +40,11 @@ describe("invoice-from-order", () => {
       orderNumber: "O-2026-0001",
       orderLines: [],
       priorInvoicedPence: 0,
+      company: { vatRegistered: true },
     });
     expect(lines).toHaveLength(1);
     expect(lines[0].description).toContain("Part invoice");
+    expect(lines[0]).toMatchObject({ taxCode: "zero_rated", vatRate: 0 });
   });
 
   it("copies order lines for first full remaining invoice", () => {
@@ -58,12 +60,70 @@ describe("invoice-from-order", () => {
           quantity: 1,
           unitPricePence: 100000,
           vatRate: 0,
+          taxCode: "exempt",
+          taxCodeNeedsReview: false,
+          discountPercent: 0,
+          expenseId: null,
           position: 0,
         },
       ],
       priorInvoicedPence: 0,
+      company: { vatRegistered: true },
     });
     expect(lines).toHaveLength(1);
     expect(lines[0].description).toBe("Build");
+    expect(lines[0]).toMatchObject({ taxCode: "exempt", vatRate: 0 });
+  });
+
+  const orderLine = (id: string, taxCode: "standard" | "zero_rated" | "exempt" | null, vatRate: number) => ({
+    id,
+    orderId: "o1",
+    description: `Line ${id}`,
+    quantity: 1,
+    unitPricePence: 10_000,
+    vatRate,
+    taxCode,
+    taxCodeNeedsReview: false,
+    discountPercent: 0,
+    position: Number(id),
+  });
+
+  it("keeps the order's code on a single-code part invoice", () => {
+    const lines = buildInvoiceLineValues({
+      mode: "part",
+      amountPence: 12_000,
+      orderNumber: "O-2026-0002",
+      orderLines: [orderLine("1", "standard", 20), orderLine("2", "standard", 20)],
+      priorInvoicedPence: 0,
+      company: { vatRegistered: true },
+    });
+    expect(lines).toEqual([
+      expect.objectContaining({ taxCode: "standard", vatRate: 20, unitPricePence: 10_000 }),
+    ]);
+  });
+
+  it("keeps zero rated and exempt lines apart on a part invoice, though both are 0%", () => {
+    const lines = buildInvoiceLineValues({
+      mode: "part",
+      amountPence: 10_000,
+      orderNumber: "O-2026-0003",
+      orderLines: [orderLine("1", "zero_rated", 0), orderLine("2", "exempt", 0)],
+      priorInvoicedPence: 0,
+      company: { vatRegistered: true },
+    });
+    expect(lines.map((l) => l.taxCode)).toEqual(["zero_rated", "exempt"]);
+    expect(lines.reduce((n, l) => n + l.unitPricePence, 0)).toBe(10_000);
+  });
+
+  it("codes order lines saved before tax codes from their rate", () => {
+    const lines = buildInvoiceLineValues({
+      mode: "remaining",
+      amountPence: 10_000,
+      orderNumber: "O-2026-0004",
+      orderLines: [orderLine("1", null, 0)],
+      priorInvoicedPence: 0,
+      company: { vatRegistered: false },
+    });
+    expect(lines[0]).toMatchObject({ taxCode: "outside_scope", vatRate: 0 });
   });
 });

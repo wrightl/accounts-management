@@ -38,10 +38,11 @@ import {
   needsAmountCheck,
 } from "@/lib/expenses/currency";
 import {
-  VatRateField,
-  choiceFromVatRate,
-  vatRateFromChoice,
-} from "@/components/documents/vat-rate-field";
+  TaxCodeField,
+  choiceFromLineTax,
+  lineTaxFromChoice,
+} from "@/components/documents/tax-code-field";
+import type { TaxCode } from "@/lib/tax-codes";
 import { vatFromInclusiveGross } from "@/lib/vat";
 import {
   expenseRawFromFormData,
@@ -97,6 +98,7 @@ export function ExpenseForm({
     detectedCurrency?: string | null;
     originalAmountMinor?: number | null;
     vatRate?: number;
+    taxCode?: string | null;
     vatPence?: number;
     status: string;
     source?: string;
@@ -191,9 +193,16 @@ export function ExpenseForm({
     if (fromBankTransaction) return String(penceToPounds(fromBankTransaction.amountPence));
     return "";
   });
-  const [vatRate, setVatRate] = useState(
-    expense?.vatRate ?? (vatRegistered ? defaultVatRate : 0),
+  // The rate always follows the code, so an expense saved at a rate that
+  // isn't a UK rate shows (and saves) the code its rate implies.
+  const initialTax = lineTaxFromChoice(
+    choiceFromLineTax({
+      vatRate: expense?.vatRate ?? (vatRegistered ? defaultVatRate : 0),
+      taxCode: expense?.taxCode,
+    }),
   );
+  const [vatRate, setVatRate] = useState(vatRegistered ? initialTax.vatRate : 0);
+  const [taxCode, setTaxCode] = useState<TaxCode>(initialTax.taxCode);
   // Only guess who paid when there's a single founder to choose from;
   // otherwise the reviewer must pick, so a wrong payee isn't reimbursed.
   const defaultPayee = founders.length === 1 ? founders[0].id : "";
@@ -316,6 +325,7 @@ export function ExpenseForm({
     mileageRatePence,
     sterlingPounds,
     vatRate,
+    taxCode,
     currency,
     originalAmount,
     pendingReceipt !== null,
@@ -389,6 +399,8 @@ export function ExpenseForm({
       "vatRate",
       String(useMileage || !vatRegistered ? 0 : vatRate),
     );
+    if (useMileage || !vatRegistered) formData.delete("taxCode");
+    else formData.set("taxCode", taxCode);
     return formData;
   }
 
@@ -490,6 +502,8 @@ export function ExpenseForm({
       "vatRate",
       String(useMileage || !vatRegistered ? 0 : vatRate),
     );
+    if (useMileage || !vatRegistered) formData.delete("taxCode");
+    else formData.set("taxCode", taxCode);
     if (mode === "create" && fromBankTransaction) {
       formData.set("bankTransactionId", fromBankTransaction.id);
     }
@@ -911,20 +925,25 @@ export function ExpenseForm({
         )}
         {vatRegistered && !useMileage ? (
           <div>
-            <VatRateField
+            <TaxCodeField
               id="expense-vat"
-              label="VAT rate"
+              label="VAT"
+              use="purchases"
               required
-              value={choiceFromVatRate(vatRate)}
+              value={{ taxCode }}
               onChange={(v) => {
-                setVatRate(vatRateFromChoice(v));
+                const next = lineTaxFromChoice(v);
+                setTaxCode(next.taxCode);
+                setVatRate(next.vatRate);
                 clearField("vatRate");
+                clearField("taxCode");
               }}
               disabled={!canWrite || pending}
               invalid={Boolean(fieldErrors.vatRate)}
               describedBy={fieldErrors.vatRate ? "vatRate-error" : undefined}
             />
             <input type="hidden" name="vatRate" value={vatRate} />
+            <input type="hidden" name="taxCode" value={taxCode} />
             <FieldError id="vatRate-error">{fieldErrors.vatRate}</FieldError>
           </div>
         ) : null}

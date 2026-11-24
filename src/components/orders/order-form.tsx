@@ -13,11 +13,13 @@ import { scheduleFocusFirstFieldError } from "@/components/ui/focus-first-field-
 import { preventResetSubmit } from "@/components/ui/prevent-reset-submit";
 import { useFieldErrors } from "@/components/ui/use-field-errors";
 import {
-  VatRateField,
-  choiceFromVatRate,
-  vatRateFromChoice,
-  type VatRateFieldValue,
-} from "@/components/documents/vat-rate-field";
+  TaxCodeField,
+  choiceFromLineTax,
+  lineTaxFromChoice,
+  postedLineTax,
+  type TaxCodeFieldValue,
+} from "@/components/documents/tax-code-field";
+import type { TaxCode } from "@/lib/tax-codes";
 import { formatGBP, invoiceTotals, poundsToPence } from "@/lib/money";
 import { orderRawFromFormData, parseOrderInput } from "@/lib/orders/schema";
 
@@ -29,6 +31,8 @@ type LineDraft = {
   /** Percent off the line; blank for no discount. */
   discountPercent: string;
   vatRate: number;
+  /** Unset on lines saved before tax codes; the rate then implies it. */
+  taxCode?: TaxCode;
 };
 
 function newLine(defaultVatRate: number): LineDraft {
@@ -81,7 +85,7 @@ export function OrderForm({
             quantity: Number(l.quantity) || 0,
             unitPricePence: poundsToPence(l.unitPricePounds),
             discountPercent: Number(l.discountPercent) || 0,
-            vatRate: vatRegistered ? l.vatRate : 0,
+            ...postedLineTax(l, vatRegistered),
           })),
       );
     } catch {
@@ -89,10 +93,10 @@ export function OrderForm({
     }
   }, [lines, vatRegistered]);
 
-  function setLineVat(index: number, value: VatRateFieldValue) {
+  function setLineVat(index: number, value: TaxCodeFieldValue) {
     setLines((prev) =>
       prev.map((l, i) =>
-        i === index ? { ...l, vatRate: vatRateFromChoice(value) } : l,
+        i === index ? { ...l, ...lineTaxFromChoice(value) } : l,
       ),
     );
   }
@@ -112,7 +116,7 @@ export function OrderForm({
           unitPricePounds: l.unitPricePounds,
           discountPercent:
             l.discountPercent.trim() === "" ? 0 : Number(l.discountPercent),
-          vatRate: vatRegistered ? l.vatRate : 0,
+          ...postedLineTax(l, vatRegistered),
         })),
       ),
     );
@@ -300,11 +304,11 @@ export function OrderForm({
                 </FieldError>
               </div>
               {vatRegistered ? (
-                <VatRateField
+                <TaxCodeField
                   id={`vat-${line.key}`}
                   label=""
                   compact
-                  value={choiceFromVatRate(line.vatRate)}
+                  value={choiceFromLineTax(line)}
                   onChange={(v) => setLineVat(index, v)}
                   disabled={pending}
                 />

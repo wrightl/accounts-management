@@ -54,6 +54,7 @@ export default async function EditRecurringInvoicePage({
           discountPercent: l.discountPercent ? String(l.discountPercent) : "",
           unitPricePounds: String(penceToPounds(l.unitPricePence)),
           vatRate: l.vatRate ?? 0,
+          taxCode: l.taxCode,
         }))}
         vatRegistered={company.vatRegistered}
         defaultVatRate={defaultLineVatRate(company)}

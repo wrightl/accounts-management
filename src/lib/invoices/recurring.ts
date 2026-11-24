@@ -1,3 +1,4 @@
+import type { TaxCode } from "@/lib/tax-codes";
 import { todayIsoDate } from "@/lib/dates";
 
 export type RecurringOnGenerate = "draft" | "send";
@@ -8,6 +9,9 @@ export type RecurringLineTemplate = {
   unitPricePence: number;
   /** Percent 0–100; missing on older templates → treat as 0. */
   vatRate: number;
+  /** Missing on templates saved before tax codes and not yet backfilled. */
+  taxCode?: TaxCode;
+  taxCodeNeedsReview?: boolean;
   /** Line discount percent 0–100; missing on older templates → 0. */
   discountPercent?: number;
 };

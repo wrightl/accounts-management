@@ -19,11 +19,13 @@ import {
   recurringInvoiceRawFromFormData,
 } from "@/lib/recurring-invoices/schema";
 import {
-  VatRateField,
-  choiceFromVatRate,
-  vatRateFromChoice,
-  type VatRateFieldValue,
-} from "@/components/documents/vat-rate-field";
+  TaxCodeField,
+  choiceFromLineTax,
+  lineTaxFromChoice,
+  postedLineTax,
+  type TaxCodeFieldValue,
+} from "@/components/documents/tax-code-field";
+import type { TaxCode } from "@/lib/tax-codes";
 import { Plus, Trash2 } from "lucide-react";
 import { PAGE_WIDTH } from "@/components/ui/page-width";
 
@@ -35,6 +37,8 @@ export interface RecurringLineDraft {
   /** Percent off the line; blank for no discount. */
   discountPercent: string;
   vatRate: number;
+  /** Unset on lines saved before tax codes; the rate then implies it. */
+  taxCode?: TaxCode;
 }
 
 function newLine(defaultVatRate: number): RecurringLineDraft {
@@ -89,7 +93,7 @@ export function RecurringInvoiceForm({
     initialLines && initialLines.length > 0
       ? initialLines.map((l) => ({
           ...l,
-          vatRate: vatRegistered ? l.vatRate : 0,
+          ...postedLineTax(l, vatRegistered),
         }))
       : // A fixed key: keys feed DOM ids, and a random one fails hydration.
         [{ ...newLine(lineDefault), key: "initial-0" }],
@@ -108,7 +112,7 @@ export function RecurringInvoiceForm({
             quantity: Number(l.quantity) || 0,
             unitPricePence: poundsToPence(l.unitPricePounds || "0"),
             discountPercent: Number(l.discountPercent) || 0,
-            vatRate: vatRegistered ? l.vatRate : 0,
+            ...postedLineTax(l, vatRegistered),
           })),
       );
     } catch {
@@ -116,10 +120,10 @@ export function RecurringInvoiceForm({
     }
   }, [lines, vatRegistered]);
 
-  function setLineVat(index: number, value: VatRateFieldValue) {
+  function setLineVat(index: number, value: TaxCodeFieldValue) {
     setLines((prev) =>
       prev.map((l, i) =>
-        i === index ? { ...l, vatRate: vatRateFromChoice(value) } : l,
+        i === index ? { ...l, ...lineTaxFromChoice(value) } : l,
       ),
     );
   }
@@ -139,7 +143,7 @@ export function RecurringInvoiceForm({
           unitPricePounds: l.unitPricePounds,
           discountPercent:
             l.discountPercent.trim() === "" ? 0 : Number(l.discountPercent),
-          vatRate: vatRegistered ? l.vatRate : 0,
+          ...postedLineTax(l, vatRegistered),
         })),
       ),
     );
@@ -444,11 +448,11 @@ export function RecurringInvoiceForm({
                 </FieldError>
               </div>
               {vatRegistered ? (
-                <VatRateField
+                <TaxCodeField
                   id={`vat-${line.key}`}
                   label=""
                   compact
-                  value={choiceFromVatRate(line.vatRate)}
+                  value={choiceFromLineTax(line)}
                   onChange={(v) => setLineVat(index, v)}
                   disabled={pending}
                 />
