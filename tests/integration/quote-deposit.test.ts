@@ -157,7 +157,7 @@ describe("deposit on accept", () => {
     expect(lines[0]!.description).toMatch(/^Deposit — /);
 
     // The milestone is used, so staff can't invoice it twice from the order.
-    const used = await getUsedMilestoneIds(db as unknown as Database, quote.orderId!);
+    const used = await getUsedMilestoneIds(db as unknown as Database, companyId, quote.orderId!);
     expect(used.has(invoice.paymentMilestoneId!)).toBe(true);
 
     // Checkout is for the deposit, on the company's own Stripe account.

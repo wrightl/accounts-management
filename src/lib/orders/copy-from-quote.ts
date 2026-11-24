@@ -96,7 +96,7 @@ export async function createOrderFromQuote(
   await tx
     .update(quotes)
     .set({ orderId: order.id })
-    .where(eq(quotes.id, source.quote.id));
+    .where(and(eq(quotes.id, source.quote.id), eq(quotes.companyId, companyId)));
 
   return order.id;
 }

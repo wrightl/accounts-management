@@ -134,8 +134,8 @@ export async function getOrderDetail(companyId: string, id: string) {
     .orderBy(desc(invoices.createdAt));
 
   const today = todayIsoDate();
-  const priorInvoicedPence = await sumInvoicedPenceForOrder(db, id);
-  const usedMilestoneIds = await getUsedMilestoneIds(db, id);
+  const priorInvoicedPence = await sumInvoicedPenceForOrder(db, companyId, id);
+  const usedMilestoneIds = await getUsedMilestoneIds(db, companyId, id);
 
   const order = rows[0].order;
   const remainingPence = Math.max(0, order.grossPence - priorInvoicedPence);

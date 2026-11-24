@@ -37,7 +37,9 @@ export async function cancelPendingReimbursementRunsForPayee(
     .delete(reconciliationMatches)
     .where(and(inArray(reconciliationMatches.reimbursementId, ids), matchOfCompany(companyId)));
 
-  await tx.delete(reimbursements).where(inArray(reimbursements.id, ids));
+  await tx
+    .delete(reimbursements)
+    .where(and(inArray(reimbursements.id, ids), eq(reimbursements.companyId, companyId)));
 
   return ids;
 }

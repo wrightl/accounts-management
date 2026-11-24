@@ -1,15 +1,18 @@
+import path from "node:path";
 import { RuleTester } from "eslint";
 import tsParser from "@typescript-eslint/parser";
 import { describe, expect, it } from "vitest";
 import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
 import * as schema from "@/db/schema";
-import tenantScope, { CHILD_TABLES, NOT_COMPANY_OWNED } from "../../eslint-rules/tenant-scope.mjs";
+import tenantScope, { CHILD_TABLES, COMPANY_TABLES, NOT_COMPANY_OWNED } from "../../eslint-rules/tenant-scope.mjs";
 
 const rule = tenantScope.rules["require-company-scope"];
 const tester = new RuleTester({
   languageOptions: { parser: tsParser, ecmaVersion: 2022, sourceType: "module" },
 });
 const error = (table: string) => ({ messageId: "unscoped", data: { table } });
+const companyError = (table: string) => ({ messageId: "unscopedCompany", data: { table } });
+const inRepo = (file: string) => path.join(process.cwd(), file);
 
 describe("tenant-scope/require-company-scope", () => {
   tester.run("require-company-scope", rule, {
@@ -54,9 +57,57 @@ describe("tenant-scope/require-company-scope", () => {
       }`,
       // Inserts have no WHERE.
       `async function f(db, id) { await db.insert(payments).values({ invoiceId: id }); }`,
-      // Tables that aren't child tables.
+      // Tables no company owns.
       `async function f(db) { await db.select().from(fxRates); }`,
-      `async function f(db, id) { await db.select().from(invoices).where(eq(invoices.id, id)); }`,
+      `async function f(db, id) { await db.select().from(users).where(eq(users.id, id)); }`,
+      // A company-owned table filtered on its own companyId.
+      `async function f(db, companyId, row) {
+        await db.update(expenses).set({ status: "approved" })
+          .where(and(eq(expenses.id, row.expense.id), eq(expenses.companyId, companyId)));
+      }`,
+      `async function f(db, companyId, id) {
+        await db.delete(clients).where(and(eq(clients.companyId, companyId), eq(clients.id, id)));
+      }`,
+      `async function f(db, job) {
+        await db.update(sendJobs).set({ status: "sent" })
+          .where(and(eq(sendJobs.id, job.id), eq(sendJobs.companyId, job.companyId)));
+      }`,
+      // Scoped through an inner join to a scoped company-owned table.
+      `async function f(db, companyId, id) {
+        await db.select().from(invoices).innerJoin(clients, eq(clients.id, invoices.clientId))
+          .where(and(eq(invoices.id, id), eq(clients.companyId, companyId)));
+      }`,
+      // A condition built by a function in the same file.
+      `function membershipWhere(userId, companyId) {
+        return and(eq(companyMemberships.userId, userId), eq(companyMemberships.companyId, companyId));
+      }
+      async function f(db, userId, companyId) {
+        await db.select().from(companyMemberships).where(membershipWhere(userId, companyId));
+      }`,
+      `const listWhere = (companyId, filters) => {
+        const conditions = [eq(expenses.companyId, companyId)];
+        if (filters.q) conditions.push(ilike(expenses.description, filters.q));
+        return conditions;
+      };
+      async function f(db, companyId, filters) {
+        await db.select().from(expenses).where(and(...listWhere(companyId, filters)));
+      }`,
+      // Cross-company code listed in CROSS_COMPANY, including callbacks inside it.
+      {
+        code: `export async function drainSendJobs() {
+          const jobs = await db.select().from(sendJobs).where(eq(sendJobs.status, "pending"));
+          await Promise.all(jobs.map(async (j) => db.select().from(invoices).where(eq(invoices.id, j.invoiceId))));
+        }`,
+        filename: inRepo("src/lib/outbox.ts"),
+      },
+      {
+        code: `async function listPlatformCompanies(db) { await db.select().from(companyBilling); }`,
+        filename: inRepo("src/lib/platform/queries.ts"),
+      },
+      {
+        code: `export const migration = { async up(ctx) { await ctx.db.select().from(companyMemberships); } };`,
+        filename: inRepo("src/db/data-migrations/0099_example.ts"),
+      },
     ],
     invalid: [
       {
@@ -121,7 +172,61 @@ describe("tenant-scope/require-company-scope", () => {
             .innerJoin(payments, eq(payments.invoiceId, invoices.id))
             .where(eq(invoices.id, id));
         }`,
-        errors: [error("payments")],
+        errors: [error("payments"), companyError("invoices")],
+      },
+      // A company-owned table filtered only on its id (PR 102).
+      {
+        code: `async function f(db, companyId, row) {
+          await db.update(expenses).set({ status: "approved" }).where(eq(expenses.id, row.expense.id));
+        }`,
+        errors: [companyError("expenses")],
+      },
+      {
+        code: `async function f(db, id) { await db.select().from(invoices).where(eq(invoices.id, id)); }`,
+        errors: [companyError("invoices")],
+      },
+      {
+        code: `async function f(tx, ids) { await tx.delete(reimbursements).where(inArray(reimbursements.id, ids)); }`,
+        errors: [companyError("reimbursements")],
+      },
+      // Filtering another table's companyId, or on a branch, doesn't scope it.
+      {
+        code: `async function f(db, companyId, id) {
+          await db.update(expenses).set({ status: "approved" })
+            .where(and(eq(expenses.id, id), eq(clients.companyId, companyId)));
+        }`,
+        errors: [companyError("expenses")],
+      },
+      {
+        code: `async function f(db, companyId, id) {
+          await db.delete(expenses).where(or(eq(expenses.id, id), eq(expenses.companyId, companyId)));
+        }`,
+        errors: [companyError("expenses")],
+      },
+      // A same-file function must scope everything it returns, and be given the company id.
+      {
+        code: `function where(companyId, all) {
+          if (all) return eq(expenses.status, "approved");
+          return eq(expenses.companyId, companyId);
+        }
+        async function f(db, companyId) { await db.select().from(expenses).where(where(companyId, true)); }`,
+        errors: [companyError("expenses")],
+      },
+      {
+        code: `function where(companyId) { return eq(expenses.companyId, companyId); }
+        async function f(db, id) { await db.select().from(expenses).where(where(id)); }`,
+        errors: [companyError("expenses")],
+      },
+      // CROSS_COMPANY only covers the functions it names, in its own file.
+      {
+        code: `async function processSendJob(db, id) { await db.select().from(sendJobs).where(eq(sendJobs.id, id)); }`,
+        filename: inRepo("src/lib/outbox.ts"),
+        errors: [companyError("sendJobs")],
+      },
+      {
+        code: `export async function drainSendJobs(db) { await db.select().from(sendJobs); }`,
+        filename: inRepo("src/lib/other.ts"),
+        errors: [companyError("sendJobs")],
       },
       // Scopes that look right but don't restrict the rows.
       {
@@ -129,7 +234,7 @@ describe("tenant-scope/require-company-scope", () => {
           await db.select().from(payments).innerJoin(invoices, eq(invoices.id, payments.invoiceId))
             .where(or(eq(invoices.companyId, companyId), eq(payments.id, x)));
         }`,
-        errors: [error("payments")],
+        errors: [companyError("invoices"), error("payments")],
       },
       {
         code: `async function f(db, companyId) {
@@ -193,14 +298,14 @@ describe("tenant-scope/require-company-scope", () => {
           await db.select().from(payments).leftJoin(invoices, eq(invoices.id, payments.invoiceId))
             .where(eq(invoices.companyId, companyId));
         }`,
-        errors: [error("payments")],
+        errors: [companyError("invoices"), error("payments")],
       },
       {
         code: `async function f(db, companyId, someOtherId) {
           await db.select().from(payments).innerJoin(invoices, eq(invoices.id, payments.invoiceId))
             .where(eq(invoices.companyId, someOtherId));
         }`,
-        errors: [error("payments")],
+        errors: [companyError("invoices"), error("payments")],
       },
       {
         code: `async function f(db, companyId) {
@@ -282,7 +387,7 @@ describe("tenant-scope/require-company-scope", () => {
           await db.select().from(payments)
             .leftJoin(invoices, and(eq(invoices.id, payments.invoiceId), eq(invoices.companyId, companyId)));
         }`,
-        errors: [error("payments")],
+        errors: [companyError("invoices"), error("payments")],
       },
       // A scope that only applies on one branch.
       {
@@ -301,16 +406,29 @@ describe("tenant-scope/require-company-scope", () => {
 });
 
 describe("tenant-scope table lists", () => {
-  it("covers every schema table without a company_id column", () => {
-    const withoutCompany = Object.entries(schema)
-      .filter(([, value]) => value instanceof PgTable)
-      .filter(([, table]) =>
-        !getTableConfig(table as PgTable).columns.some((c) => c.name === "company_id"),
-      )
+  const tables = Object.entries(schema).filter(([, value]) => value instanceof PgTable);
+  const hasCompanyId = (table: unknown) =>
+    getTableConfig(table as PgTable).columns.some((c) => c.name === "company_id");
+  const names = (company: boolean) =>
+    tables
+      .filter(([name, table]) => hasCompanyId(table) === company && !NOT_COMPANY_OWNED.includes(name))
       .map(([name]) => name)
       .sort();
+
+  it("covers every company-owned schema table with a company_id column", () => {
+    // A new table with company_id must be added to COMPANY_TABLES or, if
+    // company_id is only context and no company owns it, to NOT_COMPANY_OWNED.
+    expect([...COMPANY_TABLES].sort()).toEqual(names(true));
+  });
+
+  it("covers every company-owned schema table without a company_id column", () => {
     // A new table without company_id must be added to CHILD_TABLES (and scoped
     // through its parent) or, if no company owns it, to NOT_COMPANY_OWNED.
-    expect([...CHILD_TABLES, ...NOT_COMPANY_OWNED].sort()).toEqual(withoutCompany);
+    expect([...CHILD_TABLES].sort()).toEqual(names(false));
+  });
+
+  it("lists only schema tables in NOT_COMPANY_OWNED", () => {
+    const all = tables.map(([name]) => name);
+    expect(NOT_COMPANY_OWNED.filter((name) => !all.includes(name))).toEqual([]);
   });
 });

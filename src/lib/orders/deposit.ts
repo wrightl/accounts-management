@@ -36,7 +36,7 @@ export async function raiseDepositInvoice(
   const [order] = await tx
     .select()
     .from(orders)
-    .where(eq(orders.id, params.orderId))
+    .where(and(eq(orders.id, params.orderId), eq(orders.companyId, params.companyId)))
     .limit(1);
   if (!order) throw new Error("Order not found");
 

@@ -230,7 +230,9 @@ export async function deleteDirectorLoanEntry(id: string): Promise<ActionResult>
       const locked = await checkPeriodOpen(companyId, entry.entryDate);
       if (locked) return { ok: false, error: locked };
 
-      await db.delete(directorLoanEntries).where(eq(directorLoanEntries.id, id));
+      await db
+        .delete(directorLoanEntries)
+        .where(and(eq(directorLoanEntries.id, id), eq(directorLoanEntries.companyId, companyId)));
       return { ok: true, id };
     },
     {

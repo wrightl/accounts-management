@@ -135,7 +135,7 @@ export async function createInvoiceFromOrder(
       const db = getDb();
       const company = await getOrCreateCompanySettings(companyId);
       const paymentTermsDays = company.invoicePaymentTermsDays;
-      const priorInvoicedPence = await sumInvoicedPenceForOrder(db, orderId);
+      const priorInvoicedPence = await sumInvoicedPenceForOrder(db, companyId, orderId);
       const remainingPence = detail.order.grossPence - priorInvoicedPence;
 
       if (remainingPence <= 0) {
@@ -158,7 +158,7 @@ export async function createInvoiceFromOrder(
           };
         }
 
-        const used = await getUsedMilestoneIds(db, orderId);
+        const used = await getUsedMilestoneIds(db, companyId, orderId);
         if (used.has(id)) {
           return { ok: false, error: "That milestone has already been invoiced" };
         }

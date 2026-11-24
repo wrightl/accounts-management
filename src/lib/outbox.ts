@@ -55,6 +55,7 @@ export async function enqueueSendJob(
     .from(sendJobs)
     .where(
       and(
+        eq(sendJobs.companyId, companyId),
         eq(sendJobs.kind, kind),
         eq(sendJobs.invoiceId, invoiceId),
         eq(sendJobs.status, "pending"),
@@ -77,9 +78,26 @@ export async function enqueueSendJob(
   return created.id;
 }
 
+/**
+ * The company that owns a queued job. Job ids come from the queue (cron drain,
+ * inline send, platform retry), so this lookup is the one step that isn't
+ * scoped to a company; everything after it is.
+ */
+export async function sendJobCompany(jobId: string): Promise<string | null> {
+  const [job] = await getDb()
+    .select({ companyId: sendJobs.companyId })
+    .from(sendJobs)
+    .where(eq(sendJobs.id, jobId))
+    .limit(1);
+  return job?.companyId ?? null;
+}
+
 export async function processSendJob(jobId: string): Promise<{ ok: boolean; error?: string }> {
   const db = getDb();
-  const [job] = await db.select().from(sendJobs).where(eq(sendJobs.id, jobId)).limit(1);
+  const companyId = await sendJobCompany(jobId);
+  if (!companyId) return { ok: false, error: "Send job not found" };
+  const thisJob = and(eq(sendJobs.id, jobId), eq(sendJobs.companyId, companyId));
+  const [job] = await db.select().from(sendJobs).where(thisJob).limit(1);
   if (!job) return { ok: false, error: "Send job not found" };
   if (job.status === "sent") return { ok: true };
 
@@ -92,7 +110,7 @@ export async function processSendJob(jobId: string): Promise<{ ok: boolean; erro
     await db
       .update(sendJobs)
       .set({ status: "failed", lastError: "Company is suspended" })
-      .where(eq(sendJobs.id, jobId));
+      .where(thisJob);
     return { ok: false, error: "Company is suspended" };
   }
 
@@ -100,7 +118,7 @@ export async function processSendJob(jobId: string): Promise<{ ok: boolean; erro
     await db
       .update(sendJobs)
       .set({ status: "failed", lastError: job.lastError ?? "Max attempts reached" })
-      .where(eq(sendJobs.id, jobId));
+      .where(thisJob);
     return { ok: false, error: "Max attempts reached" };
   }
 
@@ -115,7 +133,7 @@ export async function processSendJob(jobId: string): Promise<{ ok: boolean; erro
     })
     .where(
       and(
-        eq(sendJobs.id, jobId),
+        thisJob,
         inArray(sendJobs.status, ["pending", "failed"]),
         lt(sendJobs.attempts, MAX_ATTEMPTS),
         or(isNull(sendJobs.lockedUntil), lt(sendJobs.lockedUntil, now)),
@@ -128,17 +146,22 @@ export async function processSendJob(jobId: string): Promise<{ ok: boolean; erro
 
   try {
     if (job.kind === "invoice_send") {
-      await deliverInvoice(job.invoiceId, job.actorUserId);
+      await deliverInvoice(companyId, job.invoiceId, job.actorUserId);
       await db
         .update(sendJobs)
         .set({ status: "sent", sentAt: new Date(), lastError: null, lockedUntil: null })
-        .where(eq(sendJobs.id, jobId));
+        .where(thisJob);
     } else {
-      const delivered = await deliverReminder(job.invoiceId, job.actorUserId, job.reminderStep);
+      const delivered = await deliverReminder(
+        companyId,
+        job.invoiceId,
+        job.actorUserId,
+        job.reminderStep,
+      );
       if (delivered === "chase_off") {
         // Nothing was sent, so remove the job. Left in place, it would count as
         // this step being done and stop it being queued if chasing is turned back on.
-        await db.delete(sendJobs).where(eq(sendJobs.id, jobId));
+        await db.delete(sendJobs).where(thisJob);
         return { ok: true };
       }
       // Paid or cancelled since it was queued: nothing to chase, so close the job.
@@ -150,7 +173,7 @@ export async function processSendJob(jobId: string): Promise<{ ok: boolean; erro
           lastError: delivered ? null : "Skipped: invoice no longer outstanding",
           lockedUntil: null,
         })
-        .where(eq(sendJobs.id, jobId));
+        .where(thisJob);
     }
     return { ok: true };
   } catch (err) {
@@ -162,7 +185,7 @@ export async function processSendJob(jobId: string): Promise<{ ok: boolean; erro
         lastError: message,
         lockedUntil: null,
       })
-      .where(eq(sendJobs.id, jobId));
+      .where(thisJob);
     return { ok: false, error: message };
   }
 }
@@ -317,16 +340,13 @@ export async function enqueueOverdueReminders(): Promise<number> {
   return queued;
 }
 
-async function deliverInvoice(invoiceId: string, actorUserId?: string | null) {
+async function deliverInvoice(
+  companyId: string,
+  invoiceId: string,
+  actorUserId?: string | null,
+) {
   const db = getDb();
-  const [invRow] = await db
-    .select({ companyId: invoices.companyId })
-    .from(invoices)
-    .where(eq(invoices.id, invoiceId))
-    .limit(1);
-  if (!invRow) throw new Error("Invoice not found");
-
-  const detail = await getInvoiceDetail(invRow.companyId, invoiceId);
+  const detail = await getInvoiceDetail(companyId, invoiceId);
   if (!detail) throw new Error("Invoice not found");
   const stored = storedStatus(detail.invoice.status);
   if (stored !== "draft" && stored !== "sent") {
@@ -334,7 +354,7 @@ async function deliverInvoice(invoiceId: string, actorUserId?: string | null) {
   }
   if (!detail.client.email) throw new Error("Client has no email address");
 
-  const company = await getCompanySettings(invRow.companyId);
+  const company = await getCompanySettings(companyId);
   const { bytes: pdfBytes, storedPath } = await loadOrRenderInvoicePdf(detail, { company });
   if (storedPath) detail.invoice.pdfBlobPath = storedPath;
   const filename = `${detail.invoice.number}.pdf`;
@@ -343,12 +363,12 @@ async function deliverInvoice(invoiceId: string, actorUserId?: string | null) {
   const amount = escapeHtml(detail.invoice.grossFormatted);
   const link = invoiceLink(detail.invoice.publicToken, company);
   const sender = await resolveClientEmailSender({
-    companyId: invRow.companyId,
+    companyId,
     companyName: company.name,
     actorUserId,
   });
 
-  await sendClientEmail(invRow.companyId, {
+  await sendClientEmail(companyId, {
     to: detail.client.email,
     from: sender.from,
     replyTo: sender.replyTo,
@@ -371,7 +391,7 @@ async function deliverInvoice(invoiceId: string, actorUserId?: string | null) {
       sentAt: detail.invoice.sentAt ?? new Date(),
       pdfBlobPath: detail.invoice.pdfBlobPath,
     })
-    .where(eq(invoices.id, invoiceId));
+    .where(and(eq(invoices.id, invoiceId), eq(invoices.companyId, companyId)));
 }
 
 /**
@@ -381,6 +401,7 @@ async function deliverInvoice(invoiceId: string, actorUserId?: string | null) {
  * chase any more.
  */
 async function deliverReminder(
+  companyId: string,
   invoiceId: string,
   actorUserId?: string | null,
   step?: number | null,
@@ -394,7 +415,7 @@ async function deliverReminder(
     })
     .from(invoices)
     .innerJoin(clients, eq(invoices.clientId, clients.id))
-    .where(eq(invoices.id, invoiceId))
+    .where(and(eq(invoices.id, invoiceId), eq(invoices.companyId, companyId)))
     .limit(1);
   if (!row) throw new Error("Invoice not found");
   if (storedStatus(row.invoice.status) !== "sent") return false;

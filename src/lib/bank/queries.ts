@@ -494,7 +494,7 @@ async function buildMatchLabels(
             })
             .from(invoices)
             .innerJoin(clients, eq(invoices.clientId, clients.id))
-            .where(inArray(invoices.id, invoiceIds));
+            .where(and(inArray(invoices.id, invoiceIds), eq(invoices.companyId, companyId)));
         for (const row of rows) {
             labels.set(
                 row.invoiceId,
@@ -507,7 +507,7 @@ async function buildMatchLabels(
         const rows = await db
             .select({ id: expenses.id, description: expenses.description })
             .from(expenses)
-            .where(inArray(expenses.id, expenseIds));
+            .where(and(inArray(expenses.id, expenseIds), eq(expenses.companyId, companyId)));
         for (const row of rows) {
             labels.set(row.id, row.description ?? 'Expense');
         }
@@ -523,7 +523,12 @@ async function buildMatchLabels(
             })
             .from(reimbursements)
             .innerJoin(users, eq(reimbursements.payeeUserId, users.id))
-            .where(inArray(reimbursements.id, reimbursementIds));
+            .where(
+                and(
+                    inArray(reimbursements.id, reimbursementIds),
+                    eq(reimbursements.companyId, companyId),
+                ),
+            );
         for (const row of rows) {
             labels.set(
                 row.id,
@@ -786,7 +791,12 @@ export async function listBankTransactions(
             : await db
                   .select({ id: bankAccounts.id, name: bankAccounts.name })
                   .from(bankAccounts)
-                  .where(inArray(bankAccounts.id, accountIds));
+                  .where(
+                      and(
+                          inArray(bankAccounts.id, accountIds),
+                          eq(bankAccounts.companyId, companyId),
+                      ),
+                  );
     const accountNameById = new Map(accounts.map((a) => [a.id, a.name]));
 
     const rows: BankTransactionListItem[] = pageTx.map((tx) => {
@@ -1391,7 +1401,12 @@ export async function suggestMatches(
                     description: expenses.description,
                 })
                 .from(expenses)
-                .where(eq(expenses.id, expenseMatch.expenseId))
+                .where(
+                    and(
+                        eq(expenses.id, expenseMatch.expenseId),
+                        eq(expenses.companyId, companyId),
+                    ),
+                )
                 .limit(1);
             if (!expense) continue;
 

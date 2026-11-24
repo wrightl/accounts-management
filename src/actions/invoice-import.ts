@@ -258,13 +258,13 @@ async function loadBatch(companyId: string, batchId: string) {
 }
 
 /**
- * Point unsaved drafts at an existing client, or null to create one from the
- * file. Shares the batch lock with saving, so a draft can't change mid-save.
+ * Point the unsaved drafts `which` picks out at an existing client, or null
+ * to create one from the file. Shares the batch lock with saving, so a draft can't change mid-save.
  */
 async function setDraftsClient(
   batchId: string,
   clientId: string | null,
-  which: (scope: SQL) => SQL | undefined,
+  which: SQL,
 ): Promise<ActionResult> {
   return mutate(
     "accounts:write",
@@ -297,7 +297,7 @@ async function setDraftsClient(
         const updated = await tx
           .update(invoiceImportDrafts)
           .set({ clientId, clientCreated: false })
-          .where(which(scope))
+          .where(and(scope, which))
           .returning({ id: invoiceImportDrafts.id });
         if (updated.length === 0) return { ok: false, error: "Invoice not found in this import" };
         return { ok: true };
@@ -313,8 +313,10 @@ export async function setImportClientForKey(
   key: string,
   clientId: string | null,
 ): Promise<ActionResult> {
-  return setDraftsClient(batchId, clientId, (scope) =>
-    and(scope, sql`${invoiceImportDrafts.parsed} -> 'client' ->> 'key' = ${key}`),
+  return setDraftsClient(
+    batchId,
+    clientId,
+    sql`${invoiceImportDrafts.parsed} -> 'client' ->> 'key' = ${key}`,
   );
 }
 
@@ -324,9 +326,7 @@ export async function setImportDraftClient(
   draftId: string,
   clientId: string | null,
 ): Promise<ActionResult> {
-  return setDraftsClient(batchId, clientId, (scope) =>
-    and(scope, eq(invoiceImportDrafts.id, draftId)),
-  );
+  return setDraftsClient(batchId, clientId, eq(invoiceImportDrafts.id, draftId));
 }
 
 /** Leave invoices out of the import, or bring back ones left out. */
@@ -795,7 +795,7 @@ export async function undoInvoiceImport(batchId: string): Promise<UndoResult> {
                   rowOfCompany(payments.invoiceId, invoices, companyId),
                 ),
               ),
-              tx.select({ invoiceId: creditNotes.invoiceId }).from(creditNotes).where(inArray(creditNotes.invoiceId, ids)),
+              tx.select({ invoiceId: creditNotes.invoiceId }).from(creditNotes).where(and(inArray(creditNotes.invoiceId, ids), eq(creditNotes.companyId, companyId))),
               tx
                 .select({
                   id: reconciliationMatches.id,
@@ -812,8 +812,8 @@ export async function undoInvoiceImport(batchId: string): Promise<UndoResult> {
                     or(inArray(reconciliationMatches.invoiceId, ids), inArray(payments.invoiceId, ids)),
                   ),
                 ),
-              tx.select({ invoiceId: sendJobs.invoiceId }).from(sendJobs).where(and(inArray(sendJobs.invoiceId, ids), eq(sendJobs.status, "sent"))),
-              tx.select({ invoiceId: invoices.latePaymentForInvoiceId }).from(invoices).where(inArray(invoices.latePaymentForInvoiceId, ids)),
+              tx.select({ invoiceId: sendJobs.invoiceId }).from(sendJobs).where(and(inArray(sendJobs.invoiceId, ids), eq(sendJobs.companyId, companyId), eq(sendJobs.status, "sent"))),
+              tx.select({ invoiceId: invoices.latePaymentForInvoiceId }).from(invoices).where(and(inArray(invoices.latePaymentForInvoiceId, ids), eq(invoices.companyId, companyId))),
             ]);
 
         const reasons = new Map<string, string>();

@@ -172,6 +172,34 @@ function isFounderRole(role: string): boolean {
   return role === "admin" || role === "user";
 }
 
+/**
+ * The job already queued for a Resend email, if the webhook was delivered
+ * before. Resend email ids are unique across companies, and this runs before
+ * the recipient (and so the company) is resolved.
+ */
+async function inboundJobForEmail(resendEmailId: string): Promise<string | null> {
+  const [existing] = await getDb()
+    .select({ id: inboundEmailJobs.id })
+    .from(inboundEmailJobs)
+    .where(eq(inboundEmailJobs.resendEmailId, resendEmailId))
+    .limit(1);
+  return existing?.id ?? null;
+}
+
+/**
+ * The company that owns a queued job. Job ids come from the queue (webhook,
+ * cron drain, platform retry), so this lookup is the one step that isn't
+ * scoped to a company; everything after it is.
+ */
+async function inboundJobCompany(jobId: string): Promise<string | null> {
+  const [job] = await getDb()
+    .select({ companyId: inboundEmailJobs.companyId })
+    .from(inboundEmailJobs)
+    .where(eq(inboundEmailJobs.id, jobId))
+    .limit(1);
+  return job?.companyId ?? null;
+}
+
 export async function enqueueInboundEmailJob(
   payload: InboundEmailReceivedPayload,
 ): Promise<{ jobId: string | null; skipped: boolean }> {
@@ -182,13 +210,9 @@ export async function enqueueInboundEmailJob(
   }
 
   const db = getDb();
-  const existing = await db
-    .select({ id: inboundEmailJobs.id })
-    .from(inboundEmailJobs)
-    .where(eq(inboundEmailJobs.resendEmailId, payload.email_id))
-    .limit(1);
-  if (existing[0]) {
-    return { jobId: existing[0].id, skipped: false };
+  const existingId = await inboundJobForEmail(payload.email_id);
+  if (existingId) {
+    return { jobId: existingId, skipped: false };
   }
 
   const fromEmail = parseEmailAddressHeader(payload.from);
@@ -262,11 +286,10 @@ export async function processInboundEmailJob(
   jobId: string,
 ): Promise<InboundEmailJobResult> {
   const db = getDb();
-  const [job] = await db
-    .select()
-    .from(inboundEmailJobs)
-    .where(eq(inboundEmailJobs.id, jobId))
-    .limit(1);
+  const companyId = await inboundJobCompany(jobId);
+  if (!companyId) return { ok: false, error: "Inbound email job not found" };
+  const thisJob = and(eq(inboundEmailJobs.id, jobId), eq(inboundEmailJobs.companyId, companyId));
+  const [job] = await db.select().from(inboundEmailJobs).where(thisJob).limit(1);
 
   if (!job) return { ok: false, error: "Inbound email job not found" };
   if (job.status === "processed") {
@@ -282,7 +305,7 @@ export async function processInboundEmailJob(
         status: "failed",
         lastError: job.lastError ?? "Max attempts reached",
       })
-      .where(eq(inboundEmailJobs.id, jobId));
+      .where(thisJob);
     return { ok: false, error: "Max attempts reached" };
   }
 
@@ -297,7 +320,7 @@ export async function processInboundEmailJob(
     })
     .where(
       and(
-        eq(inboundEmailJobs.id, jobId),
+        thisJob,
         inArray(inboundEmailJobs.status, ["pending", "failed"]),
         lt(inboundEmailJobs.attempts, MAX_ATTEMPTS),
         or(
@@ -340,7 +363,7 @@ export async function processInboundEmailJob(
         lastError: skippedNote,
         lockedUntil: null,
       })
-      .where(eq(inboundEmailJobs.id, jobId));
+      .where(thisJob);
 
     // Only ask the mailbox owner, and only about a claim they sent themselves.
     if (!delivered.paymentStated && !delivered.externalSender) {
@@ -407,7 +430,7 @@ export async function processInboundEmailJob(
         processedAt: rejected ? new Date() : null,
         lockedUntil: null,
       })
-      .where(eq(inboundEmailJobs.id, jobId));
+      .where(thisJob);
 
     if (rejected || attempts >= MAX_ATTEMPTS) {
       try {
@@ -556,7 +579,7 @@ async function deliverInboundEmail(
     await getDb()
       .update(inboundEmailJobs)
       .set({ bodyHtml, bodyText: email.text == null ? null : withoutNul(email.text) })
-      .where(eq(inboundEmailJobs.id, job.id));
+      .where(and(eq(inboundEmailJobs.id, job.id), eq(inboundEmailJobs.companyId, job.companyId)));
   } catch (err) {
     console.error(
       JSON.stringify({
@@ -870,7 +893,7 @@ async function finishPaymentAnswer(
       lastError: note,
       lockedUntil: null,
     })
-    .where(eq(inboundEmailJobs.id, job.id));
+    .where(and(eq(inboundEmailJobs.id, job.id), eq(inboundEmailJobs.companyId, job.companyId)));
 
   if (answer.source && answer.expenseIds.length) {
     try {
@@ -1205,11 +1228,10 @@ export async function adminRetryInboundEmailJob(
   jobId: string,
 ): Promise<InboundEmailJobResult> {
   const db = getDb();
-  const [job] = await db
-    .select()
-    .from(inboundEmailJobs)
-    .where(eq(inboundEmailJobs.id, jobId))
-    .limit(1);
+  const companyId = await inboundJobCompany(jobId);
+  if (!companyId) return { ok: false, error: "Inbound email job not found" };
+  const thisJob = and(eq(inboundEmailJobs.id, jobId), eq(inboundEmailJobs.companyId, companyId));
+  const [job] = await db.select().from(inboundEmailJobs).where(thisJob).limit(1);
 
   if (!job) return { ok: false, error: "Inbound email job not found" };
   if (job.status === "processed") {
@@ -1224,7 +1246,7 @@ export async function adminRetryInboundEmailJob(
       lastError: null,
       processedAt: null,
     })
-    .where(eq(inboundEmailJobs.id, jobId));
+    .where(thisJob);
 
   return processInboundEmailJob(jobId);
 }
@@ -1235,10 +1257,13 @@ export async function adminDismissInboundEmailJob(
   reason?: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const db = getDb();
+  const companyId = await inboundJobCompany(jobId);
+  if (!companyId) return { ok: false, error: "Inbound email job not found" };
+  const thisJob = and(eq(inboundEmailJobs.id, jobId), eq(inboundEmailJobs.companyId, companyId));
   const [job] = await db
     .select({ id: inboundEmailJobs.id, status: inboundEmailJobs.status })
     .from(inboundEmailJobs)
-    .where(eq(inboundEmailJobs.id, jobId))
+    .where(thisJob)
     .limit(1);
 
   if (!job) return { ok: false, error: "Inbound email job not found" };
@@ -1257,7 +1282,7 @@ export async function adminDismissInboundEmailJob(
       lastError: note,
       processedAt: new Date(),
     })
-    .where(eq(inboundEmailJobs.id, jobId));
+    .where(thisJob);
 
   return { ok: true };
 }

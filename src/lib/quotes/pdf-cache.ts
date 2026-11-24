@@ -136,7 +136,7 @@ export async function loadOrRenderQuotePdf(
     await db
       .update(quotes)
       .set({ pdfBlobPath: stored.path })
-      .where(eq(quotes.id, quoteId));
+      .where(and(eq(quotes.id, quoteId), eq(quotes.companyId, companyId)));
   } catch (err) {
     console.warn(
       JSON.stringify({

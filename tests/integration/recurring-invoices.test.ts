@@ -197,11 +197,11 @@ describe("generateRecurringInvoices (PGlite)", () => {
 
   it("generateRecurringInvoiceForTemplate rejects second generate in same month", async () => {
     const { tmpl } = await insertTemplate({ dayOfMonth: 1 });
-    const first = await generateRecurringInvoiceForTemplate(tmpl.id, {
+    const first = await generateRecurringInvoiceForTemplate(tmpl.companyId, tmpl.id, {
       today: "2026-03-20",
     });
     expect(first.ok).toBe(true);
-    const second = await generateRecurringInvoiceForTemplate(tmpl.id, {
+    const second = await generateRecurringInvoiceForTemplate(tmpl.companyId, tmpl.id, {
       today: "2026-03-21",
     });
     expect(second.ok).toBe(false);

@@ -208,7 +208,12 @@ export async function renameBankSpendingCategory(
       await tx
         .update(bankSpendingCategories)
         .set({ name: normalized })
-        .where(eq(bankSpendingCategories.id, categoryId));
+        .where(
+          and(
+            eq(bankSpendingCategories.id, categoryId),
+            eq(bankSpendingCategories.companyId, companyId),
+          ),
+        );
       await tx
         .update(bankTransactions)
         .set({ spendingCategory: normalized })

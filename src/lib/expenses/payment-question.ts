@@ -85,7 +85,13 @@ export async function maybeAskHowPaid(params: {
   const [claimed] = await db
     .update(inboundEmailJobs)
     .set({ paymentQuestionSentAt: new Date() })
-    .where(and(eq(inboundEmailJobs.id, job.id), isNull(inboundEmailJobs.paymentQuestionSentAt)))
+    .where(
+      and(
+        eq(inboundEmailJobs.id, job.id),
+        eq(inboundEmailJobs.companyId, job.companyId),
+        isNull(inboundEmailJobs.paymentQuestionSentAt),
+      ),
+    )
     .returning({ id: inboundEmailJobs.id });
   if (!claimed) return false;
 
@@ -119,7 +125,7 @@ export async function maybeAskHowPaid(params: {
     await db
       .update(inboundEmailJobs)
       .set({ paymentQuestionSentAt: null })
-      .where(eq(inboundEmailJobs.id, job.id));
+      .where(and(eq(inboundEmailJobs.id, job.id), eq(inboundEmailJobs.companyId, job.companyId)));
     console.error(
       JSON.stringify({
         level: "error",

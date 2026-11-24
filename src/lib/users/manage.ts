@@ -134,6 +134,20 @@ export async function revokeCompanyInvite(params: {
  * Remove a member from a company. When it was their only company, their Clerk
  * account (or pending invite) and local user row go too.
  */
+/**
+ * Whether anyone has reimbursed this person, in any company. The user row is
+ * shared by every company they belonged to, so it's kept for payee history
+ * when any of them has paid them.
+ */
+async function hasReimbursementHistory(userId: string): Promise<boolean> {
+  const [row] = await getDb()
+    .select({ id: reimbursements.id })
+    .from(reimbursements)
+    .where(eq(reimbursements.payeeUserId, userId))
+    .limit(1);
+  return row != null;
+}
+
 export async function removeCompanyMember(params: {
   companyId: string;
   userId: string;
@@ -178,11 +192,7 @@ export async function removeCompanyMember(params: {
     return { ok: true, id: userId };
   }
 
-  const [remainingReimbursement] = await db
-    .select({ id: reimbursements.id })
-    .from(reimbursements)
-    .where(eq(reimbursements.payeeUserId, userId))
-    .limit(1);
+  const remainingReimbursement = await hasReimbursementHistory(userId);
 
   await removeMembership(userId, companyId);
 

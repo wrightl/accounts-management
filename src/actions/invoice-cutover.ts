@@ -95,6 +95,7 @@ async function loadImpact(
       .where(
         and(
           inArray(creditNotes.invoiceId, ids),
+          eq(creditNotes.companyId, companyId),
           eq(creditNotes.status, "issued"),
         ),
       ),

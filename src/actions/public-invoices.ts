@@ -16,7 +16,13 @@ export async function markPublicInvoiceViewed(rawToken: string): Promise<void> {
   await db
     .update(invoices)
     .set({ viewedAt: new Date() })
-    .where(and(eq(invoices.id, data.detail.invoice.id), isNull(invoices.viewedAt)));
+    .where(
+      and(
+        eq(invoices.id, data.detail.invoice.id),
+        eq(invoices.companyId, data.detail.invoice.companyId),
+        isNull(invoices.viewedAt),
+      ),
+    );
 }
 
 /** Send the client to Stripe Checkout for the full amount due. */

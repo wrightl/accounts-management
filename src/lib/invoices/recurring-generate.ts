@@ -122,6 +122,7 @@ type TemplateRow = {
  * Once per calendar month — returns an error if already generated this month.
  */
 export async function generateRecurringInvoiceForTemplate(
+  companyId: string,
   templateId: string,
   options: GenerateOneOptions = {},
 ): Promise<
@@ -157,7 +158,7 @@ export async function generateRecurringInvoiceForTemplate(
     .from(recurringInvoices)
     .innerJoin(companies, eq(companies.id, recurringInvoices.companyId))
     .innerJoin(clients, eq(clients.id, recurringInvoices.clientId))
-    .where(eq(recurringInvoices.id, templateId))
+    .where(and(eq(recurringInvoices.id, templateId), eq(recurringInvoices.companyId, companyId)))
     .limit(1);
 
   const tmpl = rows[0];
@@ -189,7 +190,7 @@ export async function generateRecurringInvoiceForTemplate(
   const latest = await db
     .select({ id: invoices.id })
     .from(invoices)
-    .where(eq(invoices.recurringInvoiceId, templateId))
+    .where(and(eq(invoices.recurringInvoiceId, templateId), eq(invoices.companyId, companyId)))
     .orderBy(desc(invoices.createdAt))
     .limit(1);
 
@@ -269,7 +270,9 @@ async function generateFromTemplateRow(
           lastGeneratedAt: recurringInvoices.lastGeneratedAt,
         })
         .from(recurringInvoices)
-        .where(eq(recurringInvoices.id, tmpl.id))
+        .where(
+          and(eq(recurringInvoices.id, tmpl.id), eq(recurringInvoices.companyId, tmpl.companyId)),
+        )
         .for("update");
       if (
         !locked?.enabled ||
@@ -329,7 +332,9 @@ async function generateFromTemplateRow(
           nextRunOn,
           ...(disable ? { enabled: false } : {}),
         })
-        .where(eq(recurringInvoices.id, tmpl.id));
+        .where(
+          and(eq(recurringInvoices.id, tmpl.id), eq(recurringInvoices.companyId, tmpl.companyId)),
+        );
 
       return inv.id;
     });

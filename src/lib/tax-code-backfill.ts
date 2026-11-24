@@ -193,6 +193,7 @@ async function lineGroups(db: Database, company: Company): Promise<BackfillGroup
 }
 
 async function expenseGroups(db: Database, company: Company): Promise<BackfillGroup[]> {
+  const companyId = company.id;
   const rows = await db
     .select({
       vatRate: expenses.vatRate,
@@ -201,7 +202,7 @@ async function expenseGroups(db: Database, company: Company): Promise<BackfillGr
       rows: count(),
     })
     .from(expenses)
-    .where(and(eq(expenses.companyId, company.id), isNull(expenses.taxCode)))
+    .where(and(eq(expenses.companyId, companyId), isNull(expenses.taxCode)))
     .groupBy(expenses.vatRate, expenses.category, expenses.detectedCurrency);
   return rows.map((r) => ({
     table: "expenses" as const,

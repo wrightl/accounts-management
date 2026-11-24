@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { clerkClient } from "@clerk/nextjs/server";
 import { getDb } from "@/db";
 import {
@@ -35,7 +35,7 @@ import {
   adminRetryInboundEmailJob,
   drainInboundEmailJobs,
 } from "@/lib/expenses/inbound-email";
-import { processSendJob } from "@/lib/outbox";
+import { processSendJob, sendJobCompany } from "@/lib/outbox";
 import { runDailyCron } from "@/lib/cron-daily";
 import { updatePlatformSettings } from "@/lib/platform-settings";
 import { getCurrentUser } from "@/lib/auth";
@@ -590,11 +590,10 @@ async function retrySendJob(
   jobId: string,
 ): Promise<{ companyId: string | null; result: ActionResult }> {
   const db = getDb();
-  const [job] = await db
-    .select()
-    .from(sendJobs)
-    .where(eq(sendJobs.id, jobId))
-    .limit(1);
+  const companyId = await sendJobCompany(jobId);
+  if (!companyId) return { companyId: null, result: { ok: false, error: "Send job not found" } };
+  const thisJob = and(eq(sendJobs.id, jobId), eq(sendJobs.companyId, companyId));
+  const [job] = await db.select().from(sendJobs).where(thisJob).limit(1);
   if (!job) return { companyId: null, result: { ok: false, error: "Send job not found" } };
   if (job.status !== "failed") {
     return {
@@ -626,7 +625,7 @@ async function retrySendJob(
       lastError: null,
       sentAt: null,
     })
-    .where(eq(sendJobs.id, jobId));
+    .where(thisJob);
 
   const result = await processSendJob(jobId);
   if (!result.ok) {

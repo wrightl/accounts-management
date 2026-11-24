@@ -47,28 +47,48 @@ export function resolveMilestoneDueDate(
  */
 export async function sumInvoicedPenceForOrder(
   db: Database,
+  companyId: string,
   orderId: string,
 ): Promise<number> {
   const [row] = await db
     .select({ total: sum(invoices.grossPence).mapWith(Number) })
     .from(invoices)
-    .where(and(eq(invoices.orderId, orderId), ne(invoices.status, "void")));
+    .where(
+      and(
+        eq(invoices.orderId, orderId),
+        eq(invoices.companyId, companyId),
+        ne(invoices.status, "void"),
+      ),
+    );
   const [credited] = await db
     .select({ total: sum(creditNotes.grossPence).mapWith(Number) })
     .from(creditNotes)
     .innerJoin(invoices, eq(creditNotes.invoiceId, invoices.id))
-    .where(and(eq(invoices.orderId, orderId), eq(creditNotes.status, "issued")));
+    .where(
+      and(
+        eq(invoices.orderId, orderId),
+        eq(creditNotes.companyId, companyId),
+        eq(creditNotes.status, "issued"),
+      ),
+    );
   return (row?.total ?? 0) - (credited?.total ?? 0);
 }
 
 export async function getUsedMilestoneIds(
   db: Database,
+  companyId: string,
   orderId: string,
 ): Promise<Set<string>> {
   const rows = await db
     .select({ milestoneId: invoices.paymentMilestoneId })
     .from(invoices)
-    .where(and(eq(invoices.orderId, orderId), ne(invoices.status, "void")));
+    .where(
+      and(
+        eq(invoices.orderId, orderId),
+        eq(invoices.companyId, companyId),
+        ne(invoices.status, "void"),
+      ),
+    );
   return new Set(
     rows.map((r) => r.milestoneId).filter((id): id is string => id != null),
   );

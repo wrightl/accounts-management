@@ -18,22 +18,22 @@ export async function listNotifications(opts: {
   return db
     .select()
     .from(notifications)
-    .where(notificationListWhere(opts))
+    .where(notificationListWhere(opts.companyId, opts.userId, opts.filter))
     .orderBy(desc(notifications.createdAt), desc(notifications.id))
     .limit(limit)
     .offset(offset);
 }
 
-function notificationListWhere(opts: {
-  userId: string;
-  companyId: string;
-  filter?: NotificationListFilter;
-}) {
+function notificationListWhere(
+  companyId: string,
+  userId: string,
+  filter?: NotificationListFilter,
+) {
   return and(
-    eq(notifications.userId, opts.userId),
-    eq(notifications.companyId, opts.companyId),
+    eq(notifications.companyId, companyId),
+    eq(notifications.userId, userId),
     isNull(notifications.deletedAt),
-    opts.filter === "unread" ? isNull(notifications.readAt) : undefined,
+    filter === "unread" ? isNull(notifications.readAt) : undefined,
   );
 }
 
@@ -42,7 +42,7 @@ export async function listNotificationPage(
   opts: { userId: string; companyId: string; filter?: NotificationListFilter } & ListPaging,
 ): Promise<Paged<Notification>> {
   const db = getDb();
-  const where = notificationListWhere(opts);
+  const where = notificationListWhere(opts.companyId, opts.userId, opts.filter);
   return fetchPage(
     opts,
     async () => (await db.select({ n: count() }).from(notifications).where(where))[0]?.n ?? 0,

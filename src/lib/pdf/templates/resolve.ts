@@ -61,7 +61,8 @@ export async function getCompanyTemplate(
   company: TemplateChoice,
   kind: DocumentKind,
 ): Promise<CompanyTemplate> {
-  const entitlements = await getEntitlements(company.id);
+  const companyId = company.id;
+  const entitlements = await getEntitlements(companyId);
   const choice = templateChoice(company, kind);
   const key = entitlements.invoiceTemplates ? choice.key : DEFAULT_TEMPLATE_KEY;
 
@@ -75,7 +76,7 @@ export async function getCompanyTemplate(
     .where(
       and(
         eq(invoiceTemplates.id, choice.customTemplateId),
-        eq(invoiceTemplates.companyId, company.id),
+        eq(invoiceTemplates.companyId, companyId),
         eq(invoiceTemplates.kind, kind),
       ),
     )

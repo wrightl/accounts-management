@@ -282,7 +282,7 @@ export async function getForecastInputs(companyId: string, today: string = today
     ? await db
         .select({ id: clients.id, name: clientDisplayNameSql.as("client_name") })
         .from(clients)
-        .where(inArray(clients.id, [...clientIds]))
+        .where(and(inArray(clients.id, [...clientIds]), eq(clients.companyId, companyId)))
     : [];
 
   return {

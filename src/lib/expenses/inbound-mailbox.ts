@@ -174,6 +174,7 @@ export async function ensureInboundAlias(
         .where(
           and(
             eq(companyMemberships.id, row.membershipId),
+            eq(companyMemberships.companyId, companyId),
             isNull(companyMemberships.inboundAlias),
           ),
         )
@@ -183,7 +184,9 @@ export async function ensureInboundAlias(
       const [now] = await db
         .select({ alias: companyMemberships.inboundAlias })
         .from(companyMemberships)
-        .where(eq(companyMemberships.id, row.membershipId))
+        .where(
+          and(eq(companyMemberships.id, row.membershipId), eq(companyMemberships.companyId, companyId)),
+        )
         .limit(1);
       return now?.alias ?? null;
     } catch (err) {
@@ -261,11 +264,8 @@ export async function setInboundAlias(
       }
       if (current.alias === alias) return { ok: true, alias, previous: current.alias };
 
-      const [taken] = await tx
-        .select({ id: companyMemberships.id })
-        .from(companyMemberships)
-        .where(eq(companyMemberships.inboundAlias, alias))
-        .limit(1);
+      // A live alias in any company is caught by the unique index on the
+      // update below, which rolls this back and returns ALIAS_TAKEN.
       const [released] = await tx
         .select({ alias: releasedInboundAliases.alias })
         .from(releasedInboundAliases)
@@ -280,12 +280,12 @@ export async function setInboundAlias(
           ),
         )
         .limit(1);
-      if (taken || released) return { ok: false, error: ALIAS_TAKEN };
+      if (released) return { ok: false, error: ALIAS_TAKEN };
 
       await tx
         .update(companyMemberships)
         .set({ inboundAlias: alias })
-        .where(eq(companyMemberships.id, current.id));
+        .where(and(eq(companyMemberships.id, current.id), eq(companyMemberships.companyId, companyId)));
       await tx.delete(releasedInboundAliases).where(eq(releasedInboundAliases.alias, alias));
       if (current.alias) {
         await tx

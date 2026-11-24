@@ -102,7 +102,7 @@ export async function deleteClient(id: string): Promise<ActionResult> {
       const linked = await db
         .select({ id: invoices.id })
         .from(invoices)
-        .where(eq(invoices.clientId, id))
+        .where(and(eq(invoices.clientId, id), eq(invoices.companyId, companyId)))
         .limit(1);
 
       if (linked[0]) {

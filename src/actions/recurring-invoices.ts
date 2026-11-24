@@ -351,7 +351,7 @@ export async function generateRecurringInvoiceNow(
         .limit(1);
       if (!existing) return { ok: false, error: "Recurring invoice not found" };
 
-      const result = await generateRecurringInvoiceForTemplate(id);
+      const result = await generateRecurringInvoiceForTemplate(companyId, id);
       if (!result.ok) return result;
 
       revalidatePath(`/invoices/${result.invoiceId}`);
