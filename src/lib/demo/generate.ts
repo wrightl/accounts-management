@@ -96,6 +96,8 @@ import {
 } from "@/lib/demo/story";
 
 type Row<T extends { $inferInsert: unknown }> = T["$inferInsert"];
+/** A line or expense before writeDemoBooks gives it a tax code from its rate. */
+type Uncoded<T extends { $inferInsert: unknown }> = Omit<Row<T>, "taxCode" | "taxCodeNeedsReview">;
 
 export type DemoPeople = {
   /** The lead director: the demo's admin login. */
@@ -136,21 +138,21 @@ export type DemoBooks = {
   declineReasons: Row<typeof quoteDeclineReasonCategories>[];
   quotes: Row<typeof quotes>[];
   quoteVersions: Row<typeof quoteVersions>[];
-  quoteLineItems: Row<typeof quoteLineItems>[];
+  quoteLineItems: Uncoded<typeof quoteLineItems>[];
   quoteMilestones: Row<typeof quotePaymentMilestones>[];
   orders: Row<typeof orders>[];
-  orderLineItems: Row<typeof orderLineItems>[];
+  orderLineItems: Uncoded<typeof orderLineItems>[];
   orderMilestones: Row<typeof orderPaymentMilestones>[];
   recurringInvoices: Row<typeof recurringInvoices>[];
   invoices: Row<typeof invoices>[];
-  invoiceLineItems: Row<typeof invoiceLineItems>[];
+  invoiceLineItems: Uncoded<typeof invoiceLineItems>[];
   payments: Row<typeof payments>[];
   creditNotes: Row<typeof creditNotes>[];
-  creditNoteLineItems: Row<typeof creditNoteLineItems>[];
+  creditNoteLineItems: Uncoded<typeof creditNoteLineItems>[];
   writeOffs: Row<typeof invoiceWriteOffs>[];
   sendJobs: Row<typeof sendJobs>[];
   inboundEmailJobs: Row<typeof inboundEmailJobs>[];
-  expenses: Row<typeof expenses>[];
+  expenses: Uncoded<typeof expenses>[];
   expenseLabels: Row<typeof expenseLabels>[];
   receipts: ReceiptSpec[];
   reimbursements: Row<typeof reimbursements>[];

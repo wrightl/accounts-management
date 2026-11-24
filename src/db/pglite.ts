@@ -3,6 +3,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { schema } from "./schema";
+import { TEST_TAX_CODE_TRIGGER_SQL } from "./test-tax-code-trigger";
 
 /** Env var naming a file written by {@link createMigratedSnapshot} (see tests/global-setup.ts). */
 export const PGLITE_SNAPSHOT_ENV = "PGLITE_SNAPSHOT";
@@ -15,6 +16,8 @@ export const PGLITE_SNAPSHOT_ENV = "PGLITE_SNAPSHOT";
 export async function createMigratedSnapshot() {
   const client = new PGlite();
   await migrate(drizzle({ client }), { migrationsFolder: "drizzle" });
+  // Test databases only; see the file it comes from.
+  await client.exec(TEST_TAX_CODE_TRIGGER_SQL);
   const dump = await client.dumpDataDir("none");
   await client.close();
   return dump;

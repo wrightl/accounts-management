@@ -694,6 +694,13 @@
       "when": 1795530136580,
       "tag": "0098_tax_code_rate_checks",
       "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1795535936701,
+      "tag": "0099_tax_code_required",
+      "breakpoints": true
     }
   ]
 }

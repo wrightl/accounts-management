@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { and, eq, isNull } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "@/db/pglite";
+import { beforeTaxCodesRequired } from "../fixtures/before-tax-codes-required";
 import { setTestDb, type Database } from "@/db";
 import {
   companies,
@@ -50,7 +51,9 @@ async function figures() {
 }
 
 beforeAll(async () => {
-  ctx = await createTestDb();
+  // These tests cover data from before tax codes were required (0099).
+  ctx = await createTestDb({ fresh: true });
+  await beforeTaxCodesRequired(ctx.client);
   db = ctx.db;
   setTestDb(db as unknown as Database);
   const created = await createDemoCompany({
