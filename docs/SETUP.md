@@ -155,6 +155,34 @@ Legacy: `STRIPE_PRICE_ESSENTIALS_MONTHLY` / `_YEARLY` / `STRIPE_PRICE_PREMIUM_*`
 seed empty DB columns on first read after migration `0041_stripe_price_ids`. Prefer
 Platform Settings going forward; you can remove the env vars once the DB is seeded.
 
+## 5c. HMRC (Making Tax Digital) **(you)**
+
+Lets a company's admin connect Alfa to HMRC (Settings → HMRC). Hidden until every
+variable below is set.
+
+1. On the [HMRC Developer Hub](https://developer.service.hmrc.gov.uk), create an
+   application in the sandbox and subscribe it to the VAT (MTD) API.
+2. Add redirect URIs: `https://<your domain>/api/hmrc/callback` for each
+   environment that connects, e.g. the preview and production domains, and
+   `http://localhost:3001/api/hmrc/callback` for local development. They must
+   match `NEXT_PUBLIC_APP_URL` exactly.
+3. Set the variables:
+
+| Variable | Value |
+| --- | --- |
+| `HMRC_CLIENT_ID`, `HMRC_CLIENT_SECRET` | from the Developer Hub application |
+| `HMRC_ENV` | `sandbox` until HMRC approves production access, then `production` |
+| `SECRET_BOX_KEY` | `openssl rand -base64 32`; encrypts HMRC tokens in the database. Keep it safe: tokens sealed with a lost key can't be read, and companies must connect again |
+| `HMRC_CONNECT_ENABLED` | `true` to show Settings → HMRC |
+
+To rotate `SECRET_BOX_KEY`, move the current value to `SECRET_BOX_KEY_PREVIOUS`
+and set a new `SECRET_BOX_KEY`. Tokens are re-sealed with the new key as they
+are next used; remove the previous key once every connection has been used or
+reconnected.
+
+In the sandbox, sign in on HMRC's site with a test user made with HMRC's Create
+Test User API, not a real Government Gateway account.
+
 ## 6. Custom subdomain **(you)**
 
 1. Vercel → Project → **Domains** → add `accounts.dotanddashconsulting.com`.
@@ -269,6 +297,9 @@ production's. That blocks Resend and Stripe webhooks and the cron call.
 | `CRON_SECRET` | new random value, not production's |
 | `BLOB_READ_WRITE_TOKEN` | token for a separate preview Blob store |
 | `PLATFORM_ADMIN_EMAILS` | optional break-glass list |
+| `HMRC_CLIENT_ID`, `HMRC_CLIENT_SECRET`, `HMRC_ENV=sandbox` | the sandbox Developer Hub application (§5c) |
+| `SECRET_BOX_KEY` | its own random value, not production's (§5c) |
+| `HMRC_CONNECT_ENABLED` | `true` to try connecting on preview |
 
 `AI_GATEWAY_API_KEY`, `COMPANIES_HOUSE_API_KEY` and the VAPID keys can be shared
 with production. Leave `FCM_*` unset unless you test mobile push.

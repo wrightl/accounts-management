@@ -8,6 +8,7 @@ import {
   recurringInvoices,
 } from "@/db/schema";
 import { scanUpcomingDeadlines } from "@/lib/deadlines/notify";
+import { scanHmrcGrantsExpiring } from "@/lib/hmrc/notify";
 import { notify } from "./create";
 import { formatNotifyDate, todayKey } from "./queries";
 
@@ -21,7 +22,8 @@ function addDaysIso(days: number, from = new Date()): string {
 
 /**
  * Daily notification scanners: quote expiry windows, expired quotes,
- * overdue invoices, recurring invoices due in 3 days, and filing deadlines.
+ * overdue invoices, recurring invoices due in 3 days, filing deadlines, and
+ * HMRC access about to run out.
  */
 export async function runNotificationScanners(): Promise<{
   quoteExpiring3d: number;
@@ -30,6 +32,7 @@ export async function runNotificationScanners(): Promise<{
   invoiceOverdue: number;
   recurringDue3d: number;
   deadlineUpcoming: number;
+  hmrcGrantExpiring: number;
 }> {
   const [
     quoteExpiring3d,
@@ -38,6 +41,7 @@ export async function runNotificationScanners(): Promise<{
     invoiceOverdue,
     recurringDue3d,
     deadlineUpcoming,
+    hmrcGrantExpiring,
   ] = await Promise.all([
     scanQuoteExpiring(3, "quote.expiring.3d"),
     scanQuoteExpiring(1, "quote.expiring.1d"),
@@ -45,6 +49,7 @@ export async function runNotificationScanners(): Promise<{
     scanOverdueInvoices(),
     scanRecurringDueIn3Days(),
     scanUpcomingDeadlines(),
+    scanHmrcGrantsExpiring(),
   ]);
 
   return {
@@ -54,6 +59,7 @@ export async function runNotificationScanners(): Promise<{
     invoiceOverdue,
     recurringDue3d,
     deadlineUpcoming,
+    hmrcGrantExpiring,
   };
 }
 

@@ -32,6 +32,7 @@ export const NOTIFICATION_EVENT_TYPES = [
   "assistant.connected",
   "billing.trial_ending",
   "billing.payment_failed",
+  "hmrc.grant_expiring",
 ] as const;
 
 export type NotificationEventType = (typeof NOTIFICATION_EVENT_TYPES)[number];
@@ -208,6 +209,13 @@ export const NOTIFICATION_CATALOG: readonly NotificationEventDefinition[] = [
     description: "A subscription payment failed",
     defaultRoles: ["admin"],
     defaultChannels: { inApp: true, email: true, push: true },
+  },
+  {
+    type: "hmrc.grant_expiring",
+    label: "HMRC access ending",
+    description: "Alfa's access to HMRC runs out in 30 days, then 7, so an admin can connect again in time",
+    defaultRoles: ["admin"],
+    defaultChannels: { inApp: true, email: true, push: false },
   },
 ] as const;
 

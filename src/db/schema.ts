@@ -2277,6 +2277,77 @@ export type PlatformSettings = typeof platformSettings.$inferSelect;
 export type PlatformLogLevel = "error" | "warn" | "info";
 export type BillingPlan = (typeof billingPlanEnum.enumValues)[number];
 export type BillingStatus = (typeof billingStatusEnum.enumValues)[number];
+/** Which HMRC environment a connection is for. */
+export const hmrcEnvironmentEnum = pgEnum("hmrc_environment", ["sandbox", "production"]);
+
+/**
+ * A company's authority for Alfa to call HMRC's APIs on its behalf (roadmap
+ * item 17). Tokens are sealed with src/lib/crypto/secret-box.ts and are never
+ * stored in the clear. At most one active connection per company and
+ * environment; disconnecting keeps the row, with its tokens cleared.
+ */
+export const hmrcConnections = pgTable(
+  "hmrc_connections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    environment: hmrcEnvironmentEnum("environment").notNull(),
+    /** Space-separated scopes HMRC granted, e.g. "read:vat write:vat". */
+    scopes: text("scopes").notNull(),
+    /** Sealed; null once disconnected. */
+    accessTokenSealed: text("access_token_sealed"),
+    refreshTokenSealed: text("refresh_token_sealed"),
+    accessTokenExpiresAt: timestamp("access_token_expires_at", { withTimezone: true }).notNull(),
+    /** When the company's grant (and so the refresh token) runs out: 18 months after connecting. */
+    grantExpiresAt: timestamp("grant_expires_at", { withTimezone: true }).notNull(),
+    connectedByUserId: uuid("connected_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    connectedAt: timestamp("connected_at", { withTimezone: true }).defaultNow().notNull(),
+    lastRefreshedAt: timestamp("last_refreshed_at", { withTimezone: true }),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revokedByUserId: uuid("revoked_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  },
+  (t) => [
+    index("idx_hmrc_connections_company").on(t.companyId),
+    uniqueIndex("uniq_hmrc_connections_active")
+      .on(t.companyId, t.environment)
+      .where(sql`${t.revokedAt} is null`),
+    check(
+      "hmrc_connections_tokens_while_active",
+      sql`(${t.revokedAt} is null) = (${t.accessTokenSealed} is not null and ${t.refreshTokenSealed} is not null)`,
+    ),
+  ],
+);
+
+/**
+ * A pending "Connect to HMRC": the state sent to HMRC, stored as a hash, so
+ * the callback can only finish a connection that this company's admin
+ * started, once, within a few minutes.
+ */
+export const hmrcOauthStates = pgTable(
+  "hmrc_oauth_states",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    environment: hmrcEnvironmentEnum("environment").notNull(),
+    /** SHA-256 of the state, base64url. */
+    stateHash: text("state_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("uniq_hmrc_oauth_states_hash").on(t.stateHash),
+    index("idx_hmrc_oauth_states_company").on(t.companyId),
+  ],
+);
+
 export type BillingAccess = (typeof billingAccessEnum.enumValues)[number];
 export type BillingInterval = (typeof billingIntervalEnum.enumValues)[number];
 export type CompanyBilling = typeof companyBilling.$inferSelect;
@@ -2285,6 +2356,8 @@ export type Notification = typeof notifications.$inferSelect;
 export type PushPlatform = (typeof pushPlatformEnum.enumValues)[number];
 
 export const schema = {
+  hmrcConnections,
+  hmrcOauthStates,
   users,
   companies,
   companyMemberships,

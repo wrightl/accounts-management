@@ -60,6 +60,20 @@ const serverSchema = z.object({
     FCM_PROJECT_ID: z.string().optional(),
     FCM_SERVICE_ACCOUNT_JSON: z.string().optional(),
 
+    // HMRC (Making Tax Digital). The connection is hidden until the client
+    // credentials and SECRET_BOX_KEY are set and HMRC_CONNECT_ENABLED is "true".
+    HMRC_CLIENT_ID: z.string().optional(),
+    HMRC_CLIENT_SECRET: z.string().optional(),
+    /** Which HMRC environment to talk to. Sandbox until production approval. */
+    HMRC_ENV: z.enum(['sandbox', 'production']).default('sandbox'),
+    HMRC_CONNECT_ENABLED: z.enum(['true', 'false']).optional(),
+
+    // Encryption for secrets kept in the database (see src/lib/crypto/secret-box.ts).
+    // base64 of 32 random bytes: openssl rand -base64 32
+    SECRET_BOX_KEY: z.string().optional(),
+    /** The key before the current one, kept only to decrypt during a rotation. */
+    SECRET_BOX_KEY_PREVIOUS: z.string().optional(),
+
     NODE_ENV: z
         .enum(['development', 'test', 'production'])
         .default('development'),
