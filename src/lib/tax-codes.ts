@@ -179,7 +179,7 @@ function clampRate(rate: number): number {
 
 /** Whether `rate` is `target` exactly, allowing only for floating-point noise. */
 function isRate(rate: number, target: number): boolean {
-  return Math.abs(rate - target) < 0.005;
+  return Math.abs(rate - target) < 1e-9;
 }
 
 /**
