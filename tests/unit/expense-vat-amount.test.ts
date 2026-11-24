@@ -54,6 +54,23 @@ describe("resolveExpenseVat", () => {
     });
   });
 
+  it("keeps a stored typed figure when no source is posted, while it fits", () => {
+    const existing = { vatPence: 150, vatPenceSource: "manual" };
+    expect(resolveExpenseVat({ ...base, existing })).toEqual({ vatPence: 150, vatPenceSource: "manual" });
+    expect(resolveExpenseVat({ ...base, amountPence: 100, existing })).toEqual({
+      vatPence: 17,
+      vatPenceSource: "derived",
+    });
+    expect(resolveExpenseVat({ ...base, existing, posted: { vatSource: "derived" } })).toEqual({
+      vatPence: 200,
+      vatPenceSource: "derived",
+    });
+    expect(resolveExpenseVat({ ...base, existing: { vatPence: 150, vatPenceSource: "derived" } })).toEqual({
+      vatPence: 200,
+      vatPenceSource: "derived",
+    });
+  });
+
   it("refuses a figure that isn't an amount below the total", () => {
     expect(() => resolveExpenseVat({ ...base, posted: { vatSource: "manual", vatPounds: "12.00" } })).toThrow(
       ExpenseVatError,

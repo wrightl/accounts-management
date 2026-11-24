@@ -94,6 +94,19 @@ describe("VAT as shown on the receipt", () => {
     expect(await stored(created.id!)).toEqual({ vatPence: 200, vatPenceSource: "derived", receiptVatPence: 198 });
   });
 
+  it("keeps a typed figure when an update doesn't say where the VAT came from", async () => {
+    const created = await createExpense(form({ vatSource: "manual", vatPounds: "1.50" }));
+    if (!created.ok) throw new Error(created.error);
+    const renamed = await updateExpense(created.id!, form({ description: "Lunch with a client" }));
+    expect(renamed.ok).toBe(true);
+    expect(await stored(created.id!)).toMatchObject({ vatPence: 150, vatPenceSource: "manual" });
+
+    // Once the amount no longer covers it, the typed figure gives way to the rate.
+    const smaller = await updateExpense(created.id!, form({ amountPounds: "1.20" }));
+    expect(smaller.ok).toBe(true);
+    expect(await stored(created.id!)).toMatchObject({ vatPence: 20, vatPenceSource: "derived" });
+  });
+
   it("refuses VAT that isn't less than the amount paid", async () => {
     const result = await createExpense(form({ vatSource: "manual", vatPounds: "12.00" }));
     expect(result.ok).toBe(false);

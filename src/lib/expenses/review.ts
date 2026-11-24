@@ -151,6 +151,7 @@ export async function approvePendingExpense(
       currency: input.fields ? input.fields.foreignCurrency : existing.detectedCurrency,
       posted: input.fields,
       receiptVatPence: existing.receiptVatPence,
+      existing,
     });
   } catch (e) {
     if (e instanceof ExpenseVatError) return { ok: false, error: e.message, fieldErrors: { vatPounds: e.message } };

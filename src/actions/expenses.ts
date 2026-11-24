@@ -253,6 +253,7 @@ export async function updateExpense(
           currency: parsed.data.foreignCurrency,
           posted: parsed.data,
           receiptVatPence: existing.receiptVatPence,
+          existing,
         });
       } catch (e) {
         if (e instanceof ExpenseVatError) {
