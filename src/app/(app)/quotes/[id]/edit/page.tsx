@@ -34,6 +34,7 @@ export default async function EditQuotePage({
     discountPercent: l.discountPercent ? String(l.discountPercent) : "",
     unitPricePounds: String(penceToPounds(l.unitPricePence)),
     vatRate: l.vatRate,
+    taxCode: l.taxCode ?? undefined,
   }));
 
   return (

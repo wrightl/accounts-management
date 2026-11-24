@@ -15,11 +15,13 @@ import {
   parseCreditNoteInput,
 } from "@/lib/credit-notes/schema";
 import {
-  VatRateField,
-  choiceFromVatRate,
-  vatRateFromChoice,
-  type VatRateFieldValue,
-} from "@/components/documents/vat-rate-field";
+  TaxCodeField,
+  choiceFromLineTax,
+  lineTaxFromChoice,
+  postedLineTax,
+  type TaxCodeFieldValue,
+} from "@/components/documents/tax-code-field";
+import type { TaxCode } from "@/lib/tax-codes";
 import { Plus, Trash2 } from "lucide-react";
 import { PAGE_WIDTH } from "@/components/ui/page-width";
 
@@ -31,6 +33,8 @@ export interface CreditNoteLineDraft {
   /** Percent off the line; blank for no discount. */
   discountPercent: string;
   vatRate: number;
+  /** Unset on lines saved before tax codes; the rate then implies it. */
+  taxCode?: TaxCode;
 }
 
 function newLine(defaultVatRate: number): CreditNoteLineDraft {
@@ -94,7 +98,7 @@ export function CreditNoteForm({
             quantity: Number(l.quantity) || 0,
             unitPricePence: poundsToPence(l.unitPricePounds || "0"),
             discountPercent: Number(l.discountPercent) || 0,
-            vatRate: vatEnabled ? l.vatRate : 0,
+            ...postedLineTax(l, vatEnabled),
           })),
       );
     } catch {
@@ -114,7 +118,7 @@ export function CreditNoteForm({
           unitPricePounds: l.unitPricePounds,
           discountPercent:
             l.discountPercent.trim() === "" ? 0 : Number(l.discountPercent),
-          vatRate: vatEnabled ? l.vatRate : 0,
+          ...postedLineTax(l, vatEnabled),
         })),
       ),
     );
@@ -139,8 +143,8 @@ export function CreditNoteForm({
     setLines((prev) => prev.map((l, i) => (i === index ? { ...l, ...patch } : l)));
   }
 
-  function setLineVat(index: number, value: VatRateFieldValue) {
-    updateLine(index, { vatRate: vatRateFromChoice(value) });
+  function setLineVat(index: number, value: TaxCodeFieldValue) {
+    updateLine(index, lineTaxFromChoice(value));
   }
 
   function clearLineField(index: number, field: string) {
@@ -306,11 +310,11 @@ export function CreditNoteForm({
                 </FieldError>
               </div>
               {vatEnabled ? (
-                <VatRateField
+                <TaxCodeField
                   id={`vat-${line.key}`}
                   label=""
                   compact
-                  value={choiceFromVatRate(line.vatRate)}
+                  value={choiceFromLineTax(line)}
                   onChange={(v) => setLineVat(index, v)}
                   disabled={pending}
                 />

@@ -1,4 +1,5 @@
 import "server-only";
+import type { StoredLineTax } from "@/lib/tax-codes";
 import { and, asc, count, desc, eq, type SQL } from "drizzle-orm";
 import { getDb } from "@/db";
 import { clientDisplayNameSql } from "@/lib/clients/sql";
@@ -184,10 +185,9 @@ export type OrderLineValue = {
   description: string;
   quantity: number;
   unitPricePence: number;
-  vatRate: number;
   discountPercent: number;
   position: number;
-};
+} & StoredLineTax;
 
 export function milestoneRowsToInsert(
   orderId: string,

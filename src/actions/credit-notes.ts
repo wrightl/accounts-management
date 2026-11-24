@@ -1,6 +1,8 @@
 "use server";
 
 import { and, eq, sql, sum } from "drizzle-orm";
+import { storedLineTax } from "@/lib/documents/schema";
+import { isRatedTaxCode } from "@/lib/tax-codes";
 import { documentTotals, isForeignDocumentCurrency, toSterlingPence } from "@/lib/currency";
 import { documentRate } from "@/lib/document-rate";
 import { getDb, type Database } from "@/db";
@@ -13,7 +15,6 @@ import {
 import { writeAudit } from "@/lib/audit";
 import { mutate } from "@/lib/mutate";
 import { formatMoney, poundsToPence } from "@/lib/money";
-import { parseVatRate } from "@/lib/vat";
 import { allocateCreditNoteNumber } from "@/lib/invoices/allocate";
 import { invoiceRefundDue, isInvoiceSettled, settlementMinor } from "@/lib/invoices/balance";
 import { syncFxDifference } from "@/lib/invoices/fx-difference";
@@ -31,7 +32,7 @@ import { renderCompanyCreditNotePdf } from "@/lib/pdf/templates/company-render";
 import { sendClientEmail } from "@/lib/email/client-email";
 import { resolveClientEmailSender } from "@/lib/email/resolve-client-sender";
 import { escapeHtml } from "@/lib/html";
-import { getCompanySettings } from "@/lib/settings/queries";
+import { getCompanySettings, getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { FORM_FIELD_ERROR_SUMMARY } from "@/lib/validation/field-errors";
 import { getBooksLockedThrough } from "@/lib/period-lock-queries";
 import { periodLockError } from "@/lib/period-lock";
@@ -121,6 +122,7 @@ export async function createCreditNote(
     "accounts:write",
     async ({ companyId, localUserId }) => {
       const db = getDb();
+      const company = await getOrCreateCompanySettings(companyId);
       let created: { id: string; number: string; grossPence: number };
       try {
         created = await db.transaction(async (tx) => {
@@ -140,14 +142,22 @@ export async function createCreditNote(
           );
           if (locked) throw new CreditNoteError(locked);
 
+          // Reverse VAT at the invoice's codes and rates, even if the company has
+          // since deregistered; an invoice without VAT credits without VAT.
+          const creditTax = (l: (typeof parsed.data.lines)[number]) => {
+            if (inv.vatPence > 0) return storedLineTax({ vatRegistered: true }, l);
+            if (company.vatRegistered && l.taxCode && !isRatedTaxCode(l.taxCode)) {
+              return { taxCode: l.taxCode, vatRate: 0, taxCodeNeedsReview: false as const };
+            }
+            return storedLineTax(company, { vatRate: 0 });
+          };
           let lineValues;
           try {
             lineValues = parsed.data.lines.map((l, i) => ({
               description: l.description,
               quantity: l.quantity,
               unitPricePence: poundsToPence(l.unitPricePounds),
-              // Reverse VAT at the invoice's rates; an invoice without VAT credits without VAT.
-              vatRate: inv.vatPence > 0 ? parseVatRate(l.vatRate) : 0,
+              ...creditTax(l),
               discountPercent: l.discountPercent ?? 0,
               position: i,
             }));

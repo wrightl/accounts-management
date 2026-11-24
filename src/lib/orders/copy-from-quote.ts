@@ -2,6 +2,7 @@ import "server-only";
 import { sterlingTotals } from "@/lib/currency";
 import { and, eq } from "drizzle-orm";
 import {
+  companies,
   orderLineItems,
   orderPaymentMilestones,
   orders,
@@ -9,6 +10,7 @@ import {
   quotes,
 } from "@/db/schema";
 import { rowOfCompany } from "@/lib/tenant-scope";
+import { carriedLineTax } from "@/lib/tax-codes";
 import type { Tx } from "@/lib/invoices/allocate";
 import { allocateOrderNumber } from "@/lib/invoices/allocate";
 import { todayIsoDate } from "@/lib/invoices/status";
@@ -34,6 +36,8 @@ type QuoteOrderSource = {
     quantity: number;
     unitPricePence: number;
     vatRate: number;
+    taxCode?: string | null;
+    taxCodeNeedsReview?: boolean;
     discountPercent: number;
     position: number;
   }>;
@@ -66,11 +70,15 @@ export async function createOrderFromQuote(
     })
     .returning({ id: orders.id });
 
+  const [company] = await tx
+    .select({ vatRegistered: companies.vatRegistered })
+    .from(companies)
+    .where(eq(companies.id, companyId));
   const lineValues: OrderLineValue[] = source.lines.map((l) => ({
     description: l.description,
     quantity: l.quantity,
     unitPricePence: l.unitPricePence,
-    vatRate: l.vatRate,
+    ...carriedLineTax(l, company ?? { vatRegistered: false }),
     discountPercent: l.discountPercent,
     position: l.position,
   }));

@@ -32,6 +32,7 @@ export default async function NewCreditNotePage({
           unitPricePounds: String(penceToPounds(l.unitPricePence)),
           discountPercent: l.discountPercent ? String(l.discountPercent) : "",
           vatRate: l.vatRate,
+    taxCode: l.taxCode ?? undefined,
         }))
       : [];
   const today = todayIsoDate();

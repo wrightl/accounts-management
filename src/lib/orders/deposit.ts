@@ -2,6 +2,7 @@ import "server-only";
 import { documentTotals, STERLING_RATE } from "@/lib/currency";
 import { and, asc, eq } from "drizzle-orm";
 import {
+  companies,
   invoiceLineItems,
   invoices,
   orderLineItems,
@@ -63,9 +64,14 @@ export async function raiseDepositInvoice(
     )
     .orderBy(asc(orderLineItems.position));
 
+  const [company] = await tx
+    .select({ vatRegistered: companies.vatRegistered })
+    .from(companies)
+    .where(eq(companies.id, params.companyId));
   const amountPence = resolveMilestoneAmountPence(milestone, order.grossPence);
   const issueDate = todayIsoDate();
   const lineValues = buildInvoiceLineValues({
+    company: company ?? { vatRegistered: false },
     mode: "milestone",
     amountPence,
     orderNumber: order.number,

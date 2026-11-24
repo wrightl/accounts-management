@@ -1,6 +1,7 @@
 "use server";
 
 import { and, eq } from "drizzle-orm";
+import { storedLineTax } from "@/lib/documents/schema";
 import { getDb } from "@/db";
 import { clients, recurringInvoices } from "@/db/schema";
 import { mutate } from "@/lib/mutate";
@@ -16,7 +17,6 @@ import {
 } from "@/lib/invoices/recurring-queries";
 import { generateRecurringInvoiceForTemplate } from "@/lib/invoices/recurring-generate";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
-import { parseVatRate, resolveLineVatRate } from "@/lib/vat";
 import { revalidatePath } from "next/cache";
 import {
   parseRecurringInvoiceInput,
@@ -33,7 +33,7 @@ function buildLineTemplate(
     description: l.description,
     quantity: l.quantity,
     unitPricePence: poundsToPence(l.unitPricePounds),
-    vatRate: resolveLineVatRate(company, parseVatRate(l.vatRate)),
+    ...storedLineTax(company, l),
     discountPercent: l.discountPercent ?? 0,
   }));
 }

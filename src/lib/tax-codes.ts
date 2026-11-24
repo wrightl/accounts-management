@@ -365,3 +365,52 @@ export function resolveLineTax(
   if (inferred.needsReview) throw new TaxRateNotRecognisedError(rate);
   return { taxCode: inferred.code, vatRate: rateForTaxCode(inferred.code) };
 }
+
+/**
+ * The code for a row saved before it had one. Like {@link inferTaxCodeFromRate},
+ * with two differences, because the database only lets standard and reduced
+ * carry a rate other than 0:
+ *
+ *  - A rate that isn't a number from 0 to 100 (say -5, which no screen allows
+ *    but the column could hold) is coded standard and flagged, rather than
+ *    being read as 0% and given a 0% code it doesn't have.
+ *  - A rate above 0 always gets a rated code. A company that is not VAT
+ *    registered now may have been when the row was saved, so the row is coded
+ *    from its rate and flagged rather than marked outside scope.
+ */
+export function inferStoredTaxCode(
+  rate: number,
+  company: { vatRegistered?: boolean | null },
+): InferredTaxCode {
+  if (!Number.isFinite(rate) || rate < 0 || rate > 100) return { code: "standard", needsReview: true };
+  if (rate > 0 && !company.vatRegistered) {
+    return { code: inferTaxCodeFromRate(rate, { vatRegistered: true }).code, needsReview: true };
+  }
+  return inferTaxCodeFromRate(rate, company);
+}
+
+/** A line's tax as stored: its code, its rate and whether a person should check the code. */
+export interface StoredLineTax {
+  taxCode: TaxCode;
+  vatRate: number;
+  taxCodeNeedsReview: boolean;
+}
+
+/**
+ * The tax to store on a line copied from another (quote to order, order to
+ * invoice, a recurring template to its invoice, an invoice to its credit note).
+ * The copy keeps the source's code, rate and review flag, so it charges
+ * exactly what the source did. A source saved before it had a code (or with a
+ * code that disagrees with its rate) is coded with {@link inferStoredTaxCode}.
+ */
+export function carriedLineTax(
+  line: { taxCode?: unknown; taxCodeNeedsReview?: unknown; vatRate?: number | null },
+  company: { vatRegistered?: boolean | null },
+): StoredLineTax {
+  const vatRate = line.vatRate ?? 0;
+  if (isTaxCode(line.taxCode) && (isRatedTaxCode(line.taxCode) || vatRate === 0)) {
+    return { taxCode: line.taxCode, vatRate, taxCodeNeedsReview: line.taxCodeNeedsReview === true };
+  }
+  const inferred = inferStoredTaxCode(vatRate, company);
+  return { taxCode: inferred.code, vatRate, taxCodeNeedsReview: inferred.needsReview };
+}

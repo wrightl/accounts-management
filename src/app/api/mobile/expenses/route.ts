@@ -96,6 +96,7 @@ function expenseRawFromJson(body: Record<string, unknown>): Record<string, unkno
     clientId: optionalString(body.clientId),
     orderId: optionalString(body.orderId),
     paidByUserId: optionalString(body.paidByUserId),
+    taxCode: optionalString(body.taxCode),
     vatRate: typeof body.vatRate === "number" ? String(body.vatRate) : "0",
     useMileage: body.useMileage === true ? "true" : "",
     mileageMiles: typeof body.mileageMiles === "number" ? String(body.mileageMiles) : "",

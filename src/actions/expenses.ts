@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { capturedExpenseTax, expenseTax } from "@/lib/expenses/tax";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { expenseReceipts, expenses, reimbursementItems, reimbursements } from "@/db/schema";
@@ -36,7 +37,6 @@ import {
 } from "@/lib/expenses/schema";
 import {
   parseVatRate,
-  resolveLineVatRate,
   vatFromInclusiveGross,
 } from "@/lib/vat";
 import type { ActionResult } from "@/actions/result";
@@ -246,9 +246,8 @@ export async function updateExpense(
         );
         if (locked) return { ok: false, error: locked };
       }
-      const vatRate = parsed.data.useMileage
-        ? 0
-        : resolveLineVatRate(company, parseVatRate(parsed.data.vatRate));
+      const tax = expenseTax(company, parsed.data);
+      const vatRate = tax.vatRate;
       const vatPence = vatFromInclusiveGross(amountPence, vatRate);
 
       const project = await resolveExpenseProject(companyId, parsed.data);
@@ -274,7 +273,7 @@ export async function updateExpense(
           category: parsed.data.category || null,
           spentAt: parsed.data.spentAt || null,
           amountPence,
-          vatRate,
+          ...tax,
           vatPence,
           status,
           billable: parsed.data.billable,
@@ -415,6 +414,7 @@ export async function approveExpense(
           amountPence: parsed.data.amountPence,
           foreignCurrency: parsed.data.foreignCurrency,
           originalAmountMinor: parsed.data.originalAmountMinor,
+          taxCode: parsed.data.taxCode,
           vatRate: parseVatRate(parsed.data.vatRate),
           billable: parsed.data.billable,
           clientId: project.clientId,
@@ -634,6 +634,7 @@ export async function commitExpenseImport(
       }
       const db = getDb();
       const insertedIds: string[] = [];
+      const company = await getOrCreateCompanySettings(companyId);
       await db.transaction(async (tx) => {
         for (const row of rows) {
           const [created] = await tx
@@ -644,6 +645,7 @@ export async function commitExpenseImport(
               category: row.category,
               spentAt: row.spentAt,
               amountPence: row.amountPence,
+              ...capturedExpenseTax(company),
               vatPence: 0,
               status: row.status,
               billable: false,

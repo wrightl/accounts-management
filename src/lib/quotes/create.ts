@@ -1,4 +1,5 @@
 import "server-only";
+import { storedLineTax } from "@/lib/documents/schema";
 import { documentTotals, STERLING_RATE } from "@/lib/currency";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
@@ -10,7 +11,6 @@ import { validateMilestones, type PaymentMilestoneInput } from "@/lib/quotes/pay
 import type { QuoteParsed } from "@/lib/quotes/schema";
 import { insertQuoteVersion, linesToSnapshot } from "@/lib/quotes/versions";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
-import { parseVatRate, resolveLineVatRate } from "@/lib/vat";
 import type { ActionResult } from "@/actions/result";
 
 /**
@@ -40,7 +40,7 @@ export async function createDraftQuoteRecord(
       description: l.description,
       quantity: l.quantity,
       unitPricePence: poundsToPence(l.unitPricePounds),
-      vatRate: resolveLineVatRate(company, parseVatRate(l.vatRate)),
+      ...storedLineTax(company, l),
       discountPercent: l.discountPercent ?? 0,
       position: i,
     }));

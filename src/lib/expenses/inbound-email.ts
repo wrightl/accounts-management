@@ -9,6 +9,7 @@ import {
   users,
 } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
+import { capturedExpenseTax } from "@/lib/expenses/tax";
 import { safeFilename } from "@/lib/files";
 import {
   externalSenderOf,
@@ -736,6 +737,11 @@ async function deliverInboundEmail(
     // now() is fixed within a transaction; step createdAt so attachment order survives.
     const createdBase = Date.now();
     expenseIds = await db.transaction(async (tx) => {
+      const [company] = await tx
+        .select({ vatRegistered: companies.vatRegistered })
+        .from(companies)
+        .where(eq(companies.id, companyId));
+      const capturedTax = capturedExpenseTax(company ?? { vatRegistered: false });
       for (const [i, draft] of drafts.entries()) {
         const merged = draft.extraction;
         const { amountPence, currency, originalAmountMinor } = amounts[i]!;
@@ -747,6 +753,7 @@ async function deliverInboundEmail(
           category: merged.category ?? null,
           spentAt: draft.spentAt ?? null,
           amountPence,
+          ...capturedTax,
           vatPence: 0,
           status: "pending",
           source: "email",

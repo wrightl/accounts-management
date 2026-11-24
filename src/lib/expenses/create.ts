@@ -1,4 +1,5 @@
 import "server-only";
+import { expenseTax } from "@/lib/expenses/tax";
 import { getDb } from "@/db";
 import { expenses } from "@/db/schema";
 import { refreshExpenseBankSuggestion } from "@/lib/bank/expense-match";
@@ -18,7 +19,7 @@ import {
 import { periodLockError } from "@/lib/period-lock";
 import { checkPayerInCompany } from "@/lib/expenses/payer";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
-import { parseVatRate, resolveLineVatRate, vatFromInclusiveGross } from "@/lib/vat";
+import { vatFromInclusiveGross } from "@/lib/vat";
 import type { ActionResult } from "@/actions/result";
 
 /**
@@ -83,10 +84,9 @@ export async function createExpenseRecord(
   const project = await resolveExpenseProject(companyId, data);
   if (!project.ok) return project;
 
-  // Mileage is always 0% VAT; otherwise use posted rate when registered.
-  const vatRate = data.useMileage
-    ? 0
-    : resolveLineVatRate(company, parseVatRate(data.vatRate));
+  // Mileage is outside the scope of VAT; otherwise use the posted code or rate when registered.
+  const tax = expenseTax(company, data);
+  const vatRate = tax.vatRate;
   const vatPence = vatFromInclusiveGross(amountPence, vatRate);
 
   const [row] = await getDb()
@@ -97,7 +97,7 @@ export async function createExpenseRecord(
       category: data.category || null,
       spentAt: data.spentAt || null,
       amountPence,
-      vatRate,
+      ...tax,
       vatPence,
       status: normalized.status,
       billable: data.billable,

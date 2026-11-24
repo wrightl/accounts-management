@@ -2,7 +2,19 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { and, eq, isNull } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "@/db/pglite";
 import { setTestDb, type Database } from "@/db";
-import { companies, expenses } from "@/db/schema";
+import {
+  companies,
+  creditNoteLineItems,
+  creditNotes,
+  expenses,
+  invoiceLineItems,
+  invoices,
+  orderLineItems,
+  orders,
+  quoteLineItems,
+  quotes,
+} from "@/db/schema";
+import { rowOfCompany } from "@/lib/tenant-scope";
 
 vi.mock("server-only", () => ({}));
 // Drawing hundreds of receipt PDFs is covered by the unit test; keep this one quick.
@@ -54,12 +66,39 @@ afterAll(async () => {
 });
 
 describe("tax code backfill on the demo company", () => {
+  it("is written with every line and expense already coded", async () => {
+    const uncoded = await db
+      .select({ id: expenses.id })
+      .from(expenses)
+      .where(and(eq(expenses.companyId, demoId), isNull(expenses.taxCode)));
+    expect(uncoded).toEqual([]);
+    const lines = await db
+      .select({ taxCode: invoiceLineItems.taxCode })
+      .from(invoiceLineItems)
+      .where(rowOfCompany(invoiceLineItems.invoiceId, invoices, demoId));
+    expect(lines.length).toBeGreaterThan(0);
+    expect(lines.every((l) => l.taxCode !== null)).toBe(true);
+  });
+
   it("codes three years of books without changing a single report figure", async () => {
     const [company] = await db.select().from(companies).where(eq(companies.id, demoId));
     expect(company!.vatRegistered).toBe(true);
 
     const before = await figures();
     expect(before.vat.vatOnSalesPence).toBeGreaterThan(0);
+
+    // The demo is written with codes; clear them to backfill it as if it
+    // were three years of books saved before tax codes.
+    const companyId = demoId;
+    const cleared = { taxCode: null, taxCodeNeedsReview: false };
+    await db.update(invoiceLineItems).set(cleared).where(rowOfCompany(invoiceLineItems.invoiceId, invoices, companyId));
+    await db
+      .update(creditNoteLineItems)
+      .set(cleared)
+      .where(rowOfCompany(creditNoteLineItems.creditNoteId, creditNotes, companyId));
+    await db.update(quoteLineItems).set(cleared).where(rowOfCompany(quoteLineItems.quoteId, quotes, companyId));
+    await db.update(orderLineItems).set(cleared).where(rowOfCompany(orderLineItems.orderId, orders, companyId));
+    await db.update(expenses).set(cleared).where(eq(expenses.companyId, companyId));
 
     const plans = await applyTaxCodeBackfill(db as unknown as Database, { companyId: demoId });
     expect(plans[0]!.groups.reduce((n, g) => n + g.rows, 0)).toBeGreaterThan(0);

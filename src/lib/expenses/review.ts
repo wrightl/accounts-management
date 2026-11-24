@@ -1,4 +1,5 @@
 import "server-only";
+import { expenseTax, keptExpenseTax } from "@/lib/expenses/tax";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { expenseReceipts, expenses } from "@/db/schema";
@@ -19,7 +20,7 @@ import { normalizeExpensePaymentFields } from "@/lib/expenses/schema";
 import { checkPayerInCompany } from "@/lib/expenses/payer";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { getStorage } from "@/lib/storage";
-import { resolveLineVatRate, vatFromInclusiveGross } from "@/lib/vat";
+import { vatFromInclusiveGross } from "@/lib/vat";
 import { periodLockError } from "@/lib/period-lock";
 import type { ActionResult } from "@/actions/result";
 
@@ -44,6 +45,8 @@ export type ApproveExpenseInput = {
     amountPence: number;
     foreignCurrency: string | null;
     originalAmountMinor: number | null;
+    /** Posted with the VAT rate; when absent the rate decides the code. */
+    taxCode?: string | null;
     vatRate: number;
     billable: boolean;
     clientId: string | null;
@@ -134,10 +137,10 @@ export async function approvePendingExpense(
   // Approving brings the expense into the books on its spend date.
   const locked = periodLockError(company.booksLockedThrough, spentAt);
   if (locked) return { ok: false, error: locked };
-  const vatRate = resolveLineVatRate(
-    company,
-    input.fields?.vatRate ?? existing.vatRate,
-  );
+  const tax = input.fields
+    ? expenseTax(company, { taxCode: input.fields.taxCode, vatRate: input.fields.vatRate })
+    : keptExpenseTax(company, existing);
+  const vatRate = tax.vatRate;
   const vatPence = vatFromInclusiveGross(amountPence, vatRate);
 
   await db
@@ -158,7 +161,7 @@ export async function approvePendingExpense(
           }
         : {}),
       amountPence,
-      vatRate,
+      ...tax,
       vatPence,
       status: normalized.status,
       paidByUserId: normalized.paidByUserId,

@@ -39,6 +39,7 @@ export default async function EditInvoicePage({
     discountPercent: l.discountPercent ? String(l.discountPercent) : "",
     unitPricePounds: String(penceToPounds(l.unitPricePence)),
     vatRate: l.vatRate,
+    taxCode: l.taxCode ?? undefined,
     expenseId: l.expenseId ?? undefined,
   }));
 
