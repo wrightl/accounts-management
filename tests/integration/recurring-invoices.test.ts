@@ -259,5 +259,10 @@ describe("recurring invoices in a foreign currency", () => {
 
     const now = await generateRecurringInvoiceForTemplate(tmpl.id, { today: "2026-03-15" });
     expect(now).toMatchObject({ ok: false, error: expect.stringMatching(/EUR rate/) });
+    // Retries the same day don't notify again.
+    await generateRecurringInvoices({ today: "2026-03-15" });
+    expect(
+      await db.select().from(notifications).where(eq(notifications.companyId, companyId)),
+    ).toHaveLength(1);
   });
 });

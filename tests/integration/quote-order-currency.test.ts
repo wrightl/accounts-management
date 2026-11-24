@@ -11,6 +11,7 @@ import {
   orders,
   quoteVersions,
   quotes,
+  recurringInvoices,
   users,
 } from "@/db/schema";
 import { resetFxFetchBackoff } from "@/lib/bank/fx";
@@ -19,7 +20,8 @@ import { seedCompany } from "@/lib/test/seed-company";
 import { createDraftQuoteRecord } from "@/lib/quotes/create";
 import { getQuoteDetail, getQuoteVersionSnapshot } from "@/lib/quotes/queries";
 import { createOrderFromQuote } from "@/lib/orders/copy-from-quote";
-import { raiseDepositInvoice } from "@/lib/orders/deposit";
+import { depositRateFor, raiseDepositInvoice } from "@/lib/orders/deposit";
+import { recurringDueSoon } from "@/lib/safe-to-pay/queries";
 import { sumInvoicedForOrder } from "@/lib/orders/invoice-from-order";
 
 vi.mock("server-only", () => ({}));
@@ -180,6 +182,7 @@ describe("orders and their invoices", () => {
         companyId,
         orderId,
         createdByUserId: actorId,
+        issueDate: "2026-05-10",
         rate: { currency: "USD", fxRate: 1.5, fxRateDate: "2026-05-10", fxRateSource: "boe" },
       }),
     );
@@ -190,6 +193,8 @@ describe("orders and their invoices", () => {
       currency: "USD",
       fxRate: 1.5,
       fxRateDate: "2026-05-10",
+      // The rate's date is the invoice's own issue date.
+      issueDate: "2026-05-10",
       grossMinor: 30000,
       grossPence: 20000,
     });
@@ -208,6 +213,7 @@ describe("orders and their invoices", () => {
           companyId,
           orderId,
           createdByUserId: actorId,
+          issueDate: "2026-05-10",
           rate: { currency: "GBP", fxRate: 1, fxRateDate: null, fxRateSource: null },
         }),
       ),
@@ -258,5 +264,51 @@ describe("latestStoredRates", () => {
     ]);
     const rates = await latestStoredRates(["usd", "GBP", "EUR"]);
     expect(Object.fromEntries(rates)).toEqual({ GBP: 1, USD: 1.3 });
+  });
+});
+
+describe("depositRateFor", () => {
+  const quote = { currency: "USD", fxRate: 1.25, fxRateDate: "2026-05-01", fxRateSource: "manual" };
+
+  it("takes the Bank of England rate for the deposit's issue date", async () => {
+    await db.insert(fxRates).values({ currency: "USD", observationDate: "2026-05-10", foreignPerGbp: 1.4 });
+    expect(await depositRateFor(quote, "2026-05-10")).toEqual({
+      currency: "USD",
+      fxRate: 1.4,
+      fxRateDate: "2026-05-10",
+      fxRateSource: "boe",
+    });
+  });
+
+  it("falls back to the quote's rate when there's no Bank of England rate", async () => {
+    expect(await depositRateFor(quote, "2026-05-10")).toEqual({
+      currency: "USD",
+      fxRate: 1.25,
+      fxRateDate: "2026-05-01",
+      fxRateSource: "manual",
+    });
+  });
+});
+
+describe("recurring invoices in the safe-to-pay figure", () => {
+  it("converts foreign templates and counts the ones it can't value", async () => {
+    await db.insert(fxRates).values({ currency: "USD", observationDate: "2026-05-01", foreignPerGbp: 1.25 });
+    const template = (currency: string) => ({
+      companyId,
+      clientId,
+      name: `${currency} retainer`,
+      currency,
+      lineTemplate: [{ description: "Retainer", quantity: 1, unitPricePence: 100000 }],
+      dayOfMonth: 15,
+      onGenerate: "draft",
+      enabled: true,
+      nextRunOn: "2026-05-15",
+    });
+    await db.insert(recurringInvoices).values([template("USD"), template("EUR"), template("GBP")]);
+    // $1,000 at 1.25 is £800, plus £1,000; the EUR template has no rate.
+    expect(await recurringDueSoon(companyId, "2026-05-10", "2026-06-10")).toEqual({
+      pence: 180000,
+      unpriced: 1,
+    });
   });
 });

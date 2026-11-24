@@ -1,5 +1,5 @@
 import "server-only";
-import { documentColumns, type DocumentRateDetails } from "@/lib/document-rate";
+import { documentColumns, documentRate, type DocumentRateDetails } from "@/lib/document-rate";
 import { and, asc, eq } from "drizzle-orm";
 import {
   companies,
@@ -16,7 +16,6 @@ import {
   resolveMilestoneAmountPence,
   resolveMilestoneDueDate,
 } from "@/lib/orders/invoice-from-order";
-import { todayIsoDate } from "@/lib/invoices/status";
 
 export type DepositInvoice = {
   invoiceId: string;
@@ -27,10 +26,34 @@ export type DepositInvoice = {
 };
 
 /**
+ * The rate for a deposit issued on `issueDate` when a client accepts a quote:
+ * the Bank of England rate for that date, or, since the client is waiting and
+ * can't be asked to retry, the quote's own rate when that can't be fetched.
+ */
+export async function depositRateFor(
+  quote: {
+    currency: string;
+    fxRate: number;
+    fxRateDate: string | null;
+    fxRateSource: string | null;
+  },
+  issueDate: string,
+): Promise<DocumentRateDetails> {
+  const fetched = await documentRate(quote.currency, issueDate);
+  if (fetched.ok) return fetched.rate;
+  return {
+    currency: quote.currency,
+    fxRate: quote.fxRate,
+    fxRateDate: quote.fxRateDate,
+    fxRateSource: quote.fxRateSource as DocumentRateDetails["fxRateSource"],
+  };
+}
+
+/**
  * Raise the order's first payment milestone as a sent invoice, so the client
  * can pay it straight after accepting the quote. Returns null when the order
- * has no payment schedule. `rate` is the rate for today in the order's
- * currency, fetched by the caller before its transaction.
+ * has no payment schedule. `rate` is the rate for `issueDate` in the order's
+ * currency, fetched by the caller before its transaction for that same date.
  */
 export async function raiseDepositInvoice(
   tx: Tx,
@@ -38,6 +61,7 @@ export async function raiseDepositInvoice(
     companyId: string;
     orderId: string;
     createdByUserId: string | null;
+    issueDate: string;
     rate: DocumentRateDetails;
   },
 ): Promise<DepositInvoice | null> {
@@ -81,7 +105,7 @@ export async function raiseDepositInvoice(
     .where(eq(companies.id, params.companyId));
   // In the order's currency.
   const amountPence = resolveMilestoneAmountPence(milestone, order.grossMinor);
-  const issueDate = todayIsoDate();
+  const issueDate = params.issueDate;
   const lineValues = buildInvoiceLineValues({
     company: company ?? { vatRegistered: false },
     mode: "milestone",

@@ -111,7 +111,18 @@ async function recurringEvents(
   const rates = await latestStoredRates(rows.map((r) => r.currency));
   return rows.flatMap((r) => {
     const rate = rates.get(r.currency);
-    if (rate == null) return [];
+    if (rate == null) {
+      console.warn(
+        JSON.stringify({
+          level: "warn",
+          msg: "forecast.recurring_unpriced",
+          companyId,
+          template: r.name,
+          currency: r.currency,
+        }),
+      );
+      return [];
+    }
     const gross = toSterlingPence(invoiceTotals((r.lines as LineItem[]) ?? []).grossPence, rate);
     if (gross <= 0) return [];
     const remaining =

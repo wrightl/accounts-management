@@ -7,7 +7,11 @@ import { getDb } from "@/db";
 import { companies, quotes } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
 import { createOrderFromQuote } from "@/lib/orders/copy-from-quote";
-import { raiseDepositInvoice, type DepositInvoice } from "@/lib/orders/deposit";
+import {
+  depositRateFor,
+  raiseDepositInvoice,
+  type DepositInvoice,
+} from "@/lib/orders/deposit";
 import { enqueueSendJob, processSendJob } from "@/lib/outbox";
 import { createInvoiceCheckout } from "@/lib/payments/checkout";
 import type { PaymentMilestoneInput } from "@/lib/quotes/payment-schedule";
@@ -19,7 +23,6 @@ import {
 } from "@/lib/quotes/status-write";
 import { todayIsoDate } from "@/lib/invoices/status";
 import { formatMoney } from "@/lib/money";
-import { documentRate, type DocumentRateDetails } from "@/lib/document-rate";
 import type { QuoteStatus } from "@/lib/quotes/status";
 import type { ActionResult } from "@/actions/result";
 import {
@@ -112,21 +115,9 @@ export async function acceptPublicQuote(
   }));
 
   const takeDeposit = detail.quote.depositOnAccept && milestones.length > 0;
-  // The deposit invoice takes today's rate, fetched before the transaction.
-  // The client is waiting, so if the Bank of England can't be reached it
-  // falls back to the quote's own rate.
-  let depositRate: DocumentRateDetails | null = null;
-  if (takeDeposit) {
-    const fetched = await documentRate(detail.quote.currency, todayIsoDate());
-    depositRate = fetched.ok
-      ? fetched.rate
-      : {
-          currency: detail.quote.currency,
-          fxRate: detail.quote.fxRate,
-          fxRateDate: detail.quote.fxRateDate,
-          fxRateSource: detail.quote.fxRateSource as DocumentRateDetails["fxRateSource"],
-        };
-  }
+  // Fetched before the transaction, for the same date the deposit is issued.
+  const depositIssueDate = todayIsoDate();
+  const depositRate = takeDeposit ? await depositRateFor(detail.quote, depositIssueDate) : null;
 
   const db = getDb();
   let accepted: { orderId: string; deposit: DepositInvoice | null };
@@ -157,6 +148,7 @@ export async function acceptPublicQuote(
             companyId: loaded.companyId,
             orderId: newOrderId,
             createdByUserId: loaded.createdByUserId,
+            issueDate: depositIssueDate,
             rate: depositRate,
           })
         : null;

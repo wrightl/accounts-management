@@ -275,6 +275,8 @@ async function generateFromTemplateRow(
         href: `/recurring-invoices/${tmpl.id}`,
         entityType: "recurring_invoice",
         entityId: tmpl.id,
+        // Once per template and day, however often the run or Generate now retries.
+        dedupeKey: `recurring.failed:${tmpl.id}:${today}`,
       });
     } catch {
       // The log above still records it.
