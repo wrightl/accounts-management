@@ -15,6 +15,8 @@ export type ReceiptExtraction = {
   currency?: string;
   /** Last four digits of the card the receipt was paid with, when shown. */
   cardLast4?: string;
+  /** VAT the receipt shows in total, in its own currency, e.g. "2.00". */
+  vatPounds?: string;
   confidence: "high" | "partial" | "none";
 };
 
@@ -236,6 +238,38 @@ export function parseReceiptAmount(text: string): string | undefined {
   return max.toFixed(2);
 }
 
+/** A VAT registration number line, not an amount: "VAT No", "VAT Reg", "VAT number". */
+const VAT_NUMBER_LINE = /\bvat\s*(?:reg(?:istration)?|no\b|number|#)/i;
+/** A total that includes or excludes VAT, not the VAT itself. */
+const VAT_TOTAL_LINE = /\b(?:inc|incl|including|ex|excl|excluding|exc|plus|\+)\.?\s*vat\b/i;
+
+/**
+ * The VAT a receipt shows in total, e.g. "VAT 20% 2.00" or "Total VAT £2.00".
+ * Skips VAT numbers, percentages and totals "inc VAT". When a receipt lists VAT
+ * per rate and a total, the largest figure is the total. Never more than the
+ * amount paid.
+ */
+export function parseReceiptVat(text: string, amountPounds?: string): string | undefined {
+  const total = amountPounds ? Number(amountPounds) : undefined;
+  const candidates: number[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    const vatAt = line.search(/\bvat\b/i);
+    if (vatAt < 0 || VAT_NUMBER_LINE.test(line) || VAT_TOTAL_LINE.test(line)) continue;
+    // The first amount after "VAT" on the line, skipping a rate such as "20%"
+    // or "20.00%", so "Subtotal 10.00 VAT 2.00 Total 12.00" reads 2.00.
+    for (const match of line.slice(vatAt).matchAll(/(?<![\d.,])(\d{1,6}[.,]\d{2})(?![\d])(\s*%)?/g)) {
+      if (match[2]) continue;
+      const value = Number(match[1]!.replace(",", "."));
+      if (Number.isFinite(value) && value > 0 && !(total !== undefined && Number.isFinite(total) && value >= total)) {
+        candidates.push(value);
+      }
+      break;
+    }
+  }
+  if (candidates.length === 0) return undefined;
+  return Math.max(...candidates).toFixed(2);
+}
+
 const MERCHANT_SKIP =
   /^(receipt|invoice|tax|vat|total|date|time|tel|phone|www\.|http|billing summary|summary|sold to|bill to|payment instructions|questions on)/i;
 
@@ -291,6 +325,7 @@ export function parseReceiptText(text: string): ReceiptExtraction {
   const category = inferReceiptCategory(text);
   const currency = detectReceiptCurrency(text);
   const cardLast4 = parseCardLast4(text);
+  const vatPounds = parseReceiptVat(text, amountPounds);
   const description = merchant;
 
   const fields = [description, amountPounds, spentAt, category].filter(Boolean);
@@ -306,6 +341,7 @@ export function parseReceiptText(text: string): ReceiptExtraction {
     merchant,
     currency,
     cardLast4,
+    vatPounds,
     confidence,
   };
 }
@@ -318,6 +354,7 @@ export function normalizeAiExtraction(raw: {
   merchant?: string | null;
   currency?: string | null;
   cardLast4?: string | null;
+  vatPounds?: string | null;
 }): ReceiptExtraction {
   const description = raw.description?.trim() || raw.merchant?.trim() || undefined;
   const amountPounds = raw.amountPounds?.trim() || undefined;
@@ -327,6 +364,12 @@ export function normalizeAiExtraction(raw: {
   const currency = normalizeCurrencyCode(raw.currency);
   const cardDigits = raw.cardLast4?.replace(/\D/g, "") ?? "";
   const cardLast4 = cardDigits.length === 4 ? cardDigits : undefined;
+  const vatRaw = raw.vatPounds?.replace(/[^\d.]/g, "") ?? "";
+  const vatValue = Number(vatRaw);
+  const vatPounds =
+    vatRaw && Number.isFinite(vatValue) && vatValue > 0 && (!amountPounds || vatValue < Number(amountPounds))
+      ? vatValue.toFixed(2)
+      : undefined;
 
   const fields = [description, amountPounds, spentAt, category].filter(Boolean);
   let confidence: ReceiptExtraction["confidence"] = "none";
@@ -341,6 +384,7 @@ export function normalizeAiExtraction(raw: {
     merchant: raw.merchant?.trim() || undefined,
     currency,
     cardLast4,
+    vatPounds,
     confidence,
   };
 }

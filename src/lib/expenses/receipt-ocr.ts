@@ -179,6 +179,7 @@ async function runAiGatewayOcr(
     category: z.enum(EXPENSE_CATEGORIES).nullable(),
     currency: z.string().nullable(),
     cardLast4: z.string().nullable(),
+    vatPounds: z.string().nullable(),
   });
 
   const mediaType = isPdfContent(bytes, contentType) ? "application/pdf" : contentType;
@@ -205,6 +206,7 @@ async function runAiGatewayOcr(
 - category: best match from ${EXPENSE_CATEGORIES.join(", ")}
 - currency: ISO 4217 currency code of the total (e.g. GBP, USD, EUR). Use null if unclear.
 - cardLast4: the last 4 digits of the payment card if the receipt shows a masked card number (e.g. "**** 1234" gives "1234"). Use null if no card number is shown.
+- vatPounds: the total VAT shown on the receipt as a decimal string e.g. "2.00", in the same currency as the total. Not the VAT rate, not a VAT registration number, not a total including VAT. Use null if the receipt shows no VAT amount.
 Use null for any field you cannot determine confidently.`,
           },
           filePart,

@@ -701,6 +701,13 @@
       "when": 1795535936701,
       "tag": "0099_tax_code_required",
       "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1795537813478,
+      "tag": "0100_expense_vat_source",
+      "breakpoints": true
     }
   ]
 }

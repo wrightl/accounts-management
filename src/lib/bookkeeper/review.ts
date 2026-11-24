@@ -8,6 +8,7 @@ import { ReconciliationError, confirmMatch, updateTransactionCategory } from "@/
 import { suggestBankCategories } from "@/lib/bookkeeper/categories";
 import { suggestReceiptMatches } from "@/lib/bookkeeper/receipts";
 import { checkPeriodOpen } from "@/lib/period-lock-queries";
+import { resolveExpenseVat } from "@/lib/expenses/vat-amount";
 import type { ActionResult } from "@/actions/result";
 
 /**
@@ -125,14 +126,19 @@ export async function acceptReceiptMatchFor(
   if (useBankAmount && bankPence !== row.expense.amountPence) {
     const locked = await checkPeriodOpen(companyId, row.expense.spentAt);
     if (locked) return { ok: false, error: locked };
-    const rate = row.expense.vatRate;
+    // VAT read from the receipt or typed is what was charged, so it stays while
+    // it is still below the new amount; otherwise it is worked out again.
+    const vat = resolveExpenseVat({
+      amountPence: bankPence,
+      vatRate: row.expense.vatRate,
+      currency: row.expense.detectedCurrency,
+      receiptVatPence: row.expense.receiptVatPence,
+      existing: row.expense,
+    });
     await db
       .update(expenses)
-      .set({
-        amountPence: bankPence,
-        vatPence: rate > 0 ? Math.round((bankPence * rate) / (100 + rate)) : 0,
-      })
-      .where(eq(expenses.id, row.expense.id));
+      .set({ amountPence: bankPence, ...vat })
+      .where(and(eq(expenses.id, row.expense.id), eq(expenses.companyId, companyId)));
   }
   try {
     await confirmMatch(companyId, matchId);

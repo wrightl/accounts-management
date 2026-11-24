@@ -1,5 +1,6 @@
 import "server-only";
 import { expenseTax, keptExpenseTax } from "@/lib/expenses/tax";
+import { ExpenseVatError, resolveExpenseVat } from "@/lib/expenses/vat-amount";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { expenseReceipts, expenses } from "@/db/schema";
@@ -20,7 +21,6 @@ import { normalizeExpensePaymentFields } from "@/lib/expenses/schema";
 import { checkPayerInCompany } from "@/lib/expenses/payer";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { getStorage } from "@/lib/storage";
-import { vatFromInclusiveGross } from "@/lib/vat";
 import { periodLockError } from "@/lib/period-lock";
 import type { ActionResult } from "@/actions/result";
 
@@ -48,6 +48,9 @@ export type ApproveExpenseInput = {
     /** Posted with the VAT rate; when absent the rate decides the code. */
     taxCode?: string | null;
     vatRate: number;
+    /** VAT read from the receipt or typed, with where it came from. */
+    vatPounds?: string;
+    vatSource?: string;
     billable: boolean;
     clientId: string | null;
     orderId: string | null;
@@ -140,8 +143,20 @@ export async function approvePendingExpense(
   const tax = input.fields
     ? expenseTax(company, { taxCode: input.fields.taxCode, vatRate: input.fields.vatRate })
     : keptExpenseTax(company, existing);
-  const vatRate = tax.vatRate;
-  const vatPence = vatFromInclusiveGross(amountPence, vatRate);
+  let vat;
+  try {
+    vat = resolveExpenseVat({
+      amountPence,
+      vatRate: tax.vatRate,
+      currency: input.fields ? input.fields.foreignCurrency : existing.detectedCurrency,
+      posted: input.fields,
+      // A pending expense's VAT hasn't been chosen yet, so its receipt figure is offered.
+      receiptVatPence: existing.receiptVatPence,
+    });
+  } catch (e) {
+    if (e instanceof ExpenseVatError) return { ok: false, error: e.message, fieldErrors: { vatPounds: e.message } };
+    throw e;
+  }
 
   await db
     .update(expenses)
@@ -162,7 +177,8 @@ export async function approvePendingExpense(
         : {}),
       amountPence,
       ...tax,
-      vatPence,
+      ...vat,
+      ...(vat.vatPenceSource === "receipt" ? { receiptVatPence: vat.vatPence } : {}),
       status: normalized.status,
       paidByUserId: normalized.paidByUserId,
     })

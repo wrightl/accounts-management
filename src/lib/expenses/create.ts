@@ -1,5 +1,6 @@
 import "server-only";
 import { expenseTax } from "@/lib/expenses/tax";
+import { ExpenseVatError, resolveExpenseVat } from "@/lib/expenses/vat-amount";
 import { getDb } from "@/db";
 import { expenses } from "@/db/schema";
 import { refreshExpenseBankSuggestion } from "@/lib/bank/expense-match";
@@ -19,7 +20,6 @@ import {
 import { periodLockError } from "@/lib/period-lock";
 import { checkPayerInCompany } from "@/lib/expenses/payer";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
-import { vatFromInclusiveGross } from "@/lib/vat";
 import type { ActionResult } from "@/actions/result";
 
 /**
@@ -86,8 +86,18 @@ export async function createExpenseRecord(
 
   // Mileage is outside the scope of VAT; otherwise use the posted code or rate when registered.
   const tax = expenseTax(company, data);
-  const vatRate = tax.vatRate;
-  const vatPence = vatFromInclusiveGross(amountPence, vatRate);
+  let vat;
+  try {
+    vat = resolveExpenseVat({
+      amountPence,
+      vatRate: tax.vatRate,
+      currency: data.foreignCurrency,
+      posted: data,
+    });
+  } catch (e) {
+    if (e instanceof ExpenseVatError) return { ok: false, error: e.message, fieldErrors: { vatPounds: e.message } };
+    throw e;
+  }
 
   const [row] = await getDb()
     .insert(expenses)
@@ -98,7 +108,8 @@ export async function createExpenseRecord(
       spentAt: data.spentAt || null,
       amountPence,
       ...tax,
-      vatPence,
+      ...vat,
+      ...(vat.vatPenceSource === "receipt" ? { receiptVatPence: vat.vatPence } : {}),
       status: normalized.status,
       billable: data.billable,
       clientId: project.clientId,
