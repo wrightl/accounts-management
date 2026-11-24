@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { capturedExpenseTax, expenseTax } from "@/lib/expenses/tax";
+import { ExpenseVatError, resolveExpenseVat } from "@/lib/expenses/vat-amount";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { expenseReceipts, expenses, reimbursementItems, reimbursements } from "@/db/schema";
@@ -35,10 +36,7 @@ import {
   parseExpenseImportCsvFile,
   parseExpenseInput,
 } from "@/lib/expenses/schema";
-import {
-  parseVatRate,
-  vatFromInclusiveGross,
-} from "@/lib/vat";
+import { parseVatRate } from "@/lib/vat";
 import type { ActionResult } from "@/actions/result";
 import { periodLockError } from "@/lib/period-lock";
 import { checkPeriodOpen, getBooksLockedThrough } from "@/lib/period-lock-queries";
@@ -247,8 +245,22 @@ export async function updateExpense(
         if (locked) return { ok: false, error: locked };
       }
       const tax = expenseTax(company, parsed.data);
-      const vatRate = tax.vatRate;
-      const vatPence = vatFromInclusiveGross(amountPence, vatRate);
+      let vat;
+      try {
+        vat = resolveExpenseVat({
+          amountPence,
+          vatRate: tax.vatRate,
+          currency: parsed.data.foreignCurrency,
+          posted: parsed.data,
+          receiptVatPence: existing.receiptVatPence,
+        });
+      } catch (e) {
+        if (e instanceof ExpenseVatError) {
+          return { ok: false, error: e.message, fieldErrors: { vatPounds: e.message } };
+        }
+        throw e;
+      }
+      const vatPence = vat.vatPence;
 
       const project = await resolveExpenseProject(companyId, parsed.data);
       if (!project.ok) return project;
@@ -274,7 +286,8 @@ export async function updateExpense(
           spentAt: parsed.data.spentAt || null,
           amountPence,
           ...tax,
-          vatPence,
+          ...vat,
+          ...(vat.vatPenceSource === "receipt" ? { receiptVatPence: vat.vatPence } : {}),
           status,
           billable: parsed.data.billable,
           clientId: project.clientId,
@@ -416,6 +429,8 @@ export async function approveExpense(
           originalAmountMinor: parsed.data.originalAmountMinor,
           taxCode: parsed.data.taxCode,
           vatRate: parseVatRate(parsed.data.vatRate),
+          vatPounds: parsed.data.vatPounds,
+          vatSource: parsed.data.vatSource,
           billable: parsed.data.billable,
           clientId: project.clientId,
           orderId: project.orderId,

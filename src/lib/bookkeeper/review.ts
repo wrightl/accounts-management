@@ -130,7 +130,10 @@ export async function acceptReceiptMatchFor(
       .update(expenses)
       .set({
         amountPence: bankPence,
-        vatPence: rate > 0 ? Math.round((bankPence * rate) / (100 + rate)) : 0,
+        // VAT read from the receipt or typed is what was charged; only a worked-out figure follows the amount.
+        ...(row.expense.vatPenceSource === "derived"
+          ? { vatPence: rate > 0 ? Math.round((bankPence * rate) / (100 + rate)) : 0 }
+          : {}),
       })
       .where(eq(expenses.id, row.expense.id));
   }

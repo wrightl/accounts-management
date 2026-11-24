@@ -96,6 +96,10 @@ export const expenseFieldsSchema = z.object({
   coversFrom: optionalIsoDate,
   coversTo: optionalIsoDate,
   taxCode: lineTaxCodeSchema("purchases"),
+  /** VAT in pounds when it was read from the receipt or typed; blank to work it out from the rate. */
+  vatPounds: z.string().trim().optional(),
+  /** Where vatPounds came from: "receipt" or "manual". Anything else works the VAT out. */
+  vatSource: z.enum(["derived", "receipt", "manual"]).optional().catch(undefined),
   vatRate: z.coerce
     .number({ error: "Enter a VAT rate between 0 and 100" })
     .int("Enter a whole-number VAT rate")
@@ -155,6 +159,8 @@ export function expenseRawFromFormData(formData: FormData): Record<string, unkno
     coversFrom: formData.get("coversFrom") ?? undefined,
     coversTo: formData.get("coversTo") ?? undefined,
     taxCode: formData.get("taxCode") ?? "",
+    vatPounds: formData.get("vatPounds") ?? undefined,
+    vatSource: formData.get("vatSource") ?? undefined,
     vatRate: formData.get("vatRate") ?? "0",
   };
 }

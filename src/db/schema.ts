@@ -73,6 +73,8 @@ export const entityTypeEnum = pgEnum("entity_type", [
 /** How a sole trader's profit is worked out: when money moves, or when it is earned and owed. */
 export const accountingBasisEnum = pgEnum("accounting_basis", ["cash", "accruals"]);
 export const invoiceSourceEnum = pgEnum("invoice_source", ["alfa", "import"]);
+/** Where an expense's VAT figure came from: worked out from the rate, read from the receipt, or typed. */
+export const vatPenceSourceEnum = pgEnum("vat_pence_source", ["derived", "receipt", "manual"]);
 /** VAT tax codes; see src/lib/tax-codes.ts. */
 export const taxCodeEnum = pgEnum("tax_code", TAX_CODES);
 export const invoiceStatusEnum = pgEnum("invoice_status", [
@@ -897,6 +899,13 @@ export const expenses = pgTable(
     /** The backfill could only guess the tax code; a person should check it. */
     taxCodeNeedsReview: boolean("tax_code_needs_review").notNull().default(false),
     vatPence: integer("vat_pence").notNull().default(0),
+    /**
+     * Where vatPence came from. "derived" works it out from the rate and the
+     * gross amount; "receipt" and "manual" keep the figure as given.
+     */
+    vatPenceSource: vatPenceSourceEnum("vat_pence_source").notNull().default("derived"),
+    /** The VAT the receipt shows, in pence, kept to compare even when it isn't used. GBP receipts only. */
+    receiptVatPence: integer("receipt_vat_pence"),
     status: expenseStatusEnum("status").notNull().default("recorded"),
     source: expenseSourceEnum("source").notNull().default("manual"),
     /** Rebillable: recharge this to the client on a later invoice. */

@@ -44,6 +44,7 @@ import {
 } from "@/components/documents/tax-code-field";
 import type { TaxCode } from "@/lib/tax-codes";
 import { vatFromInclusiveGross } from "@/lib/vat";
+import { vatDiffersFromDerived } from "@/lib/expenses/vat-amount";
 import {
   expenseRawFromFormData,
   normalizeExpensePaymentFields,
@@ -100,6 +101,10 @@ export function ExpenseForm({
     vatRate?: number;
     taxCode?: string | null;
     vatPence?: number;
+    /** Where vatPence came from: worked out, read from the receipt, or typed. */
+    vatPenceSource?: string;
+    /** The VAT a receipt showed, in pence, when one was read. */
+    receiptVatPence?: number | null;
     status: string;
     source?: string;
     billable: boolean;
@@ -203,6 +208,13 @@ export function ExpenseForm({
   );
   const [vatRate, setVatRate] = useState(vatRegistered ? initialTax.vatRate : 0);
   const [taxCode, setTaxCode] = useState<TaxCode>(initialTax.taxCode);
+  // A VAT figure read from the receipt or typed; null works it out from the rate.
+  const [vatEntry, setVatEntry] = useState<{ source: "receipt" | "manual"; pounds: string } | null>(() =>
+    (expense?.vatPenceSource === "receipt" || expense?.vatPenceSource === "manual") && expense.vatPence != null
+      ? { source: expense.vatPenceSource, pounds: penceToPounds(expense.vatPence).toFixed(2) }
+      : null,
+  );
+  const [receiptVatPence, setReceiptVatPence] = useState<number | null>(expense?.receiptVatPence ?? null);
   // Only guess who paid when there's a single founder to choose from;
   // otherwise the reviewer must pick, so a wrong payee isn't reimbursed.
   const defaultPayee = founders.length === 1 ? founders[0].id : "";
@@ -301,6 +313,13 @@ export function ExpenseForm({
         : ""
       : amountPounds;
 
+  // A VAT figure can be read or typed for sterling expenses with a rated code.
+  const vatAmountApplies = vatRegistered && !useMileage && !foreign && vatRate > 0;
+  const derivedVatPence = vatFromInclusiveGross(parsePence(sterlingPounds) ?? 0, vatRate);
+  const shownVatPence = vatEntry ? parsePence(vatEntry.pounds) : derivedVatPence;
+  const receiptDiffers =
+    receiptVatPence != null && vatDiffersFromDerived(receiptVatPence, derivedVatPence);
+
   useReportExpenseSummary(
     description,
     useMileage ? computedMileagePence : parsePence(sterlingPounds),
@@ -326,6 +345,7 @@ export function ExpenseForm({
     sterlingPounds,
     vatRate,
     taxCode,
+    vatEntry,
     currency,
     originalAmount,
     pendingReceipt !== null,
@@ -366,6 +386,11 @@ export function ExpenseForm({
     if (extraction.category && !category) {
       setCategory(extraction.category);
     }
+    // VAT in another currency isn't converted yet, so only a sterling receipt's VAT is used.
+    if (extraction.vatPounds && !isForeignCurrency(extraction.currency)) {
+      setReceiptVatPence(parsePence(extraction.vatPounds));
+      if (vatEntry?.source !== "manual") setVatEntry({ source: "receipt", pounds: extraction.vatPounds });
+    }
   }
 
   function buildFormData(targetStatus: ExpenseStatusOption): FormData {
@@ -401,6 +426,13 @@ export function ExpenseForm({
     );
     if (useMileage || !vatRegistered) formData.delete("taxCode");
     else formData.set("taxCode", taxCode);
+    if (vatEntry && vatAmountApplies) {
+      formData.set("vatPounds", vatEntry.pounds);
+      formData.set("vatSource", vatEntry.source);
+    } else {
+      formData.delete("vatPounds");
+      formData.set("vatSource", "derived");
+    }
     return formData;
   }
 
@@ -504,6 +536,13 @@ export function ExpenseForm({
     );
     if (useMileage || !vatRegistered) formData.delete("taxCode");
     else formData.set("taxCode", taxCode);
+    if (vatEntry && vatAmountApplies) {
+      formData.set("vatPounds", vatEntry.pounds);
+      formData.set("vatSource", vatEntry.source);
+    } else {
+      formData.delete("vatPounds");
+      formData.set("vatSource", "derived");
+    }
     if (mode === "create" && fromBankTransaction) {
       formData.set("bankTransactionId", fromBankTransaction.id);
     }
@@ -947,10 +986,61 @@ export function ExpenseForm({
             <FieldError id="vatRate-error">{fieldErrors.vatRate}</FieldError>
           </div>
         ) : null}
-        {vatRegistered && !useMileage && sterlingPounds.trim() ? (
+        {vatAmountApplies && sterlingPounds.trim() ? (
+          <div>
+            <Label htmlFor="expense-vat-amount">VAT amount (£)</Label>
+            <Input
+              id="expense-vat-amount"
+              inputMode="decimal"
+              value={vatEntry ? vatEntry.pounds : penceToPounds(derivedVatPence).toFixed(2)}
+              onChange={(e) => {
+                setVatEntry({ source: "manual", pounds: e.target.value });
+                clearField("vatPounds");
+              }}
+              disabled={!canWrite || pending}
+              aria-invalid={Boolean(fieldErrors.vatPounds) || undefined}
+              aria-describedby="expense-vat-amount-hint vatPounds-error"
+            />
+            <p id="expense-vat-amount-hint" className="mt-1 text-sm text-muted">
+              {vatEntry?.source === "receipt"
+                ? "From the receipt."
+                : vatEntry?.source === "manual"
+                  ? "Entered by hand."
+                  : "Worked out from the rate."}
+              {receiptDiffers ? (
+                <>
+                  {" "}
+                  The receipt shows {formatGBP(receiptVatPence!)}; worked out from the rate it&apos;s{" "}
+                  {formatGBP(derivedVatPence)}.
+                </>
+              ) : null}{" "}
+              {vatEntry ? (
+                <button
+                  type="button"
+                  className="underline"
+                  onClick={() => setVatEntry(null)}
+                  disabled={!canWrite || pending}
+                >
+                  Work it out from the rate
+                </button>
+              ) : receiptVatPence != null ? (
+                <button
+                  type="button"
+                  className="underline"
+                  onClick={() =>
+                    setVatEntry({ source: "receipt", pounds: penceToPounds(receiptVatPence).toFixed(2) })
+                  }
+                  disabled={!canWrite || pending}
+                >
+                  Use the receipt&apos;s figure
+                </button>
+              ) : null}
+            </p>
+            <FieldError id="vatPounds-error">{fieldErrors.vatPounds}</FieldError>
+          </div>
+        ) : vatRegistered && !useMileage && sterlingPounds.trim() ? (
           <p className="text-sm text-muted sm:col-span-2">
-            Of which VAT:{" "}
-            {formatGBP(vatFromInclusiveGross(parsePence(sterlingPounds) ?? 0, vatRate))}
+            Of which VAT: {formatGBP(shownVatPence ?? derivedVatPence)}
           </p>
         ) : null}
         <div className={useMileage ? "sm:col-span-2" : ""}>

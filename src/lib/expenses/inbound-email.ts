@@ -10,6 +10,17 @@ import {
 } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
 import { capturedExpenseTax } from "@/lib/expenses/tax";
+import { parseVatPounds } from "@/lib/expenses/vat-amount";
+
+/** A receipt's VAT as pence, when it reads as an amount below the total. */
+function receiptVatPence(vatPounds: string | undefined, amountPence: number): number | null {
+  try {
+    const pence = parseVatPounds(vatPounds);
+    return pence != null && pence > 0 && pence < amountPence ? pence : null;
+  } catch {
+    return null;
+  }
+}
 import { safeFilename } from "@/lib/files";
 import {
   externalSenderOf,
@@ -755,6 +766,8 @@ async function deliverInboundEmail(
           amountPence,
           ...capturedTax,
           vatPence: 0,
+          // Kept for approval: used once a rated code is chosen (sterling receipts only).
+          receiptVatPence: currency ? null : receiptVatPence(merged.vatPounds, amountPence),
           status: "pending",
           source: "email",
           billable: false,
