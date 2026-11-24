@@ -250,6 +250,32 @@ describe("receipt matching", () => {
     // The amount follows the bank; the VAT charged, as the receipt shows, doesn't.
     expect(updated).toMatchObject({ amountPence: 1_400, vatPence: 198, vatPenceSource: "receipt" });
   });
+
+  it("works VAT out again when the bank amount is below the receipt's VAT", async () => {
+    const [expense] = await db
+      .insert(expenses)
+      .values({
+        companyId,
+        description: "Refunded lunch",
+        spentAt: addDays(today, -3),
+        amountPence: 1_250,
+        vatRate: 20,
+        vatPence: 198,
+        vatPenceSource: "receipt",
+        receiptVatPence: 198,
+        status: "recorded",
+      })
+      .returning();
+    const bank = await seedTx("PRET A MANGER 123", -150, { date: addDays(today, -2) });
+    const [match] = await db
+      .insert(reconciliationMatches)
+      .values({ bankTransactionId: bank, matchType: "expense", expenseId: expense!.id })
+      .returning();
+
+    expect((await acceptReceiptMatch(match!.id, true)).ok).toBe(true);
+    const [updated] = await db.select().from(expenses).where(eq(expenses.id, expense!.id));
+    expect(updated).toMatchObject({ amountPence: 150, vatPence: 25, vatPenceSource: "derived", receiptVatPence: 198 });
+  });
 });
 
 describe("asking questions", () => {
