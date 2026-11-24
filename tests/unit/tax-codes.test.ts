@@ -3,6 +3,7 @@ import {
   TAX_CODES,
   TAX_CODE_INFO,
   TaxCodeNotAllowedError,
+  TaxCodeNotRecognisedError,
   TaxRateNotRecognisedError,
   defaultLineTax,
   en16931Category,
@@ -242,9 +243,30 @@ describe("resolveLineTax", () => {
       taxCode: "zero_rated",
       vatRate: 0,
     });
-    expect(resolveLineTax(registered, { taxCode: "bogus", vatRate: 5 }, "sales")).toEqual({
-      taxCode: "reduced",
-      vatRate: 5,
+    for (const taxCode of [undefined, null, "", "  "]) {
+      expect(resolveLineTax(registered, { taxCode, vatRate: 5 }, "sales")).toEqual({
+        taxCode: "reduced",
+        vatRate: 5,
+      });
+    }
+  });
+
+  it("refuses a posted code it does not recognise", () => {
+    expect(() => resolveLineTax(registered, { taxCode: "bogus", vatRate: 5 }, "sales")).toThrow(
+      TaxCodeNotRecognisedError,
+    );
+    expect(() => resolveLineTax(registered, { taxCode: "stadard" }, "sales")).toThrow(
+      '"stadard" is not a tax code',
+    );
+    expect(() => resolveLineTax(registered, { taxCode: 20 }, "sales")).toThrow(
+      TaxCodeNotRecognisedError,
+    );
+  });
+
+  it("ignores an unknown code when not registered", () => {
+    expect(resolveLineTax(unregistered, { taxCode: "bogus" }, "sales")).toEqual({
+      taxCode: "outside_scope",
+      vatRate: 0,
     });
   });
 

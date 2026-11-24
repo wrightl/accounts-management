@@ -292,6 +292,13 @@ export class TaxCodeNotAllowedError extends Error {
   }
 }
 
+export class TaxCodeNotRecognisedError extends Error {
+  constructor(readonly posted: unknown) {
+    super(`"${String(posted)}" is not a tax code. Choose one from the list.`);
+    this.name = "TaxCodeNotRecognisedError";
+  }
+}
+
 export class TaxRateNotRecognisedError extends Error {
   constructor(readonly rate: number) {
     super(
@@ -306,10 +313,12 @@ export class TaxRateNotRecognisedError extends Error {
  *
  *  - Not VAT registered: outside the scope of VAT at 0%, whatever was posted.
  *  - A valid code: kept, with the code's own rate. Any posted rate is ignored.
- *  - No code (callers that still post only a rate): inferred from the rate.
+ *  - No code at all (callers that still post only a rate): inferred from the
+ *    rate. A code that was posted but isn't recognised is refused instead.
  *
- * Throws {@link TaxCodeNotAllowedError} when a registered company posts a
- * code that doesn't apply, such as postponed import VAT on a sale, and
+ * For a registered company, throws {@link TaxCodeNotRecognisedError} for an
+ * unknown code, {@link TaxCodeNotAllowedError} for a code that doesn't apply,
+ * such as postponed import VAT on a sale, and
  * {@link TaxRateNotRecognisedError} when a bare rate is not 0%, 5% or 20%.
  */
 export function resolveLineTax(
@@ -318,7 +327,11 @@ export function resolveLineTax(
   use: TaxCodeUse,
 ): LineTax {
   if (!company.vatRegistered) return { taxCode: "outside_scope", vatRate: 0 };
-  const code = parseTaxCode(posted.taxCode);
+  const postedCode = posted.taxCode;
+  const codePosted =
+    postedCode != null && !(typeof postedCode === "string" && postedCode.trim() === "");
+  const code = parseTaxCode(postedCode);
+  if (codePosted && !code) throw new TaxCodeNotRecognisedError(postedCode);
   if (code) {
     if (!isTaxCodeAllowed(code, use)) throw new TaxCodeNotAllowedError(code, use);
     return { taxCode: code, vatRate: rateForTaxCode(code) };
