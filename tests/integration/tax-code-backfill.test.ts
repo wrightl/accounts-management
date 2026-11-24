@@ -33,6 +33,7 @@ let unregisteredId: string;
 let oddDefaultId: string;
 let deregisteredId: string;
 let deregisteredInvoiceId: string;
+let oddRatesInvoiceId: string;
 let registeredInvoiceId: string;
 let unregisteredInvoiceId: string;
 let before: Awaited<ReturnType<typeof amounts>>;
@@ -146,6 +147,8 @@ beforeAll(async () => {
   registeredInvoiceId = await seedBooks(registeredId, "REG", [20, 5, 0, 17]);
   unregisteredInvoiceId = await seedBooks(unregisteredId, "SML", [0]);
   deregisteredInvoiceId = await seedBooks(deregisteredId, "DRG", [20, 0]);
+  // No screen allows these, but the integer columns could hold them.
+  oddRatesInvoiceId = await seedBooks(registeredId, "ODD", [-5, 150]);
 
   await db.insert(expenses).values([
     { companyId: registeredId, description: "Laptop", category: "Equipment", amountPence: 12_000, vatRate: 20, vatPence: 2_000 },
@@ -162,6 +165,7 @@ beforeAll(async () => {
     },
     { companyId: registeredId, description: "Misc", category: null, amountPence: 1_000, vatRate: 0 },
     { companyId: unregisteredId, description: "Laptop", category: "Equipment", amountPence: 12_000, vatRate: 0 },
+    { companyId: registeredId, description: "Odd rate", category: "Travel", amountPence: 1_000, vatRate: -5 },
     { companyId: deregisteredId, description: "Old laptop", category: "Equipment", amountPence: 12_000, vatRate: 20, vatPence: 2_000 },
   ]);
   before = await amounts();
@@ -299,6 +303,18 @@ describe("tax code backfill", () => {
     expect(template!.lines).toEqual([
       expect.objectContaining({ vatRate: 20, taxCode: "standard", taxCodeNeedsReview: true }),
     ]);
+  });
+
+  it("codes rates outside 0 to 100 as standard for review instead of breaking the rate check", async () => {
+    expect(await lineCodes(oddRatesInvoiceId)).toEqual([
+      { vatRate: -5, taxCode: "standard", needsReview: true },
+      { vatRate: 150, taxCode: "standard", needsReview: true },
+    ]);
+    const [expense] = await db
+      .select({ taxCode: expenses.taxCode, needsReview: expenses.taxCodeNeedsReview })
+      .from(expenses)
+      .where(and(eq(expenses.companyId, registeredId), eq(expenses.vatRate, -5)));
+    expect(expense).toEqual({ taxCode: "standard", needsReview: true });
   });
 
   it("leaves rates and amounts alone", async () => {
