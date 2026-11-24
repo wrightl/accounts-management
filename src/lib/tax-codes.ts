@@ -265,21 +265,35 @@ export interface LineTax {
   vatRate: number;
 }
 
+/** A default for new lines, and whether the company's setting needs checking. */
+export interface DefaultLineTax extends LineTax {
+  needsReview: boolean;
+}
+
 /**
  * Default tax for a new line: the company's default code when registered,
- * else outside the scope of VAT at 0%. The rate always comes from the code;
- * an old default rate that is not a UK rate gives the standard rate.
+ * else outside the scope of VAT at 0%. The rate always comes from the code.
+ *
+ * Before default codes exist, the code is inferred from the default rate. A
+ * rate that is not a UK rate (say 17%) suggests the standard rate with
+ * `needsReview` set, so the form can ask the user to choose rather than
+ * charging 20% without saying so. It doesn't throw, because that would stop
+ * the form opening at all.
  */
 export function defaultLineTax(company: {
   vatRegistered?: boolean | null;
   defaultTaxCode?: string | null;
   defaultVatRate?: number | null;
-}): LineTax {
-  if (!company.vatRegistered) return { taxCode: "outside_scope", vatRate: 0 };
-  const code =
-    parseTaxCode(company.defaultTaxCode) ??
-    inferTaxCodeFromRate(company.defaultVatRate ?? STANDARD_RATE, company).code;
-  return { taxCode: code, vatRate: rateForTaxCode(code) };
+}): DefaultLineTax {
+  if (!company.vatRegistered) return { taxCode: "outside_scope", vatRate: 0, needsReview: false };
+  const posted = parseTaxCode(company.defaultTaxCode);
+  if (posted) return { taxCode: posted, vatRate: rateForTaxCode(posted), needsReview: false };
+  const inferred = inferTaxCodeFromRate(company.defaultVatRate ?? STANDARD_RATE, company);
+  return {
+    taxCode: inferred.code,
+    vatRate: rateForTaxCode(inferred.code),
+    needsReview: inferred.needsReview,
+  };
 }
 
 export class TaxCodeNotAllowedError extends Error {

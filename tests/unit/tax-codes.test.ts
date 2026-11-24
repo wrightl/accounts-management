@@ -170,19 +170,21 @@ describe("defaultLineTax", () => {
     expect(defaultLineTax({ vatRegistered: false, defaultTaxCode: "standard" })).toEqual({
       taxCode: "outside_scope",
       vatRate: 0,
+      needsReview: false,
     });
   });
 
   it("uses the company default code with the code's own rate", () => {
     expect(
       defaultLineTax({ vatRegistered: true, defaultTaxCode: "reduced", defaultVatRate: 20 }),
-    ).toEqual({ taxCode: "reduced", vatRate: 5 });
+    ).toEqual({ taxCode: "reduced", vatRate: 5, needsReview: false });
     expect(
       defaultLineTax({ vatRegistered: true, defaultTaxCode: "standard", defaultVatRate: 5 }),
-    ).toEqual({ taxCode: "standard", vatRate: 20 });
+    ).toEqual({ taxCode: "standard", vatRate: 20, needsReview: false });
     expect(defaultLineTax({ vatRegistered: true, defaultTaxCode: "zero_rated" })).toEqual({
       taxCode: "zero_rated",
       vatRate: 0,
+      needsReview: false,
     });
   });
 
@@ -190,16 +192,28 @@ describe("defaultLineTax", () => {
     expect(defaultLineTax({ vatRegistered: true, defaultVatRate: 20 })).toEqual({
       taxCode: "standard",
       vatRate: 20,
+      needsReview: false,
     });
     expect(defaultLineTax({ vatRegistered: true, defaultVatRate: 5 })).toEqual({
       taxCode: "reduced",
       vatRate: 5,
+      needsReview: false,
     });
-    expect(defaultLineTax({ vatRegistered: true })).toEqual({ taxCode: "standard", vatRate: 20 });
-    expect(defaultLineTax({ vatRegistered: true, defaultVatRate: 17 })).toEqual({
+    expect(defaultLineTax({ vatRegistered: true })).toEqual({
       taxCode: "standard",
       vatRate: 20,
+      needsReview: false,
     });
+  });
+
+  it("flags a default rate that is not a UK rate rather than charging 20% quietly", () => {
+    for (const rate of [17, 19.6]) {
+      expect(defaultLineTax({ vatRegistered: true, defaultVatRate: rate })).toEqual({
+        taxCode: "standard",
+        vatRate: 20,
+        needsReview: true,
+      });
+    }
   });
 });
 
