@@ -45,6 +45,7 @@ export async function updateCompany(formData: FormData): Promise<ActionResult> {
         defaultVatRate: rest.defaultVatRate,
         addressLines: rest.addressLines,
         email: rest.email,
+        accountsEmail: rest.accountsEmail,
         bankAccountName: rest.bankAccountName,
         sortCode: rest.sortCode,
         accountNumber: rest.accountNumber,

@@ -100,6 +100,10 @@ export default async function PlatformCompanyDetailPage({
               <dd>{company.email ?? "—"}</dd>
             </div>
             <div className="flex justify-between gap-4">
+              <dt className="text-muted">Accounts email</dt>
+              <dd>{company.accountsEmail ?? "—"}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
               <dt className="text-muted">Company number</dt>
               <dd>{company.companyNumber ?? "—"}</dd>
             </div>

@@ -49,6 +49,7 @@ export function SettingsForm({
     defaultVatRate: number;
     addressLines: string | null;
     email: string | null;
+    accountsEmail: string | null;
     bankProvider: string | null;
     bankName: string | null;
     bankAccountName: string | null;
@@ -248,15 +249,39 @@ export function SettingsForm({
             type="email"
             defaultValue={settings.email ?? ""}
             disabled={pending}
-            placeholder="accounts@example.com"
+            placeholder="hello@example.com"
             aria-invalid={Boolean(fieldErrors.email)}
             aria-describedby={fieldErrors.email ? "email-error" : undefined}
             onChange={() => clearField("email")}
           />
           <p className="mt-1 text-xs text-muted">
-            Shown on invoice and quote PDFs.
+            Your general contact address. Shown on invoices, quotes and credit
+            notes when no accounts email is set.
           </p>
           <FieldError id="email-error">{fieldErrors.email}</FieldError>
+        </div>
+        <div>
+          <Label htmlFor="accountsEmail">Accounts email (optional)</Label>
+          <Input
+            id="accountsEmail"
+            name="accountsEmail"
+            type="email"
+            defaultValue={settings.accountsEmail ?? ""}
+            disabled={pending}
+            placeholder="accounts@example.com"
+            aria-invalid={Boolean(fieldErrors.accountsEmail)}
+            aria-describedby={
+              fieldErrors.accountsEmail ? "accountsEmail-error" : undefined
+            }
+            onChange={() => clearField("accountsEmail")}
+          />
+          <p className="mt-1 text-xs text-muted">
+            Shown on invoices, quotes and credit notes, and used as the reply
+            address on emails to clients. Leave blank to use the company email.
+          </p>
+          <FieldError id="accountsEmail-error">
+            {fieldErrors.accountsEmail}
+          </FieldError>
         </div>
         <div>
           <Label htmlFor="financialYearStartMonth" required>

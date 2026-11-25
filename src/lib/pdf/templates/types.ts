@@ -5,6 +5,7 @@ export interface PdfCompany {
   vatNumber?: string | null;
   addressLines: string | null;
   email?: string | null;
+  accountsEmail?: string | null;
   bankName: string | null;
   bankAccountName: string | null;
   sortCode: string | null;

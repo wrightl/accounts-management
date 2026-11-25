@@ -87,7 +87,7 @@ export async function renderDesignSamplePdf(params: {
     data: {
       ...sampleDesignData(params.kind),
       company: params.company,
-      contactEmail: resolvePdfCompanyEmail(params.company.email),
+      contactEmail: resolvePdfCompanyEmail(params.company),
     },
   });
 }

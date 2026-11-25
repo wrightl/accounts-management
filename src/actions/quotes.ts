@@ -490,6 +490,7 @@ export async function sendQuote(quoteId: string, formData: FormData): Promise<Ac
       const sender = await resolveClientEmailSender({
         companyId,
         companyName: company.name,
+        accountsEmail: company.accountsEmail,
         actorUserId: localUserId,
       });
 

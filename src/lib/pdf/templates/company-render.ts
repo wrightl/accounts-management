@@ -25,7 +25,7 @@ import { renderQuotePdf } from "@/lib/quotes/pdf";
  */
 
 function parties(company: Company, client: PdfClient, lines: PdfLine[]) {
-  return { company, client, lines, contactEmail: resolvePdfCompanyEmail(company.email) };
+  return { company, client, lines, contactEmail: resolvePdfCompanyEmail(company) };
 }
 
 export async function renderCompanyInvoicePdf(
