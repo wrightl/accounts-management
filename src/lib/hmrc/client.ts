@@ -2,6 +2,8 @@ import "server-only";
 import { writeAudit } from "@/lib/audit";
 import { hmrcConfig } from "@/lib/hmrc/config";
 import { getHmrcAccessToken } from "@/lib/hmrc/connections";
+import { buildFraudHeaders, type HmrcFraudContext } from "@/lib/hmrc/fraud-headers";
+import { vendorDetails } from "@/lib/hmrc/vendor";
 
 /** HMRC answered an API call with an error. */
 export class HmrcApiError extends Error {
@@ -24,15 +26,19 @@ export interface HmrcRequest {
   body?: unknown;
   /** API version for the Accept header; most HMRC APIs are 1.0. */
   apiVersion?: string;
-  /** Extra headers, such as the fraud prevention headers (PR 6). */
-  headers?: Record<string, string>;
+  /**
+   * Who and what the call is for, for HMRC's fraud prevention headers: from
+   * hmrcClientContext() when a person asked for it, hmrcBatchContext() otherwise.
+   */
+  fraud: HmrcFraudContext;
   /** The person the call is made for, for the audit log; null for scheduled work. */
   actorUserId: string | null;
 }
 
 /**
  * Call an HMRC API as the company: a current access token (refreshed when
- * needed), HMRC's versioned Accept header, a timeout, and an audit entry for
+ * needed), HMRC's versioned Accept header, the fraud prevention headers, a
+ * timeout, and an audit entry for
  * every call with its method, path and status. Returns the parsed JSON body,
  * or null for an empty one.
  */
@@ -58,7 +64,7 @@ export async function hmrcFetch<T = unknown>(
         Accept: `application/vnd.hmrc.${request.apiVersion ?? "1.0"}+json`,
         Authorization: `Bearer ${accessToken}`,
         ...(request.body !== undefined ? { "Content-Type": "application/json" } : {}),
-        ...request.headers,
+        ...buildFraudHeaders(request.fraud, vendorDetails()),
       },
       body: request.body !== undefined ? JSON.stringify(request.body) : undefined,
       signal: AbortSignal.timeout(30_000),
@@ -73,7 +79,12 @@ export async function hmrcFetch<T = unknown>(
     action: "hmrc.api",
     entityType: "hmrc_connection",
     entityId: connectionId,
-    meta: { method, path: request.path, status: response?.status ?? null },
+    meta: {
+      method,
+      path: request.path,
+      status: response?.status ?? null,
+      connectionMethod: request.fraud.method,
+    },
   });
 
   if (!response) {

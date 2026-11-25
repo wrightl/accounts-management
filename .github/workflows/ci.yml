@@ -48,6 +48,11 @@ jobs:
 
       - name: Unit & integration tests (shard ${{ matrix.shard }}/3)
         run: npx vitest run --shard=${{ matrix.shard }}/3
+        env:
+          # HMRC sandbox application for the fraud prevention header check
+          # (tests/integration/hmrc-fraud-headers-sandbox.test.ts). Skipped when unset.
+          HMRC_SANDBOX_CLIENT_ID: ${{ secrets.HMRC_SANDBOX_CLIENT_ID }}
+          HMRC_SANDBOX_CLIENT_SECRET: ${{ secrets.HMRC_SANDBOX_CLIENT_SECRET }}
 
   build-e2e:
     runs-on: ubuntu-latest
