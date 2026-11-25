@@ -715,6 +715,13 @@
       "when": 1795551518569,
       "tag": "0101_hmrc_connections",
       "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1795635538411,
+      "tag": "0102_company_accounts_email",
+      "breakpoints": true
     }
   ]
 }

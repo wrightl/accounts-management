@@ -15,11 +15,12 @@ export function companySampleDesignData(company: Company, kind: DocumentKind): D
       vatNumber: company.vatNumber,
       addressLines: company.addressLines,
       email: company.email,
+      accountsEmail: company.accountsEmail,
       bankName: company.bankName,
       bankAccountName: company.bankAccountName,
       sortCode: company.sortCode,
       accountNumber: company.accountNumber,
     },
-    contactEmail: resolvePdfCompanyEmail(company.email),
+    contactEmail: resolvePdfCompanyEmail(company),
   };
 }

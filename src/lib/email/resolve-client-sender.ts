@@ -4,6 +4,7 @@ import { getDb } from "@/db";
 import { companyMemberships, users } from "@/db/schema";
 import { serverEnv } from "@/env";
 import {
+  buildCompanySender,
   buildOnBehalfSender,
   type OnBehalfSender,
 } from "@/lib/email/on-behalf";
@@ -11,14 +12,20 @@ import { getUser } from "@/lib/users";
 
 /**
  * Resolve From / Reply-To for client-facing mail.
- * Prefer the acting user; otherwise the company's earliest admin, then any member.
+ * With an accounts email, the mail comes from the company and replies go there.
+ * Otherwise prefer the acting user, then the company's earliest admin, then any member.
  */
 export async function resolveClientEmailSender(opts: {
   companyId: string;
   companyName: string;
+  accountsEmail?: string | null;
   actorUserId?: string | null;
 }): Promise<OnBehalfSender> {
   const emailFrom = serverEnv().EMAIL_FROM;
+  const accountsEmail = opts.accountsEmail?.trim();
+  if (accountsEmail) {
+    return buildCompanySender({ companyName: opts.companyName, accountsEmail, emailFrom });
+  }
   const person = await loadSenderPerson(opts.companyId, opts.actorUserId);
   if (!person) {
     return { from: emailFrom };

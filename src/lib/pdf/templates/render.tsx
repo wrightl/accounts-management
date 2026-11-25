@@ -62,7 +62,7 @@ interface DocumentParams {
 export async function renderInvoiceTemplatePdf(
   params: DocumentParams & { invoice: PdfInvoice },
 ): Promise<Uint8Array> {
-  const contactEmail = resolvePdfCompanyEmail(params.company.email);
+  const contactEmail = resolvePdfCompanyEmail(params.company);
   return renderTemplatePdf({
     templateKey: params.templateKey,
     view: invoiceView({ ...params, contactEmail }),
@@ -77,7 +77,7 @@ export async function renderCreditNoteTemplatePdf(
     details: PdfCreditNoteDetails;
   },
 ): Promise<Uint8Array> {
-  const contactEmail = resolvePdfCompanyEmail(params.company.email);
+  const contactEmail = resolvePdfCompanyEmail(params.company);
   return renderTemplatePdf({
     templateKey: params.templateKey,
     view: creditNoteView({ ...params, contactEmail }),
@@ -89,7 +89,7 @@ export async function renderCreditNoteTemplatePdf(
 export async function renderQuoteTemplatePdf(
   params: DocumentParams & { quote: PdfQuote },
 ): Promise<Uint8Array> {
-  const contactEmail = resolvePdfCompanyEmail(params.company.email);
+  const contactEmail = resolvePdfCompanyEmail(params.company);
   return renderTemplatePdf({
     templateKey: params.templateKey,
     view: quoteView({ ...params, contactEmail }),

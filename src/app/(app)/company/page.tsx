@@ -63,6 +63,7 @@ export default async function CompanyPage() {
             />
             <Field label="VAT number" value={settings.vatNumber} />
             <Field label="Email" value={settings.email} />
+            <Field label="Accounts email" value={settings.accountsEmail} />
             <Field label="Financial year end" value={yearEnd} />
             <div className="sm:col-span-2">
               <Field label="Address" value={settings.addressLines} />

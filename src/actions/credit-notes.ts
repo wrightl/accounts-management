@@ -444,6 +444,7 @@ export async function sendCreditNote(id: string): Promise<ActionResult> {
       const sender = await resolveClientEmailSender({
         companyId,
         companyName: company.name,
+        accountsEmail: company.accountsEmail,
         actorUserId: localUserId,
       });
       const number = escapeHtml(creditNote.number);

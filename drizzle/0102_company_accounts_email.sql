@@ -1,0 +1,1 @@
+ALTER TABLE "companies" ADD COLUMN "accounts_email" text;

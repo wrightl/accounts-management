@@ -33,7 +33,7 @@ export async function startStripeConnectOnboarding(): Promise<ActionResult> {
       if (!accountId) {
         const account = await stripe.v2.core.accounts.create({
           display_name: company.name,
-          contact_email: company.email ?? undefined,
+          contact_email: company.accountsEmail ?? company.email ?? undefined,
           dashboard: "full",
           identity: { country: "gb" },
           configuration: {

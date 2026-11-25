@@ -144,6 +144,11 @@ export const companies = pgTable("companies", {
   addressLines: text("address_lines"),
   email: text("email"),
   /**
+   * Where clients write about money: shown on documents and used as Reply-To on
+   * client email. Optional; `email` and the sending user stand in when null.
+   */
+  accountsEmail: text("accounts_email"),
+  /**
    * Catalog slug from `BANK_PROVIDERS` (`starling`, `monzo`, …, `other`).
    * Null until the company picks a bank in Settings / onboarding.
    */

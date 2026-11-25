@@ -127,7 +127,7 @@ const CONTENT: Record<
 async function recipientEmails(companyId: string): Promise<string[]> {
   const db = getDb();
   const [company] = await db
-    .select({ email: companies.email })
+    .select({ email: companies.email, accountsEmail: companies.accountsEmail })
     .from(companies)
     .where(eq(companies.id, companyId))
     .limit(1);
@@ -148,6 +148,7 @@ async function recipientEmails(companyId: string): Promise<string[]> {
     if (a.email) set.add(a.email.toLowerCase());
   }
   if (company?.email) set.add(company.email.toLowerCase());
+  if (company?.accountsEmail) set.add(company.accountsEmail.toLowerCase());
   return [...set];
 }
 

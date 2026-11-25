@@ -345,6 +345,7 @@ async function deliverInvoice(invoiceId: string, actorUserId?: string | null) {
   const sender = await resolveClientEmailSender({
     companyId: invRow.companyId,
     companyName: company.name,
+    accountsEmail: company.accountsEmail,
     actorUserId,
   });
 
@@ -417,6 +418,7 @@ async function deliverReminder(
   const sender = await resolveClientEmailSender({
     companyId: row.invoice.companyId,
     companyName: company.name,
+    accountsEmail: company.accountsEmail,
     actorUserId,
   });
 

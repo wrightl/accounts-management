@@ -77,3 +77,23 @@ export function buildOnBehalfSender(opts: {
     replyTo,
   };
 }
+
+/**
+ * Sender for client mail when the company has an accounts email:
+ * From `{Company} <EMAIL_FROM address>`, Reply-To the accounts email.
+ * With no company name, keeps EMAIL_FROM as it is.
+ */
+export function buildCompanySender(opts: {
+  companyName: string;
+  accountsEmail: string;
+  emailFrom: string;
+}): OnBehalfSender {
+  const replyTo = opts.accountsEmail.trim();
+  const company = opts.companyName.trim();
+  const match = opts.emailFrom.match(/<([^>]+)>/);
+  const address = (match?.[1] ?? opts.emailFrom).trim();
+  if (!company || !address.includes("@")) {
+    return { from: opts.emailFrom, replyTo };
+  }
+  return { from: `${quoteDisplayName(company)} <${address}>`, replyTo };
+}

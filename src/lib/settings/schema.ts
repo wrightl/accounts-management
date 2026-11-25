@@ -55,6 +55,13 @@ export const companySettingsFieldsSchema = z
         z.string().trim().email("Enter a valid email address"),
       ])
       .transform((v) => (v === "" ? null : v)),
+    accountsEmail: z
+      .union([
+        z.literal(""),
+        z.string().trim().email("Enter a valid email address"),
+      ])
+      .optional()
+      .transform((v) => (v ? v : null)),
     bankAccountName: optionalText,
     sortCode: optionalText,
     accountNumber: optionalText,
@@ -232,6 +239,7 @@ export function companySettingsRawFromFormData(formData: FormData): Record<strin
     defaultVatRate: formData.get("defaultVatRate") ?? "20",
     addressLines: formData.get("addressLines") ?? "",
     email: formData.get("email") ?? "",
+    accountsEmail: formData.get("accountsEmail") ?? "",
     bankAccountName: formData.get("bankAccountName") ?? "",
     sortCode: formData.get("sortCode") ?? "",
     accountNumber: formData.get("accountNumber") ?? "",
