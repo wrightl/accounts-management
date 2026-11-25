@@ -2348,6 +2348,53 @@ export const hmrcOauthStates = pgTable(
   ],
 );
 
+/** What was sent to HMRC. VAT returns first (roadmap item 18); more kinds later. */
+export const taxSubmissionKindEnum = pgEnum("tax_submission_kind", ["vat_return"]);
+
+/**
+ * Every submission Alfa makes to HMRC for a company, accepted or not: what
+ * was sent and what came back (with secrets removed), HMRC's receipt, who
+ * submitted it and the books lock date it applied. Recorded by
+ * src/lib/tax/submissions.ts, which moves the lock in the same transaction.
+ */
+export const taxSubmissions = pgTable(
+  "tax_submissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    kind: taxSubmissionKindEnum("kind").notNull(),
+    environment: hmrcEnvironmentEnum("environment").notNull(),
+    /** HMRC's key for the period, e.g. "24A1" for a VAT return. */
+    periodKey: text("period_key").notNull(),
+    periodStart: date("period_start", { mode: "string" }),
+    periodEnd: date("period_end", { mode: "string" }),
+    /** The body sent, with secrets removed. */
+    request: jsonb("request").$type<Record<string, unknown>>().notNull(),
+    /** HMRC's answer, with secrets removed; null when HMRC couldn't be reached. */
+    response: jsonb("response").$type<Record<string, unknown>>(),
+    /** HTTP status HMRC answered with; null when it couldn't be reached. */
+    httpStatus: integer("http_status"),
+    /** HMRC's receipt (the form bundle number for a VAT return), set once accepted. */
+    receiptId: text("receipt_id"),
+    /** HMRC's X-CorrelationId, for support queries. */
+    correlationId: text("correlation_id"),
+    submittedByUserId: uuid("submitted_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }).defaultNow().notNull(),
+    /** The books lock date after this submission; null when it didn't move the lock. */
+    lockedThrough: date("locked_through", { mode: "string" }),
+  },
+  (t) => [
+    index("idx_tax_submissions_company").on(t.companyId, t.kind, t.periodKey),
+    uniqueIndex("uniq_tax_submissions_accepted")
+      .on(t.companyId, t.environment, t.kind, t.periodKey)
+      .where(sql`${t.receiptId} is not null`),
+  ],
+);
+
+export type TaxSubmission = typeof taxSubmissions.$inferSelect;
+
 export type BillingAccess = (typeof billingAccessEnum.enumValues)[number];
 export type BillingInterval = (typeof billingIntervalEnum.enumValues)[number];
 export type CompanyBilling = typeof companyBilling.$inferSelect;
@@ -2357,6 +2404,7 @@ export type PushPlatform = (typeof pushPlatformEnum.enumValues)[number];
 
 export const schema = {
   hmrcConnections,
+  taxSubmissions,
   hmrcOauthStates,
   users,
   companies,

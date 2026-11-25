@@ -36,6 +36,7 @@ class AppConstants {
   static const String keyUserId = 'user_id';
   static const String keyCompanyId = 'company_id';
   static const String keyUserEmail = 'user_email';
+  static const String keyHmrcDeviceId = 'hmrc_device_id';
   
   // API Endpoints
   static const String authValidateEndpoint = '/api/mobile/auth/validate';

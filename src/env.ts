@@ -67,6 +67,11 @@ const serverSchema = z.object({
     /** Which HMRC environment to talk to. Sandbox until production approval. */
     HMRC_ENV: z.enum(['sandbox', 'production']).default('sandbox'),
     HMRC_CONNECT_ENABLED: z.enum(['true', 'false']).optional(),
+    /**
+     * Alfa's public IP address as HMRC sees it, for the Gov-Vendor-Public-IP
+     * and Gov-Vendor-Forwarded fraud prevention headers. Left out when unset.
+     */
+    HMRC_VENDOR_PUBLIC_IP: z.union([z.ipv4(), z.ipv6()]).optional(),
 
     // Encryption for secrets kept in the database (see src/lib/crypto/secret-box.ts).
     // base64 of 32 random bytes: openssl rand -base64 32

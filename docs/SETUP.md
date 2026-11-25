@@ -183,6 +183,18 @@ reconnected.
 In the sandbox, sign in on HMRC's site with a test user made with HMRC's Create
 Test User API, not a real Government Gateway account.
 
+**Fraud prevention headers.** Every call to HMRC carries the device and network
+details HMRC requires (`src/lib/hmrc/fraud-headers.ts`). The web app keeps them
+in two cookies set by a small script; the mobile app sends them in an
+`X-Alfa-Device` header. Optionally set `HMRC_VENDOR_PUBLIC_IP` to Alfa's public
+IP address for the `Gov-Vendor-Public-IP` and `Gov-Vendor-Forwarded` headers;
+they're left out without it.
+
+To check the headers with HMRC's Test Fraud Prevention Headers API in CI,
+subscribe the sandbox application to that API too and add its credentials as
+the GitHub Actions secrets `HMRC_SANDBOX_CLIENT_ID` and
+`HMRC_SANDBOX_CLIENT_SECRET`. The check is skipped when they're missing.
+
 ## 6. Custom subdomain **(you)**
 
 1. Vercel → Project → **Domains** → add `accounts.dotanddashconsulting.com`.
