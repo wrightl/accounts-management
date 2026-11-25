@@ -13,7 +13,7 @@ import { buildForecast } from "@/lib/forecast/engine";
 import { getForecastInputs } from "@/lib/forecast/queries";
 import { getInvoiceDetail, listInvoices } from "@/lib/invoices/queries";
 import { getDirectorLoanAccounts, getReservesPosition } from "@/lib/ledger/queries";
-import { formatGBP } from "@/lib/money";
+import { formatGBP, formatMoney } from "@/lib/money";
 import {
   getAgedReceivables,
   getExpenseByCategory,
@@ -417,7 +417,7 @@ export const ASSISTANT_TOOLS: readonly AssistantTool[] = [
         lines: detail.lines.map((l) => ({
           description: l.description,
           quantity: l.quantity,
-          unitPrice: formatGBP(l.unitPricePence),
+          unitPrice: formatMoney(l.unitPricePence, detail.invoice.currency),
           vatRate: `${l.vatRate}%`,
           discount: l.discountPercent ? `${l.discountPercent}%` : null,
         })),

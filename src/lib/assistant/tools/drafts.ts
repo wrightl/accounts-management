@@ -15,7 +15,8 @@ import { createDraftQuoteRecord } from "@/lib/quotes/create";
 import { parseQuoteInput } from "@/lib/quotes/schema";
 import { formatQuoteReference } from "@/lib/quotes/status";
 import { defaultDueDate } from "@/lib/invoices/status";
-import { formatGBP } from "@/lib/money";
+import { DOCUMENT_CURRENCIES, describeDocumentRate, isDocumentCurrency, STERLING } from "@/lib/currency";
+import { formatDocumentAmount, formatGBP } from "@/lib/money";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import type { ActionResult } from "@/actions/result";
 import { defineDraftTool, isoDate, type AssistantDraftTool, type DraftResult } from "./define";
@@ -29,11 +30,14 @@ function failed(result: Extract<ActionResult, { ok: false }>): DraftResult {
 async function findClient(
   companyId: string,
   name: string,
-): Promise<{ ok: true; id: string; name: string } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; id: string; name: string; defaultCurrency: string | null }
+  | { ok: false; error: string }
+> {
   const wanted = name.trim();
   const escaped = wanted.replace(/[\\%_]/g, (c) => `\\${c}`);
   const rows = await getDb()
-    .select({ id: clients.id, name: clients.name })
+    .select({ id: clients.id, name: clients.name, defaultCurrency: clients.defaultCurrency })
     .from(clients)
     .where(and(eq(clients.companyId, companyId), ilike(clients.name, `%${escaped}%`)))
     .limit(10);
@@ -67,7 +71,9 @@ function pounds(max: number) {
 const invoiceLine = z.object({
   description: z.string().trim().min(1).max(500),
   quantity: z.number().positive().max(1_000_000).default(1),
-  unitPrice: pounds(10_000_000).describe("Price per unit in pounds, before VAT"),
+  unitPrice: pounds(10_000_000).describe(
+    "Price per unit in the document's currency (pounds unless a currency is given), before VAT",
+  ),
   taxCode: z
     .enum(TAX_CODES)
     .optional()
@@ -84,6 +90,68 @@ const invoiceLine = z.object({
 });
 
 type LineInput = z.infer<typeof invoiceLine>;
+
+const documentCurrency = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .refine(isDocumentCurrency, `Use one of ${DOCUMENT_CURRENCIES.join(", ")}`)
+  .optional()
+  .describe(
+    "ISO currency code the client is billed in, e.g. USD or EUR. Leave out to use the client's usual currency, or GBP",
+  );
+
+/** The currency asked for, else the client's usual one, else sterling. */
+function currencyFor(asked: string | undefined, client: { defaultCurrency: string | null }) {
+  return asked ?? (isDocumentCurrency(client.defaultCurrency) ? client.defaultCurrency! : STERLING);
+}
+
+/** The currency and totals columns invoices and quotes share. */
+function totalsColumns(t: typeof invoices | typeof quotes) {
+  return {
+    currency: t.currency,
+    fxRate: t.fxRate,
+    fxRateDate: t.fxRateDate,
+    fxRateSource: t.fxRateSource,
+    netMinor: t.netMinor,
+    vatMinor: t.vatMinor,
+    grossMinor: t.grossMinor,
+    netPence: t.netPence,
+    vatPence: t.vatPence,
+    grossPence: t.grossPence,
+  };
+}
+
+type TotalsRow = {
+  currency: string;
+  fxRate: number;
+  fxRateDate: string | null;
+  fxRateSource: string | null;
+  netMinor: number;
+  vatMinor: number;
+  grossMinor: number;
+  netPence: number;
+  vatPence: number;
+  grossPence: number;
+};
+
+/** Totals as the person sees them: in the document's currency, with pounds for a foreign one. */
+function draftTotals(doc: TotalsRow) {
+  return {
+    currency: doc.currency,
+    net: formatDocumentAmount(doc.netMinor, doc.netPence, doc.currency),
+    vat: formatDocumentAmount(doc.vatMinor, doc.vatPence, doc.currency),
+    total: formatDocumentAmount(doc.grossMinor, doc.grossPence, doc.currency),
+    ...(doc.currency !== STERLING
+      ? {
+          exchangeRate: describeDocumentRate({
+            ...doc,
+            fxRateSource: doc.fxRateSource as "boe" | "manual" | null,
+          }),
+        }
+      : {}),
+  };
+}
 
 /**
  * Lines as the shared invoice and quote schemas expect them. A line with
@@ -118,6 +186,7 @@ export const DRAFT_TOOLS: readonly AssistantDraftTool[] = [
       lines: z.array(invoiceLine).min(1).max(50),
       issueDate: isoDate.optional().describe("Defaults to today"),
       dueDate: isoDate.optional().describe("Defaults to the company's payment terms"),
+      currency: documentCurrency,
       notes: z.string().trim().max(2000).optional(),
     }),
     execute: async ({ companyId, localUserId }, input) => {
@@ -129,6 +198,8 @@ export const DRAFT_TOOLS: readonly AssistantDraftTool[] = [
         clientId: client.id,
         issueDate,
         dueDate: input.dueDate ?? defaultDueDate(issueDate, company.invoicePaymentTermsDays),
+        currency: currencyFor(input.currency, client),
+        fxRate: "",
         notes: input.notes ?? "",
         lines: documentLines(input.lines, company),
       });
@@ -144,9 +215,7 @@ export const DRAFT_TOOLS: readonly AssistantDraftTool[] = [
           number: invoices.number,
           issueDate: invoices.issueDate,
           dueDate: invoices.dueDate,
-          netPence: invoices.netPence,
-          vatPence: invoices.vatPence,
-          grossPence: invoices.grossPence,
+          ...totalsColumns(invoices),
         })
         .from(invoices)
         .where(and(eq(invoices.id, created.id!), eq(invoices.companyId, companyId)))
@@ -160,9 +229,7 @@ export const DRAFT_TOOLS: readonly AssistantDraftTool[] = [
           client: client.name,
           issueDate: formatIsoDateUk(invoice!.issueDate),
           dueDate: formatIsoDateUk(invoice!.dueDate),
-          net: formatGBP(invoice!.netPence),
-          vat: formatGBP(invoice!.vatPence),
-          total: formatGBP(invoice!.grossPence),
+          ...draftTotals(invoice!),
         },
       };
     },
@@ -179,6 +246,7 @@ export const DRAFT_TOOLS: readonly AssistantDraftTool[] = [
       lines: z.array(invoiceLine).min(1).max(50),
       issueDate: isoDate.optional().describe("Defaults to today"),
       validUntil: isoDate.optional().describe("Last day the client can accept it, if the person gives one"),
+      currency: documentCurrency,
       notes: z.string().trim().max(2000).optional(),
     }),
     execute: async ({ companyId, localUserId }, input) => {
@@ -193,6 +261,8 @@ export const DRAFT_TOOLS: readonly AssistantDraftTool[] = [
         clientId: client.id,
         issueDate,
         validUntil: input.validUntil ?? "",
+        currency: currencyFor(input.currency, client),
+        fxRate: "",
         notes: input.notes ?? "",
         lines: documentLines(input.lines, company),
       });
@@ -208,9 +278,7 @@ export const DRAFT_TOOLS: readonly AssistantDraftTool[] = [
           version: quotes.version,
           issueDate: quotes.issueDate,
           validUntil: quotes.validUntil,
-          netPence: quotes.netPence,
-          vatPence: quotes.vatPence,
-          grossPence: quotes.grossPence,
+          ...totalsColumns(quotes),
         })
         .from(quotes)
         .where(and(eq(quotes.id, created.id!), eq(quotes.companyId, companyId)))
@@ -224,9 +292,7 @@ export const DRAFT_TOOLS: readonly AssistantDraftTool[] = [
           client: client.name,
           issueDate: formatIsoDateUk(quote!.issueDate),
           validUntil: formatIsoDateUk(quote!.validUntil),
-          net: formatGBP(quote!.netPence),
-          vat: formatGBP(quote!.vatPence),
-          total: formatGBP(quote!.grossPence),
+          ...draftTotals(quote!),
         },
       };
     },

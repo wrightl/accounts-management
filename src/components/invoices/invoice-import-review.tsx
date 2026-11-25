@@ -22,7 +22,8 @@ import { useAlert } from "@/components/ui/alert-dialog";
 import { FieldError, Input, Label } from "@/components/ui/form";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import type { ImportBatchReview } from "@/lib/invoices/import/queries";
-import { formatGBP } from "@/lib/money";
+import { parsedCurrency } from "@/lib/invoices/import/parse";
+import { formatGBP, formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { cardClasses } from "@/components/ui/card";
 
@@ -254,7 +255,11 @@ export function InvoiceImportReview({
             are brought forward and stay out of P&amp;L{vatRegistered ? " and VAT" : ""}.{" "}
             {review.counted} count, adding {formatGBP(review.netInAccounts)} income
             {review.vatInAccounts !== 0 ? <> and {formatGBP(review.vatInAccounts)} VAT</> : null} to
-            their periods.
+            their periods
+            {review.foreignCounted > 0
+              ? `, plus ${review.foreignCounted} in other currencies, converted to pounds at the Bank of England rate on each issue date when saved`
+              : ""}
+            .
           </p>
         ) : (
           <p className={isOpen ? "mt-3 rounded-xl bg-wash px-4 py-3" : "mt-3"}>
@@ -381,7 +386,11 @@ export function InvoiceImportReview({
                       ) : null}
                     </TD>
                     <TD className="text-right">
-                      {client.invoiceCount} ({formatGBP(client.grossPence)})
+                      {client.invoiceCount} (
+                      {Object.entries(client.grossByCurrency)
+                        .map(([currency, minor]) => formatMoney(minor, currency))
+                        .join(" + ")}
+                      )
                     </TD>
                     <TD>
                       {clientSelect({
@@ -495,7 +504,9 @@ export function InvoiceImportReview({
                         <div className="text-xs text-muted">Linked to a bank payment</div>
                       ) : null}
                     </TD>
-                    <TD className="text-right">{formatGBP(parsed.grossPence)}</TD>
+                    <TD className="text-right">
+                      {formatMoney(parsed.grossPence, parsedCurrency(parsed))}
+                    </TD>
                     <TD className="text-xs">
                       {draft.errors.map((e) => (
                         <div key={e} className="font-medium">{e}</div>

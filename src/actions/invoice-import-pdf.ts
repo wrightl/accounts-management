@@ -26,8 +26,10 @@ import { getEntitlements } from "@/lib/billing/entitlements";
 import { todayIsoDate } from "@/lib/dates";
 import { MAX_RECEIPT_BYTES, sniffReceiptContentType } from "@/lib/expenses/receipt-file";
 import { suggestClient } from "@/lib/invoices/import/clients";
+import { isDocumentCurrency, STERLING } from "@/lib/currency";
 import {
   normalizeClientKey,
+  parsedCurrency,
   validateParsedInvoice,
   type ParsedInvoice,
 } from "@/lib/invoices/import/parse";
@@ -306,6 +308,7 @@ export async function uploadInvoicePdf(
         .where(eq(companies.id, companyId));
       const blank: ParsedInvoice = {
         number: null,
+        currency: STERLING,
         client: { key: normalizeClientKey(null, null, null), name: null, companyName: null, email: null, address: null },
         issueDate: "",
         dueDate: null,
@@ -400,6 +403,12 @@ const optionalText = z.string().trim().max(500).nullable();
 
 const editedInvoiceSchema = z.object({
   number: optionalText,
+  currency: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .refine(isDocumentCurrency, "Choose a currency")
+    .optional(),
   issueDate: z.string().max(10),
   dueDate: z.string().max(10).nullable(),
   netPence: pence,
@@ -453,6 +462,9 @@ async function bankLinkProblem(
     )
     .limit(1);
   if (!tx || tx.amountPence <= 0) return { error: "Bank payment not found" };
+  if (parsedCurrency(invoice) !== STERLING) {
+    return { error: "Link the bank payment from the invoice once the import is saved" };
+  }
   if (invoice.status !== "paid" || invoice.amountPaidPence !== invoice.grossPence) {
     return { error: "Only an invoice paid in full can be linked to a bank payment" };
   }
@@ -504,6 +516,7 @@ export async function updateImportDraft(
       // Worked out here, not taken from the browser, so status and amounts agree.
       const next: ParsedInvoice = {
         ...edited,
+        currency: edited.currency ?? parsedCurrency(draft.parsed),
         status:
           edited.grossPence > 0 && edited.amountPaidPence >= edited.grossPence
             ? "paid"
@@ -563,6 +576,8 @@ export async function findImportDraftBankMatches(
     );
   const exclude = new Set(chosen.flatMap((c) => (c.id ? [c.id] : [])));
   const { parsed } = draft;
+  // A foreign invoice's bank payment is linked from the invoice after saving.
+  if (parsedCurrency(parsed) !== STERLING) return { ok: true, matches: [] };
   const matches = await findBankTransactionsForImportDraft(
     companyId,
     {

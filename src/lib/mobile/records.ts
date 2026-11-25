@@ -26,10 +26,22 @@ export type BookRecord = {
   status: string | null;
   date: string | null;
   details: Record<string, string>;
+  /**
+   * For invoices and quotes: the document's currency and its total in both
+   * that currency (minor units) and sterling pence. `amount` is already
+   * formatted for display; these let the app format or sum it itself.
+   */
+  currency?: string;
+  amountMinor?: number;
+  amountPence?: number;
   /** What the phone can do with this record; absent when nothing. */
   actions?: {
-    /** Record a payment; the amount still owed prefills the form. */
-    recordPayment?: { amountDuePence: number };
+    /**
+     * Record a payment; the amount still owed prefills the form. In minor
+     * units of `currency` (pence for sterling), as the payments endpoint's
+     * `amountPence` takes it.
+     */
+    recordPayment?: { amountDuePence: number; currency: string };
     /** Mark the reimbursement run paid. */
     markPaid?: boolean;
   };
@@ -83,7 +95,7 @@ export async function loadBooksPage(
 
 /** Sent invoices still owed money, and unpaid runs due today or earlier. */
 type Payable = {
-  invoices?: Map<string, number>;
+  invoices?: Map<string, { grossMinor: number; currency: string }>;
   runs?: Set<string>;
 };
 
@@ -99,12 +111,15 @@ async function addActions(
         companyId,
         items
           .filter((i) => payable.invoices!.has(i.id))
-          .map((i) => ({ id: i.id, grossPence: payable.invoices!.get(i.id)! })),
+          .map((i) => ({ id: i.id, grossMinor: payable.invoices!.get(i.id)!.grossMinor })),
       )
     : new Map<string, number>();
   return items.map((item) => {
     const amountDuePence = owed.get(item.id) ?? 0;
-    if (amountDuePence > 0) return { ...item, actions: { recordPayment: { amountDuePence } } };
+    if (amountDuePence > 0) {
+      const { currency } = payable.invoices!.get(item.id)!;
+      return { ...item, actions: { recordPayment: { amountDuePence, currency } } };
+    }
     if (payable.runs?.has(item.id)) return { ...item, actions: { markPaid: true } };
     return item;
   });
@@ -147,7 +162,7 @@ async function loadAllRecords(
           invoices: new Map(
             rows
               .filter((row) => row.status === "sent" || row.status === "overdue")
-              .map((row) => [row.id, row.grossPence]),
+              .map((row) => [row.id, { grossMinor: row.grossMinor, currency: row.currency }]),
           ),
         },
         title: "Invoices",
@@ -159,6 +174,9 @@ async function loadAllRecords(
             title: row.number,
             subtitle: row.clientName,
             amount: row.grossFormatted,
+            currency: row.currency,
+            amountMinor: row.grossMinor,
+            amountPence: row.grossPence,
             status: row.status,
             date: row.issueDate,
             details: {
@@ -186,6 +204,9 @@ async function loadAllRecords(
             title: row.number,
             subtitle: row.clientName,
             amount: row.grossFormatted,
+            currency: row.currency,
+            amountMinor: row.grossMinor,
+            amountPence: row.grossPence,
             status: row.status,
             date: row.issueDate,
             details: {

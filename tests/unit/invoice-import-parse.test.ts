@@ -183,13 +183,26 @@ describe("parseInvoiceImport", () => {
     expect(warnings).toContain("No invoice number");
   });
 
-  it("skips non-GBP, draft and void rows with a reason", () => {
+  it("skips draft, void and unsupported-currency rows with a reason", () => {
     const { drafts, skipped } = parse(
-      "invoice number,client name,issue date,description,net,status,currency\nE1,Acme,01/02/2026,W,10.00,sent,EUR\nD1,Acme,01/02/2026,W,10.00,draft,GBP\nV1,Acme,01/02/2026,W,10.00,void,GBP\nG1,Acme,01/02/2026,W,10.00,sent,GBP",
+      "invoice number,client name,issue date,description,net,status,currency\nY1,Acme,01/02/2026,W,10.00,sent,JPY\nD1,Acme,01/02/2026,W,10.00,draft,GBP\nV1,Acme,01/02/2026,W,10.00,void,GBP\nG1,Acme,01/02/2026,W,10.00,sent,GBP\nE1,Acme,01/02/2026,W,10.00,sent,eur\nB1,Acme,01/02/2026,W,10.00,sent,",
     );
-    expect(drafts).toHaveLength(1);
-    expect(skipped.map((s) => s.number)).toEqual(["E1", "D1", "V1"]);
-    expect(skipped[0].reason).toContain("EUR");
+    expect(skipped.map((s) => s.number)).toEqual(["Y1", "D1", "V1"]);
+    expect(skipped[0].reason).toContain("JPY");
+    expect(drafts.map((d) => [d.invoice.number, d.invoice.currency])).toEqual([
+      ["G1", "GBP"],
+      ["E1", "EUR"],
+      ["B1", "GBP"],
+    ]);
+    // Amounts stay in the invoice's own currency until it's saved.
+    expect(drafts[1].invoice.grossPence).toBe(1000);
+  });
+
+  it("errors when an invoice's rows disagree on currency", () => {
+    const { drafts } = parse(
+      "invoice number,client name,issue date,description,net,status,currency\nM1,Acme,01/02/2026,A,10.00,sent,USD\nM1,Acme,01/02/2026,B,10.00,sent,EUR",
+    );
+    expect(drafts[0].errors.join()).toContain("disagree on currency");
   });
 
   it("errors on an unknown status or missing client", () => {
