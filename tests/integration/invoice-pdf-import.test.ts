@@ -289,14 +289,22 @@ describe("uploading a PDF", () => {
     expect(draft.warnings.join()).toContain("bill you received");
   });
 
-  it("blocks a file holding several invoices, and non-GBP", async () => {
+  it("blocks a file holding several invoices, and a currency invoices can't be in", async () => {
     generateText.mockResolvedValue({
-      output: { ...reading, invoiceCount: 3, currency: "EUR" },
+      output: { ...reading, invoiceCount: 3, currency: "JPY" },
       usage: {},
     });
     const draft = await upload(await newBatch());
     expect(draft.errors.join()).toContain("several invoices");
-    expect(draft.errors.join()).toContain("EUR");
+    expect(draft.errors.join()).toContain("JPY");
+  });
+
+  it("keeps another currency on the draft and asks for it to be checked", async () => {
+    generateText.mockResolvedValue({ output: { ...reading, currency: "EUR" }, usage: {} });
+    const draft = await upload(await newBatch());
+    expect(draft.parsed.currency).toBe("EUR");
+    expect(draft.errors.join()).not.toContain("EUR");
+    expect(draft.warnings.join()).toContain("Read as EUR");
   });
 });
 

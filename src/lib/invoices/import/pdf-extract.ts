@@ -3,6 +3,7 @@ import { z } from "zod";
 import { INVOICE_EXTRACT_MODEL } from "@/lib/ai/models";
 import { normalizeClientKey, parseImportDate, type ParsedInvoice } from "@/lib/invoices/import/parse";
 import { normalizeClientName } from "@/lib/invoices/import/clients";
+import { isDocumentCurrency, STERLING } from "@/lib/currency";
 import { poundsToPence } from "@/lib/money";
 
 const schema = z.object({
@@ -72,9 +73,13 @@ export function draftFromExtraction(
   if ((extraction.invoiceCount ?? 1) > 1) {
     errors.push("This file seems to hold several invoices. Split it and upload each one.");
   }
-  const currency = extraction.currency?.trim().toUpperCase();
-  if (currency && currency !== "GBP") {
-    errors.push(`In ${currency}: Alfa only holds invoices in GBP`);
+  const currency = extraction.currency?.trim().toUpperCase() || STERLING;
+  if (!isDocumentCurrency(currency)) {
+    errors.push(`In ${currency}: Alfa can't hold invoices in ${currency}`);
+  } else if (currency !== STERLING) {
+    warnings.push(
+      `Read as ${currency}. Check the currency: it's converted to pounds at the Bank of England rate on the issue date.`,
+    );
   }
 
   const issuer = normalizeClientName(extraction.issuerName);
@@ -115,6 +120,7 @@ export function draftFromExtraction(
   return {
     invoice: {
       number: extraction.number?.trim() || null,
+      currency,
       client: {
         key: normalizeClientKey(email, name, companyName),
         name,

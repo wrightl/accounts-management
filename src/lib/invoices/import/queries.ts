@@ -13,6 +13,8 @@ import { todayIsoDate } from "@/lib/dates";
 import { type ListPaging, fetchPage } from "@/lib/list-paging";
 import { isBroughtForward } from "@/lib/invoices/cutover";
 import { suggestClient } from "@/lib/invoices/import/clients";
+import { parsedCurrency } from "@/lib/invoices/import/parse";
+import { STERLING } from "@/lib/currency";
 import { LOCAL_READ_WARNING, readLocally } from "@/lib/invoices/import/pdf-local";
 import { importExpiresAt } from "@/lib/invoices/import/purge";
 import { formatInvoiceNumber } from "@/lib/invoices/numbering";
@@ -75,7 +77,8 @@ export async function getImportBatchReview(companyId: string, batchId: string) {
       label: string;
       email: string | null;
       invoiceCount: number;
-      grossPence: number;
+      /** Gross by currency, in that currency's minor units. */
+      grossByCurrency: Record<string, number>;
       /** The client its unsaved invoices share, or null to create one. */
       resolution: string | null;
       /** Its unsaved invoices are linked to different clients. */
@@ -87,6 +90,8 @@ export async function getImportBatchReview(companyId: string, batchId: string) {
   const seenOpen = new Set<string>();
   let broughtForward = 0;
   let counted = 0;
+  /** Counted invoices in another currency, converted to pounds only when saved. */
+  let foreignCounted = 0;
   let netInAccounts = 0;
   let vatInAccounts = 0;
   const counts = { needs_review: 0, ready: 0, skipped: 0, committed: 0 };
@@ -94,24 +99,29 @@ export async function getImportBatchReview(companyId: string, batchId: string) {
     counts[draft.status] += 1;
     if (draft.status === "skipped") continue;
     const { parsed } = draft;
+    const currency = parsedCurrency(parsed);
     if (isBroughtForward(parsed.issueDate, cutover)) broughtForward += 1;
     else {
       counted += 1;
-      netInAccounts += parsed.netPence;
-      vatInAccounts += parsed.vatPence;
+      if (currency === STERLING) {
+        netInAccounts += parsed.netPence;
+        vatInAccounts += parsed.vatPence;
+      } else {
+        foreignCounted += 1;
+      }
     }
     const { key } = parsed.client;
     let row = clientRows.get(key);
     if (row) {
       row.invoiceCount += 1;
-      row.grossPence += parsed.grossPence;
+      row.grossByCurrency[currency] = (row.grossByCurrency[currency] ?? 0) + parsed.grossPence;
     } else {
       row = {
         key,
         label: parsed.client.companyName || parsed.client.name || parsed.client.email || "Client",
         email: parsed.client.email,
         invoiceCount: 1,
-        grossPence: parsed.grossPence,
+        grossByCurrency: { [currency]: parsed.grossPence },
         resolution: null,
         mixed: false,
         suggestion: suggestClient(parsed.client, existingClients),
@@ -154,6 +164,7 @@ export async function getImportBatchReview(companyId: string, batchId: string) {
     cutover,
     broughtForward,
     counted,
+    foreignCounted,
     netInAccounts,
     vatInAccounts,
     nextNumber: formatInvoiceNumber(prefix, year, series?.nextSeq ?? 1),

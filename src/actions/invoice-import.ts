@@ -1,6 +1,8 @@
 "use server";
 
-import { sterlingTotals } from "@/lib/currency";
+import { convertTotals, STERLING, toSterlingPence } from "@/lib/currency";
+import { documentRate, type DocumentRateDetails } from "@/lib/document-rate";
+import { syncFxDifference } from "@/lib/invoices/fx-difference";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
 import { carriedLineTax } from "@/lib/tax-codes";
 import { and, asc, eq, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm";
@@ -18,6 +20,7 @@ import {
   invoiceImportDrafts,
   invoiceLineItems,
   invoices,
+  invoiceWriteOffs,
   orders,
   payments,
   quotes,
@@ -39,6 +42,7 @@ import {
   MAX_IMPORT_INVOICES,
   MAX_IMPORT_ROWS,
   parseInvoiceImport,
+  parsedCurrency,
   type ParsedDraft,
   type ParsedInvoice,
   withoutVat,
@@ -96,7 +100,16 @@ export async function inspectInvoiceImportCsv(formData: FormData): Promise<Inspe
 
 function duplicateProblem(
   invoice: ParsedInvoice,
-  existing: { number: string; grossPence: number; clientEmail: string | null; clientName: string; clientCompany: string | null } | undefined,
+  existing:
+    | {
+        number: string;
+        currency: string;
+        grossMinor: number;
+        clientEmail: string | null;
+        clientName: string;
+        clientCompany: string | null;
+      }
+    | undefined,
 ): "same" | "different" | null {
   if (!existing) return null;
   const sameClient =
@@ -108,7 +121,11 @@ function duplicateProblem(
           (m) => m?.toLowerCase() === n.toLowerCase(),
         ),
     );
-  return sameClient && existing.grossPence === invoice.grossPence ? "same" : "different";
+  return sameClient &&
+    existing.currency === parsedCurrency(invoice) &&
+    existing.grossMinor === invoice.grossPence
+    ? "same"
+    : "different";
 }
 
 function draftStatus(draft: ParsedDraft): "needs_review" | "ready" {
@@ -161,7 +178,8 @@ export async function stageInvoiceImport(
       db
         .select({
           number: invoices.number,
-          grossPence: invoices.grossPence,
+          currency: invoices.currency,
+          grossMinor: invoices.grossMinor,
           clientEmail: clients.email,
           clientName: clients.name,
           clientCompany: clients.companyName,
@@ -381,6 +399,53 @@ export type CommitChunkResult =
  * transaction, so a large import shows progress and can be re-run after a
  * failure: committed drafts aren't picked up again.
  */
+const sterlingRate: DocumentRateDetails = {
+  currency: STERLING,
+  fxRate: 1,
+  fxRateDate: null,
+  fxRateSource: null,
+};
+
+const rateKey = (currency: string, issueDate: string) => `${currency}:${issueDate}`;
+
+/**
+ * The Bank of England rate for each foreign invoice in the next chunk, on its
+ * issue date. Fetched before the saving transaction so no lock waits on the
+ * network; the transaction re-reads the chunk and asks again if it changed.
+ */
+async function ratesForNextChunk(
+  companyId: string,
+  batchId: string,
+): Promise<{ ok: true; rates: Map<string, DocumentRateDetails> } | { ok: false; error: string }> {
+  const drafts = await getDb()
+    .select({ parsed: invoiceImportDrafts.parsed })
+    .from(invoiceImportDrafts)
+    .where(
+      and(
+        eq(invoiceImportDrafts.batchId, batchId),
+        eq(invoiceImportDrafts.companyId, companyId),
+        eq(invoiceImportDrafts.status, "ready"),
+      ),
+    )
+    .orderBy(asc(invoiceImportDrafts.position))
+    .limit(COMMIT_CHUNK);
+  const rates = new Map<string, DocumentRateDetails>();
+  for (const { parsed } of drafts) {
+    const currency = parsedCurrency(parsed);
+    const key = rateKey(currency, parsed.issueDate);
+    if (currency === STERLING || rates.has(key)) continue;
+    const rate = await documentRate(currency, parsed.issueDate);
+    if (!rate.ok) {
+      return {
+        ok: false,
+        error: `Couldn't get the Bank of England ${currency} rate for ${parsed.issueDate}${parsed.number ? ` (invoice ${parsed.number})` : ""}. Try again later.`,
+      };
+    }
+    rates.set(key, rate.rate);
+  }
+  return { ok: true, rates };
+}
+
 export async function commitInvoiceImportChunk(
   batchId: string,
 ): Promise<CommitChunkResult> {
@@ -390,6 +455,14 @@ export async function commitInvoiceImportChunk(
       const db = getDb();
       // Codes the imported lines; history can carry any rate.
       const importCompany = await getOrCreateCompanySettings(companyId);
+      const fetched = await ratesForNextChunk(companyId, batchId);
+      if (!fetched.ok) return fetched;
+      const rateFor = (parsed: ParsedInvoice) => {
+        const currency = parsedCurrency(parsed);
+        return currency === STERLING
+          ? sterlingRate
+          : fetched.rates.get(rateKey(currency, parsed.issueDate));
+      };
       const result = await db.transaction(async (tx): Promise<CommitChunkResult> => {
         // Under the lock saveInvoiceCutover takes, so a cutover saved while this
         // runs can't leave rows flagged against the old date.
@@ -492,6 +565,10 @@ export async function commitInvoiceImportChunk(
                 );
         const attachedTo = new Map(attached.map((a) => [a.sha, a.number]));
 
+        // A rate for every invoice, checked before anything is written.
+        if (drafts.some((d) => !rateFor(d.parsed))) {
+          return { ok: false, error: "The import changed while saving. Try again." };
+        }
         for (const draft of drafts) {
           const { parsed } = draft;
           if (parsed.number && takenNumbers.has(parsed.number.toLowerCase())) {
@@ -546,6 +623,9 @@ export async function commitInvoiceImportChunk(
           if (!draft.bankTransactionId) continue;
           const row = linkedById.get(draft.bankTransactionId);
           const label = draft.parsed.number ?? "an invoice";
+          if (parsedCurrency(draft.parsed) !== STERLING) {
+            return flag(draft.id, `Link the bank payment for ${label} from the invoice once the import is saved`);
+          }
           if (!row || row.matchId) {
             return flag(draft.id, `The bank payment for ${label} is already reconciled: pick another`);
           }
@@ -618,6 +698,9 @@ export async function commitInvoiceImportChunk(
           }
 
           const paymentDate = parsed.amountPaidPence > 0 ? parsed.paidDate ?? parsed.issueDate : null;
+          // Checked above, before anything was written.
+          const rate = rateFor(parsed) as DocumentRateDetails;
+          const foreign = rate.currency !== STERLING;
           const [invoice] = await tx
             .insert(invoices)
             .values({
@@ -627,7 +710,11 @@ export async function commitInvoiceImportChunk(
               status: parsed.status,
               issueDate: parsed.issueDate,
               dueDate: parsed.dueDate,
-              ...sterlingTotals(parsed),
+              currency: rate.currency,
+              fxRate: rate.fxRate,
+              fxRateDate: rate.fxRateDate,
+              fxRateSource: rate.fxRateSource,
+              ...convertTotals({ netMinor: parsed.netPence, vatMinor: parsed.vatPence }, rate),
               paidAt:
                 parsed.status === "paid" && paymentDate
                   ? new Date(`${paymentDate}T12:00:00Z`)
@@ -661,9 +748,11 @@ export async function commitInvoiceImportChunk(
               .insert(payments)
               .values({
                 invoiceId: invoice.id,
-                amountPence: parsed.amountPaidPence,
-                // Imports are sterling only for now.
                 amountMinor: parsed.amountPaidPence,
+                // The pounds that reached the bank aren't in the file: estimated at the
+                // invoice's rate until the payment is linked to a bank line.
+                amountPence: toSterlingPence(parsed.amountPaidPence, rate.fxRate),
+                amountPenceEstimated: foreign,
                 receivedAt: new Date(`${paymentDate}T12:00:00Z`),
                 reference: parsed.paymentReference,
                 method: "import",
@@ -678,6 +767,7 @@ export async function commitInvoiceImportChunk(
                 confirmed: true,
               });
             }
+            if (foreign) await syncFxDifference(tx, companyId, invoice.id, paymentDate);
           }
           await tx
             .update(invoiceImportDrafts)
@@ -786,8 +876,8 @@ export async function undoInvoiceImport(batchId: string): Promise<UndoResult> {
           );
         const ids = rows.map((r) => r.id);
         const none = ids.length === 0;
-        const [paymentRows, creditRows, matchRows, jobRows, claimRows] = none
-          ? [[], [], [], [], []]
+        const [paymentRows, creditRows, matchRows, jobRows, claimRows, writeOffRows] = none
+          ? [[], [], [], [], [], []]
           : await Promise.all([
               tx.select({ id: payments.id, invoiceId: payments.invoiceId, method: payments.method, receivedAt: payments.receivedAt }).from(payments).where(
                 and(
@@ -814,6 +904,15 @@ export async function undoInvoiceImport(batchId: string): Promise<UndoResult> {
                 ),
               tx.select({ invoiceId: sendJobs.invoiceId }).from(sendJobs).where(and(inArray(sendJobs.invoiceId, ids), eq(sendJobs.status, "sent"))),
               tx.select({ invoiceId: invoices.latePaymentForInvoiceId }).from(invoices).where(inArray(invoices.latePaymentForInvoiceId, ids)),
+              tx
+                .select({ invoiceId: invoiceWriteOffs.invoiceId, kind: invoiceWriteOffs.kind })
+                .from(invoiceWriteOffs)
+                .where(
+                  and(
+                    eq(invoiceWriteOffs.companyId, companyId),
+                    inArray(invoiceWriteOffs.invoiceId, ids),
+                  ),
+                ),
             ]);
 
         const reasons = new Map<string, string>();
@@ -851,6 +950,10 @@ export async function undoInvoiceImport(batchId: string): Promise<UndoResult> {
         }
         for (const j of jobRows) block(j.invoiceId, "Has been emailed to the client");
         for (const c of claimRows) block(c.invoiceId, "Has a late payment claim");
+        // The exchange difference saving booked goes with the invoice; any other write-off blocks.
+        for (const w of writeOffRows) {
+          if (w.kind !== "fx_difference") block(w.invoiceId, "Has a write-off");
+        }
         // The same dates saving checks: removing an invoice moves whatever saving it added.
         const cutover = company.invoiceCutoverDate;
         for (const inv of rows) {
@@ -879,6 +982,15 @@ export async function undoInvoiceImport(batchId: string): Promise<UndoResult> {
               .delete(reconciliationMatches)
               .where(and(inArray(reconciliationMatches.id, importMatchIds), matchOfCompany(companyId)));
           }
+          await tx
+            .delete(invoiceWriteOffs)
+            .where(
+              and(
+                eq(invoiceWriteOffs.companyId, companyId),
+                eq(invoiceWriteOffs.kind, "fx_difference"),
+                inArray(invoiceWriteOffs.invoiceId, removable.map((r) => r.id)),
+              ),
+            );
           await tx.delete(invoices).where(
             and(
               eq(invoices.companyId, companyId),

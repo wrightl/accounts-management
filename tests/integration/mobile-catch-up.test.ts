@@ -550,7 +550,8 @@ describe("mobile payments and reimbursement runs", () => {
 
     const list = (await (await listRecords(get("/api/mobile/records?resource=invoices"))).json()).data;
     const row = list.items.find((i: { id: string }) => i.id === invoice.id);
-    expect(row.actions).toEqual({ recordPayment: { amountDuePence: 10000 } });
+    expect(row.actions).toEqual({ recordPayment: { amountDuePence: 10000, currency: "GBP" } });
+    expect(row).toMatchObject({ currency: "GBP", amountMinor: 10000, amountPence: 10000 });
     expect(list.items.filter((i: { actions?: unknown }) => i.actions)).toHaveLength(1);
 
     const part = await recordPaymentRoute(
@@ -560,7 +561,7 @@ describe("mobile payments and reimbursement runs", () => {
     expect(part.status).toBe(201);
     const after = (await (await listRecords(get("/api/mobile/records?resource=invoices"))).json()).data;
     expect(after.items.find((i: { id: string }) => i.id === invoice.id).actions).toEqual({
-      recordPayment: { amountDuePence: 6000 },
+      recordPayment: { amountDuePence: 6000, currency: "GBP" },
     });
 
     const tooMuch = await recordPaymentRoute(

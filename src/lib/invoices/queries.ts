@@ -227,10 +227,13 @@ export async function listInvoicePage(companyId: string, filters: InvoiceListFil
   };
 }
 
-/** What's still owed on each of these company invoices, after payments and credit notes. */
+/**
+ * What's still owed on each of these company invoices, after payments and
+ * credit notes, in each invoice's own currency (minor units).
+ */
 export async function invoiceAmountsDue(
   companyId: string,
-  list: { id: string; grossPence: number }[],
+  list: { id: string; grossMinor: number }[],
 ): Promise<Map<string, number>> {
   const due = new Map<string, number>();
   if (list.length === 0) return due;
@@ -239,7 +242,7 @@ export async function invoiceAmountsDue(
   const paidRows = await db
     .select({
       invoiceId: payments.invoiceId,
-      total: sum(payments.amountPence).mapWith(Number),
+      total: sum(payments.amountMinor).mapWith(Number),
     })
     .from(payments)
     .where(
@@ -254,7 +257,7 @@ export async function invoiceAmountsDue(
   for (const inv of list) {
     due.set(
       inv.id,
-      invoiceAmountDue(settlementPence(inv, paid.get(inv.id) ?? 0, credits.get(inv.id))),
+      invoiceAmountDue(settlementMinor(inv, paid.get(inv.id) ?? 0, credits.get(inv.id))),
     );
   }
   return due;

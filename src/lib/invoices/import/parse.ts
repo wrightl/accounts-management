@@ -4,6 +4,7 @@ import type {
   ImportDateFormat,
   ImportField,
 } from "@/lib/invoices/import/fields";
+import { isDocumentCurrency, STERLING } from "@/lib/currency";
 import { invoiceTotals, lineNetPence, poundsToPence } from "@/lib/money";
 
 export const MAX_IMPORT_ROWS = 20_000;
@@ -25,9 +26,17 @@ export interface ParsedClient {
   address: string | null;
 }
 
+/**
+ * An invoice read from a file. Its amounts (the `*Pence` fields, kept under
+ * those names for drafts already saved) are minor units of `currency`; the
+ * sterling book values are worked out when it's saved, at the Bank of England
+ * rate on its issue date.
+ */
 export interface ParsedInvoice {
   /** As written in the source, trimmed. Null when the source had none. */
   number: string | null;
+  /** ISO 4217 code. Missing on drafts saved before imports took other currencies: GBP. */
+  currency?: string;
   client: ParsedClient;
   issueDate: string;
   dueDate: string | null;
@@ -174,8 +183,14 @@ type Row = {
   get: (field: ImportField) => string;
 };
 
+/** The currency an invoice is in: GBP unless the source names another. */
+export function parsedCurrency(invoice: Pick<ParsedInvoice, "currency">): string {
+  return invoice.currency?.trim().toUpperCase() || STERLING;
+}
+
 function buildDraft(
   rows: Row[],
+  currency: string,
   options: { dateFormat: ImportDateFormat; paymentTermsDays: number },
 ): ParsedDraft {
   const errors: string[] = [];
@@ -219,6 +234,7 @@ function buildDraft(
       ["clientName", "client"],
       ["clientEmail", "client email"],
       ["status", "status"],
+      ["currency", "currency"],
     ] as const) {
       if (row.get(field).trim() !== get(field).trim()) {
         errors.push(`Rows for this invoice disagree on ${label} (row ${row.number})`);
@@ -367,6 +383,7 @@ function buildDraft(
   return {
     invoice: {
       number,
+      currency,
       client,
       issueDate: issueDate ?? "",
       dueDate,
@@ -388,6 +405,9 @@ function buildDraft(
 /** Checks for an invoice that was read from a PDF or edited by hand. */
 export function validateParsedInvoice(invoice: ParsedInvoice): string[] {
   const errors: string[] = [];
+  if (!isDocumentCurrency(parsedCurrency(invoice))) {
+    errors.push(`In ${parsedCurrency(invoice)}: Alfa can't hold invoices in ${parsedCurrency(invoice)}`);
+  }
   const amounts = [invoice.netPence, invoice.vatPence, invoice.grossPence, invoice.amountPaidPence];
   if (amounts.some((a) => !Number.isFinite(a))) errors.push("An amount isn't a number");
   if (!invoice.client.name && !invoice.client.companyName && !invoice.client.email) {
@@ -491,16 +511,16 @@ export function parseInvoiceImport(
       skipped.push({ rows: sourceRows, number, reason: skipReason });
       continue;
     }
-    const currency = first.get("currency").trim().toUpperCase();
-    if (currency && currency !== "GBP") {
+    const currency = first.get("currency").trim().toUpperCase() || STERLING;
+    if (!isDocumentCurrency(currency)) {
       skipped.push({
         rows: sourceRows,
         number,
-        reason: `In ${currency}: Alfa only holds invoices in GBP`,
+        reason: `In ${currency}: Alfa can't hold invoices in ${currency}`,
       });
       continue;
     }
-    drafts.push(buildDraft(rows, options));
+    drafts.push(buildDraft(rows, currency, options));
   }
 
   return { headers, rowCount: table.length - 1, drafts, skipped };

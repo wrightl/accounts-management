@@ -12,7 +12,8 @@ import { DisplayDate } from "@/components/date-format-provider";
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label, Select } from "@/components/ui/form";
 import type { InvoiceBankMatch } from "@/lib/bank/queries";
-import type { ParsedInvoice } from "@/lib/invoices/import/parse";
+import { DOCUMENT_CURRENCIES, STERLING } from "@/lib/currency";
+import { parsedCurrency, type ParsedInvoice } from "@/lib/invoices/import/parse";
 import { penceToPounds, poundsToPence } from "@/lib/money";
 
 function pounds(pence: number): string {
@@ -71,6 +72,8 @@ export function InvoiceDraftEditor({
     })),
   );
 
+  const [currency, setCurrency] = useState(parsedCurrency(invoice));
+  const foreign = currency !== STERLING;
   const [bankTx, setBankTx] = useState<string | null>(bankTransactionId);
   const [matches, setMatches] = useState<InvoiceBankMatch[] | null>(null);
 
@@ -120,6 +123,7 @@ export function InvoiceDraftEditor({
     const paid = toPence(form.paid);
     const next: ParsedInvoice = {
       ...invoice,
+      currency,
       number: form.number.trim() || null,
       issueDate: form.issueDate,
       dueDate: form.dueDate || null,
@@ -141,7 +145,7 @@ export function InvoiceDraftEditor({
         batchId,
         draftId,
         next,
-        gross > 0 && paid >= gross ? bankTx : null,
+        gross > 0 && paid >= gross && !foreign ? bankTx : null,
       );
       if (!result.ok) {
         setError(result.error);
@@ -194,12 +198,31 @@ export function InvoiceDraftEditor({
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           {field("number", "Invoice number")}
+          <div>
+            <Label htmlFor={`${draftId}-currency`}>Currency</Label>
+            <Select
+              id={`${draftId}-currency`}
+              value={currency}
+              disabled={pending}
+              onChange={(e) => {
+                setDirty(true);
+                setCurrency(e.target.value);
+                if (e.target.value !== STERLING) setBankTx(null);
+              }}
+              options={DOCUMENT_CURRENCIES.map((code) => ({ value: code, label: code }))}
+            />
+          </div>
           {field("issueDate", "Issue date", "date")}
           {field("dueDate", "Due date", "date")}
-          {field("net", "Net")}
-          {field("vat", "VAT")}
-          {field("gross", "Gross")}
+          {field("net", `Net (${currency})`)}
+          {field("vat", `VAT (${currency})`)}
+          {field("gross", `Gross (${currency})`)}
         </div>
+        {foreign ? (
+          <p className="text-xs text-muted">
+            Saved in {currency}, with pounds at the Bank of England rate on the issue date.
+          </p>
+        ) : null}
         <fieldset className="space-y-3">
           <legend className="font-medium">Payment</legend>
           <label className="flex items-center gap-2">
@@ -212,10 +235,14 @@ export function InvoiceDraftEditor({
             Mark as paid
           </label>
           <div className="grid gap-3 sm:grid-cols-2">
-            {field("paid", "Amount paid")}
+            {field("paid", `Amount paid (${currency})`)}
             {field("paidDate", "Paid date", "date")}
           </div>
-          {paidInFull ? (
+          {paidInFull && foreign ? (
+            <p className="text-xs text-muted">
+              Link the bank payment from the invoice once the import is saved.
+            </p>
+          ) : paidInFull ? (
             <div>
               <Label htmlFor={`${draftId}-bank`}>Bank payment</Label>
               <Select
