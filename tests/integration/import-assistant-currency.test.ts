@@ -169,6 +169,56 @@ describe("importing invoices in another currency", () => {
     expect(await byNumber("US-2")).toBeUndefined();
   });
 
+  it("won't undo an invoice with a write-off made by hand", async () => {
+    await db
+      .insert(fxRates)
+      .values({ currency: "USD", observationDate: "2026-05-01", foreignPerGbp: 1.25 });
+    const batchId = await stageCsv(USD_FILE);
+    await commitAll(batchId);
+    const uk = await byNumber("UK-1");
+    await db.insert(invoiceWriteOffs).values({
+      companyId,
+      invoiceId: uk.id,
+      kind: "bad_debt",
+      amountPence: 1_000,
+      amountMinor: 1_000,
+      writtenOffOn: "2026-06-01",
+    });
+
+    const result = await undoInvoiceImport(batchId);
+    expect(result).toMatchObject({
+      ok: true,
+      kept: [expect.objectContaining({ reason: "Has a write-off" })],
+    });
+    expect(await byNumber("UK-1")).toBeDefined();
+    expect(await byNumber("US-1")).toBeUndefined();
+  });
+
+  it("treats the same number in another currency as a different invoice", async () => {
+    const [client] = await db
+      .insert(clients)
+      .values({ companyId, name: "Initech", email: "bill@initech.example" })
+      .returning();
+    await db.insert(invoices).values({
+      companyId,
+      number: "US-1",
+      clientId: client.id,
+      status: "paid",
+      netMinor: 100_000,
+      grossMinor: 100_000,
+      netPence: 100_000,
+      grossPence: 100_000,
+    });
+    const batchId = await stageCsv(USD_FILE);
+    const [draft] = await db
+      .select()
+      .from(invoiceImportDrafts)
+      .where(eq(invoiceImportDrafts.batchId, batchId))
+      .orderBy(invoiceImportDrafts.position);
+    // Same client and amount, but pounds in Alfa and dollars in the file.
+    expect(draft.errors.join()).toContain("already exists in Alfa with different details");
+  });
+
   it("skips a currency invoices can't be issued in", async () => {
     const batchId = await stageCsv(
       [HEAD, "JP-1,Initech,bill@initech.example,01/05/2026,Work,1000,0,sent,,,JPY"].join("\n"),

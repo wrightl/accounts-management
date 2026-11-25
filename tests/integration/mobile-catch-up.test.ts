@@ -542,6 +542,22 @@ describe("mobile payments and reimbursement runs", () => {
     return invoice;
   }
 
+  it("offers what's owed on a foreign invoice in its own currency", async () => {
+    const company = await seedCompany(db, { name: "Dollar Co" });
+    const user = await seedUser(company.id);
+    const invoice = await seedInvoice(company.id, user.id);
+    await db
+      .update(invoices)
+      .set({ currency: "USD", fxRate: 1.25, netMinor: 12_500, grossMinor: 12_500 })
+      .where(eq(invoices.id, invoice.id));
+
+    const list = (await (await listRecords(get("/api/mobile/records?resource=invoices"))).json()).data;
+    const row = list.items.find((i: { id: string }) => i.id === invoice.id);
+    // $125.00 owed, not the £100.00 in the books: the payments endpoint reads dollars.
+    expect(row.actions).toEqual({ recordPayment: { amountDuePence: 12_500, currency: "USD" } });
+    expect(row).toMatchObject({ currency: "USD", amountMinor: 12_500, amountPence: 10_000 });
+  });
+
   it("offers Record payment with what's owed, and records it like the web", async () => {
     const company = await seedCompany(db, { name: "Pay Co" });
     const user = await seedUser(company.id);
