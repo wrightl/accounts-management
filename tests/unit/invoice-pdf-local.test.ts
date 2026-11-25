@@ -101,15 +101,17 @@ Total £60.00`;
     expect(parseInvoiceText("Paid by USD card\nTotal £50.00").currency).toBe("GBP");
   });
 
-  it("notes a currency shown on the total, which blocks the draft", () => {
+  it("keeps a currency shown on the total and asks for it to be checked", () => {
     const extraction = parseInvoiceText("Amount due: $99.00");
     expect(extraction.currency).toBe("USD");
-    const { errors } = draftFromExtraction(extraction, {
-      name: "Test Co",
-      legalName: null,
-      vatNumber: null,
-    });
-    expect(errors.join()).toContain("Alfa only holds invoices in GBP");
+    const company = { name: "Test Co", legalName: null, vatNumber: null };
+    const { invoice, errors, warnings } = draftFromExtraction(extraction, company);
+    expect(invoice.currency).toBe("USD");
+    expect(errors).toEqual([]);
+    expect(warnings.join()).toContain("Read as USD");
+    // A currency invoices can't be issued in still blocks the draft.
+    const yen = draftFromExtraction({ ...extraction, currency: "JPY" }, company);
+    expect(yen.errors.join()).toContain("Alfa can't hold invoices in JPY");
   });
 });
 

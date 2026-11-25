@@ -32,6 +32,22 @@ let adminId: string;
 let otherAdminId: string;
 
 const NOW = new Date("2026-12-01T10:00:00Z");
+
+const WEB_CALL = {
+  method: "WEB_APP_VIA_SERVER" as const,
+  userId: "user-1",
+  deviceId: "beec798b-b366-47fa-b1f8-92cede14a1ce",
+  web: {
+    screens: [{ width: 1920, height: 1080, scalingFactor: 2, colourDepth: 24 }],
+    window: { width: 1256, height: 803 },
+    utcOffsetMinutes: 0,
+    userAgent: "Mozilla/5.0 (Test)",
+  },
+  publicIp: "198.51.100.7",
+  publicPort: null,
+  publicIpAt: NOW,
+  multiFactor: [],
+};
 const HOUR = 60 * 60 * 1000;
 
 function tokenResponse(access: string, refresh: string) {
@@ -209,15 +225,26 @@ describe("calling HMRC", () => {
     );
     const result = await hmrcFetch(
       companyId,
-      { path: "/organisations/vat/123456789/obligations", query: { status: "O" }, actorUserId: adminId },
+      { path: "/organisations/vat/123456789/obligations", query: { status: "O" }, actorUserId: adminId, fraud: WEB_CALL },
       { fetchImpl, now: new Date(NOW.getTime() + HOUR) },
     );
     expect(result).toEqual({ obligations: [] });
     const [url, init] = fetchImpl.mock.calls[0]!;
     expect(String(url)).toBe("https://test-api.service.hmrc.gov.uk/organisations/vat/123456789/obligations?status=O");
-    expect(init!.headers).toMatchObject({ Accept: "application/vnd.hmrc.1.0+json", Authorization: "Bearer access-1" });
+    expect(init!.headers).toMatchObject({
+      Accept: "application/vnd.hmrc.1.0+json",
+      Authorization: "Bearer access-1",
+      "Gov-Client-Connection-Method": "WEB_APP_VIA_SERVER",
+      "Gov-Client-Public-IP": "198.51.100.7",
+      "Gov-Vendor-Product-Name": "Alfa",
+    });
     const [audit] = await db.select().from(auditLog).where(eq(auditLog.action, "hmrc.api"));
-    expect(audit!.meta).toEqual({ method: "GET", path: "/organisations/vat/123456789/obligations", status: 200 });
+    expect(audit!.meta).toEqual({
+      method: "GET",
+      path: "/organisations/vat/123456789/obligations",
+      status: 200,
+      connectionMethod: "WEB_APP_VIA_SERVER",
+    });
   });
 
   it("turns an HMRC error into a message", async () => {
@@ -225,7 +252,7 @@ describe("calling HMRC", () => {
     const fetchImpl = vi.fn(
       async () => new Response(JSON.stringify({ code: "INVALID_VRN", message: "Invalid VRN" }), { status: 400 }),
     );
-    const error = await hmrcFetch(companyId, { path: "/organisations/vat/1/obligations", actorUserId: null }, { fetchImpl, now: NOW }).catch(
+    const error = await hmrcFetch(companyId, { path: "/organisations/vat/1/obligations", actorUserId: null, fraud: WEB_CALL }, { fetchImpl, now: NOW }).catch(
       (e) => e,
     );
     expect(error).toBeInstanceOf(HmrcApiError);

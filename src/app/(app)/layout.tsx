@@ -22,6 +22,7 @@ import { aiGatewayConfigured } from "@/lib/ai/models";
 import { DashboardShell } from "@/components/dashboard/shell";
 import { DateFormatProvider } from "@/components/date-format-provider";
 import { SyncUiPrefsCookie } from "@/components/users/sync-ui-prefs-cookie";
+import { HmrcClientDetailsCookie } from "@/components/hmrc/client-details-cookie";
 import { parseUiPrefs } from "@/lib/ui-prefs";
 
 export default async function AppLayout({
@@ -141,6 +142,7 @@ export default async function AppLayout({
   return (
     <>
       <SyncUiPrefsCookie prefs={uiPrefs} />
+      {hmrcConnectEnabled() ? <HmrcClientDetailsCookie /> : null}
       <DateFormatProvider format={uiPrefs.dateFormat}>
         <DashboardShell
           groups={groups}

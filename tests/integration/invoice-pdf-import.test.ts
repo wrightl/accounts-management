@@ -8,6 +8,7 @@ import {
   bankTransactions,
   clients,
   companies,
+  fxRates,
   invoiceImportBatches,
   invoiceImportDrafts,
   invoicePdfReads,
@@ -289,14 +290,22 @@ describe("uploading a PDF", () => {
     expect(draft.warnings.join()).toContain("bill you received");
   });
 
-  it("blocks a file holding several invoices, and non-GBP", async () => {
+  it("blocks a file holding several invoices, and a currency invoices can't be in", async () => {
     generateText.mockResolvedValue({
-      output: { ...reading, invoiceCount: 3, currency: "EUR" },
+      output: { ...reading, invoiceCount: 3, currency: "JPY" },
       usage: {},
     });
     const draft = await upload(await newBatch());
     expect(draft.errors.join()).toContain("several invoices");
-    expect(draft.errors.join()).toContain("EUR");
+    expect(draft.errors.join()).toContain("JPY");
+  });
+
+  it("keeps another currency on the draft and asks for it to be checked", async () => {
+    generateText.mockResolvedValue({ output: { ...reading, currency: "EUR" }, usage: {} });
+    const draft = await upload(await newBatch());
+    expect(draft.parsed.currency).toBe("EUR");
+    expect(draft.errors.join()).not.toContain("EUR");
+    expect(draft.warnings.join()).toContain("Read as EUR");
   });
 });
 
@@ -662,6 +671,34 @@ describe("linking a bank payment", () => {
     expect((await undoInvoiceImport(batchId)).ok).toBe(true);
     expect(await db.select().from(invoices)).toEqual([]);
     expect(await db.select().from(reconciliationMatches)).toEqual([]);
+  });
+
+  it("leaves a foreign invoice's bank payment to be linked once it's saved", async () => {
+    const tx = await credit();
+    await db
+      .insert(fxRates)
+      .values({ currency: "USD", observationDate: "2026-02-01", foreignPerGbp: 1.25 });
+    const batchId = await newBatch();
+    const draft = await upload(batchId);
+    const usd = { ...paid(draft.parsed), currency: "USD" };
+
+    const linked = await updateImportDraft(batchId, draft.id, usd, tx.id);
+    expect(linked).toMatchObject({ ok: false });
+    expect(!linked.ok && linked.error).toContain("from the invoice once the import is saved");
+
+    expect(await updateImportDraft(batchId, draft.id, usd)).toMatchObject({ ok: true });
+    expect(await findImportDraftBankMatches(batchId, draft.id)).toEqual({ ok: true, matches: [] });
+
+    // A link that got onto the draft anyway is caught on saving.
+    await approveImportDrafts(batchId, { draftId: draft.id });
+    await db
+      .update(invoiceImportDrafts)
+      .set({ bankTransactionId: tx.id })
+      .where(eq(invoiceImportDrafts.id, draft.id));
+    const saved = await commitInvoiceImportChunk(batchId);
+    expect(saved).toMatchObject({ ok: false });
+    expect(!saved.ok && saved.error).toContain("from the invoice once the import is saved");
+    expect(await db.select().from(invoices)).toEqual([]);
   });
 
   it("won't undo an import payment that was later reconciled by hand", async () => {

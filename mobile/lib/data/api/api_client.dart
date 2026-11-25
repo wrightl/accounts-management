@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../core/constants/app_constants.dart';
+import 'hmrc_device_details.dart';
 
 class ApiClient {
   static Future<String?> Function()? sessionTokenProvider;
@@ -11,6 +12,7 @@ class ApiClient {
 
   late final Dio _dio;
   final FlutterSecureStorage _storage;
+  late final HmrcDeviceDetails _deviceDetails = HmrcDeviceDetails(_storage);
   
   ApiClient({FlutterSecureStorage? storage}) 
       : _storage = storage ?? const FlutterSecureStorage() {
@@ -36,6 +38,14 @@ class ApiClient {
               : await _storage.read(key: AppConstants.keyAuthToken);
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
+          }
+          // Device details for HMRC's fraud prevention headers, used only
+          // when the request ends in a call to HMRC.
+          try {
+            final device = await _deviceDetails.headerValue();
+            if (device != null) options.headers[HmrcDeviceDetails.headerName] = device;
+          } catch (_) {
+            // Never block a request on these details.
           }
           return handler.next(options);
         },
