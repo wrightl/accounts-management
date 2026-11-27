@@ -195,6 +195,11 @@ subscribe the sandbox application to that API too and add its credentials as
 the GitHub Actions secrets `HMRC_SANDBOX_CLIENT_ID` and
 `HMRC_SANDBOX_CLIENT_SECRET`. The check is skipped when they're missing.
 
+Alfa can't send `Gov-Client-Public-Port`, because Vercel doesn't pass on the
+port the client connected from. HMRC's validator reports it as missing, and the
+CI check allows that one error. Before going live, tell HMRC why it can't be
+sent, as their validator asks.
+
 ## 6. Custom subdomain **(you)**
 
 1. Vercel → Project → **Domains** → add `accounts.dotanddashconsulting.com`.

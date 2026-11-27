@@ -70,6 +70,9 @@ export async function hmrcClientContext(
     clientIpFromForwardedFor(headerList.get("x-forwarded-for")) ??
     clientIpFromForwardedFor(headerList.get("x-real-ip"));
   const multiFactor = await multiFactorFromClerk(now);
+  // Vercel doesn't pass on the port the client connected from, so
+  // Gov-Client-Public-Port can't be sent. HMRC asks vendors in that position
+  // to tell them why (docs/SETUP.md, section 5c).
   const base = { userId, publicIp, publicPort: null, publicIpAt: now, multiFactor };
 
   const mobile = parseClientDetails(
@@ -101,8 +104,15 @@ function stableServerDeviceId(): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 
-/** Fraud prevention details for a call Alfa makes on its own, such as a cron job. */
-export function hmrcBatchContext(userId: string | null, now: Date = new Date()): BatchCallContext {
+/**
+ * Fraud prevention details for a call Alfa makes on its own, such as a cron
+ * job. HMRC requires a user ID, so the company is always named, and the
+ * person too when the job acts for one.
+ */
+export function hmrcBatchContext(
+  { userId, companyId }: { userId: string | null; companyId: string },
+  now: Date = new Date(),
+): BatchCallContext {
   const interfaces = Object.values(os.networkInterfaces())
     .flat()
     .filter((i) => i && !i.internal);
@@ -113,6 +123,7 @@ export function hmrcBatchContext(userId: string | null, now: Date = new Date()):
   return {
     method: "BATCH_PROCESS_DIRECT",
     userId,
+    companyId,
     deviceId: stableServerDeviceId(),
     localIps,
     localIpsAt: now,

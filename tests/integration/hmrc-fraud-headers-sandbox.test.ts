@@ -4,6 +4,10 @@
  * application subscribed to that API, with its credentials in
  * HMRC_SANDBOX_CLIENT_ID and HMRC_SANDBOX_CLIENT_SECRET (GitHub Actions
  * secrets in CI). Skipped without them.
+ *
+ * One error is expected: Gov-Client-Public-Port. Vercel doesn't pass on the
+ * port the client connected from, and HMRC asks vendors who can't send it
+ * to tell them why. Any other error fails the test.
  */
 import { describe, expect, it } from "vitest";
 import {
@@ -59,6 +63,13 @@ async function validate(context: HmrcFraudContext): Promise<ValidatorResult> {
   return body;
 }
 
+/** HMRC's errors, less the one Alfa can't fix in code (see above). */
+function unexpectedErrors(result: ValidatorResult) {
+  return (result.errors ?? []).filter(
+    (e) => !(e.code === "MISSING_HEADER" && e.headers?.length === 1 && e.headers[0] === "gov-client-public-port"),
+  );
+}
+
 const now = new Date();
 const DEVICE = "beec798b-b366-47fa-b1f8-92cede14a1ce";
 const person = {
@@ -85,7 +96,7 @@ describe.skipIf(!clientId || !clientSecret)("HMRC's fraud prevention header vali
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
       },
     });
-    expect(result.errors ?? [], JSON.stringify(result)).toEqual([]);
+    expect(unexpectedErrors(result), JSON.stringify(result)).toEqual([]);
   });
 
   it("accepts the mobile app's headers", async () => {
@@ -101,15 +112,19 @@ describe.skipIf(!clientId || !clientSecret)("HMRC's fraud prevention header vali
         osVersion: "18.1",
         deviceManufacturer: "Apple",
         deviceModel: "iPhone15,2",
+        localIps: ["192.168.1.20", "fd00::5"],
+        localIpsAt: now.toISOString(),
+        appVersion: "1.0.0+4",
       },
     });
-    expect(result.errors ?? [], JSON.stringify(result)).toEqual([]);
+    expect(unexpectedErrors(result), JSON.stringify(result)).toEqual([]);
   });
 
   it("accepts the headers for scheduled work", async () => {
     const result = await validate({
       method: "BATCH_PROCESS_DIRECT",
       userId: null,
+      companyId: "9d1f3b2a-6c4e-4f8a-b0d2-7e5a1c3f9b40",
       deviceId: DEVICE,
       localIps: ["10.1.2.3"],
       localIpsAt: now,
@@ -120,6 +135,6 @@ describe.skipIf(!clientId || !clientSecret)("HMRC's fraud prevention header vali
       deviceManufacturer: null,
       deviceModel: "x86_64",
     });
-    expect(result.errors ?? [], JSON.stringify(result)).toEqual([]);
+    expect(unexpectedErrors(result), JSON.stringify(result)).toEqual([]);
   });
 });

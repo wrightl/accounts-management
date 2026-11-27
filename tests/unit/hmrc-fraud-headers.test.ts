@@ -145,6 +145,7 @@ describe("batch headers", () => {
     const batch: BatchCallContext = {
       method: "BATCH_PROCESS_DIRECT",
       userId: null,
+      companyId: "c-1",
       deviceId: DEVICE,
       localIps: ["10.0.0.4", "fe80::1"],
       localIpsAt: AT,
@@ -163,9 +164,77 @@ describe("batch headers", () => {
       "Gov-Client-MAC-Addresses": "02%3A42%3Aac%3A11%3A00%3A02",
       "Gov-Client-Timezone": "UTC+00:00",
       "Gov-Client-User-Agent": "os-family=Linux&os-version=6.1.0&device-model=x86_64",
+      "Gov-Client-User-IDs": "alfa-company=c-1",
       "Gov-Vendor-Product-Name": "Alfa",
       "Gov-Vendor-Version": "Alfa=0.1.0",
     });
+  });
+});
+
+describe("mobile app local IPs and versions", () => {
+  const mobile = {
+    deviceId: DEVICE,
+    screens: [{ width: 1179, height: 2556, scalingFactor: 3, colourDepth: 24 }],
+    window: { width: 393, height: 852 },
+    utcOffsetMinutes: 0,
+    osFamily: "Android",
+    osVersion: "15",
+    deviceManufacturer: "Google",
+    deviceModel: "Pixel 9",
+    localIps: ["192.168.1.20", "2001:db8::5", "not-an-ip"],
+    localIpsAt: "2026-11-27T21:00:00.123456Z",
+    appVersion: "1.0.0+4",
+  };
+
+  it("drops local IPs the server can't read and keeps the rest of the header", () => {
+    const parsed = parseClientDetails(mobileClientDetailsSchema, JSON.stringify(mobile));
+    expect(parsed?.localIps).toEqual(["192.168.1.20", "2001:db8::5"]);
+    expect(parsed?.appVersion).toBe("1.0.0+4");
+  });
+
+  it("sends the local IPs with their timestamp and both versions", () => {
+    const parsed = mobileClientDetailsSchema.parse(mobile);
+    const headers = buildFraudHeaders(
+      { ...web, method: "MOBILE_APP_VIA_SERVER", web: undefined, mobile: parsed },
+      VENDOR,
+    );
+    expect(headers["Gov-Client-Local-IPs"]).toBe("192.168.1.20,2001%3Adb8%3A%3A5");
+    expect(headers["Gov-Client-Local-IPs-Timestamp"]).toBe("2026-11-27T21:00:00.123Z");
+    expect(headers["Gov-Vendor-Version"]).toBe("Alfa%20mobile=1.0.0%2B4&Alfa%20server=0.1.0");
+  });
+
+  it("leaves the local IP headers out when the app found none", () => {
+    const parsed = mobileClientDetailsSchema.parse({ ...mobile, localIps: [], appVersion: undefined });
+    const headers = buildFraudHeaders(
+      { ...web, method: "MOBILE_APP_VIA_SERVER", web: undefined, mobile: parsed },
+      VENDOR,
+    );
+    expect(headers["Gov-Client-Local-IPs"]).toBeUndefined();
+    expect(headers["Gov-Client-Local-IPs-Timestamp"]).toBeUndefined();
+    expect(headers["Gov-Vendor-Version"]).toBe("Alfa=0.1.0");
+  });
+});
+
+describe("batch user IDs", () => {
+  it("names the person as well as the company when there is one", () => {
+    const headers = buildFraudHeaders(
+      {
+        method: "BATCH_PROCESS_DIRECT",
+        userId: "u-1",
+        companyId: "c-1",
+        deviceId: DEVICE,
+        localIps: [],
+        localIpsAt: AT,
+        macAddresses: [],
+        utcOffsetMinutes: 0,
+        osFamily: "Linux",
+        osVersion: "6.1.0",
+        deviceManufacturer: null,
+        deviceModel: null,
+      },
+      VENDOR,
+    );
+    expect(headers["Gov-Client-User-IDs"]).toBe("alfa=u-1&alfa-company=c-1");
   });
 });
 
