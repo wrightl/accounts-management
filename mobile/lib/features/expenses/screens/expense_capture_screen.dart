@@ -10,7 +10,6 @@ import '../../../data/models/expense.dart';
 import '../../../core/utils/formatters.dart';
 
 /// VAT rates offered when the company is VAT registered.
-const _vatRates = [20, 5, 0];
 
 class ExpenseCaptureScreen extends StatefulWidget {
   const ExpenseCaptureScreen({super.key, this.initialReceipt});
@@ -33,6 +32,13 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
   final _gbpController = TextEditingController();
   String _currency = 'GBP';
 
+  /// The VAT in pounds, read from the receipt or typed.
+  final _vatController = TextEditingController();
+
+  /// `receipt` when [_vatController] holds the receipt's figure, `manual`
+  /// once the person edits it, null to let the server work it out.
+  String? _vatSource;
+
   String _selectedCategory = 'Other';
   bool _categoryChosen = false;
   bool _useMileage = false;
@@ -44,7 +50,7 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
   String? _clientId;
   String? _orderId;
   bool _billable = false;
-  int? _vatRate;
+  String? _taxCode;
   XFile? _capturedReceipt;
 
   /// Set once the expense is saved but its receipt didn't upload, so the
@@ -65,7 +71,7 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
       final options = await context.read<ExpenseProvider>().loadOptions();
       if (!mounted || options == null) return;
       setState(() {
-        _vatRate ??= options.defaultVatRate;
+        _taxCode ??= options.initialTaxCode;
         if (_rateController.text.isEmpty) {
           _rateController.text = '${options.defaultMileageRatePence}';
         }
@@ -77,6 +83,7 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
   void dispose() {
     _descriptionController.dispose();
     _amountController.dispose();
+    _vatController.dispose();
     _milesController.dispose();
     _rateController.dispose();
     _gbpController.dispose();
@@ -164,7 +171,38 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
       } else {
         _receiptNote = extraction.summary;
       }
+      // The receipt's VAT, unless the person has typed their own. Only for
+      // sterling: the server works out VAT on a foreign expense from the rate.
+      if (extraction.vatPounds != null &&
+          !extraction.isForeignCurrency &&
+          _vatSource != 'manual') {
+        _vatController.text = extraction.vatPounds!;
+        _vatSource = 'receipt';
+      }
     });
+  }
+
+  ExpenseTaxCode? _chosenTaxCode(ExpenseOptions? options) =>
+      options?.vatRegistered == true && !_useMileage
+          ? options!.taxCode(_taxCode)
+          : null;
+
+  /// The VAT amount field is for sterling expenses at a rate above 0%.
+  bool _showVatAmount(ExpenseOptions? options) =>
+      _chosenTaxCode(options)?.rated == true && _currency == 'GBP';
+
+  String? _validateVat(String? value) {
+    final text = value?.trim() ?? '';
+    if (text.isEmpty) return null;
+    if (!RegExp(r'^\d+(\.\d{1,2})?$').hasMatch(text)) {
+      return 'Enter the VAT as an amount in pounds, like 2.00';
+    }
+    final vat = double.parse(text);
+    final amount = double.tryParse(_amountController.text.trim());
+    if (amount != null && vat >= amount) {
+      return 'The VAT must be less than the amount paid';
+    }
+    return null;
   }
 
   int? get _mileagePence {
@@ -233,6 +271,11 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
     }
 
     final provider = context.read<ExpenseProvider>();
+    final taxCode = _chosenTaxCode(provider.options);
+    final vatText = _vatController.text.trim();
+    final sendVat = _showVatAmount(provider.options) &&
+        _vatSource != null &&
+        vatText.isNotEmpty;
     final request = CreateExpenseRequest(
       description: _descriptionController.text,
       amountPence: amount == null ? null : CurrencyUtils.poundsToPence(amount),
@@ -246,9 +289,11 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
       billable: _billable,
       clientId: _clientId,
       orderId: _orderId,
-      vatRate: provider.options?.vatRegistered == true && !_useMileage
-          ? (_vatRate ?? 0)
-          : 0,
+      // The rate goes with the code for servers older than tax codes.
+      vatRate: taxCode?.rate ?? 0,
+      taxCode: taxCode?.code,
+      vatPounds: sendVat ? vatText : null,
+      vatSource: sendVat ? _vatSource : null,
       mileageMiles: _useMileage ? num.tryParse(_milesController.text) : null,
       mileageRatePence: _useMileage ? int.tryParse(_rateController.text) : null,
     );
@@ -525,23 +570,49 @@ class _ExpenseCaptureScreenState extends State<ExpenseCaptureScreen> {
                     ),
                   if (options?.vatRegistered == true && !_useMileage) ...[
                     const SizedBox(height: 16),
-                    DropdownButtonFormField<int>(
-                      initialValue: _vatRates.contains(_vatRate) ? _vatRate : 0,
+                    DropdownButtonFormField<String>(
+                      key: ValueKey('tax-code-$_taxCode'),
+                      initialValue: options!.taxCode(_taxCode)?.code ??
+                          options.initialTaxCode,
+                      isExpanded: true,
                       decoration: const InputDecoration(
-                        labelText: 'VAT rate',
+                        labelText: 'Tax code',
                         prefixIcon: Icon(Icons.percent),
-                        helperText: 'The amount includes VAT at this rate.',
+                        helperText: 'The kind of VAT on this purchase.',
                       ),
-                      items: _vatRates
+                      items: options.taxCodes
                           .map(
-                            (rate) => DropdownMenuItem(
-                              value: rate,
-                              child: Text('$rate%'),
+                            (code) => DropdownMenuItem(
+                              value: code.code,
+                              child: Text(
+                                code.display,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           )
                           .toList(),
-                      onChanged: (value) => setState(() => _vatRate = value),
+                      onChanged: (value) => setState(() => _taxCode = value),
                     ),
+                    if (_showVatAmount(options)) ...[
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _vatController,
+                        decoration: InputDecoration(
+                          labelText: 'VAT amount (£)',
+                          prefixIcon: const Icon(Icons.receipt_long),
+                          helperText: _vatSource == 'receipt'
+                              ? 'Read from the receipt. Change it if it is wrong.'
+                              : 'Leave blank to work it out from the rate.',
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        validator: _validateVat,
+                        onChanged: (value) => setState(() {
+                          _vatSource = value.trim().isEmpty ? null : 'manual';
+                        }),
+                      ),
+                    ],
                   ],
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(

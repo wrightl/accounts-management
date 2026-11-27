@@ -112,4 +112,111 @@ void main() {
     expect(expense.isForeign, true);
     expect(expense.displayAmount, '£10.00 (€12.50)');
   });
+
+  group('tax codes and VAT', () {
+    CreateExpenseRequest request({
+      String? taxCode,
+      int vatRate = 0,
+      String? vatPounds,
+      String? vatSource,
+    }) =>
+        CreateExpenseRequest(
+          description: 'Train',
+          amountPence: 1200,
+          category: 'Travel',
+          expenseDate: DateTime(2026, 11, 20),
+          status: 'recorded',
+          taxCode: taxCode,
+          vatRate: vatRate,
+          vatPounds: vatPounds,
+          vatSource: vatSource,
+        );
+
+    test('sends the tax code with its rate for older servers', () {
+      final json = request(taxCode: 'reduced', vatRate: 5).toJson();
+      expect(json['taxCode'], 'reduced');
+      expect(json['vatRate'], 5);
+      expect(json.containsKey('vatPounds'), false);
+      expect(json.containsKey('vatSource'), false);
+    });
+
+    test('sends no tax code when there is none', () {
+      final json = request().toJson();
+      expect(json.containsKey('taxCode'), false);
+      expect(json['vatRate'], 0);
+    });
+
+    test('sends the VAT and where it came from together', () {
+      final json = request(
+        taxCode: 'standard',
+        vatRate: 20,
+        vatPounds: '1.98',
+        vatSource: 'receipt',
+      ).toJson();
+      expect(json['vatPounds'], '1.98');
+      expect(json['vatSource'], 'receipt');
+    });
+
+    test('sends no VAT figure without a source', () {
+      final json = request(taxCode: 'standard', vatRate: 20, vatPounds: '2.00').toJson();
+      expect(json.containsKey('vatPounds'), false);
+      expect(json.containsKey('vatSource'), false);
+    });
+
+    test('reads the tax codes and default from the options', () {
+      final options = ExpenseOptions.fromJson({
+        'categories': ['Travel'],
+        'payers': [],
+        'clients': [],
+        'orders': [],
+        'vatRegistered': true,
+        'defaultVatRate': 20,
+        'taxCodes': [
+          {'code': 'standard', 'label': 'Standard rate', 'rate': 20},
+          {'code': 'exempt', 'label': 'Exempt', 'rate': 0},
+        ],
+        'defaultTaxCode': 'exempt',
+      });
+      expect(options.taxCodes.map((t) => t.code), ['standard', 'exempt']);
+      expect(options.initialTaxCode, 'exempt');
+      expect(options.taxCode('standard')!.display, 'Standard rate (20%)');
+      expect(options.taxCode('exempt')!.display, 'Exempt');
+    });
+
+    test('falls back to the expense codes and the default rate on an older server', () {
+      final options = ExpenseOptions.fromJson({
+        'vatRegistered': true,
+        'defaultVatRate': 5,
+      });
+      expect(options.taxCodes, fallbackExpenseTaxCodes);
+      expect(options.taxCodes.map((t) => t.code), isNot(contains('export')));
+      expect(options.initialTaxCode, 'reduced');
+    });
+
+    test('reads the tax code label and VAT on an expense', () {
+      final expense = Expense.fromJson({
+        'id': 'e1',
+        'companyId': 'co1',
+        'amountPence': 1200,
+        'status': 'recorded',
+        'vatRate': 5,
+        'taxCode': 'reduced',
+        'taxCodeLabel': 'Reduced rate',
+        'vatPence': 57,
+      });
+      expect(expense.taxCode, 'reduced');
+      expect(expense.taxCodeLabel, 'Reduced rate');
+      expect(expense.vatPence, 57);
+    });
+
+    test('reads the VAT a receipt shows', () {
+      final extraction = ReceiptExtraction.fromJson({
+        'amountPounds': '12.00',
+        'vatPounds': '2.00',
+        'confidence': 'high',
+      });
+      expect(extraction.vatPounds, '2.00');
+      expect(extraction.summary, 'Filled: amount, VAT');
+    });
+  });
 }

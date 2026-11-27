@@ -78,6 +78,7 @@ dependencies:
   receive_sharing_intent: ^1.9.0
   local_auth: ^3.0.2
   home_widget: ^0.10.0
+  device_info_plus: ^13.3.0
 
 dev_dependencies:
   flutter_test:

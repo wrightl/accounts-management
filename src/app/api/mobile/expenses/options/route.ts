@@ -7,6 +7,7 @@ import { listFounders } from "@/lib/expenses/queries";
 import { requireMobileAuth } from "@/lib/mobile-auth";
 import { listOrderOptions } from "@/lib/profitability/queries";
 import { getOrCreateCompanySettings } from "@/lib/settings/queries";
+import { defaultLineTax, rateForTaxCode, taxCodeInfo, taxCodesFor } from "@/lib/tax-codes";
 import { ensureLocalUser } from "@/lib/users";
 
 /** Choices for the capture and approve forms, as the web expense form loads them. */
@@ -42,6 +43,14 @@ export async function GET() {
         })),
         vatRegistered: settings.vatRegistered,
         defaultVatRate: settings.vatRegistered ? settings.defaultVatRate : 0,
+        // The codes an expense can use, in the web picker's order. vatRate is
+        // still sent with them for servers and screens that only know rates.
+        taxCodes: taxCodesFor("purchases").map((code) => ({
+          code,
+          label: taxCodeInfo(code).label,
+          rate: rateForTaxCode(code),
+        })),
+        defaultTaxCode: defaultLineTax(settings).taxCode,
         defaultMileageRatePence: settings.defaultMileageRatePence,
       },
     });

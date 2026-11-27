@@ -5,6 +5,7 @@ import {
 } from "@/lib/expenses/payment-source";
 import { formatExpenseAmount } from "@/lib/money";
 import { formatExpenseRef } from "@/lib/references";
+import { isTaxCode, taxCodeInfo } from "@/lib/tax-codes";
 
 type ReceiptInput = {
   id: string;
@@ -31,7 +32,11 @@ export type MobileExpenseInput = {
   status: string;
   billable?: boolean | null;
   vatRate?: number | null;
+  /** The stored tax code; older rows and callers may not have one. */
+  taxCode?: string | null;
   vatPence?: number | null;
+  /** Where vatPence came from: "derived", "receipt" or "manual". */
+  vatPenceSource?: string | null;
   clientId?: string | null;
   orderId?: string | null;
   clientName?: string | null;
@@ -69,6 +74,7 @@ export function toMobileExpense(expense: MobileExpenseInput) {
     originalAmountMinor: expense.originalAmountMinor ?? null,
   };
   const original = expenseOriginalAmount(currencyFields);
+  const taxCode = isTaxCode(expense.taxCode) ? expense.taxCode : null;
   return {
     id: expense.id,
     companyId: expense.companyId,
@@ -88,7 +94,11 @@ export function toMobileExpense(expense: MobileExpenseInput) {
     status: expense.status,
     billable: Boolean(expense.billable),
     vatRate: expense.vatRate ?? 0,
+    taxCode,
+    /** e.g. "Reduced rate", as the web picker shows it. */
+    taxCodeLabel: taxCode ? taxCodeInfo(taxCode).label : null,
     vatPence: expense.vatPence ?? 0,
+    vatPenceSource: expense.vatPenceSource ?? null,
     clientId: expense.clientId ?? null,
     orderId: expense.orderId ?? null,
     clientName: expense.clientName ?? null,
