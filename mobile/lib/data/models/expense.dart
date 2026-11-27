@@ -17,6 +17,9 @@ class Expense {
     required this.status,
     required this.billable,
     this.vatRate = 0,
+    this.taxCode,
+    this.taxCodeLabel,
+    this.vatPence = 0,
     this.clientId,
     this.clientName,
     this.paidByUserId,
@@ -50,6 +53,15 @@ class Expense {
   final String status;
   final bool billable;
   final int vatRate;
+
+  /// e.g. `reduced`; null from servers older than tax codes.
+  final String? taxCode;
+
+  /// e.g. "Reduced rate", as the web shows it.
+  final String? taxCodeLabel;
+
+  /// The VAT on the expense, in pence.
+  final int vatPence;
   final String? clientId;
   final String? clientName;
   final String? paidByUserId;
@@ -99,6 +111,11 @@ class Expense {
       status: asString(json['status'], 'recorded'),
       billable: json['billable'] == true,
       vatRate: asInt(json['vatRate']),
+      taxCode: json['taxCode'] is String ? json['taxCode'] as String : null,
+      taxCodeLabel: json['taxCodeLabel'] is String
+          ? json['taxCodeLabel'] as String
+          : null,
+      vatPence: asInt(json['vatPence']),
       clientId: json['clientId'] as String?,
       clientName: json['clientName'] as String?,
       paidByUserId: json['paidByUserId'] as String?,
@@ -236,6 +253,9 @@ class CreateExpenseRequest {
     this.clientId,
     this.orderId,
     this.vatRate = 0,
+    this.taxCode,
+    this.vatPounds,
+    this.vatSource,
     this.mileageMiles,
     this.mileageRatePence,
     this.clientRequestId,
@@ -265,7 +285,20 @@ class CreateExpenseRequest {
   final bool billable;
   final String? clientId;
   final String? orderId;
+
+  /// Still sent alongside [taxCode] for servers that only know rates.
   final int vatRate;
+
+  /// One of the codes from [ExpenseOptions.taxCodes]; null when the company
+  /// isn't VAT registered or for mileage.
+  final String? taxCode;
+
+  /// The VAT in pounds, e.g. "2.00", when it was read from the receipt or
+  /// typed. Null lets the server work it out from the rate.
+  final String? vatPounds;
+
+  /// `receipt` or `manual`, set with [vatPounds].
+  final String? vatSource;
 
   /// Set both to log a mileage allowance; the server works out the amount.
   final num? mileageMiles;
@@ -291,6 +324,11 @@ class CreateExpenseRequest {
         'clientId': clientId,
         'orderId': orderId,
         'vatRate': vatRate,
+        'taxCode': ?taxCode,
+        if (vatSource != null && vatPounds != null) ...{
+          'vatPounds': vatPounds,
+          'vatSource': vatSource,
+        },
         'clientRequestId': ?clientRequestId,
         if (isMileage) ...{
           'useMileage': true,
@@ -308,6 +346,7 @@ class ReceiptExtraction {
     this.spentAt,
     this.category,
     this.currency,
+    this.vatPounds,
     required this.confidence,
   });
 
@@ -318,6 +357,9 @@ class ReceiptExtraction {
 
   /// e.g. GBP, USD; null when not detected.
   final String? currency;
+
+  /// The VAT shown on the receipt, e.g. "2.00", in the receipt's currency.
+  final String? vatPounds;
 
   /// `high`, `partial` or `none`.
   final String confidence;
@@ -332,6 +374,7 @@ class ReceiptExtraction {
       if (amountPounds != null) 'amount',
       if (spentAt != null) 'date',
       if (category != null) 'category',
+      if (vatPounds != null) 'VAT',
     ];
     if (parts.isEmpty) return 'No fields could be read — fill in the details manually.';
     return 'Filled: ${parts.join(', ')}';
@@ -350,6 +393,7 @@ class ReceiptExtraction {
       spentAt: date == null ? null : DateTime.tryParse(date),
       category: text('category'),
       currency: text('currency'),
+      vatPounds: text('vatPounds'),
       confidence: text('confidence') ?? 'none',
     );
   }
@@ -366,6 +410,8 @@ class ExpenseOptions {
     required this.orders,
     required this.vatRegistered,
     required this.defaultVatRate,
+    this.taxCodes = fallbackExpenseTaxCodes,
+    this.defaultTaxCode,
     this.defaultMileageRatePence = 45,
   });
 
@@ -379,7 +425,38 @@ class ExpenseOptions {
   final List<ExpenseOrderChoice> orders;
   final bool vatRegistered;
   final int defaultVatRate;
+
+  /// The tax codes an expense can use, in the web picker's order.
+  final List<ExpenseTaxCode> taxCodes;
+
+  /// The company's default code, e.g. `standard`.
+  final String? defaultTaxCode;
   final int defaultMileageRatePence;
+
+  /// The default code if it's in [taxCodes], else the one matching
+  /// [defaultVatRate] (for servers older than tax codes), else the first.
+  String get initialTaxCode {
+    if (taxCodes.any((t) => t.code == defaultTaxCode)) return defaultTaxCode!;
+    return taxCodeForRate(defaultVatRate) ?? taxCodes.first.code;
+  }
+
+  /// The code a bare rate stands for: 20% standard, 5% reduced, 0% zero rated.
+  String? taxCodeForRate(int rate) {
+    final code = switch (rate) {
+      20 => 'standard',
+      5 => 'reduced',
+      0 => 'zero_rated',
+      _ => null,
+    };
+    return taxCodes.any((t) => t.code == code) ? code : null;
+  }
+
+  ExpenseTaxCode? taxCode(String? code) {
+    for (final t in taxCodes) {
+      if (t.code == code) return t;
+    }
+    return null;
+  }
 
   factory ExpenseOptions.fromJson(Map<String, dynamic> json) {
     List<ExpenseChoice> choices(dynamic value) => asList(value)
@@ -388,6 +465,11 @@ class ExpenseOptions {
         .toList();
     final categories = asList(json['categories']).map(asString).toList();
     final currencies = asList(json['currencies']).map(asString).toList();
+    final taxCodes = asList(json['taxCodes'])
+        .whereType<Map>()
+        .map((e) => ExpenseTaxCode.fromJson(asMap(e)))
+        .where((t) => t.code.isNotEmpty)
+        .toList();
     return ExpenseOptions(
       categories: categories.isEmpty ? expenseCategories : categories,
       currencies: currencies.isEmpty ? const ['GBP'] : currencies,
@@ -400,10 +482,52 @@ class ExpenseOptions {
           .toList(),
       vatRegistered: json['vatRegistered'] == true,
       defaultVatRate: asInt(json['defaultVatRate']),
+      taxCodes: taxCodes.isEmpty ? fallbackExpenseTaxCodes : taxCodes,
+      defaultTaxCode: json['defaultTaxCode'] is String
+          ? json['defaultTaxCode'] as String
+          : null,
       defaultMileageRatePence: asInt(json['defaultMileageRatePence'], 45),
     );
   }
 }
+
+/// A VAT tax code an expense can use (src/lib/tax-codes.ts).
+class ExpenseTaxCode {
+  const ExpenseTaxCode({
+    required this.code,
+    required this.label,
+    required this.rate,
+  });
+
+  final String code;
+  final String label;
+
+  /// The VAT rate the code applies, e.g. 20; 0 for every unrated code.
+  final int rate;
+
+  bool get rated => rate > 0;
+
+  /// e.g. "Standard rate (20%)" or "Exempt".
+  String get display => rated ? '$label ($rate%)' : label;
+
+  factory ExpenseTaxCode.fromJson(Map<String, dynamic> json) => ExpenseTaxCode(
+        code: asString(json['code']),
+        label: asString(json['label'], asString(json['code'])),
+        rate: asInt(json['rate']),
+      );
+}
+
+/// The expense codes, for a server that doesn't send them yet. Same labels
+/// and order as taxCodesFor("purchases") on the web.
+const fallbackExpenseTaxCodes = [
+  ExpenseTaxCode(code: 'standard', label: 'Standard rate', rate: 20),
+  ExpenseTaxCode(code: 'reduced', label: 'Reduced rate', rate: 5),
+  ExpenseTaxCode(code: 'zero_rated', label: 'Zero rated', rate: 0),
+  ExpenseTaxCode(code: 'exempt', label: 'Exempt', rate: 0),
+  ExpenseTaxCode(code: 'outside_scope', label: 'Outside the scope of VAT', rate: 0),
+  ExpenseTaxCode(code: 'reverse_charge', label: 'Reverse charge', rate: 0),
+  ExpenseTaxCode(code: 'postponed_import', label: 'Postponed import VAT', rate: 0),
+];
 
 class ExpenseChoice {
   ExpenseChoice({required this.id, required this.name});

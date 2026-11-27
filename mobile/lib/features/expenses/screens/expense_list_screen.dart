@@ -312,8 +312,17 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
                         ? '${expense.clientName!} (rebillable)'
                         : expense.clientName!,
                   ),
-                if (expense.vatRate > 0)
+                if (expense.taxCodeLabel != null)
+                  _buildDetailRow(
+                    'Tax code',
+                    expense.vatRate > 0
+                        ? '${expense.taxCodeLabel!} (${expense.vatRate}%)'
+                        : expense.taxCodeLabel!,
+                  )
+                else if (expense.vatRate > 0)
                   _buildDetailRow('VAT rate', '${expense.vatRate}%'),
+                if (expense.vatPence > 0)
+                  _buildDetailRow('VAT', CurrencyUtils.formatPence(expense.vatPence)),
                 if (expense.createdByName != null)
                   _buildDetailRow('Created by', expense.createdByName!),
                 if (expense.labels.isNotEmpty) ...[

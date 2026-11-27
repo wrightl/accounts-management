@@ -14,7 +14,7 @@ class ProductLockup extends StatelessWidget {
           'assets/images/logo.png',
           width: imageSize,
           height: imageSize,
-          errorBuilder: (_, __, ___) => Icon(
+          errorBuilder: (_, _, _) => Icon(
             Icons.crop_square,
             size: imageSize,
             color: Theme.of(context).colorScheme.primary,

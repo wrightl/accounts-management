@@ -101,6 +101,45 @@ describe("mobile app headers", () => {
   });
 });
 
+/**
+ * A header exactly as the app's HmrcDeviceDetails.encode produces it
+ * (mobile/test/unit/hmrc_device_details_test.dart checks the Dart side
+ * produces this same string): base64url JSON with no padding.
+ */
+const APP_SAMPLE_HEADER =
+  "eyJkZXZpY2VJZCI6IjNmMmM5YjFlLTdhNGQtNGU1Zi05YjZjLTFkMmUzZjRhNWI2YyIsInNjcmVlbnMiOlt7IndpZHRoIjoxMTc5LCJoZWlnaHQiOjI1NTYsInNjYWxpbmdGYWN0b3IiOjMuMCwiY29sb3VyRGVwdGgiOjI0fV0sIndpbmRvdyI6eyJ3aWR0aCI6MzkzLCJoZWlnaHQiOjg1Mn0sInV0Y09mZnNldE1pbnV0ZXMiOjYwLCJvc0ZhbWlseSI6ImlPUyIsIm9zVmVyc2lvbiI6IjE4LjEiLCJkZXZpY2VNYW51ZmFjdHVyZXIiOiJBcHBsZSIsImRldmljZU1vZGVsIjoiaVBob25lIDE1IFBybyJ9";
+
+describe("the app's X-Alfa-Device header", () => {
+  it("decodes and passes mobileClientDetailsSchema", () => {
+    expect(APP_SAMPLE_HEADER).not.toMatch(/[=+/]/);
+    const json = Buffer.from(APP_SAMPLE_HEADER, "base64url").toString("utf8");
+    expect(parseClientDetails(mobileClientDetailsSchema, json)).toEqual({
+      deviceId: "3f2c9b1e-7a4d-4e5f-9b6c-1d2e3f4a5b6c",
+      screens: [{ width: 1179, height: 2556, scalingFactor: 3, colourDepth: 24 }],
+      window: { width: 393, height: 852 },
+      utcOffsetMinutes: 60,
+      osFamily: "iOS",
+      osVersion: "18.1",
+      deviceManufacturer: "Apple",
+      deviceModel: "iPhone 15 Pro",
+    });
+  });
+
+  it("turns into the mobile Gov-Client headers", () => {
+    const json = Buffer.from(APP_SAMPLE_HEADER, "base64url").toString("utf8");
+    const mobile = mobileClientDetailsSchema.parse(JSON.parse(json));
+    const headers = buildFraudHeaders(
+      { ...web, method: "MOBILE_APP_VIA_SERVER", web: undefined, deviceId: mobile.deviceId, mobile },
+      VENDOR,
+    );
+    expect(headers["Gov-Client-Device-ID"]).toBe(mobile.deviceId);
+    expect(headers["Gov-Client-User-Agent"]).toBe(
+      "os-family=iOS&os-version=18.1&device-manufacturer=Apple&device-model=iPhone%2015%20Pro",
+    );
+    expect(headers["Gov-Client-Timezone"]).toBe("UTC+01:00");
+  });
+});
+
 describe("batch headers", () => {
   it("describes the server instead of a person's device", () => {
     const batch: BatchCallContext = {

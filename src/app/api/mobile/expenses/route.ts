@@ -98,6 +98,10 @@ function expenseRawFromJson(body: Record<string, unknown>): Record<string, unkno
     paidByUserId: optionalString(body.paidByUserId),
     taxCode: optionalString(body.taxCode),
     vatRate: typeof body.vatRate === "number" ? String(body.vatRate) : "0",
+    // The VAT read from the receipt ("receipt") or typed ("manual"). Left out
+    // when the app sends neither, so the server works it out from the rate.
+    vatPounds: optionalNumberString(body.vatPounds) || undefined,
+    vatSource: optionalString(body.vatSource) || undefined,
     useMileage: body.useMileage === true ? "true" : "",
     mileageMiles: typeof body.mileageMiles === "number" ? String(body.mileageMiles) : "",
     mileageRatePence:
