@@ -70,6 +70,9 @@ export async function hmrcClientContext(
     clientIpFromForwardedFor(headerList.get("x-forwarded-for")) ??
     clientIpFromForwardedFor(headerList.get("x-real-ip"));
   const multiFactor = await multiFactorFromClerk(now);
+  // Vercel doesn't pass on the port the client connected from, so
+  // Gov-Client-Public-Port can't be sent. HMRC asks vendors in that position
+  // to tell them why (docs/SETUP.md, section 5c).
   const base = { userId, publicIp, publicPort: null, publicIpAt: now, multiFactor };
 
   const mobile = parseClientDetails(
@@ -94,6 +97,17 @@ export async function hmrcClientContext(
   };
 }
 
+/** The operating system user running this process. */
+function osUserName(): string {
+  try {
+    const name = os.userInfo().username;
+    if (name) return name;
+  } catch {
+    // No passwd entry for the process's user, as on some serverless hosts.
+  }
+  return `uid-${process.getuid?.() ?? "unknown"}`;
+}
+
 /** A UUID-shaped ID that stays the same for this deployment. */
 function stableServerDeviceId(): string {
   const seed = process.env.VERCEL_PROJECT_ID ?? os.hostname();
@@ -101,8 +115,15 @@ function stableServerDeviceId(): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 
-/** Fraud prevention details for a call Alfa makes on its own, such as a cron job. */
-export function hmrcBatchContext(userId: string | null, now: Date = new Date()): BatchCallContext {
+/**
+ * Fraud prevention details for a call Alfa makes on its own, such as a cron
+ * job. HMRC requires the operating system user, which is sent with the
+ * company and, when the job acts for one, the person.
+ */
+export function hmrcBatchContext(
+  { userId, companyId }: { userId: string | null; companyId: string },
+  now: Date = new Date(),
+): BatchCallContext {
   const interfaces = Object.values(os.networkInterfaces())
     .flat()
     .filter((i) => i && !i.internal);
@@ -113,6 +134,8 @@ export function hmrcBatchContext(userId: string | null, now: Date = new Date()):
   return {
     method: "BATCH_PROCESS_DIRECT",
     userId,
+    companyId,
+    osUser: osUserName(),
     deviceId: stableServerDeviceId(),
     localIps,
     localIpsAt: now,

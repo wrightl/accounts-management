@@ -32,6 +32,17 @@ const utcOffsetSchema = z.number().int().min(-14 * 60).max(14 * 60);
 
 const deviceIdSchema = z.string().uuid();
 
+const ipSchema = z.union([z.ipv4(), z.ipv6()]);
+
+/**
+ * The device's local IP addresses. One the server can't read as an address
+ * is dropped rather than refusing the whole header.
+ */
+const localIpsSchema = z
+  .array(z.string().max(64))
+  .max(16)
+  .transform((ips) => ips.filter((ip) => ipSchema.safeParse(ip).success));
+
 /** What the web page's script stores in the client details cookie. */
 export const webClientDetailsSchema = z.object({
   screens: z.array(screenSchema).min(1).max(8),
@@ -51,6 +62,11 @@ export const mobileClientDetailsSchema = z.object({
   osVersion: z.string().min(1).max(256),
   deviceManufacturer: z.string().max(128).optional(),
   deviceModel: z.string().max(128).optional(),
+  localIps: localIpsSchema.optional(),
+  /** When the app read its local IPs, e.g. 2026-11-27T21:00:00.123Z. */
+  localIpsAt: z.iso.datetime().optional(),
+  /** The app's version and build number, e.g. 1.0.0+4. */
+  appVersion: z.string().min(1).max(64).optional(),
 });
 export type MobileClientDetails = z.infer<typeof mobileClientDetailsSchema>;
 
@@ -91,7 +107,12 @@ export interface ClientCallContext {
 /** A call Alfa makes on its own, such as a scheduled job. */
 export interface BatchCallContext {
   method: "BATCH_PROCESS_DIRECT";
+  /** The person the job acts for, when there is one. */
   userId: string | null;
+  /** The company the job acts for. */
+  companyId: string;
+  /** The operating system user running the job. HMRC requires it for this connection method. */
+  osUser: string;
   deviceId: string;
   localIps: string[];
   localIpsAt: Date;
@@ -156,8 +177,18 @@ function formatMultiFactor(factors: MultiFactor[]): string {
     .join(",");
 }
 
-function formatUserIds(userId: string | null): string {
-  return userId ? pairs([["alfa", userId]]) : "";
+function formatUserIds(userId: string | null, companyId?: string, osUser?: string): string {
+  return pairs([
+    ["os", osUser],
+    ["alfa", userId],
+    ["alfa-company", companyId],
+  ]);
+}
+
+/** HMRC's timestamp format: 2026-11-27T21:00:00.123Z. */
+function formatTimestamp(value: string): string | null {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 function formatUserAgent(parts: {
@@ -174,13 +205,23 @@ function formatUserAgent(parts: {
   ]);
 }
 
-function vendorHeaders(vendor: VendorDetails): Record<string, string> {
+/**
+ * The vendor headers. With a client app version (the mobile app), HMRC asks
+ * for the client's version and the server's, as two named entries.
+ */
+function vendorHeaders(vendor: VendorDetails, clientVersion?: string | null): Record<string, string> {
   const licence = Object.entries(vendor.licenseIds)
     .map(([k, v]) => `${enc(k)}=${enc(v)}`)
     .join("&");
+  const versions: Array<[string, string]> = clientVersion
+    ? [
+        [`${vendor.productName} mobile`, clientVersion],
+        [`${vendor.productName} server`, vendor.version],
+      ]
+    : [[vendor.productName, vendor.version]];
   return {
     "Gov-Vendor-Product-Name": enc(vendor.productName),
-    "Gov-Vendor-Version": pairs([[vendor.productName, vendor.version]]),
+    "Gov-Vendor-Version": pairs(versions),
     "Gov-Vendor-License-IDs": licence,
   };
 }
@@ -203,18 +244,23 @@ export function buildFraudHeaders(context: HmrcFraudContext, vendor: VendorDetai
       "Gov-Client-MAC-Addresses": context.macAddresses.map(enc).join(","),
       "Gov-Client-Timezone": formatUtcOffset(context.utcOffsetMinutes),
       "Gov-Client-User-Agent": formatUserAgent(context),
-      "Gov-Client-User-IDs": formatUserIds(context.userId),
+      "Gov-Client-User-IDs": formatUserIds(context.userId, context.companyId, context.osUser),
       ...vendorHeaders(vendor),
     });
   }
 
   const details = context.method === "WEB_APP_VIA_SERVER" ? context.web : context.mobile;
+  const localIps = context.method === "MOBILE_APP_VIA_SERVER" ? (context.mobile?.localIps ?? []) : [];
+  const localIpsAt =
+    localIps.length && context.mobile?.localIpsAt ? formatTimestamp(context.mobile.localIpsAt) : null;
   const forwarded =
     vendor.publicIp && context.publicIp ? pairs([["by", vendor.publicIp], ["for", context.publicIp]]) : null;
 
   return compact({
     "Gov-Client-Connection-Method": context.method,
     "Gov-Client-Device-ID": context.deviceId,
+    "Gov-Client-Local-IPs": localIpsAt ? localIps.map(enc).join(",") : null,
+    "Gov-Client-Local-IPs-Timestamp": localIpsAt,
     "Gov-Client-Multi-Factor": formatMultiFactor(context.multiFactor),
     "Gov-Client-Public-IP": context.publicIp,
     "Gov-Client-Public-IP-Timestamp": context.publicIp ? context.publicIpAt.toISOString() : null,
@@ -228,7 +274,7 @@ export function buildFraudHeaders(context: HmrcFraudContext, vendor: VendorDetai
       : { "Gov-Client-User-Agent": context.mobile ? formatUserAgent(context.mobile) : null }),
     "Gov-Vendor-Forwarded": forwarded,
     "Gov-Vendor-Public-IP": vendor.publicIp,
-    ...vendorHeaders(vendor),
+    ...vendorHeaders(vendor, context.method === "MOBILE_APP_VIA_SERVER" ? context.mobile?.appVersion : null),
   });
 }
 
@@ -236,7 +282,7 @@ export function buildFraudHeaders(context: HmrcFraudContext, vendor: VendorDetai
 export function clientIpFromForwardedFor(value: string | null): string | null {
   const first = value?.split(",")[0]?.trim();
   if (!first) return null;
-  return z.union([z.ipv4(), z.ipv6()]).safeParse(first).success ? first : null;
+  return ipSchema.safeParse(first).success ? first : null;
 }
 
 /** Parse details JSON (cookie or header), or null when missing or malformed. */
