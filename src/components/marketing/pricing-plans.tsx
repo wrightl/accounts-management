@@ -310,7 +310,7 @@ export function PricingPlans({ catalog }: { catalog: StripeCatalog | null }) {
 
         <p className="mx-auto mt-10 max-w-3xl text-center text-sm text-muted">
           VAT export helps your accountant — it is not HMRC filing. Bank import
-          is CSV today, not a live feed. GBP only. Per organisation, not per
+          is CSV today, not a live feed. Books in sterling; invoice in other currencies. Per organisation, not per
           seat.
         </p>
 

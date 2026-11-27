@@ -40,6 +40,21 @@ export function PublicFooter() {
                 </Link>
               </li>
               <li>
+                <Link href="/compare" className="hover:text-white">
+                  Compare
+                </Link>
+              </li>
+              <li>
+                <Link href="/use-cases" className="hover:text-white">
+                  Use cases
+                </Link>
+              </li>
+              <li>
+                <a href="/llms.txt" className="hover:text-white">
+                  For AI assistants
+                </a>
+              </li>
+              <li>
                 <PricingAwareSignUpLink location="footer" className="hover:text-white">
                   Sign up
                 </PricingAwareSignUpLink>

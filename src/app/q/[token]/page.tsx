@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Download } from "lucide-react";
 import { notFound } from "next/navigation";
 import { markPublicQuoteViewed } from "@/actions/public-quotes";
@@ -18,6 +19,11 @@ import { quoteStatusLabel, type QuoteStatus } from "@/lib/quotes/status";
 import { todayIsoDate } from "@/lib/invoices/status";
 import { canTransitionQuote } from "@/lib/quotes/transitions";
 import { resolveMilestoneAmountPence } from "@/lib/orders/invoice-from-order";
+
+export const metadata: Metadata = {
+  title: "Quote",
+  robots: { index: false, follow: false },
+};
 
 export default async function PublicQuotePage({
   params,
