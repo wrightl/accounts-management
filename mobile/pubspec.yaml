@@ -79,6 +79,7 @@ dependencies:
   local_auth: ^3.0.2
   home_widget: ^0.10.0
   device_info_plus: ^13.3.0
+  package_info_plus: ^10.2.2
 
 dev_dependencies:
   flutter_test:

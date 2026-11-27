@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:alfa/core/constants/app_constants.dart';
 import 'package:alfa/data/api/hmrc_device_details.dart';
@@ -149,5 +150,186 @@ void main() {
     expect(HmrcDeviceDetails.cleanOsVersion('Version 18.1 (Build 22B83)'), '18.1');
     expect(HmrcDeviceDetails.cleanOsVersion('15'), '15');
     expect(HmrcDeviceDetails.cleanOsVersion(''), 'unknown');
+  });
+
+  group('headerValue', () {
+    const display = HmrcDisplay(
+      screens: [HmrcScreen(width: 1080, height: 2400, scalingFactor: 2.75)],
+      windowWidth: 393,
+      windowHeight: 873,
+    );
+    const android = HmrcDeviceOs(
+      family: 'Android',
+      version: '15',
+      manufacturer: 'Google',
+      model: 'Pixel 9',
+    );
+
+    late DateTime clock;
+    late int ipReads;
+    late int osReads;
+    late int versionReads;
+
+    setUp(() {
+      FlutterSecureStorage.setMockInitialValues({});
+      clock = DateTime.utc(2026, 11, 27, 9, 15, 30, 123, 456);
+      ipReads = 0;
+      osReads = 0;
+      versionReads = 0;
+    });
+
+    HmrcDeviceDetails details({
+      Future<List<String>> Function()? localIps,
+      Future<String?> Function()? appVersion,
+      Future<HmrcDeviceOs> Function()? os,
+      HmrcDisplay? Function()? displayLookup,
+    }) =>
+        HmrcDeviceDetails(
+          const FlutterSecureStorage(),
+          osLookup: os ??
+              () async {
+                osReads++;
+                return android;
+              },
+          appVersionLookup: appVersion ??
+              () async {
+                versionReads++;
+                return '1.0.0+4';
+              },
+          localIpsLookup: localIps ??
+              () async {
+                ipReads++;
+                return ['192.168.1.20', 'fe80::1%wlan0', '2001:db8::5%en0', '192.168.1.20'];
+              },
+          displayLookup: displayLookup ?? () => display,
+          now: () => clock,
+        );
+
+    test('includes the new keys with the right types', () async {
+      final json = decode((await details().headerValue())!);
+
+      expect(json['localIps'], isA<List<dynamic>>());
+      expect((json['localIps'] as List).every((ip) => ip is String), isTrue);
+      expect(json['localIps'], ['192.168.1.20', 'fe80::1', '2001:db8::5']);
+
+      expect(json['localIpsAt'], isA<String>());
+      expect(json['localIpsAt'], '2026-11-27T09:15:30.123Z');
+      expect(
+        RegExp(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$')
+            .hasMatch(json['localIpsAt'] as String),
+        isTrue,
+      );
+
+      expect(json['appVersion'], '1.0.0+4');
+      expect(json['deviceManufacturer'], 'Google');
+      expect(json['deviceModel'], 'Pixel 9');
+    });
+
+    test('keeps the existing fields and shapes', () async {
+      final json = decode((await details().headerValue())!);
+      expect(HmrcDeviceDetails.isUuid(json['deviceId'] as String), isTrue);
+      expect(json['screens'], [
+        {'width': 1080, 'height': 2400, 'scalingFactor': 2.75, 'colourDepth': 24},
+      ]);
+      expect(json['window'], {'width': 393, 'height': 873});
+      expect(json['utcOffsetMinutes'], 0);
+      expect(json['osFamily'], 'Android');
+      expect(json['osVersion'], '15');
+    });
+
+    test('sends an empty list when the IP lookup fails or finds nothing', () async {
+      final failing = decode((await details(
+        localIps: () async => throw const SocketException('no network'),
+      ).headerValue())!);
+      expect(failing['localIps'], <String>[]);
+      expect(failing['localIpsAt'], isA<String>());
+
+      final empty = decode((await details(localIps: () async => []).headerValue())!);
+      expect(empty['localIps'], <String>[]);
+    });
+
+    test('leaves out the app version and model when their lookups fail', () async {
+      final json = decode((await details(
+        appVersion: () async => throw Exception('no package info'),
+        os: () async => throw Exception('no device info'),
+      ).headerValue())!);
+      expect(json.containsKey('appVersion'), isFalse);
+      // The dart:io fallback, which knows no model.
+      expect(json.containsKey('deviceModel'), isFalse);
+      expect(json['osFamily'], isA<String>());
+    });
+
+    test('leaves out empty manufacturer and model', () async {
+      final json = decode((await details(
+        os: () async => const HmrcDeviceOs(
+          family: 'Android',
+          version: '15',
+          manufacturer: '',
+          model: ' ',
+        ),
+      ).headerValue())!);
+      expect(json.containsKey('deviceManufacturer'), isFalse);
+      expect(json.containsKey('deviceModel'), isFalse);
+    });
+
+    test('reads the IPs again only after 60 seconds', () async {
+      final d = details();
+      await d.headerValue();
+      clock = clock.add(const Duration(seconds: 59));
+      final cached = decode((await d.headerValue())!);
+      expect(ipReads, 1);
+      expect(cached['localIpsAt'], '2026-11-27T09:15:30.123Z');
+
+      clock = clock.add(const Duration(seconds: 1));
+      final fresh = decode((await d.headerValue())!);
+      expect(ipReads, 2);
+      expect(fresh['localIpsAt'], '2026-11-27T09:16:30.123Z');
+    });
+
+    test('reads the app version and device once', () async {
+      final d = details();
+      await d.headerValue();
+      await d.headerValue();
+      await d.headerValue();
+      expect(versionReads, 1);
+      expect(osReads, 1);
+    });
+
+    test('gives null rather than throwing when the screen lookup fails', () async {
+      expect(await details(displayLookup: () => throw StateError('no view')).headerValue(), isNull);
+      expect(await details(displayLookup: () => null).headerValue(), isNull);
+    });
+  });
+
+  group('normaliseLocalIps', () {
+    test('drops zone suffixes and duplicates, keeping order', () {
+      expect(
+        HmrcDeviceDetails.normaliseLocalIps(['10.0.0.2', 'fe80::a%en0', 'fe80::a%en1', '10.0.0.2']),
+        ['10.0.0.2', 'fe80::a'],
+      );
+    });
+
+    test('keeps at most 16', () {
+      final ips = [for (var i = 0; i < 40; i++) '10.0.0.$i'];
+      final kept = HmrcDeviceDetails.normaliseLocalIps(ips);
+      expect(kept, hasLength(16));
+      expect(kept.first, '10.0.0.0');
+      expect(kept.last, '10.0.0.15');
+    });
+  });
+
+  test('cuts every string to 128 characters', () {
+    final json = HmrcDeviceDetails.buildDetails(
+      deviceId: HmrcDeviceDetails.uuidV4(),
+      screens: const [HmrcScreen(width: 1, height: 1, scalingFactor: 1)],
+      windowWidth: 1,
+      windowHeight: 1,
+      utcOffsetMinutes: 0,
+      os: HmrcDeviceOs(family: 'f', version: 'v' * 300, manufacturer: 'm' * 300, model: 'd' * 300),
+      appVersion: 'a' * 300,
+    )!;
+    for (final key in ['osVersion', 'deviceManufacturer', 'deviceModel', 'appVersion']) {
+      expect((json[key] as String).length, 128, reason: key);
+    }
   });
 }
