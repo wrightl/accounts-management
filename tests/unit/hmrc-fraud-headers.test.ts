@@ -146,6 +146,7 @@ describe("batch headers", () => {
       method: "BATCH_PROCESS_DIRECT",
       userId: null,
       companyId: "c-1",
+      osUser: "sbx_user1051",
       deviceId: DEVICE,
       localIps: ["10.0.0.4", "fe80::1"],
       localIpsAt: AT,
@@ -164,7 +165,7 @@ describe("batch headers", () => {
       "Gov-Client-MAC-Addresses": "02%3A42%3Aac%3A11%3A00%3A02",
       "Gov-Client-Timezone": "UTC+00:00",
       "Gov-Client-User-Agent": "os-family=Linux&os-version=6.1.0&device-model=x86_64",
-      "Gov-Client-User-IDs": "alfa-company=c-1",
+      "Gov-Client-User-IDs": "os=sbx_user1051&alfa-company=c-1",
       "Gov-Vendor-Product-Name": "Alfa",
       "Gov-Vendor-Version": "Alfa=0.1.0",
     });
@@ -222,6 +223,7 @@ describe("batch user IDs", () => {
         method: "BATCH_PROCESS_DIRECT",
         userId: "u-1",
         companyId: "c-1",
+      osUser: "sbx_user1051",
         deviceId: DEVICE,
         localIps: [],
         localIpsAt: AT,
@@ -234,7 +236,7 @@ describe("batch user IDs", () => {
       },
       VENDOR,
     );
-    expect(headers["Gov-Client-User-IDs"]).toBe("alfa=u-1&alfa-company=c-1");
+    expect(headers["Gov-Client-User-IDs"]).toBe("os=sbx_user1051&alfa=u-1&alfa-company=c-1");
   });
 });
 

@@ -109,8 +109,10 @@ export interface BatchCallContext {
   method: "BATCH_PROCESS_DIRECT";
   /** The person the job acts for, when there is one. */
   userId: string | null;
-  /** The company the job acts for. HMRC requires a user ID, so this is always sent. */
+  /** The company the job acts for. */
   companyId: string;
+  /** The operating system user running the job. HMRC requires it for this connection method. */
+  osUser: string;
   deviceId: string;
   localIps: string[];
   localIpsAt: Date;
@@ -175,8 +177,9 @@ function formatMultiFactor(factors: MultiFactor[]): string {
     .join(",");
 }
 
-function formatUserIds(userId: string | null, companyId?: string): string {
+function formatUserIds(userId: string | null, companyId?: string, osUser?: string): string {
   return pairs([
+    ["os", osUser],
     ["alfa", userId],
     ["alfa-company", companyId],
   ]);
@@ -241,7 +244,7 @@ export function buildFraudHeaders(context: HmrcFraudContext, vendor: VendorDetai
       "Gov-Client-MAC-Addresses": context.macAddresses.map(enc).join(","),
       "Gov-Client-Timezone": formatUtcOffset(context.utcOffsetMinutes),
       "Gov-Client-User-Agent": formatUserAgent(context),
-      "Gov-Client-User-IDs": formatUserIds(context.userId, context.companyId),
+      "Gov-Client-User-IDs": formatUserIds(context.userId, context.companyId, context.osUser),
       ...vendorHeaders(vendor),
     });
   }

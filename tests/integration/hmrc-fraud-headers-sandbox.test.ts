@@ -125,6 +125,7 @@ describe.skipIf(!clientId || !clientSecret)("HMRC's fraud prevention header vali
       method: "BATCH_PROCESS_DIRECT",
       userId: null,
       companyId: "9d1f3b2a-6c4e-4f8a-b0d2-7e5a1c3f9b40",
+      osUser: "sbx_user1051",
       deviceId: DEVICE,
       localIps: ["10.1.2.3"],
       localIpsAt: now,

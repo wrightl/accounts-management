@@ -97,6 +97,17 @@ export async function hmrcClientContext(
   };
 }
 
+/** The operating system user running this process. */
+function osUserName(): string {
+  try {
+    const name = os.userInfo().username;
+    if (name) return name;
+  } catch {
+    // No passwd entry for the process's user, as on some serverless hosts.
+  }
+  return `uid-${process.getuid?.() ?? "unknown"}`;
+}
+
 /** A UUID-shaped ID that stays the same for this deployment. */
 function stableServerDeviceId(): string {
   const seed = process.env.VERCEL_PROJECT_ID ?? os.hostname();
@@ -106,8 +117,8 @@ function stableServerDeviceId(): string {
 
 /**
  * Fraud prevention details for a call Alfa makes on its own, such as a cron
- * job. HMRC requires a user ID, so the company is always named, and the
- * person too when the job acts for one.
+ * job. HMRC requires the operating system user, which is sent with the
+ * company and, when the job acts for one, the person.
  */
 export function hmrcBatchContext(
   { userId, companyId }: { userId: string | null; companyId: string },
@@ -124,6 +135,7 @@ export function hmrcBatchContext(
     method: "BATCH_PROCESS_DIRECT",
     userId,
     companyId,
+    osUser: osUserName(),
     deviceId: stableServerDeviceId(),
     localIps,
     localIpsAt: now,
