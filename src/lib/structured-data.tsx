@@ -4,13 +4,26 @@
  */
 
 import { PRODUCT_NAME, PRODUCT_LOCKUP, MAKER_LEGAL, MAKER_DISPLAY } from "./product";
+import {
+  FEATURE_GROUPS,
+  ONE_LINE_SUMMARY,
+  PLANS,
+  SITE_URL,
+  SUPPORT_EMAIL,
+} from "./marketing/facts";
 
 export interface StructuredDataProps {
   type: "organization" | "softwareApplication" | "faq" | "breadcrumb" | "pricing";
   data?: Record<string, unknown>;
 }
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://alfa.dotanddashconsulting.com";
+const BASE_URL = SITE_URL;
+const ORG_ID = `${BASE_URL}/#organization`;
+const APP_ID = `${BASE_URL}/#software`;
+
+function planSummary(id: "essentials" | "premium"): string {
+  return PLANS.find((p) => p.id === id)!.summary;
+}
 
 /**
  * Generate Organization schema
@@ -19,10 +32,11 @@ export function generateOrganizationSchema() {
   return {
     "@context": "https://schema.org",
     "@type": "Organization",
+    "@id": ORG_ID,
     name: MAKER_LEGAL,
     alternateName: MAKER_DISPLAY,
     url: BASE_URL,
-    logo: `${BASE_URL}/logo.png`,
+    logo: `${BASE_URL}/brand/logo.png`,
     description: "Developer of Alfa, accounting software for UK limited companies and sole traders",
     foundingDate: "2024",
     address: {
@@ -32,7 +46,7 @@ export function generateOrganizationSchema() {
     contactPoint: {
       "@type": "ContactPoint",
       contactType: "customer support",
-      email: "support@dotanddashconsulting.com",
+      email: SUPPORT_EMAIL,
       availableLanguage: ["English"],
     },
   };
@@ -58,15 +72,15 @@ export function generateSoftwareApplicationSchema(
   const essentialsName = amounts?.essentialsName ?? "Essentials";
   const premiumName = amounts?.premiumName ?? "Premium";
   const essentialsDescription =
-    amounts?.essentialsDescription ??
-    "Core accounting features for consultancies";
+    amounts?.essentialsDescription ?? planSummary("essentials");
   const premiumDescription =
-    amounts?.premiumDescription ??
-    "Advanced features including recurring invoices and receipt OCR";
+    amounts?.premiumDescription ?? planSummary("premium");
 
   return {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
+    "@id": APP_ID,
+    url: BASE_URL,
     name: PRODUCT_NAME,
     alternateName: PRODUCT_LOCKUP,
     applicationCategory: "BusinessApplication",
@@ -103,33 +117,8 @@ export function generateSoftwareApplicationSchema(
         },
       ],
     },
-    description: "Accounting software for UK limited companies, sole traders, and neurodiverse founders. Manage quotes, invoices, expenses, reimbursements, bank reconciliation, and reporting — with display and focus controls. Built for UK consultancies, studios, and small agencies.",
-    featureList: [
-      "Quote creation and client acceptance workflow",
-      "Invoice generation and tracking",
-      "Expense management with receipt OCR",
-      "Bank CSV import and reconciliation",
-      "VAT support for registered businesses",
-      "Recurring invoices",
-      "Online card payments and quote deposits",
-      "Credit notes and period lock",
-      "13-week cash-flow forecast",
-      "Safe-to-pay-yourself dividend guidance for limited companies",
-      "Director's loan tracking and corporation tax estimate",
-      "Project profitability and rebillable expenses",
-      "AI bookkeeping suggestions and questions",
-      "Connect your own AI assistant (Claude, ChatGPT) to your books",
-      "Invoice import from CSV or PDF",
-      "Foreign-currency expenses at Bank of England rates",
-      "Reimbursement tracking",
-      "Accountant collaboration",
-      "Dividend calculations for limited companies",
-      "Board minutes and dividend vouchers as PDFs",
-      "Companies House, corporation tax, VAT and Self Assessment deadline reminders",
-      "Financial reporting and exports",
-      "UK-specific tax year support",
-      "Multi-user access with role-based permissions",
-    ],
+    description: ONE_LINE_SUMMARY,
+    featureList: FEATURE_GROUPS.flatMap((g) => g.items),
     audience: {
       "@type": "Audience",
       audienceType: [
@@ -143,10 +132,7 @@ export function generateSoftwareApplicationSchema(
     },
     inLanguage: "en-GB",
     countryOfOrigin: "GB",
-    publisher: {
-      "@type": "Organization",
-      name: MAKER_LEGAL,
-    },
+    publisher: { "@id": ORG_ID, "@type": "Organization", name: MAKER_LEGAL },
   };
 }
 
@@ -193,11 +179,9 @@ export function generatePricingSchema(amounts?: CatalogOfferAmounts | null) {
   const essentialsName = amounts?.essentialsName ?? "Essentials";
   const premiumName = amounts?.premiumName ?? "Premium";
   const essentialsDescription =
-    amounts?.essentialsDescription ??
-    "Core accounting features: quotes, invoices, expenses, bank reconciliation, and reporting for UK businesses.";
+    amounts?.essentialsDescription ?? planSummary("essentials");
   const premiumDescription =
-    amounts?.premiumDescription ??
-    "Advanced features: recurring invoices, receipt OCR, multi-user access, and priority support for growing UK consultancies.";
+    amounts?.premiumDescription ?? planSummary("premium");
 
   return {
     "@context": "https://schema.org",
@@ -206,7 +190,7 @@ export function generatePricingSchema(amounts?: CatalogOfferAmounts | null) {
         "@type": "Product",
         "@id": `${BASE_URL}/pricing#trial`,
         name: `${PRODUCT_NAME} Trial`,
-        description: "30-day free trial with full access to all features. No credit card required.",
+        description: "30-day free trial with every core feature. No card required.",
         brand: {
           "@type": "Brand",
           name: PRODUCT_NAME,

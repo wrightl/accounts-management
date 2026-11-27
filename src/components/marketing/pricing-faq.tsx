@@ -27,7 +27,7 @@ export function PricingFaq({
     {
       id: "currency",
       q: "What currency do you support?",
-      a: "Your books are kept in pounds. Expenses paid in US dollars, euros and other major currencies are converted to sterling at the Bank of England rate for that day.",
+      a: "Your books are kept in pounds. You can send quotes and invoices in US dollars, euros and other major currencies, and expenses paid in them are converted to sterling at the Bank of England rate for that day.",
     },
     {
       id: "ai_bookkeeper",
