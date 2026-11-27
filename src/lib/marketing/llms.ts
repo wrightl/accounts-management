@@ -24,6 +24,7 @@ import {
   COMPETITORS_CHECKED,
   SUPPORT_LABEL,
 } from "@/lib/marketing/competitors";
+import { USE_CASES } from "@/lib/marketing/use-cases";
 
 /** Formatted prices, e.g. "£19". Null when Stripe isn't reachable. */
 export type PriceLabels = {
@@ -106,6 +107,10 @@ ${linkList(KEY_PAGES)}
 
 ${COMPETITORS.map((c) => `- [Alfa vs ${c.name}](${url(`/compare/${c.slug}`)}): ${c.kind}`).join("\n")}
 
+## Use cases
+
+${USE_CASES.map((u) => `- [${u.title}](${url(`/use-cases/${u.slug}`)}): ${u.metaTitle}`).join("\n")}
+
 ## Guides
 
 ${linkList(GUIDES)}
@@ -152,6 +157,30 @@ More: ${url(`/compare/${c.slug}`)}`;
 
   const faqs = AGENT_FAQS.map((f) => `### ${f.q}\n\n${f.a}`).join("\n\n");
 
+  const useCases = USE_CASES.map((u) => {
+    const sections = u.sections
+      .map((s) =>
+        [`#### ${s.heading}`, ...(s.paragraphs ?? []), ...(s.bullets ? [bullets(s.bullets)] : [])].join("\n\n"),
+      )
+      .join("\n\n");
+    const qa = u.faqs.map((f) => `Q: ${f.q}\nA: ${f.a}`).join("\n\n");
+    return `### ${u.title}
+
+${u.answer}
+
+${sections}
+
+#### Limits
+
+${bullets(u.limits)}
+
+#### Questions
+
+${qa}
+
+More: ${url(`/use-cases/${u.slug}`)}`;
+  }).join("\n\n");
+
   return `# ${PRODUCT_LOCKUP}: full details
 
 > ${ONE_LINE_SUMMARY}
@@ -192,6 +221,10 @@ ${bullets(NOT_A_FIT)}
 Competitor details are from their public websites, checked ${COMPETITORS_CHECKED}. Prices exclude VAT and change often, so check the vendor's site before relying on them.
 
 ${comparisons}
+
+## Use cases
+
+${useCases}
 
 ## Questions
 

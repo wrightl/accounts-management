@@ -29,3 +29,20 @@ test.describe("Compare and AI assistant files - Public Access", () => {
     await expect(page.locator("footer").getByRole("link", { name: "Compare" })).toBeVisible();
   });
 });
+
+test.describe("Use cases - Public Access", () => {
+  test("hub links each use case without signing in", async ({ page }) => {
+    await page.goto("/use-cases");
+    await page.getByRole("link", { name: /Invoicing overseas clients in foreign currencies/ }).click();
+    await expect(
+      page.getByRole("heading", { name: "Invoicing overseas clients in foreign currencies", level: 1 }),
+    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: "What HMRC expects on the invoice" })).toBeVisible();
+  });
+
+  test("founders page answers the director's loan question", async ({ page }) => {
+    await page.goto("/use-cases/accounting-for-founders");
+    await expect(page.getByRole("heading", { name: "Your director's loan account" })).toBeVisible();
+    await expect(page.locator("footer").getByRole("link", { name: "Use cases" })).toBeVisible();
+  });
+});

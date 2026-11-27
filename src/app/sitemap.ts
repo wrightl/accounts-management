@@ -1,5 +1,6 @@
 import { MetadataRoute } from "next";
 import { COMPETITORS } from "@/lib/marketing/competitors";
+import { USE_CASES } from "@/lib/marketing/use-cases";
 import { FACTS_UPDATED, SITE_URL } from "@/lib/marketing/facts";
 
 /**
@@ -28,6 +29,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
     page("/pricing", FACTS_UPDATED, "monthly", 0.9),
     page("/compare", FACTS_UPDATED, "monthly", 0.8),
     ...COMPETITORS.map((c) => page(`/compare/${c.slug}`, FACTS_UPDATED, "monthly", 0.7)),
+    page("/use-cases", FACTS_UPDATED, "monthly", 0.8),
+    ...USE_CASES.map((u) => page(`/use-cases/${u.slug}`, FACTS_UPDATED, "monthly", 0.8)),
     page("/guides", GUIDES_UPDATED, "monthly", 0.8),
     page("/guides/limited-companies", GUIDES_UPDATED, "monthly", 0.8),
     page("/guides/sole-traders", GUIDES_UPDATED, "monthly", 0.8),

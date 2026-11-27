@@ -7,6 +7,8 @@ export const PUBLIC_PATHS = [
   "/pricing",
   "/compare",
   "/compare/*",
+  "/use-cases",
+  "/use-cases/*",
   "/guides",
   "/guides/*",
   "/privacy",

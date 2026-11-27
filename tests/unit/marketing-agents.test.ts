@@ -8,6 +8,7 @@ import {
 } from "@/lib/marketing/competitors";
 import { LIMITATIONS, PLANS, SITE_URL } from "@/lib/marketing/facts";
 import { buildLlmsFullTxt, buildLlmsTxt } from "@/lib/marketing/llms";
+import { USE_CASES, findUseCase } from "@/lib/marketing/use-cases";
 import { existsSync } from "node:fs";
 import {
   generateOrganizationSchema,
@@ -112,5 +113,46 @@ describe("structured data", () => {
     const schema = generateSoftwareApplicationSchema();
     expect(schema["@id"]).toBe(`${SITE_URL}/#software`);
     expect(schema.publisher["@id"]).toBe(`${SITE_URL}/#organization`);
+  });
+});
+
+describe("use cases", () => {
+  it("are listed in llms.txt, the full file and the sitemap", () => {
+    const short = buildLlmsTxt(PRICES);
+    const full = buildLlmsFullTxt(PRICES);
+    const urls = sitemap().map((e) => e.url);
+    for (const u of USE_CASES) {
+      const href = `${SITE_URL}/use-cases/${u.slug}`;
+      expect(short).toContain(href);
+      expect(full).toContain(u.answer);
+      expect(urls).toContain(href);
+    }
+  });
+
+  it("each answer the question first and say where Alfa stops", () => {
+    const slugs = USE_CASES.map((u) => u.slug);
+    expect(new Set(slugs).size).toBe(slugs.length);
+    for (const u of USE_CASES) {
+      expect(u.answer.length).toBeGreaterThan(80);
+      expect(u.limits.length).toBeGreaterThan(0);
+      expect(u.faqs.length).toBeGreaterThan(0);
+      expect(findUseCase(u.slug)).toBe(u);
+    }
+  });
+
+  it("only link to pages that exist", () => {
+    const known = new Set([
+      ...sitemap().map((e) => e.url.slice(SITE_URL.length) || "/"),
+    ]);
+    for (const u of USE_CASES) {
+      for (const r of u.related) expect(known, `${u.slug} → ${r.href}`).toContain(r.href);
+    }
+  });
+
+  it("are open to every crawler", () => {
+    const { rules } = robots();
+    for (const group of [rules].flat()) {
+      expect([group.allow ?? []].flat()).toEqual(expect.arrayContaining(["/use-cases", "/use-cases/*"]));
+    }
   });
 });
