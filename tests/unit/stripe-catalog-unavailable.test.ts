@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({
@@ -15,11 +15,21 @@ vi.mock("@/lib/platform-settings", () => ({
 
 const { getStripeCatalog } = await import("@/lib/billing/catalog");
 
-describe("getStripeCatalog", () => {
-  it("returns no catalog, rather than failing, when the database can't be reached", async () => {
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
+
+describe("getStripeCatalog when the database can't be reached", () => {
+  it("returns no catalog during the build, rather than failing it", async () => {
+    vi.stubEnv("NEXT_PHASE", "phase-production-build");
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     await expect(getStripeCatalog()).resolves.toBeNull();
     expect(warn.mock.calls[0]![0]).toContain("stripe.catalog_price_ids_unavailable");
-    warn.mockRestore();
+  });
+
+  it("still throws the error while the site is running", async () => {
+    vi.stubEnv("NEXT_PHASE", "phase-production-server");
+    await expect(getStripeCatalog()).rejects.toThrow("ECONNREFUSED");
   });
 });
