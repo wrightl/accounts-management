@@ -7,7 +7,7 @@
  */
 
 /** When the competitor details below were checked against public vendor pages. */
-export const COMPETITORS_CHECKED = "18 September 2026";
+export const COMPETITORS_CHECKED = "28 November 2026";
 
 export type Support = "yes" | "partial" | "no" | "n/a";
 
@@ -76,7 +76,7 @@ export const COMPETITORS: readonly Competitor[] = [
     kind: "UK accounting suite",
     summary:
       "Xero is the accounting platform many UK accountants default to, with bank feeds, Making Tax Digital filing, payroll on some plans and a large app marketplace.",
-    pricing: "Ignite £18 a month, Grow £39 a month (from 1 September 2026); Simple £7 a month for light, non-VAT use.",
+    pricing: "Ignite £18 a month, Grow £39 a month, Comprehensive £55 a month (adds multi-currency), Ultimate £70 a month (from 1 September 2026); Simple £7 a month for light, non-VAT use.",
     pricingModel: "Per organisation, tiered by plan limits.",
     chooseAlfaIf: [
       "You bill by project or milestone and want quote, order and milestone invoice in one flow",
@@ -116,7 +116,7 @@ export const COMPETITORS: readonly Competitor[] = [
     kind: "UK accounting for freelancers and micro companies",
     summary:
       "FreeAgent is tax-led bookkeeping for UK freelancers and small limited companies, with bank feeds, time tracking, payroll and Making Tax Digital, Self Assessment and corporation tax filing.",
-    pricing: "Sole trader £19 a month, limited company £33 a month (introductory discounts are common). Free with a NatWest, RBS, Ulster or Mettle business account.",
+    pricing: "Sole trader £19 a month, limited company £33 a month (50% off for the first six months is common). Free with a NatWest, RBS, Ulster or Mettle business account.",
     pricingModel: "Per business, priced by business type.",
     chooseAlfaIf: [
       "You run a consultancy, studio or agency and quote, take deposits and invoice against milestones",
@@ -155,7 +155,7 @@ export const COMPETITORS: readonly Competitor[] = [
     kind: "Bank-linked bookkeeping",
     summary:
       "Starling Accounting (formerly Ember) is bookkeeping inside a Starling business account, with invoicing, Making Tax Digital for Income Tax and VAT filing on its Plus plan.",
-    pricing: "Essentials free; Plus £7 a month until April 2027, then £14 a month (adds VAT filing).",
+    pricing: "Essentials free; Plus £7 a month until April 2027, then £14 a month (adds VAT filing). Starling's own terms describe the £14 as including VAT.",
     pricingModel: "Tied to a Starling business account.",
     chooseAlfaIf: [
       "You bank with more than one provider, or not with Starling",
@@ -192,7 +192,7 @@ export const COMPETITORS: readonly Competitor[] = [
     kind: "Software with an accountancy service",
     summary:
       "Crunch combines free invoicing and expenses software with paid packages that include named accountants and tax filing.",
-    pricing: "Free software tier; sole trader Pro about £27 a month; limited company packages from about £94 a month.",
+    pricing: "Free software tier; sole trader Pro about £27 a month; limited company Pro about £90 to £94 a month and Premium about £137 to £145 a month, with introductory discounts.",
     pricingModel: "Software free; you pay for the accountancy service.",
     chooseAlfaIf: [
       "You already have an accountant you want to keep",
@@ -229,7 +229,7 @@ export const COMPETITORS: readonly Competitor[] = [
     kind: "Client workflow for freelancers and agencies",
     summary:
       "Bonsai covers proposals, contracts with e-signatures, client portals and invoicing for freelancers and small agencies, and syncs to Xero or QuickBooks for the books on higher tiers.",
-    pricing: "Essentials about $25 per user a month (about £19); the $15 Basic plan has no invoicing.",
+    pricing: "Essentials $25 per user a month (about £19), or $19 billed annually; Premium $39 per user a month; the $15 Basic plan has no invoicing.",
     pricingModel: "Per user.",
     chooseAlfaIf: [
       "You want UK books, VAT, dividends and an accountant pack in the same product as your quotes",
@@ -266,7 +266,7 @@ export const COMPETITORS: readonly Competitor[] = [
     kind: "Time tracking and invoicing",
     summary:
       "Harvest is time tracking, project budgets and invoicing for studios and agencies, usually synced to Xero or QuickBooks for the accounts.",
-    pricing: "Free for 1 seat and 2 projects; Teams from $9 per seat a month on annual billing, plus 2026 usage fees.",
+    pricing: "Free for 1 seat and 2 projects; Teams from $9 per seat a month on annual billing ($11 monthly), plus Flex usage fees from the second renewal: $20 to $960 a month for each of projects, tasks, clients and amount invoiced over its allowance.",
     pricingModel: "Per seat plus usage.",
     chooseAlfaIf: [
       "You price by quote and milestone rather than by the hour",
