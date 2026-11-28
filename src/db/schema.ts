@@ -2276,6 +2276,21 @@ export const assistantDraftRequests = pgTable(
   (t) => [uniqueIndex("uniq_assistant_draft_requests_key").on(t.companyId, t.userId, t.requestKey)],
 );
 
+/**
+ * Fixed-window counters for rate limits (see src/lib/rate-limit.ts). Keys
+ * name who is limited, such as an IP or an assistant connection; no company
+ * owns a row. The daily cron deletes old windows.
+ */
+export const rateLimitBuckets = pgTable(
+  "rate_limit_buckets",
+  {
+    key: text("key").notNull(),
+    windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.key, t.windowStart] }), index("idx_rate_limit_buckets_window").on(t.windowStart)],
+);
+
 export type EntityType = (typeof entityTypeEnum.enumValues)[number];
 export type Company = typeof companies.$inferSelect;
 export type PlatformSettings = typeof platformSettings.$inferSelect;
@@ -2408,6 +2423,7 @@ export type Notification = typeof notifications.$inferSelect;
 export type PushPlatform = (typeof pushPlatformEnum.enumValues)[number];
 
 export const schema = {
+  rateLimitBuckets,
   hmrcConnections,
   taxSubmissions,
   hmrcOauthStates,

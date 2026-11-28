@@ -107,7 +107,22 @@ const fetchStripeCatalogCached = unstable_cache(
  * incomplete or Stripe cannot be reached and nothing is cached yet.
  */
 export async function getStripeCatalog(): Promise<StripeCatalog | null> {
-  const ids = await getStripePriceIds();
+  let ids: StripePriceIds;
+  try {
+    ids = await getStripePriceIds();
+  } catch (error) {
+    // The price IDs live in the database. Public pages that show prices
+    // prerender at build time, when there may be no database to reach;
+    // they leave prices out and pick them up when they revalidate.
+    console.warn(
+      JSON.stringify({
+        level: "warn",
+        msg: "stripe.catalog_price_ids_unavailable",
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+    return null;
+  }
   if (!allStripePriceIdsSet(ids)) return null;
   if (!serverEnv().STRIPE_SECRET_KEY) return null;
   try {

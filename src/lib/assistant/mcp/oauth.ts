@@ -75,6 +75,20 @@ type CachedVerification = { result: Promise<AuthInfo>; until: number };
 /** Per instance, keyed by a hash of the token. Only accepted tokens stay. */
 const verifiedTokens = new Map<string, CachedVerification>();
 
+function tokenKey(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+/**
+ * Whether checking this token would reuse an answer this instance already
+ * has, rather than ask Clerk. Such a request costs nothing to verify, so the
+ * per-IP limit on failed tokens lets it through.
+ */
+export function isTokenRemembered(token: string): boolean {
+  const cached = verifiedTokens.get(tokenKey(token));
+  return cached != null && cached.until > Date.now();
+}
+
 /** For tests: start each one with no remembered tokens. */
 export function forgetVerifiedTokens(): void {
   verifiedTokens.clear();
@@ -82,7 +96,7 @@ export function forgetVerifiedTokens(): void {
 
 const verifier: OAuthTokenVerifier = {
   verifyAccessToken(token: string): Promise<AuthInfo> {
-    const key = createHash("sha256").update(token).digest("hex");
+    const key = tokenKey(token);
     const now = Date.now();
     const cached = verifiedTokens.get(key);
     if (cached && cached.until > now) return cached.result;

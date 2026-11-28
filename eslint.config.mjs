@@ -15,6 +15,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Flutter app; iOS builds check out Swift packages with their own JS here.
     "mobile/**",
+    // Git worktrees for other branches; each one is linted on its own branch.
+    ".claude/worktrees/**",
   ]),
   {
     rules: {

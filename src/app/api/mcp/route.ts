@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createMcpHandler, type AuthInfo } from "@modelcontextprotocol/server";
 import {
+  MCP_RATE_LIMITS,
   assistantDisplayName,
   loadAssistantPerson,
   nameConnection,
@@ -8,8 +9,9 @@ import {
   touchConnection,
   type AssistantPerson,
 } from "@/lib/assistant/mcp/access";
-import { publicOrigin, verifyAssistantRequest } from "@/lib/assistant/mcp/oauth";
+import { isTokenRemembered, publicOrigin, verifyAssistantRequest } from "@/lib/assistant/mcp/oauth";
 import { createAssistantServer } from "@/lib/assistant/mcp/server";
+import { clientIp, hitRateLimit, isOverRateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +43,12 @@ function refuse(status: number, message: string): Response {
   return withCors(NextResponse.json({ error: "access_denied", error_description: message }, { status }));
 }
 
+function tooManyRequests(retryAfterSeconds: number): Response {
+  const response = refuse(429, "Too many requests. Wait a moment and try again.");
+  response.headers.set("Retry-After", String(retryAfterSeconds));
+  return response;
+}
+
 /** The assistant's name, from the initialize message it sends when it starts. */
 async function startingClientName(request: NextRequest): Promise<string | null> {
   if (request.method !== "POST") return null;
@@ -52,10 +60,31 @@ async function startingClientName(request: NextRequest): Promise<string | null> 
 
 async function serve(request: NextRequest): Promise<Response> {
   const origin = publicOrigin(request.headers, request.nextUrl.origin);
+  // Failed tokens are limited by IP because each one costs a check with
+  // Clerk. A request with no token is the cheap first step of signing in, so
+  // it isn't counted. A token this instance already checked isn't held back,
+  // so bad tokens sent from an IP that assistants share can't lock out the
+  // people already using it.
+  const token = /^bearer\s+(\S+)/i.exec(request.headers.get("authorization") ?? "")?.[1];
+  const ip = token ? clientIp(request.headers) : null;
+  const ipKey = ip ? `mcp:ip:${ip}` : null;
+  if (ipKey && !isTokenRemembered(token!)) {
+    const ipLimit = await isOverRateLimit(ipKey, MCP_RATE_LIMITS.failedTokensPerIp);
+    if (!ipLimit.allowed) return tooManyRequests(ipLimit.retryAfterSeconds);
+  }
+
   const auth = await verifyAssistantRequest(request, origin);
-  if (auth instanceof Response) return withCors(auth);
+  if (auth instanceof Response) {
+    if (ipKey) await hitRateLimit(ipKey, MCP_RATE_LIMITS.failedTokensPerIp);
+    return withCors(auth);
+  }
 
   const clerkUserId = auth.extra?.clerkUserId;
+  const connectionLimit = await hitRateLimit(
+    `mcp:conn:${String(clerkUserId)}:${auth.clientId}`,
+    MCP_RATE_LIMITS.requestsPerConnection,
+  );
+  if (!connectionLimit.allowed) return tooManyRequests(connectionLimit.retryAfterSeconds);
   const person = typeof clerkUserId === "string" ? await loadAssistantPerson(clerkUserId) : null;
   if (!person) return refuse(403, "This login isn't set up in Alfa yet. Sign in to Alfa and finish setting up first.");
   const connection = await touchConnection(person.localUserId, auth.clientId);
