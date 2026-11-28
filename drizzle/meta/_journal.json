@@ -729,6 +729,13 @@
       "when": 1795636655750,
       "tag": "0103_company_accounts_email",
       "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1795869278796,
+      "tag": "0104_rate_limit_buckets",
+      "breakpoints": true
     }
   ]
 }

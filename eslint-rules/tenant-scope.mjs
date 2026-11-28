@@ -60,6 +60,7 @@ export const NOT_COMPANY_OWNED = [
   "dataMigrations",
   "fxRates",
   "platformSettings",
+  "rateLimitBuckets",
   "releasedInboundAliases",
   "stripeWebhookEvents",
   "subscriptionTiers",

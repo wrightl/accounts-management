@@ -7,6 +7,7 @@ import {
   assistantConnections,
   auditLog,
   clients,
+  rateLimitBuckets,
   companies,
   companyBilling,
   companyMemberships,
@@ -33,6 +34,8 @@ vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 const tokens = vi.hoisted(
   () => new Map<string, { clientId: string; subject: string; expiration?: number }>(),
 );
+/** How many times Clerk was asked to verify a token. */
+const clerkChecks = vi.hoisted(() => ({ count: 0 }));
 /** Who is signed in to Alfa itself, for the Settings actions. */
 const signedIn = vi.hoisted(() => ({ userId: null as string | null }));
 
@@ -46,6 +49,7 @@ vi.mock("@clerk/nextjs/server", () => ({
   clerkClient: async () => ({
     idPOAuthAccessToken: {
       verify: async (token: string) => {
+        clerkChecks.count++;
         const t = tokens.get(token);
         if (!t) throw new Error("invalid");
         return {
@@ -64,7 +68,9 @@ const { POST } = await import("@/app/api/mcp/route");
 const { setAssistantAccess, setAssistantConnected, setAssistantDrafts } = await import(
   "@/actions/assistant"
 );
-const { assistantDisplayName, DAILY_TOOL_CALL_LIMIT } = await import("@/lib/assistant/mcp/access");
+const { assistantDisplayName, DAILY_TOOL_CALL_LIMIT, MCP_RATE_LIMITS } = await import(
+  "@/lib/assistant/mcp/access"
+);
 const { forgetVerifiedTokens } = await import("@/lib/assistant/mcp/oauth");
 const { GET: getResourceMetadata } = await import(
   "@/app/.well-known/oauth-protected-resource/[[...path]]/route"
@@ -503,6 +509,76 @@ describe("daily limit", () => {
       .from(auditLog)
       .where(and(eq(auditLog.companyId, companyA), eq(auditLog.action, "assistant.tool")));
     expect(used).toHaveLength(DAILY_TOOL_CALL_LIMIT);
+  });
+});
+
+describe("short-window limits", () => {
+  // Mid-minute, so a test's window can't roll over while it runs.
+  const now = new Date("2026-11-28T10:00:30Z");
+  const windowStart = new Date("2026-11-28T10:00:00Z");
+  const fromIp = (ip: string) => ({ "x-forwarded-for": ip });
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("stops checking bad tokens with Clerk once an IP has sent too many", async () => {
+    // Already in use from this IP before the bad tokens arrive.
+    expect((await rpc("admin-token", "tools/list", {}, fromIp("203.0.113.7"))).res.status).toBe(200);
+    const { limit } = MCP_RATE_LIMITS.failedTokensPerIp;
+    for (let i = 0; i < limit; i++) {
+      expect((await rpc(`forged-${i}`, "tools/list", {}, fromIp("203.0.113.7"))).res.status).toBe(401);
+    }
+    clerkChecks.count = 0;
+    const { res } = await rpc("forged-again", "tools/list", {}, fromIp("203.0.113.7"));
+    expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after")).toBe("30");
+    expect(res.headers.get("access-control-allow-origin")).toBe("*");
+    expect(clerkChecks.count).toBe(0);
+
+    // Another IP carries on as normal, and so does a token already checked here.
+    expect((await rpc("forged", "tools/list", {}, fromIp("198.51.100.2"))).res.status).toBe(401);
+    expect((await rpc("admin-token", "tools/list", {}, fromIp("203.0.113.7"))).res.status).toBe(200);
+    expect(clerkChecks.count).toBe(1);
+  });
+
+  it("never limits requests that send no token, the first step of signing in", async () => {
+    for (let i = 0; i <= MCP_RATE_LIMITS.failedTokensPerIp.limit; i++) {
+      expect((await rpc(null, "tools/list", {}, fromIp("203.0.113.7"))).res.status).toBe(401);
+    }
+    expect(await db.select().from(rateLimitBuckets)).toHaveLength(0);
+  });
+
+  it("refuses a connection's requests past the per-minute limit, before reading anything", async () => {
+    await db.insert(rateLimitBuckets).values({
+      key: "mcp:conn:user_admin:client_claude",
+      windowStart,
+      count: MCP_RATE_LIMITS.requestsPerConnection.limit,
+    });
+    const { res } = await rpc("admin-token", "tools/list");
+    expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after")).toBe("30");
+    expect(await db.select().from(assistantConnections)).toHaveLength(0);
+
+    // Someone else's assistant isn't held up.
+    expect((await rpc("accountant-token", "tools/list")).res.status).toBe(200);
+  });
+
+  it("answers a burst of tool calls with an error the assistant can read, and doesn't audit it", async () => {
+    await db.insert(rateLimitBuckets).values({
+      key: `mcp:tool:${adminId}:client_claude`,
+      windowStart,
+      count: MCP_RATE_LIMITS.toolCallsPerConnection.limit,
+    });
+    const result = await callTool("admin-token", "list_clients");
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain("Too many look-ups in a short time");
+    const audits = await db.select().from(auditLog).where(eq(auditLog.action, "assistant.tool"));
+    expect(audits).toHaveLength(0);
   });
 });
 

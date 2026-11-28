@@ -13,6 +13,7 @@ import type { AssistantDraftTool, AssistantTool } from "@/lib/assistant/tools/de
 import { checkCompanyWritable } from "@/lib/mutate";
 import {
   DAILY_TOOL_CALL_LIMIT,
+  MCP_RATE_LIMITS,
   chooseCompany,
   claimToolCall,
   noCompanyMessage,
@@ -22,6 +23,7 @@ import {
   type AssistantCompany,
   type AssistantPerson,
 } from "./access";
+import { hitRateLimit } from "@/lib/rate-limit";
 
 export type AssistantServerContext = {
   person: AssistantPerson;
@@ -163,6 +165,7 @@ async function runTool(
   }
   if (isDraftTool(tool)) return runDraftTool(tool, input, company, context);
 
+  if (!(await withinBurstLimit(person.localUserId, oauthClientId))) return burstLimitReached();
   if (!(await claimToolCall({ companyId: company.id, localUserId: person.localUserId, tool: tool.name, oauthClientId }))) {
     return limitReached(company.name);
   }
@@ -183,6 +186,22 @@ async function runTool(
       result,
       ...(href ? { openInAlfa: new URL(href, origin).toString() } : {}),
     }),
+  );
+}
+
+/** Count a tool call against this person's assistant's short-window limit. */
+async function withinBurstLimit(localUserId: string, oauthClientId: string): Promise<boolean> {
+  const { allowed } = await hitRateLimit(
+    `mcp:tool:${localUserId}:${oauthClientId}`,
+    MCP_RATE_LIMITS.toolCallsPerConnection,
+  );
+  return allowed;
+}
+
+function burstLimitReached(): CallToolResult {
+  return text(
+    `Too many look-ups in a short time (the limit is ${MCP_RATE_LIMITS.toolCallsPerConnection.limit} a minute). Wait a minute and try again.`,
+    true,
   );
 }
 
@@ -231,6 +250,10 @@ async function runDraftTool(
     return text("This is already being created. Check Alfa in a moment rather than trying again.", true);
   }
 
+  if (!(await withinBurstLimit(person.localUserId, oauthClientId))) {
+    await finishDraftRequest(company.id, claim.claimId, null);
+    return burstLimitReached();
+  }
   if (!(await claimToolCall({ ...owner, tool: tool.name, oauthClientId }))) {
     await finishDraftRequest(company.id, claim.claimId, null);
     return limitReached(company.name);

@@ -15,6 +15,17 @@ import { isTenantRole, type TenantRole } from "@/lib/roles";
 /** Tool calls a company's assistants can make per day, across everyone. */
 export const DAILY_TOOL_CALL_LIMIT = 500;
 
+/**
+ * Short-window limits, on top of the daily one. Failed tokens are counted per
+ * IP, since each costs a check with Clerk; everything else per connection
+ * (person and assistant), because assistants share IPs across all their users.
+ */
+export const MCP_RATE_LIMITS = {
+  failedTokensPerIp: { limit: 20, windowSeconds: 60 },
+  requestsPerConnection: { limit: 120, windowSeconds: 60 },
+  toolCallsPerConnection: { limit: 30, windowSeconds: 60 },
+} as const;
+
 /** Audit action for one assistant tool call; also what the daily limit counts. */
 export const ASSISTANT_TOOL_ACTION = "assistant.tool";
 

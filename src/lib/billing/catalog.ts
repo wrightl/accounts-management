@@ -1,5 +1,6 @@
 import "server-only";
 import { unstable_cache, updateTag } from "next/cache";
+import { PHASE_PRODUCTION_BUILD } from "next/constants";
 import type { BillingInterval } from "@/db/schema";
 import { serverEnv } from "@/env";
 import { getPlatformSettings } from "@/lib/platform-settings";
@@ -106,8 +107,31 @@ const fetchStripeCatalogCached = unstable_cache(
  * Cached Stripe product/price catalog. Returns null when price IDs are
  * incomplete or Stripe cannot be reached and nothing is cached yet.
  */
+/** True while `next build` prerenders pages, which Next marks with NEXT_PHASE. */
+function isProductionBuild(): boolean {
+  return process.env.NEXT_PHASE === PHASE_PRODUCTION_BUILD;
+}
+
 export async function getStripeCatalog(): Promise<StripeCatalog | null> {
-  const ids = await getStripePriceIds();
+  let ids: StripePriceIds;
+  try {
+    ids = await getStripePriceIds();
+  } catch (error) {
+    // The price IDs live in the database. Public pages that show prices
+    // prerender at build time, when there may be no database to reach; then
+    // they leave prices out and pick them up when they revalidate. At any
+    // other time a database error is real and is thrown as before, so a
+    // passing blip can't cache pages without prices for an hour.
+    if (!isProductionBuild()) throw error;
+    console.warn(
+      JSON.stringify({
+        level: "warn",
+        msg: "stripe.catalog_price_ids_unavailable",
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+    return null;
+  }
   if (!allStripePriceIdsSet(ids)) return null;
   if (!serverEnv().STRIPE_SECRET_KEY) return null;
   try {
